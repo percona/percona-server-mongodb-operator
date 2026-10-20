@@ -32486,19 +32486,7 @@ spec:
               vpaStatus:
                 additionalProperties:
                   properties:
-                    cpu:
-                      type: string
-                    lastAppliedAt:
-                      format: date-time
-                      type: string
-                    lastObservedAt:
-                      format: date-time
-                      type: string
-                    memory:
-                      type: string
-                    message:
-                      type: string
-                    resources:
+                    applied:
                       properties:
                         claims:
                           items:
@@ -32530,6 +32518,22 @@ spec:
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             x-kubernetes-int-or-string: true
                           type: object
+                      type: object
+                    lastAppliedAt:
+                      format: date-time
+                      type: string
+                    lastObservedAt:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    recommended:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
                       type: object
                   type: object
                 type: object

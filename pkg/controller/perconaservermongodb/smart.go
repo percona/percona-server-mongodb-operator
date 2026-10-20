@@ -11,11 +11,11 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
-	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -52,7 +52,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	list := corev1.PodList{}
 	if err := r.client.List(ctx,
 		&list,
-		&k8sclient.ListOptions{
+		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(matchLabels),
 		},
@@ -326,7 +326,7 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 	pods := &corev1.PodList{}
 	err = r.client.List(ctx,
 		pods,
-		&k8sclient.ListOptions{
+		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(sts.Spec.Template.Labels),
 		},
@@ -521,7 +521,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 	for _, s := range stsList.Items {
 		podList := new(corev1.PodList)
 		if err := r.client.List(ctx, podList,
-			&k8sclient.ListOptions{
+			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(s.Labels),
 			}); err != nil {
@@ -538,7 +538,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	sfsList := appsv1.StatefulSetList{}
 	if err := r.client.List(ctx, &sfsList,
-		&k8sclient.ListOptions{
+		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
 				naming.LabelKubernetesInstance: cr.Name,
@@ -581,18 +581,24 @@ func (r *ReconcilePerconaServerMongoDB) recreateNWait(ctx context.Context, cr *a
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
-	for range waitLimit {
-		time.Sleep(time.Second * 1)
-
-		err := r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
-		if err != nil && !k8sErrors.IsNotFound(err) {
-			return errors.Wrap(err, "get pod")
+func (r *ReconcilePerconaServerMongoDB) waitPodRestart(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	updateRevision string,
+	pod *corev1.Pod,
+	timeoutSeconds int,
+) error {
+	pollInterval := time.Second
+	pollTimeout := time.Duration(timeoutSeconds) * time.Second
+	if err := wait.PollUntilContextTimeout(ctx, pollInterval, pollTimeout, false, func(ctx context.Context) (done bool, err error) {
+		err = r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
+		if err != nil {
+			return false, client.IgnoreNotFound(err)
 		}
 
 		// We update status in every loop to not wait until the end of smart update
 		if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
-			return errors.Wrap(err, "update status")
+			return false, errors.Wrap(err, "update status")
 		}
 
 		ready := false
@@ -605,11 +611,16 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 
 		if pod.Status.Phase == corev1.PodRunning && pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision && ready {
 			logf.FromContext(ctx).Info("Pod started", "pod", pod.Name)
-			return nil
+			return true, nil
 		}
+		return false, nil
+	}); wait.Interrupted(err) {
+		return errors.New("reach pod wait limit")
+	} else if err != nil {
+		return errors.Wrap(err, "wait pod restart")
 	}
 
-	return errors.New("reach pod wait limit")
+	return nil
 }
 
 func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {

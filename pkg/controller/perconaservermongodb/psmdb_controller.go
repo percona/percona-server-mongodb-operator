@@ -471,8 +471,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
 
-	if err := r.reconcileVPA(ctx, cr); err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile VPA")
+	err = r.reconcileVPARecommendations(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile VPA recommendations")
 	}
 
 	if err := r.upgradeFCVIfNeeded(ctx, cr, cr.Status.MongoVersion); err != nil {

@@ -35,8 +35,8 @@ from lib.vpa import (
     set_vpa_recommendation,
     wait_for_last_applied_at,
     wait_for_new_apply,
+    wait_for_recommended,
     wait_for_requests,
-    wait_for_vpa_status,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,8 +109,8 @@ class TestVPA:
         vpa_name = f"{CLUSTER}-rs0-vpa"
         set_vpa_recommendation(vpa_name, "350m", "350Mi")
 
-        wait_for_vpa_status("rs0.cpu", "350m", CLUSTER, max_attempts=60)
-        wait_for_vpa_status("rs0.memory", "350Mi", CLUSTER, max_attempts=60)
+        wait_for_recommended("rs0", "cpu", "350m", CLUSTER, max_attempts=60)
+        wait_for_recommended("rs0", "memory", "350Mi", CLUSTER, max_attempts=60)
 
         assert_requests("rs0", "cpu", INITIAL_CPU, CLUSTER)
         assert_requests("rs0", "memory", INITIAL_MEMORY, CLUSTER)
@@ -206,8 +206,9 @@ class TestVPA:
         assert get_last_applied_at("rs0", CLUSTER) == applied, (
             "lastAppliedAt advanced although the recommendation never changed"
         )
-        # lastObservedAt is written on every reconcile unless it too is
-        # change-driven, so this is the assertion that catches status churn.
+        # lastObservedAt now marks when the recommendation in force was adopted,
+        # so a steady recommendation must never move it. This is the assertion
+        # that catches status churn.
         assert get_vpa_status("rs0.lastObservedAt", CLUSTER) == observed, (
             "lastObservedAt advanced although the recommendation never changed"
         )

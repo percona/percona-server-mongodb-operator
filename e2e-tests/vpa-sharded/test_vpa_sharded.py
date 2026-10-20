@@ -31,8 +31,8 @@ from lib.vpa import (
     install_vpa_crd,
     set_vpa_recommendation,
     wait_for_last_applied_at,
+    wait_for_recommended,
     wait_for_requests,
-    wait_for_vpa_status,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,9 +112,9 @@ class TestVPASharded:
         set_vpa_recommendation(VPA_CFG, "250m", "250Mi", "mongod")
         set_vpa_recommendation(VPA_MONGOS, "150m", "150Mi", "mongos")
 
-        wait_for_vpa_status("rs0.cpu", "350m", CLUSTER)
-        wait_for_vpa_status("cfg.cpu", "250m", CLUSTER)
-        wait_for_vpa_status("mongos.cpu", "150m", CLUSTER)
+        wait_for_recommended("rs0", "cpu", "350m", CLUSTER)
+        wait_for_recommended("cfg", "cpu", "250m", CLUSTER)
+        wait_for_recommended("mongos", "cpu", "150m", CLUSTER)
 
         for component in ("rs0", "cfg", "mongos"):
             assert_requests(component, "cpu", INITIAL_CPU, CLUSTER)
@@ -182,7 +182,7 @@ class TestVPASharded:
     def test_non_voting_applies_independently(self, config: VPAShardedConfig) -> None:
         """Non-voting members use their own VPA object and leave rs0 alone."""
         set_vpa_recommendation(VPA_NV, "220m", "220Mi", "mongod-nv")
-        wait_for_vpa_status("rs0-nv.cpu", "220m", CLUSTER)
+        wait_for_recommended("rs0-nv", "cpu", "220m", CLUSTER)
 
         time.sleep(STABILIZATION_WINDOW + 5)
         wait_for_requests("nonvoting", "cpu", "220m", CLUSTER)
@@ -211,7 +211,7 @@ class TestVPASharded:
     def test_hidden_applies_independently(self, config: VPAShardedConfig) -> None:
         """Hidden members use their own VPA object and leave non-voting alone."""
         set_vpa_recommendation(VPA_HIDDEN, "190m", "190Mi", "mongod-hidden")
-        wait_for_vpa_status("rs0-hidden.cpu", "190m", CLUSTER)
+        wait_for_recommended("rs0-hidden", "cpu", "190m", CLUSTER)
 
         time.sleep(STABILIZATION_WINDOW + 5)
         wait_for_requests("hidden", "cpu", "190m", CLUSTER)

@@ -3187,8 +3187,15 @@ func (in *VPAComponentStatus) DeepCopyInto(out *VPAComponentStatus) {
 		in, out := &in.LastAppliedAt, &out.LastAppliedAt
 		*out = (*in).DeepCopy()
 	}
-	if in.Resources != nil {
-		in, out := &in.Resources, &out.Resources
+	if in.Recommended != nil {
+		in, out := &in.Recommended, &out.Recommended
+		*out = make(corev1.ResourceList, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val.DeepCopy()
+		}
+	}
+	if in.Applied != nil {
+		in, out := &in.Applied, &out.Applied
 		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}

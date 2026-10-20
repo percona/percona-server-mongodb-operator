@@ -8,64 +8,56 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	vpav1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
 // vpaGVK is the GroupVersionKind for VerticalPodAutoscaler objects.
 // The operator never creates these — it only reads them.
-var vpaGVK = schema.GroupVersionKind{
-	Group:   "autoscaling.k8s.io",
-	Version: "v1",
-	Kind:    "VerticalPodAutoscaler",
-}
+var vpaGVK = vpav1.SchemeGroupVersion.WithKind("VerticalPodAutoscaler")
 
-// reconcileVPA reads VPA recommendations for all replsets and mongos, records them in
+// reconcileVPARecommendations reads VPA recommendations for all replsets and mongos, records them in
 // status, and (when updateMode=Auto) patches CR resources and triggers SmartUpdate.
 //
 // The operator is recommendation-agnostic: any external tool (VPA Recommender, Goldilocks,
 // etc.) that writes to a VerticalPodAutoscaler object is a valid recommendation source.
-func (r *ReconcilePerconaServerMongoDB) reconcileVPA(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.VPA == nil || !cr.Spec.VPA.Enabled {
-		cr.Status.RemoveCondition(api.ConditionTypeVPAReady)
+func (r *ReconcilePerconaServerMongoDB) reconcileVPARecommendations(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if cr.Spec.Pause {
 		return nil
 	}
 
-	log := logf.FromContext(ctx).WithName("VPA")
+	if cr.Spec.VPA == nil || !cr.Spec.VPA.Enabled {
+		cr.Status.RemoveCondition(api.ConditionTypeVPAReady)
+		cr.Status.VPAStatus = nil
+		return nil
+	}
 
-	// The operator only reads VerticalPodAutoscaler objects; it never installs the CRD.
-	// Resolve the kind once per reconcile: without the CRD every per-component Get below
-	// would fail with the same NoKindMatchError, which client.IgnoreNotFound does not
-	// swallow, producing one logged error per component on every reconcile and a
-	// rediscovery round trip per miss.
-	if _, err := r.client.RESTMapper().RESTMapping(vpaGVK.GroupKind(), vpaGVK.Version); err != nil {
-		if meta.IsNoMatchError(err) {
-			log.Info("spec.vpa.enabled is set but the VerticalPodAutoscaler CRD is not installed, skipping VPA reconciliation")
-			cr.Status.AddCondition(api.ClusterCondition{
-				Status:  api.ConditionFalse,
-				Type:    api.ConditionTypeVPAReady,
-				Reason:  "VPACRDNotInstalled",
-				Message: "spec.vpa.enabled is set but the VerticalPodAutoscaler CRD (autoscaling.k8s.io/v1) is not installed in the cluster",
-			})
-			return nil
-		}
-		return errors.Wrap(err, "resolve VerticalPodAutoscaler kind")
+	if ok, err := util.GroupVersionKindExists(r.client, vpaGVK); err != nil {
+		return errors.Wrap(err, "check autoscaling API discovery")
+	} else if !ok {
+		cr.Status.AddCondition(api.ClusterCondition{
+			Status:  api.ConditionFalse,
+			Type:    api.ConditionTypeVPAReady,
+			Reason:  "APINotInstalled",
+			Message: "spec.vpa.enabled is set but the autoscaling.k8s.io/v1.VerticalPodAutoscaler is not installed in the cluster",
+		})
+		return nil
 	}
 
 	cr.Status.AddCondition(api.ClusterCondition{
 		Status:  api.ConditionTrue,
 		Type:    api.ConditionTypeVPAReady,
-		Reason:  "VPACRDInstalled",
-		Message: "operator is reading VerticalPodAutoscaler recommendations",
+		Reason:  "CRDInstalled",
+		Message: "reading VerticalPodAutoscaler recommendations",
 	})
 
 	for _, rs := range cr.Spec.Replsets {
@@ -73,95 +65,177 @@ func (r *ReconcilePerconaServerMongoDB) reconcileVPA(ctx context.Context, cr *ap
 			continue
 		}
 
-		// Main replset members.
-		if rec := r.vpaRecommendationFor(ctx, cr, rs.Name, vpaObjectName(cr, rs.Name, rs.VPA),
-			naming.ContainerMongod, effectiveWindow(cr.Spec.VPA, rs.VPA)); rec != nil {
-			r.commitVPAResources(ctx, cr, rs.Name, rs.Resources, rec, effectiveBounds(cr.Spec.VPA, rs.VPA))
+		if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentMongod, rs.Resources, rs.VPA); err != nil {
+			return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentMongod, rs.Name)
 		}
 
-		// Non-voting members — separate StatefulSet with container "mongod-nv".
 		if rs.NonVoting.Enabled {
-			if rec := r.vpaRecommendationFor(ctx, cr, rs.Name+"-nv",
-				vpaObjectName(cr, rs.Name+"-nv", rs.NonVoting.VPA),
-				naming.ContainerNonVoting, effectiveWindow(cr.Spec.VPA, rs.NonVoting.VPA)); rec != nil {
-				r.commitVPAResources(ctx, cr, rs.Name+"-nv", rs.NonVoting.Resources, rec,
-					effectiveBounds(cr.Spec.VPA, rs.NonVoting.VPA))
+			if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentNonVoting, rs.NonVoting.Resources, rs.NonVoting.VPA); err != nil {
+				return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentNonVoting, rs.Name)
 			}
 		}
 
-		// Hidden members — separate StatefulSet with container "mongod-hidden".
 		if rs.Hidden.Enabled {
-			if rec := r.vpaRecommendationFor(ctx, cr, rs.Name+"-hidden",
-				vpaObjectName(cr, rs.Name+"-hidden", rs.Hidden.VPA),
-				naming.ContainerHidden, effectiveWindow(cr.Spec.VPA, rs.Hidden.VPA)); rec != nil {
-				r.commitVPAResources(ctx, cr, rs.Name+"-hidden", rs.Hidden.Resources, rec,
-					effectiveBounds(cr.Spec.VPA, rs.Hidden.VPA))
+			if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentHidden,
+				rs.Hidden.Resources, rs.Hidden.VPA); err != nil {
+				return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentHidden, rs.Name)
 			}
 		}
 	}
 
-	// Config server replset — only when sharding is enabled.
-	// spec.Replset("cfg") already resolves to spec.Sharding.ConfigsvrReplSet, so
-	// applyVPAToReplset works without modification.
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		cfg := cr.Spec.Sharding.ConfigsvrReplSet
-		if rec := r.vpaRecommendationFor(ctx, cr, cfg.Name, vpaObjectName(cr, cfg.Name, cfg.VPA),
-			naming.ContainerMongod, effectiveWindow(cr.Spec.VPA, cfg.VPA)); rec != nil {
-			r.commitVPAResources(ctx, cr, cfg.Name, cfg.Resources, rec, effectiveBounds(cr.Spec.VPA, cfg.VPA))
+		if err := r.reconcileComponentVPA(ctx, cr, cfg.Name, naming.ComponentConfigSrv, cfg.Resources, cfg.VPA); err != nil {
+			return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentConfigSrv, cfg.Name)
 		}
 	}
 
-	// Mongos — only when sharding is enabled.
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos != nil {
 		mongos := cr.Spec.Sharding.Mongos
-		if rec := r.vpaRecommendationFor(ctx, cr, "mongos", vpaObjectName(cr, "mongos", mongos.VPA),
-			naming.ContainerMongos, effectiveWindow(cr.Spec.VPA, mongos.VPA)); rec != nil {
-			r.commitVPAResources(ctx, cr, "mongos", mongos.Resources, rec,
-				effectiveBounds(cr.Spec.VPA, mongos.VPA))
+		if err := r.reconcileComponentVPA(ctx, cr, "", naming.ComponentMongos, mongos.Resources, mongos.VPA); err != nil {
+			return errors.Wrapf(err, "failed to reconcile VPA for component '%s'", naming.ComponentMongos)
 		}
 	}
+
+	cleanupStaleVPAStatus(cr)
 
 	return nil
 }
 
+func cleanupStaleVPAStatus(cr *api.PerconaServerMongoDB) {
+	live := map[string]struct{}{}
+	keep := func(rsName, component string) {
+		live[naming.VPAStatusKey(rsName, component)] = struct{}{}
+	}
+
+	for _, rs := range cr.Spec.Replsets {
+		if rs == nil {
+			continue
+		}
+
+		keep(rs.Name, naming.ComponentMongod)
+		if rs.NonVoting.Enabled {
+			keep(rs.Name, naming.ComponentNonVoting)
+		}
+		if rs.Hidden.Enabled {
+			keep(rs.Name, naming.ComponentHidden)
+		}
+	}
+
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+		keep(cr.Spec.Sharding.ConfigsvrReplSet.Name, naming.ComponentConfigSrv)
+	}
+
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos != nil {
+		keep("", naming.ComponentMongos)
+	}
+
+	for key := range cr.Status.VPAStatus {
+		if _, ok := live[key]; !ok {
+			delete(cr.Status.VPAStatus, key)
+		}
+	}
+}
+
+func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	rsName, component string,
+	declared corev1.ResourceRequirements,
+	vpa *api.ComponentVPASpec,
+) error {
+	container := managedContainer(component)
+	if container == "" {
+		return nil
+	}
+
+	statusKey := naming.VPAStatusKey(rsName, component)
+	rec, err := r.vpaRecommendationFor(ctx, cr, statusKey, container, vpa)
+	if err != nil {
+		return err
+	}
+	if rec == nil {
+		return nil
+	}
+	r.commitVPAResources(ctx, cr, statusKey, declared, rec, effectiveBounds(cr.Spec.VPA, vpa))
+	return nil
+}
+
 // vpaRecommendationFor reads one component's recommendation, always records the
-// outcome in status, and returns the recommendation only when it should be applied
-// now. It returns nil when there is nothing to apply: no recommendation was
-// available, updateMode is Off, or the stabilization window has not yet passed.
+// outcome in status, and returns the recommendation the component should be sized
+// from, or nil when there is none: no recommendation was available, or updateMode
+// is Off.
+//
+// The stabilization window gates only whether a new recommendation is adopted.
+// While it is open this returns the one already in status, so the caller still
+// recomputes the effective resources from the current spec on every reconcile and
+// an edit to spec.<component>.resources is never held back by the window.
+//
+// vpa is the component's own VPA block, which together with statusKey is all that
+// the object name and the stabilization window are derived from, so callers pass
+// the block rather than deriving both themselves.
 func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
-	statusKey, vpaName, container string,
-	window time.Duration,
-) corev1.ResourceList {
+	statusKey, container string,
+	vpa *api.ComponentVPASpec,
+) (corev1.ResourceList, error) {
 	log := logf.FromContext(ctx).WithName("VPA")
+
+	vpaName := naming.VPAName(cr, statusKey, vpa)
+	window := effectiveWindow(cr.Spec.VPA, vpa)
 
 	res, err := r.readVPARecommendation(ctx, cr.Namespace, vpaName, container)
 	if err != nil {
 		log.Error(err, "failed to read VPA recommendation", "vpa", vpaName, "component", statusKey)
 		r.setVPAMessage(cr, statusKey, err.Error())
-		return nil
+		return nil, nil
+	}
+
+	// Under UpdateModeAuto, if a recommendation was previously applied but the VPA is now missing,
+	// we should return an error here for the user to handle. The operator cannot assume anything about
+	// what the new resources must be.
+	if lastApplied := cr.Status.VPAStatus[statusKey].Applied; lastApplied != nil &&
+		res.state == vpaStateObjectNotFound &&
+		cr.Spec.VPA.UpdateMode == api.VPAUpdateModeAuto {
+		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
+			"VerticalPodAutoscaler %q not found; this component is still sized from the last "+
+				"applied recommendation and reconciliation is stopped. Recreate the object, or set "+
+				"spec.vpa.updateMode to Off to return to the declared resources",
+			vpaName))
+		return nil, errors.Errorf("VerticalPodAutoscaler %q not found", vpaName)
 	}
 
 	if res.state != vpaStateOK {
 		r.setVPAMessage(cr, statusKey, res.message(container))
-		return nil
+		return nil, nil
+	}
+
+	// Off observes without applying, so every observation is recorded: there
+	// is no adoption to rate-limit and status is the only output.
+	if cr.Spec.VPA.UpdateMode == api.VPAUpdateModeOff {
+		r.recordVPAStatus(cr, statusKey, res.rec)
+		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
+			"recommendation recorded only, spec.vpa.updateMode is %s", cr.Spec.VPA.UpdateMode))
+		return nil, nil
+	}
+
+	// A recommendation that has not moved needs no decision regarding the window
+	accepted := cr.Status.VPAStatus[statusKey].Recommended
+	if quantitiesEqual(accepted, res.rec) {
+		r.setVPAMessage(cr, statusKey, "")
+		return accepted, nil
+	}
+
+	// New recommendations to be accepted only after the stabilization window has passed.
+	if !stabilizationWindowPassed(cr, statusKey, window) {
+		r.setVPAMessage(cr, statusKey, stabilizationMessage(cr, statusKey, res.rec, window))
+		return accepted, nil
 	}
 
 	r.recordVPAStatus(cr, statusKey, res.rec)
-
-	if cr.Spec.VPA.UpdateMode != api.VPAUpdateModeAuto {
-		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
-			"recommendation recorded only, spec.vpa.updateMode is %s", cr.Spec.VPA.UpdateMode))
-		return nil
-	}
-	if !stabilizationWindowPassed(cr, statusKey, window) {
-		r.setVPAMessage(cr, statusKey, stabilizationMessage(cr, statusKey, window))
-		return nil
-	}
-
 	r.setVPAMessage(cr, statusKey, "")
-	return res.rec
+	return res.rec, nil
 }
 
 // setVPAMessage records why a component is or is not applying recommendations,
@@ -193,31 +267,25 @@ func (r *ReconcilePerconaServerMongoDB) setVPAMessage(
 	cr.Status.VPAStatus[statusKey] = s
 }
 
-// stabilizationMessage says when the next apply becomes possible, so that a
-// component sitting still inside its window explains itself rather than looking
-// stalled.
+// stabilizationMessage names the recommendation waiting to be adopted and when
+// that becomes possible, so that a component sitting still inside its window
+// explains itself rather than looking stalled. Naming the pending value is what
+// makes the deferred change visible in status rather than only the fact of it.
 func stabilizationMessage(
 	cr *api.PerconaServerMongoDB,
 	statusKey string,
+	pending corev1.ResourceList,
 	window time.Duration,
 ) string {
 	s, ok := cr.Status.VPAStatus[statusKey]
-	if !ok || s.LastAppliedAt == nil {
+	if !ok || s.LastObservedAt == nil {
 		return ""
 	}
 	return fmt.Sprintf(
-		"recommendation recorded, next apply allowed after %s (stabilizationWindow %s)",
-		s.LastAppliedAt.Add(window).UTC().Format(time.RFC3339), window,
+		"new recommendation cpu=%s memory=%s, next adoption allowed after %s (stabilizationWindow %s)",
+		pending.Cpu().String(), pending.Memory().String(),
+		s.LastObservedAt.Add(window).UTC().Format(time.RFC3339), window,
 	)
-}
-
-// vpaObjectName returns the VPA object name for a component.
-// Uses the explicit objectName if configured; falls back to "<cluster>-<component>-vpa".
-func vpaObjectName(cr *api.PerconaServerMongoDB, component string, spec *api.ComponentVPASpec) string {
-	if spec != nil && spec.ObjectName != "" {
-		return spec.ObjectName
-	}
-	return cr.Name + "-" + component + "-vpa"
 }
 
 // vpaBounds holds the effective min/max resource bounds for one component.
@@ -262,8 +330,8 @@ const (
 	// vpaStateOK — a recommendation for the requested container was read.
 	vpaStateOK vpaReadState = "OK"
 
-	// vpaStateObjectNotFound — the VPA object does not exist. Normal while an
-	// external tool has yet to create it; otherwise usually a wrong objectName.
+	// vpaStateObjectNotFound — the VPA object does not exist. Either nobody has
+	// written one for this component, or objectName names one that is not there.
 	vpaStateObjectNotFound vpaReadState = "ObjectNotFound"
 
 	// vpaStateNoRecommendation — the object exists but carries no recommendation.
@@ -316,73 +384,46 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 ) (vpaReadResult, error) {
 	res := vpaReadResult{vpaName: vpaName}
 
-	vpa := &unstructured.Unstructured{}
-	vpa.SetGroupVersionKind(vpaGVK)
+	vpa := new(vpav1.VerticalPodAutoscaler)
 
 	err := r.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: vpaName}, vpa)
 	if err != nil {
-		// VPA object not yet created by the external tool — normal during initial setup.
-		if client.IgnoreNotFound(err) == nil {
-			res.state = vpaStateObjectNotFound
-			return res, nil
-		}
-		// The CRD can be uninstalled between the check in reconcileVPA and this read.
-		// IgnoreNotFound does not cover that: a missing kind surfaces as NoKindMatchError,
-		// which carries no NotFound status reason.
-		if meta.IsNoMatchError(err) {
+		if k8serrors.IsNotFound(err) || meta.IsNoMatchError(err) {
 			res.state = vpaStateObjectNotFound
 			return res, nil
 		}
 		return res, errors.Wrap(err, "get VPA object")
 	}
 
-	// Navigate: .status.recommendation.containerRecommendations[]
-	recs, found, err := unstructured.NestedSlice(vpa.Object,
-		"status", "recommendation", "containerRecommendations")
-	if err != nil || !found || len(recs) == 0 {
+	if vpa.Status.Recommendation == nil || len(vpa.Status.Recommendation.ContainerRecommendations) == 0 {
 		res.state = vpaStateNoRecommendation
 		return res, nil
 	}
 
-	for _, item := range recs {
-		rec, ok := item.(map[string]any)
-		if !ok {
+	for _, rec := range vpa.Status.Recommendation.ContainerRecommendations {
+		res.containers = append(res.containers, rec.ContainerName)
+		if rec.ContainerName != containerName {
 			continue
 		}
-		name, _, _ := unstructured.NestedString(rec, "containerName")
-		res.containers = append(res.containers, name)
-		if name != containerName {
-			continue
-		}
-		target, found, _ := unstructured.NestedMap(rec, "target")
-		if !found {
+		if len(rec.Target) == 0 {
 			res.state = vpaStateNoRecommendation
 			return res, nil
 		}
-		res.rec = parseResourceList(target)
+
+		rec := rec.Target.DeepCopy()
+		for res := range rec {
+			// we only care about CPU and memory
+			if res != corev1.ResourceCPU && res != corev1.ResourceMemory {
+				delete(rec, res)
+			}
+		}
+		res.rec = rec
 		res.state = vpaStateOK
 		return res, nil
 	}
 
 	res.state = vpaStateContainerNotFound
 	return res, nil
-}
-
-// parseResourceList converts an unstructured map (from VPA status) to corev1.ResourceList.
-func parseResourceList(m map[string]any) corev1.ResourceList {
-	rl := make(corev1.ResourceList, len(m))
-	for k, v := range m {
-		str, ok := v.(string)
-		if !ok {
-			continue
-		}
-		q, err := resource.ParseQuantity(str)
-		if err != nil {
-			continue
-		}
-		rl[corev1.ResourceName(k)] = q
-	}
-	return rl
 }
 
 // clampRecommendation enforces minAllowed/maxAllowed on a recommendation.
@@ -399,7 +440,11 @@ func clampRecommendation(rec corev1.ResourceList, bounds vpaBounds) corev1.Resou
 	return result
 }
 
-// recordVPAStatus writes the observed recommendation into cr.Status.VPAStatus.
+// recordVPAStatus writes a recommendation into cr.Status.VPAStatus together with
+// the time it was read. Under Auto the caller only reaches this once the
+// stabilization window allows adoption, so Recommended holds the recommendation
+// currently in force and lastObservedAt doubles as the clock the window is
+// measured from. Under Off nothing is applied, so every observation is recorded.
 func (r *ReconcilePerconaServerMongoDB) recordVPAStatus(
 	cr *api.PerconaServerMongoDB,
 	statusKey string,
@@ -410,46 +455,26 @@ func (r *ReconcilePerconaServerMongoDB) recordVPAStatus(
 	}
 	s := cr.Status.VPAStatus[statusKey]
 
-	// Only record an observation that says something new. Writing the timestamp
-	// on every reconcile would make the status differ every time, so the API
-	// server could never collapse the update and every VPA-enabled cluster
-	// would bump its resourceVersion forever. lastObservedAt therefore means
-	// "the observed recommendation last changed", matching lastAppliedAt.
-	changed := s.LastObservedAt == nil
-	if cpu, ok := rec[corev1.ResourceCPU]; ok && !sameQuantityString(s.CPU, cpu) {
-		s.CPU = cpu.String()
-		changed = true
-	}
-	if mem, ok := rec[corev1.ResourceMemory]; ok && !sameQuantityString(s.Memory, mem) {
-		s.Memory = mem.String()
-		changed = true
-	}
-	if !changed {
+	// Only record an observation that says something new. quantitiesEqual compares
+	// by value, so a recommender that switches units does not register as a change.
+	if s.Recommended != nil && quantitiesEqual(s.Recommended, rec) {
 		return
 	}
 
 	now := metav1.Now()
+	s.Recommended = rec.DeepCopy()
 	s.LastObservedAt = &now
 	cr.Status.VPAStatus[statusKey] = s
 }
 
-// sameQuantityString reports whether a quantity already recorded in status as a
-// string describes the same amount as q. Comparing by value rather than by text
-// keeps a recommender that switches units from registering as a change. An
-// empty or unparseable stored value counts as different, so it gets rewritten.
-func sameQuantityString(stored string, q resource.Quantity) bool {
-	if stored == "" {
-		return false
-	}
-	parsed, err := resource.ParseQuantity(stored)
-	if err != nil {
-		return false
-	}
-	return parsed.Cmp(q) == 0
-}
-
-// stabilizationWindowPassed returns true if enough time has elapsed since the last apply,
-// or if no apply has occurred yet. A zero window always returns true.
+// stabilizationWindowPassed returns true if enough time has elapsed since the
+// recommendation in status was adopted, or if none has been adopted yet. A zero
+// window always returns true.
+//
+// It measures from lastObservedAt, not lastAppliedAt: the window limits how often
+// a new recommendation may be adopted, and lastObservedAt is when the one in force
+// was taken. Measuring from the last apply would also block applies caused by the
+// user editing spec.<component>.resources, which the window has no business over.
 func stabilizationWindowPassed(cr *api.PerconaServerMongoDB, statusKey string, window time.Duration) bool {
 	if window == 0 {
 		return true
@@ -458,10 +483,10 @@ func stabilizationWindowPassed(cr *api.PerconaServerMongoDB, statusKey string, w
 		return true
 	}
 	s, ok := cr.Status.VPAStatus[statusKey]
-	if !ok || s.LastAppliedAt == nil {
+	if !ok || s.LastObservedAt == nil {
 		return true
 	}
-	return time.Since(s.LastAppliedAt.Time) >= window
+	return time.Since(s.LastObservedAt.Time) >= window
 }
 
 // commitVPAResources turns a recommendation into the component's effective
@@ -509,31 +534,25 @@ func (r *ReconcilePerconaServerMongoDB) commitVPAResources(
 	}
 	s := cr.Status.VPAStatus[statusKey]
 
-	// Only a change is a commit. The recommender holds a value steady for long
-	// stretches, so without this the component would be re-committed once per
-	// stabilization window forever: status churns, the log fills, and
-	// lastAppliedAt comes to mean "last reconciled" instead of "last changed".
-	if s.Resources != nil && sameResourceRequirements(*s.Resources, effective) {
+	// apply only when changed
+	if s.Applied != nil &&
+		quantitiesEqual(s.Applied.Limits, effective.Limits) &&
+		quantitiesEqual(s.Applied.Requests, effective.Requests) {
 		return
 	}
 
 	now := metav1.Now()
-	s.Resources = &effective
+	s.Applied = &effective
 	s.LastAppliedAt = &now
 	cr.Status.VPAStatus[statusKey] = s
 
 	log.Info("committed VPA resources",
 		"component", statusKey,
-		"cpu", requests.Cpu().String(),
-		"memory", requests.Memory().String(),
+		"cpuRequest", requests.Cpu().String(),
+		"memoryRequest", requests.Memory().String(),
+		"cpuLimits", limits.Cpu().String(),
+		"memoryLimits", limits.Memory().String(),
 	)
-}
-
-// sameResourceRequirements reports whether two requirements describe the same
-// resources. Quantities are compared by value, not by string form, so a commit
-// of 1Gi is not treated as a change when 1024Mi is already recorded.
-func sameResourceRequirements(a, b corev1.ResourceRequirements) bool {
-	return quantitiesEqual(a.Requests, b.Requests) && quantitiesEqual(a.Limits, b.Limits)
 }
 
 // capRequestsAtLimits ensures that no request exceeds the corresponding limit.
@@ -570,7 +589,12 @@ func ratioScaledLimits(orig corev1.ResourceRequirements, newRequests corev1.Reso
 		}
 		ratio := float64(oldLim.MilliValue()) / float64(oldReq.MilliValue())
 		newLimMilli := int64(float64(newReq.MilliValue()) * ratio)
-		newLimits[res] = *resource.NewMilliQuantity(newLimMilli, resource.DecimalSI)
+		newLimits[res] = *resource.NewMilliQuantity(newLimMilli, oldLim.Format)
+
+		// Milli precesion is meanningful for CPU only, unreadable for memory.
+		if res == corev1.ResourceMemory {
+			newLimits[res] = *resource.NewQuantity(newLimMilli/1000, oldLim.Format)
+		}
 	}
 	return newLimits
 }
