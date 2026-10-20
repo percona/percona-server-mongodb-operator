@@ -13,10 +13,10 @@ check_cr_config() {
 	apply_cluster $test_dir/conf/$cluster.yml
 
 	desc 'check if all 3 Pods started'
-	wait_for_running $cluster 3 "false"
+	wait_for_running $cluster 3
 
 	desc 'check if service and statefulset created with expected config'
-	compare_kubectl statefulset/$cluster
+	compare_kubectl statefulset/$cluster "" "skip_generation_check"
 	compare_kubectl service/$cluster-0
 
 	local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"

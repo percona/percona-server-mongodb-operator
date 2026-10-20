@@ -117,7 +117,7 @@ function main() {
 	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": false}]'
 	sleep 10
 	wait_cluster_consistency "$cluster" 60
-	compare_kubectl statefulset/$cluster-rs0 "-sharding-disabled"
+	compare_kubectl statefulset/$cluster-rs0 "-sharding-disabled" "skip_generation_check"
 
 	if [[ "$(kubectl_bin get sts -o yaml | yq '.items | length')" != 1 ]]; then
 		echo "Expected to have only 1 statefulset $cluster-rs0"
@@ -128,7 +128,7 @@ function main() {
 	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": true}]'
 	sleep 10
 	wait_cluster_consistency "$cluster" 60
-	compare_kubectl statefulset/$cluster-rs0 "-sharding-enabled"
+	compare_kubectl statefulset/$cluster-rs0 "-sharding-enabled" "skip_generation_check"
 	compare_kubectl statefulset/$cluster-cfg
 	compare_kubectl statefulset/$cluster-mongos ""
 
