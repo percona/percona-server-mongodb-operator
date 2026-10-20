@@ -716,12 +716,12 @@ func TestMergeNewCADeletesAnAlreadyDeletedOldSecret(t *testing.T) {
 		for _, name := range []string{api.SSLInternalSecretName(cr), api.SSLSecretName(cr)} {
 			objs = append(objs,
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace},
-					Data:       map[string][]byte{"ca.crt": mergedCA},
+					Name: name, Namespace: cr.Namespace,
+					Data: map[string][]byte{"ca.crt": mergedCA},
 				},
 				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{Name: name + "-old", Namespace: cr.Namespace},
-					Data:       map[string][]byte{"ca.crt": oldCA},
+					Name: name + "-old", Namespace: cr.Namespace,
+					Data: map[string][]byte{"ca.crt": oldCA},
 				},
 			)
 		}

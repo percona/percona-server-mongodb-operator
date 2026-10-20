@@ -447,17 +447,15 @@ func TestDeleteConfigMapIfExistsIgnoresNotFoundOnDelete(t *testing.T) {
 		cr.UID = "test-uid"
 		isController := true
 		cm := &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cmName,
-				Namespace: cr.Namespace,
-				OwnerReferences: []metav1.OwnerReference{{
-					APIVersion: "psmdb.percona.com/v1",
-					Kind:       "PerconaServerMongoDB",
-					Name:       cr.Name,
-					UID:        cr.UID,
-					Controller: &isController,
-				}},
-			},
+			Name:      cmName,
+			Namespace: cr.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "psmdb.percona.com/v1",
+				Kind:       "PerconaServerMongoDB",
+				Name:       cr.Name,
+				UID:        cr.UID,
+				Controller: &isController,
+			}},
 		}
 		return cr, buildFakeClient(cr, cm)
 	}

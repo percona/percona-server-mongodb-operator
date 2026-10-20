@@ -163,7 +163,7 @@ func TestDeleteSecretsIgnoresNotFoundOnDelete(t *testing.T) {
 			cr.Name + "-mongodb-encryption-key",
 		} {
 			objs = append(objs, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: cr.Namespace},
+				Name: name, Namespace: cr.Namespace,
 			})
 		}
 		return objs
