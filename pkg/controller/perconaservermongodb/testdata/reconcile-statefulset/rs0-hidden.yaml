@@ -263,6 +263,8 @@ spec:
                 key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
                 name: internal-reconcile-statefulset-cr-users
                 optional: false
+          - name: MONGODB_TLS_ENABLED
+            value: "true"
         resources:
           requests:
             cpu: 200m
@@ -272,6 +274,9 @@ spec:
             name: mongod-data
           - mountPath: /opt/percona
             name: bin
+          - mountPath: /etc/mongodb-ssl
+            name: ssl
+            readOnly: true
       initContainers:
       - command:
         - /init-entrypoint.sh

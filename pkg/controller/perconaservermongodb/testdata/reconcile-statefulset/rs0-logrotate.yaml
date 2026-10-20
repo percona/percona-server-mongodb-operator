@@ -264,6 +264,8 @@ spec:
                 key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
                 name: internal-reconcile-statefulset-cr-users
                 optional: false
+          - name: MONGODB_TLS_ENABLED
+            value: "true"
           - name: LOGROTATE_SCHEDULE
             value: "0 0 */2 * *"
         resources:
@@ -275,6 +277,9 @@ spec:
             name: mongod-data
           - mountPath: /opt/percona
             name: bin
+          - mountPath: /etc/mongodb-ssl
+            name: ssl
+            readOnly: true
           - mountPath: /opt/percona/logcollector/logrotate/conf.d
             name: logrotate-config
       initContainers:

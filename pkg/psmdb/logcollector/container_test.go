@@ -306,10 +306,12 @@ func expectedContainers(
 					},
 				},
 			},
+			{Name: "MONGODB_TLS_ENABLED", Value: "true"},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
+			{Name: "ssl", MountPath: config.SSLDir, ReadOnly: true},
 		},
 	}
 
