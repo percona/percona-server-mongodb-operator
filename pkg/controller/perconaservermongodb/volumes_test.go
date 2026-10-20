@@ -564,8 +564,8 @@ func TestMaxPVCCapacity(t *testing.T) {
 			name: "skips PVCs with nil capacity",
 			pvcs: []corev1.PersistentVolumeClaim{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: config.MongodDataVolClaimName + "-my-sts-0", Namespace: "ns", Labels: labels},
-					Status:     corev1.PersistentVolumeClaimStatus{},
+					Name: config.MongodDataVolClaimName + "-my-sts-0", Namespace: "ns", Labels: labels,
+					Status: corev1.PersistentVolumeClaimStatus{},
 				},
 				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-1", labels, resource.MustParse("8Gi"), resource.MustParse("8Gi")),
 			},
@@ -578,6 +578,103 @@ func TestMaxPVCCapacity(t *testing.T) {
 			got := maxPVCCapacity(tt.pvcs, config.MongodDataVolClaimName, sts)
 			expected := resource.MustParse(tt.expected)
 			assert.True(t, got.Equal(expected), "got %s, expected %s", got.String(), expected.String())
+		})
+	}
+}
+
+func TestIsPVCExpansionInProgress(t *testing.T) {
+	labels := map[string]string{"app": "test"}
+	sts := newStatefulSet("ns", "my-sts", labels, resource.MustParse("10Gi"))
+	claimName := config.MongodDataVolClaimName
+
+	tests := []struct {
+		name       string
+		pvcs       []corev1.PersistentVolumeClaim
+		expanding  bool
+		expectName string
+	}{
+		{
+			name:      "no PVCs returns false",
+			pvcs:      nil,
+			expanding: false,
+		},
+		{
+			name: "fully expanded PVC returns false",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+			},
+			expanding: false,
+		},
+		{
+			name: "spec.requests > status.capacity detected",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+				*newPVC("ns", claimName+"-my-sts-1", labels, resource.MustParse("15Gi"), resource.MustParse("10Gi")),
+			},
+			expanding:  true,
+			expectName: claimName + "-my-sts-1",
+		},
+		{
+			name: "FileSystemResizePending condition detected",
+			pvcs: func() []corev1.PersistentVolumeClaim {
+				pvc := newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi"))
+				pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+						Status: corev1.ConditionTrue,
+					},
+				}
+				return []corev1.PersistentVolumeClaim{*pvc}
+			}(),
+			expanding:  true,
+			expectName: claimName + "-my-sts-0",
+		},
+		{
+			name: "Resizing condition detected",
+			pvcs: func() []corev1.PersistentVolumeClaim {
+				pvc := newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi"))
+				pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:   corev1.PersistentVolumeClaimResizing,
+						Status: corev1.ConditionTrue,
+					},
+				}
+				return []corev1.PersistentVolumeClaim{*pvc}
+			}(),
+			expanding:  true,
+			expectName: claimName + "-my-sts-0",
+		},
+		{
+			name: "condition with status false is ignored",
+			pvcs: func() []corev1.PersistentVolumeClaim {
+				pvc := newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi"))
+				pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+						Status: corev1.ConditionFalse,
+					},
+				}
+				return []corev1.PersistentVolumeClaim{*pvc}
+			}(),
+			expanding: false,
+		},
+		{
+			name: "skips non-matching PVCs",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", claimName+"-other-sts-0", labels, resource.MustParse("20Gi"), resource.MustParse("10Gi")),
+				*newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+			},
+			expanding: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name, expanding := isPVCExpansionInProgress(tt.pvcs, claimName, sts)
+			assert.Equal(t, tt.expanding, expanding)
+			if tt.expanding {
+				assert.Equal(t, tt.expectName, name)
+			}
 		})
 	}
 }

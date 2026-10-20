@@ -59,6 +59,31 @@ func maxPVCCapacity(pvcs []corev1.PersistentVolumeClaim, claimName string, sts *
 	return max
 }
 
+func isPVCExpansionInProgress(pvcs []corev1.PersistentVolumeClaim, claimName string, sts *appsv1.StatefulSet) (string, bool) {
+	for _, pvc := range pvcs {
+		if !validatePVCName(claimName, pvc, sts) {
+			continue
+		}
+		for _, cond := range pvc.Status.Conditions {
+			if cond.Status != corev1.ConditionTrue {
+				continue
+			}
+			if cond.Type == corev1.PersistentVolumeClaimResizing ||
+				cond.Type == corev1.PersistentVolumeClaimFileSystemResizePending {
+				return pvc.Name, true
+			}
+		}
+		if pvc.Spec.Resources.Requests != nil && pvc.Status.Capacity != nil {
+			specSize := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+			statusSize := pvc.Status.Capacity[corev1.ResourceStorage]
+			if specSize.Cmp(statusSize) > 0 {
+				return pvc.Name, true
+			}
+		}
+	}
+	return "", false
+}
+
 func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	ctx context.Context,
 	cr *psmdbv1.PerconaServerMongoDB,
@@ -489,6 +514,10 @@ func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 		pvcList := corev1.PersistentVolumeClaimList{}
 		if err := r.client.List(ctx, &pvcList, client.InNamespace(cr.Namespace), client.MatchingLabels(ls)); err != nil {
 			return errors.Wrap(err, "list pvcs for shrink")
+		}
+		if pvcName, expanding := isPVCExpansionInProgress(pvcList.Items, claimName, sts); expanding {
+			logf.FromContext(ctx).WithName("PVCShrink").Info("PVC expansion still in progress, deferring shrink", "sts", sts.Name, "pvc", pvcName)
+			return nil
 		}
 		actual := maxPVCCapacity(pvcList.Items, claimName, sts)
 		requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
