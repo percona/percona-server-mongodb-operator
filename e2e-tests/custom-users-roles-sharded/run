@@ -224,9 +224,9 @@ retry 60 2 check_connection_strings "user-two-conn-str"
 desc 'check password change'
 userTwoNewPass="new-user-two-password"
 patch_secret "user-two" "userTwoPassKey" "$(echo -n "$userTwoNewPass" | base64)"
-sleep 20
 
-check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
+# mongos instances may serve a cached user for up to userCacheInvalidationIntervalSecs (30s)
+retry 30 5 check_auth "$userTwo:$userTwoNewPass@$cluster-mongos.$namespace"
 retry 60 2 check_connection_strings "user-two-conn-str"
 
 desc 'check user roles update from CR'
@@ -254,15 +254,13 @@ desc 'check user roles update from DB'
 run_mongos \
 	'use admin\n db.updateUser("user-two", { roles : [{ role : "userAdminAnyDatabase", db: "admin"}]})' \
 	"$mongosUri"
-sleep 15
-compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
+retry 30 5 compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
 
 desc 'check user recreated after deleted from DB'
 run_mongos \
 	'use admin\n db.dropUser("user-two")' \
 	"$mongosUri"
-sleep 15
-compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
+retry 30 5 compare 'admin' "$(get_user_cmd \"user-two\")" "$mongosUri" "user-two-update-roles"
 
 desc 'check new user created after updated user name via CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -340,8 +338,7 @@ desc 'check role recreated after deleted from DB'
 run_mongos \
 	'use admin\n db.dropRole("role-one")' \
 	"$mongosUri"
-sleep 15
-compare 'admin' "$(get_role_cmd \"role-one\" )" "$mongosUri" "role-one"
+retry 30 5 compare 'admin' "$(get_role_cmd \"role-one\" )" "$mongosUri" "role-one"
 
 desc 'delete initial role from CR and create a new one'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
@@ -403,8 +400,7 @@ desc 'check role update from DB'
 run_mongos \
 	'use admin\n db.updateRole( "role-two",{privileges:[{resource: {db:"config", collection:"" }, actions: ["find", "update"]}]})' \
 	"$mongosUri"
-sleep 15
-compare 'admin' "$(get_role_cmd \"role-two\" )" "$mongosUri" "role-two-updated"
+retry 30 5 compare 'admin' "$(get_role_cmd \"role-two\" )" "$mongosUri" "role-two-updated"
 
 desc 'check new role created after updated role name via CR'
 kubectl_bin patch psmdb ${cluster} --type=merge --patch '{
