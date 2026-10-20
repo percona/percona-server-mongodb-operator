@@ -6,7 +6,7 @@ external tool would normally write that status (VPA Recommender, Goldilocks, ...
 by creating VPA objects and patching their status directly.
 
 The operator never writes resources into the CR spec. It commits the effective
-values to status.vpaStatus.<component>.resources and generates the StatefulSet
+values to status.vpaStatus.<component>.applied and generates the StatefulSet
 from them, so assertions here read the StatefulSet (what the cluster runs) and
 status (what the operator decided), and check that spec still holds what the user
 declared.
@@ -117,7 +117,7 @@ def set_vpa_recommendation(
 
 
 def get_vpa_status(field: str, cluster: str, namespace: str | None = None) -> str:
-    """Read a field under .status.vpaStatus, e.g. "rs0.cpu" or "mongos.memory"."""
+    """Read a field under .status.vpaStatus, e.g. "rs0.applied.requests.cpu"."""
     return kubectl_bin(
         "get",
         *_ns_args(namespace),
@@ -196,7 +196,30 @@ def get_committed_requests(
 ) -> str:
     """Read the effective request the operator committed to status for a component."""
     return get_vpa_status(
-        f"{status_key(component)}.resources.requests.{resource}", cluster, namespace
+        f"{status_key(component)}.applied.requests.{resource}", cluster, namespace
+    )
+
+
+def get_recommended(key: str, resource: str, cluster: str, namespace: str | None = None) -> str:
+    """Read the recommendation the operator is currently sizing a component from.
+
+    key is the status.vpaStatus key ("rs0", "cfg", "mongos", "rs0-nv",
+    "rs0-hidden"), which status_key() derives from a component name.
+    """
+    return get_vpa_status(f"{key}.recommended.{resource}", cluster, namespace)
+
+
+def wait_for_recommended(
+    key: str,
+    resource: str,
+    expected: str,
+    cluster: str,
+    namespace: str | None = None,
+    max_attempts: int = 30,
+) -> None:
+    """Wait until the operator has taken a recommendation into status."""
+    wait_for_vpa_status(
+        f"{key}.recommended.{resource}", expected, cluster, namespace, max_attempts=max_attempts
     )
 
 
@@ -243,7 +266,7 @@ def assert_committed(
     """Assert status carries the committed values and the StatefulSet agrees with them.
 
     Together with assert_spec_untouched this pins the whole path: recommendation
-    -> status.vpaStatus.<component>.resources -> StatefulSet, with spec untouched.
+    -> status.vpaStatus.<component>.applied -> StatefulSet, with spec untouched.
 
     The StatefulSet converges after the commit rather than with it, so this waits
     for agreement. Mongos lags the most: reconcileMongosStatefulset returns early
@@ -253,7 +276,7 @@ def assert_committed(
     for resource in declared:
         committed = get_committed_requests(component, resource, cluster, namespace)
         assert committed, (
-            f"{cluster} status.vpaStatus.{status_key(component)}.resources.requests."
+            f"{cluster} status.vpaStatus.{status_key(component)}.applied.requests."
             f"{resource} is empty; the operator should have committed an effective value"
         )
 

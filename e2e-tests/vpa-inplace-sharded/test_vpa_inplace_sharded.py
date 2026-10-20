@@ -36,7 +36,7 @@ from lib.vpa import (
     set_vpa_recommendation,
     status_key,
     wait_for_pod_resources,
-    wait_for_vpa_status,
+    wait_for_recommended,
     wait_for_wiredtiger_cache,
     wiredtiger_cache_bytes,
 )
@@ -149,7 +149,7 @@ def _resize_and_check(
     set_vpa_recommendation(component.vpa_object, cpu, memory, container=component.container)
     # The operator keys status by the replset-qualified name (rs0-nv, rs0-hidden),
     # which is not the component name. status_key() maps between the two.
-    wait_for_vpa_status(f"{status_key(component.name)}.cpu", cpu, CLUSTER)
+    wait_for_recommended(status_key(component.name), "cpu", cpu, CLUSTER)
     wait_for_pod_resources(component.pod, "memory", memory, container=component.container)
 
     # Same pod: resized, not replaced.
