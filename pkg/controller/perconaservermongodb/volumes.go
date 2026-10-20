@@ -553,7 +553,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		}
 	}
 
-	if sc.cr.Status.State != psmdbv1.AppStateReady {
+	clusterReady := sc.cr.Status.State == psmdbv1.AppStateReady ||
+		(sc.cr.Status.State == psmdbv1.AppStateInit && sc.cr.IsPVCShrinkInProgress())
+	if !clusterReady {
 		log.Info("PVC shrink waiting for cluster to be ready", "state", string(sc.cr.Status.State))
 		revertVCT()
 		return nil
@@ -845,6 +847,15 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 				return nil
 			}
 			if !isSecondary {
+				if !isPrimaryPhase {
+					// Primary election happened during shrink. Update the
+					// tracked primary so this pod is skipped and processed
+					// in the primary phase instead.
+					log.Info("Pod became primary during shrink, updating tracked primary", "pod", pod.Name, "previousPrimary", state.PrimaryPod)
+					state.PrimaryPod = pod.Name
+					sc.cr.SetPVCShrinkState(sc.sts.Name, state)
+					continue
+				}
 				log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				return nil
 			}

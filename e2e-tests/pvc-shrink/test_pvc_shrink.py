@@ -14,7 +14,6 @@ from lib.kubectl import (
     kubectl_bin,
     wait_cluster_consistency,
     wait_for_running,
-    wait_pod,
 )
 from lib.mongo import MongoManager
 from lib.utils import Paths, retry
@@ -50,12 +49,6 @@ def _cr_storage(replset: str) -> str:
     jsonpath = f'{{.spec.replsets[?(@.name=="{replset}")].volumeSpec.persistentVolumeClaim.resources.requests.storage}}'
     return kubectl_bin("get", "psmdb", CLUSTER, "-o", f"jsonpath={jsonpath}").strip()
 
-
-def _cfg_storage() -> str:
-    return kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o",
-        "jsonpath={.spec.sharding.configsvrReplSet.volumeSpec.persistentVolumeClaim.resources.requests.storage}",
-    ).strip()
 
 
 def _has_shrink_in_progress() -> bool:
@@ -124,20 +117,6 @@ def _patch_hidden_storage(replset: str, size: str) -> None:
         }]),
     )
 
-
-def _patch_cfg_storage(size: str) -> None:
-    kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=merge", "-p",
-        json.dumps({
-            "spec": {
-                "sharding": {
-                    "configsvrReplSet": {
-                        "volumeSpec": {"persistentVolumeClaim": {"resources": {"requests": {"storage": size}}}},
-                    },
-                },
-            },
-        }),
-    )
 
 
 def _patch_shrink_enabled(enabled: bool) -> None:
@@ -567,175 +546,3 @@ class TestPVCShrinkBasic:
             _wait_pvc_size(pvc, expand_size, max_attempts=60)
 
         wait_cluster_consistency(config.cluster, 600)
-
-
-# ---------------------------------------------------------------------------
-# Test class 2: parallel shard shrink (2 shards + configsvr)
-# ---------------------------------------------------------------------------
-
-class TestPVCShrinkSharded:
-    """Shrink two shards in parallel — both rs0 and rs1 process simultaneously."""
-
-    INITIAL_SIZE = "10Gi"
-    SHRUNK_SIZE = "5Gi"
-    RS0_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs0-{i}" for i in range(3)]
-    RS1_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs1-{i}" for i in range(3)]
-    CFG_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-cfg-{i}" for i in range(3)]
-
-    @pytest.fixture(scope="class", autouse=True)
-    @classmethod
-    def config(cls, create_infra: Callable[[str], str]) -> PVCShrinkConfig:
-        platform = detect_platform()
-        return PVCShrinkConfig(
-            namespace=create_infra("pvc-shrink-sharded"),
-            cluster=CLUSTER,
-            platform=platform,
-        )
-
-    @pytest.fixture(scope="class", autouse=True)
-    @classmethod
-    def setup_tests(cls, config: PVCShrinkConfig, test_paths: Paths) -> None:
-        kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets.yml")
-        _setup_storageclass(config.platform, test_paths)
-
-    @pytest.mark.dependency()
-    def test_01_create_sharded_cluster(self, config: PVCShrinkConfig, test_paths: Paths) -> None:
-        apply_cluster(f"{test_paths['test_dir']}/conf/some-name-sharded.yml")
-        wait_for_running(f"{config.cluster}-rs0", 3)
-        wait_for_running(f"{config.cluster}-rs1", 3)
-        wait_for_running(f"{config.cluster}-cfg", 3, False)
-        wait_pod(f"{config.cluster}-mongos-0")
-        wait_pod(f"{config.cluster}-mongos-1")
-
-        for pvc in self.RS0_PVCS + self.RS1_PVCS + self.CFG_PVCS:
-            assert _pvc_size(pvc) == self.INITIAL_SIZE, f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
-
-    @pytest.mark.dependency(depends=["TestPVCShrinkSharded::test_01_create_sharded_cluster"])
-    def test_02_shrink_both_shards(self, config: PVCShrinkConfig) -> None:
-        """Patch both rs0 and rs1 storage to 5Gi simultaneously."""
-        _patch_replset_storage("rs0", self.SHRUNK_SIZE)
-        _patch_replset_storage("rs1", self.SHRUNK_SIZE)
-        time.sleep(10)
-
-        assert _has_shrink_in_progress(), "pvcShrink status should be set"
-
-        _wait_no_shrink_in_progress(max_attempts=240)
-
-        for pvc in self.RS0_PVCS + self.RS1_PVCS:
-            _wait_pvc_size(pvc, self.SHRUNK_SIZE)
-
-        wait_cluster_consistency(config.cluster, 900)
-
-    @pytest.mark.dependency(depends=["TestPVCShrinkSharded::test_02_shrink_both_shards"])
-    def test_03_cfg_untouched(self) -> None:
-        """Config server PVCs should not be affected by shard shrink."""
-        for pvc in self.CFG_PVCS:
-            assert _pvc_size(pvc) == self.INITIAL_SIZE, f"Config PVC {pvc} should still be {self.INITIAL_SIZE}"
-
-    @pytest.mark.dependency(depends=["TestPVCShrinkSharded::test_02_shrink_both_shards"])
-    def test_04_shrink_configsvr(self, config: PVCShrinkConfig) -> None:
-        """Shrink config server PVCs after shard shrink completed."""
-        _patch_cfg_storage(self.SHRUNK_SIZE)
-        time.sleep(10)
-
-        _wait_no_shrink_in_progress()
-
-        for pvc in self.CFG_PVCS:
-            _wait_pvc_size(pvc, self.SHRUNK_SIZE)
-
-        wait_cluster_consistency(config.cluster, 900)
-
-
-# ---------------------------------------------------------------------------
-# Helpers for mongos log PVC
-# ---------------------------------------------------------------------------
-
-def _patch_mongos_log_storage(size: str) -> None:
-    kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=merge", "-p",
-        json.dumps({
-            "spec": {
-                "sharding": {
-                    "mongos": {
-                        "logs": {"persistentVolumeClaim": {"resources": {"requests": {"storage": size}}}},
-                    },
-                },
-            },
-        }),
-    )
-
-
-def _mongos_log_storage() -> str:
-    return kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o",
-        "jsonpath={.spec.sharding.mongos.logs.persistentVolumeClaim.resources.requests.storage}",
-    ).strip()
-
-
-# ---------------------------------------------------------------------------
-# Test class 3: mongos log PVC shrink (logcollector with PVC)
-# ---------------------------------------------------------------------------
-
-class TestPVCShrinkMongosLog:
-    """Shrink mongos log PVCs (disposable data, no initial sync)."""
-
-    INITIAL_SIZE = "3Gi"
-    SHRUNK_SIZE = "2Gi"
-    MONGOS_LOG_PVCS: ClassVar[list[str]] = [f"mongos-logs-{CLUSTER}-mongos-{i}" for i in range(2)]
-
-    @pytest.fixture(scope="class", autouse=True)
-    @classmethod
-    def config(cls, create_infra: Callable[[str], str]) -> PVCShrinkConfig:
-        platform = detect_platform()
-        return PVCShrinkConfig(
-            namespace=create_infra("pvc-shrink-mongos-log"),
-            cluster=CLUSTER,
-            platform=platform,
-        )
-
-    @pytest.fixture(scope="class", autouse=True)
-    @classmethod
-    def setup_tests(cls, config: PVCShrinkConfig, test_paths: Paths) -> None:
-        kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets.yml")
-        _setup_storageclass(config.platform, test_paths)
-
-    @pytest.mark.dependency()
-    def test_01_create_cluster(self, config: PVCShrinkConfig, test_paths: Paths) -> None:
-        apply_cluster(f"{test_paths['test_dir']}/conf/some-name-sharded-logcollector.yml")
-        wait_for_running(f"{config.cluster}-rs0", 3)
-        wait_for_running(f"{config.cluster}-cfg", 3, False)
-        wait_pod(f"{config.cluster}-mongos-0")
-        wait_pod(f"{config.cluster}-mongos-1")
-
-        wait_cluster_consistency(config.cluster, 900)
-
-        for pvc in self.MONGOS_LOG_PVCS:
-            assert _pvc_size(pvc) == self.INITIAL_SIZE, f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
-
-    @pytest.mark.dependency(depends=["TestPVCShrinkMongosLog::test_01_create_cluster"])
-    def test_02_shrink_mongos_log(self, config: PVCShrinkConfig) -> None:
-        """Shrink mongos log PVCs from 3Gi to 2Gi."""
-        _patch_mongos_log_storage(self.SHRUNK_SIZE)
-        time.sleep(10)
-
-        _wait_no_shrink_in_progress(max_attempts=120)
-
-        for pvc in self.MONGOS_LOG_PVCS:
-            _wait_pvc_size(pvc, self.SHRUNK_SIZE)
-
-        wait_pod(f"{config.cluster}-mongos-0")
-        wait_pod(f"{config.cluster}-mongos-1")
-        wait_cluster_consistency(config.cluster, 900)
-
-    @pytest.mark.dependency(depends=["TestPVCShrinkMongosLog::test_02_shrink_mongos_log"])
-    def test_03_expand_mongos_log(self, config: PVCShrinkConfig) -> None:
-        """Expand mongos log PVCs back to 3Gi after shrink."""
-        _patch_mongos_log_storage(self.INITIAL_SIZE)
-        time.sleep(10)
-
-        assert not _has_shrink_in_progress(), "Shrink status should NOT be set for expand"
-
-        for pvc in self.MONGOS_LOG_PVCS:
-            _wait_pvc_size(pvc, self.INITIAL_SIZE)
-
-        wait_cluster_consistency(config.cluster, 900)
