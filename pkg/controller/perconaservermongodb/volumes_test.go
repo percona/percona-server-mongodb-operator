@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -519,6 +520,158 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 				require.NoError(t, err)
 				assert.Empty(t, updatedSTS.Annotations[api.AnnotationPVCResizeInProgress])
 			}
+		})
+	}
+}
+
+func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
+	require.NoError(t, apis.AddToScheme(clientgoscheme.Scheme))
+
+	const (
+		ns      = "test-ns"
+		stsName = "my-cluster-rs0"
+	)
+
+	tests := map[string]struct {
+		note                 string
+		wantErr              bool
+		wantRevertedCR       bool
+		wantResizeInProgress bool
+	}{
+		"deadline exceeded is retried": {
+			note:                 "resize volume \"pvc-1\" by resizer \"pd.csi.storage.gke.io\" failed: rpc error: code = DeadlineExceeded desc = context deadline exceeded",
+			wantResizeInProgress: true,
+		},
+		"unavailable is retried": {
+			note:                 "resize volume \"pvc-1\" by resizer \"pd.csi.storage.gke.io\" failed: rpc error: code = Unavailable desc = connection error",
+			wantResizeInProgress: true,
+		},
+		"other errors revert the resize": {
+			note:           "resize volume \"pvc-1\" by resizer \"pd.csi.storage.gke.io\" failed: rpc error: code = InvalidArgument desc = invalid size",
+			wantErr:        true,
+			wantRevertedCR: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			original := resource.MustParse("1Gi")
+			requested := resource.MustParse("2Gi")
+			ls := map[string]string{"app": "test"}
+			pvcName := config.MongodDataVolClaimName + "-" + stsName + "-0"
+
+			cr := &api.PerconaServerMongoDB{
+				Name:      "my-cluster",
+				Namespace: ns,
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					StorageScaling: &api.StorageScalingSpec{
+						EnableVolumeScaling: true,
+					},
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							VolumeSpec: &api.VolumeSpec{
+								PersistentVolumeClaim: api.PVCSpec{
+									PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+										Resources: corev1.VolumeResourceRequirements{
+											Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			sts := &appsv1.StatefulSet{
+				Name:      stsName,
+				Namespace: ns,
+				Labels: map[string]string{
+					naming.LabelKubernetesComponent: naming.ComponentMongod,
+					naming.LabelKubernetesReplset:   "rs0",
+				},
+				Annotations: map[string]string{
+					api.AnnotationPVCResizeInProgress: time.Now().Add(-time.Hour).Format(time.RFC3339),
+				},
+				Spec: appsv1.StatefulSetSpec{
+					VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+						{
+							Name: config.MongodDataVolClaimName,
+							Spec: corev1.PersistentVolumeClaimSpec{
+								Resources: corev1.VolumeResourceRequirements{
+									Requests: corev1.ResourceList{corev1.ResourceStorage: original.DeepCopy()},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			pvc := &corev1.PersistentVolumeClaim{
+				Name:      pvcName,
+				Namespace: ns,
+				Labels:    ls,
+				Spec: corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+					},
+				},
+				Status: corev1.PersistentVolumeClaimStatus{
+					Capacity: corev1.ResourceList{corev1.ResourceStorage: original.DeepCopy()},
+				},
+			}
+
+			pod := &corev1.Pod{
+				Name:      stsName + "-0",
+				Namespace: ns,
+				Labels:    ls,
+			}
+
+			event := &eventsv1.Event{
+				Name:      pvcName + ".resize-failed",
+				Namespace: ns,
+				EventTime: metav1.NewMicroTime(time.Now()),
+				Regarding: corev1.ObjectReference{Kind: "PersistentVolumeClaim", Name: pvcName, Namespace: ns},
+				Reason:    "VolumeResizeFailed",
+				Note:      tt.note,
+			}
+
+			cl := fake.NewClientBuilder().
+				WithScheme(clientgoscheme.Scheme).
+				WithObjects(cr, sts, pvc, pod, event).
+				WithStatusSubresource(pvc).
+				WithIndex(&eventsv1.Event{}, "regarding.name", func(o client.Object) []string {
+					return []string{o.(*eventsv1.Event).Regarding.Name}
+				}).
+				Build()
+
+			r := &ReconcilePerconaServerMongoDB{
+				client: cl,
+				scheme: clientgoscheme.Scheme,
+			}
+
+			err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim)
+			if tt.wantErr {
+				assert.ErrorContains(t, err, "volume resize failed")
+			} else {
+				assert.NoError(t, err)
+			}
+
+			gotSts := &appsv1.StatefulSet{}
+			require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(sts), gotSts))
+			_, inProgress := gotSts.Annotations[api.AnnotationPVCResizeInProgress]
+			assert.Equal(t, tt.wantResizeInProgress, inProgress)
+
+			gotCR := &api.PerconaServerMongoDB{}
+			require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(cr), gotCR))
+			wantSize := requested
+			if tt.wantRevertedCR {
+				wantSize = original
+			}
+			gotSize := gotCR.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+			assert.Zero(t, wantSize.Cmp(gotSize), "want %s, got %s", wantSize.String(), gotSize.String())
 		})
 	}
 }
