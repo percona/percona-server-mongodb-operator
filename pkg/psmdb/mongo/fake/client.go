@@ -11,10 +11,17 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
-type fakeMongoClient struct{}
+type fakeMongoClient struct {
+	config *mongo.RSConfig
+}
 
 func NewClient() mongo.Client {
 	return &fakeMongoClient{}
+}
+
+func NewClientWithConfig(config mongo.RSConfig) mongo.Client {
+	config.Members = append(mongo.ConfigMembers(nil), config.Members...)
+	return &fakeMongoClient{config: &config}
 }
 
 func (c *fakeMongoClient) Disconnect(ctx context.Context) error {
@@ -55,7 +62,12 @@ func (c *fakeMongoClient) SetDefaultRWConcern(ctx context.Context, readConcern, 
 }
 
 func (c *fakeMongoClient) ReadConfig(ctx context.Context) (mongo.RSConfig, error) {
-	return mongo.RSConfig{}, nil
+	if c.config == nil {
+		return mongo.RSConfig{}, nil
+	}
+	config := *c.config
+	config.Members = append(mongo.ConfigMembers(nil), config.Members...)
+	return config, nil
 }
 
 func (c *fakeMongoClient) CreateRole(ctx context.Context, db string, role mongo.Role) error {
@@ -79,6 +91,10 @@ func (c *fakeMongoClient) AddShard(ctx context.Context, rsName, host string) err
 }
 
 func (c *fakeMongoClient) WriteConfig(ctx context.Context, cfg mongo.RSConfig, force bool) error {
+	if c.config != nil {
+		cfg.Members = append(mongo.ConfigMembers(nil), cfg.Members...)
+		*c.config = cfg
+	}
 	return nil
 }
 
