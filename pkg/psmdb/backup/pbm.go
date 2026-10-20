@@ -251,7 +251,13 @@ func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServer
 }
 
 // GetPriorities returns priorities to be used in PBM config.
+//
+// Deprecated: For >=1.24.0 this is no-op, operator doesn't configure any priorities any more.
 func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB) (map[string]float64, error) {
+	if cluster.CompareVersion("1.24.0") >= 0 {
+		return nil, nil
+	}
+
 	log := logf.FromContext(ctx)
 	priorities := make(map[string]float64)
 
@@ -1536,7 +1542,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 
 	for _, chnk := range chunks {
 		err = stg.Delete(chnk.FName)
-		if err != nil && err != storage.ErrNotExist {
+		if err != nil && !errors.Is(err, storage.ErrNotExist) {
 			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
 		}
 

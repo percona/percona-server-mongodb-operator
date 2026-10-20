@@ -39,7 +39,7 @@ func TestSnapshotBackups_Start(t *testing.T) {
 		setupMock    func(*MockPBM)
 		cluster      *api.PerconaServerMongoDB
 		wantState    api.BackupState
-		wantErr      bool
+		wantErrMsg   string
 		wantReplsets []string
 	}{
 		"success - no replsets": {
@@ -88,8 +88,8 @@ func TestSnapshotBackups_Start(t *testing.T) {
 			setupMock: func(m *MockPBM) {
 				m.EXPECT().SendCmd(gomock.Any(), gomock.Any()).Return(fmt.Errorf("connection refused"))
 			},
-			cluster: &api.PerconaServerMongoDB{},
-			wantErr: true,
+			cluster:    &api.PerconaServerMongoDB{},
+			wantErrMsg: "connection refused",
 		},
 	}
 
@@ -108,8 +108,8 @@ func TestSnapshotBackups_Start(t *testing.T) {
 
 			status, err := b.Start(ctx, nil, tt.cluster, cr)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 
@@ -151,7 +151,7 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 		existingObjects []client.Object
 		rsName          string
 		pvc             string
-		wantErr         bool
+		wantErrMsg      string
 		check           func(t *testing.T, snapshot *volumesnapshotv1.VolumeSnapshot)
 	}{
 		"creates new snapshot when none exists": {
@@ -187,8 +187,8 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 			b := &snapshotBackups{}
 			snapshot, err := b.reconcileSnapshot(ctx, cl, tt.rsName, tt.pvc, bcp)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 
@@ -233,7 +233,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 		existingObjects []client.Object
 		meta            *pbmBackup.BackupMeta
 		wantDone        bool
-		wantErr         bool
+		wantErrMsg      string
 		wantSnapshots   []api.SnapshotInfo
 	}{
 		"empty replsets returns done immediately": {
@@ -301,7 +301,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 					{Name: "rs0", Node: "pod-0.rs0.svc", Status: defs.StatusCopyReady},
 				},
 			},
-			wantErr: true,
+			wantErrMsg: "snapshot error: snapshot creation failed: insufficient storage",
 		},
 		"invalid node name format returns error": {
 			meta: &pbmBackup.BackupMeta{
@@ -309,7 +309,7 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 					{Name: "rs0", Node: ".invalid-node", Status: defs.StatusCopyReady},
 				},
 			},
-			wantErr: true,
+			wantErrMsg: "get pod name: unexpected node name format: .invalid-node",
 		},
 		"multiple replsets with one not copy-ready": {
 			existingObjects: []client.Object{readySnapshot("rs0")},
@@ -336,8 +336,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 			b := &snapshotBackups{}
 			done, snapshots, err := b.reconcileSnapshots(ctx, cl, bcp, tt.meta)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 
@@ -402,7 +402,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 		cr              *api.PerconaServerMongoDBBackup
 		cluster         *api.PerconaServerMongoDB
 		wantState       api.BackupState
-		wantErr         bool
+		wantErrMsg      string
 		check           func(t *testing.T, status api.PerconaServerMongoDBBackupStatus)
 	}{
 		"metadata not found leaves status unchanged": {
@@ -417,9 +417,9 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			setupMock: func(m *MockPBM) {
 				m.EXPECT().GetBackupMeta(gomock.Any(), pbmName).Return(nil, fmt.Errorf("mongodb connection error"))
 			},
-			cr:      newCR(),
-			cluster: &api.PerconaServerMongoDB{},
-			wantErr: true,
+			cr:         newCR(),
+			cluster:    &api.PerconaServerMongoDB{},
+			wantErrMsg: "get pbm backup meta: mongodb connection error",
 		},
 		"backup in error state": {
 			setupMock: func(m *MockPBM) {
@@ -578,7 +578,7 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			existingObjects: []client.Object{readyRS0Snapshot},
 			cr:              newCR(),
 			cluster:         &api.PerconaServerMongoDB{},
-			wantErr:         true,
+			wantErrMsg:      "finish backup: finish backup failed",
 		},
 		"copy-ready with snapshot error propagates error": {
 			setupMock: func(m *MockPBM) {
@@ -601,9 +601,9 @@ func TestSnapshotBackups_Status(t *testing.T) {
 					},
 				},
 			},
-			cr:      newCR(),
-			cluster: &api.PerconaServerMongoDB{},
-			wantErr: true,
+			cr:         newCR(),
+			cluster:    &api.PerconaServerMongoDB{},
+			wantErrMsg: "reconcile snapshots: snapshot error: csi driver error: disk unavailable",
 		},
 	}
 
@@ -623,8 +623,8 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			b := &snapshotBackups{pbm: mockPBM}
 			status, err := b.Status(ctx, cl, tt.cluster, tt.cr)
 
-			if tt.wantErr {
-				assert.Error(t, err)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
 				return
 			}
 

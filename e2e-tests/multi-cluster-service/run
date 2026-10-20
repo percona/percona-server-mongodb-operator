@@ -140,8 +140,25 @@ EOF
 kubectl -n default wait --for=condition=Ready pod/curl
 log "pod/curl is ready"
 
-k8s_cluster_name=$(kubectl exec -n default -it curl -- curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
-k8s_cluster_region=$(kubectl exec -n default -it curl -- curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
+get_gke_metadata() {
+	local attr=$1
+	local value
+
+	for _ in $(seq 1 10); do
+		value=$(kubectl exec -n default curl -- curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/${attr}" || true)
+		if [[ -n ${value} ]]; then
+			echo "${value}"
+			return 0
+		fi
+		sleep 5
+	done
+
+	echo "failed to get ${attr} from GKE metadata server" >&2
+	return 1
+}
+
+k8s_cluster_name=$(get_gke_metadata cluster-name)
+k8s_cluster_region=$(get_gke_metadata cluster-location)
 log "gke-cluster=${k8s_cluster_region}/${k8s_cluster_name}"
 
 gcloud container hub memberships register ${k8s_cluster_name} --gke-cluster ${k8s_cluster_region}/${k8s_cluster_name} --enable-workload-identity
@@ -176,6 +193,9 @@ desc "check if ServiceExport objects are created"
 wait_service_export
 wait_service_import
 wait_mcs_dns
+# Replset reconfigs fail until clusterset.local hostnames are resolvable and the
+# operator can back off for a long time, so trigger a reconcile explicitly.
+kubectl_bin annotate psmdb ${cluster} percona.com/mcs-dns-ready="$(date +%s)" --overwrite
 wait_cluster_consistency "${cluster}" 60
 
 desc "disable MCS and wait for exported/imported services to be removed"
