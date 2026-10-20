@@ -112,22 +112,20 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplate
 			ImagePullSecrets: cr.Spec.ImagePullSecrets,
 			NodeSelector:     cr.Spec.NodeSelector,
 			Tolerations:      cr.Spec.Tolerations,
-			Affinity:         podAffinity(cr.Spec.Affinity, Labels(cr), Size(cr)),
+			Affinity:         podAffinity(cr.Spec.Affinity, Labels(cr)),
 			RuntimeClassName: cr.Spec.RuntimeClassName,
 			SecurityContext:  cr.Spec.PodSecurityContext,
 		},
 	}
 }
 
-// podAffinity defaults to preferred anti-affinity for a multi-instance
-// group. Preferred rather than required: an unschedulable standby would
-// otherwise leave the group permanently short of replicas, and standbys
-// hold no data.
-func podAffinity(af *api.PodAffinity, labels map[string]string, size int32) *corev1.Affinity {
+// podAffinity defaults to preferred anti-affinity. Preferred rather than
+// required: an unschedulable standby would otherwise leave the group
+// permanently short of replicas, and standbys hold no data. It must not
+// depend on spec.size — that would make scaling a pod-template change and
+// force a rollout of the whole group, including the active instance.
+func podAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
 	if af == nil {
-		if size < 2 {
-			return nil
-		}
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{

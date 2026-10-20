@@ -328,6 +328,32 @@ wait_pdb_absent() {
 	done
 }
 
+pod_template_hashes() {
+	kubectl_bin get pods \
+		-l "app.kubernetes.io/instance=${sync_cr},app.kubernetes.io/component=pcsm" \
+		-o jsonpath='{range .items[*]}{.metadata.labels.pod-template-hash}{"\n"}{end}' 2>/dev/null \
+		| sort -u | grep -v '^$' || true
+}
+
+assert_no_rollout_on_scale() {
+	local before="$1"
+	local after
+	after=$(pod_template_hashes | tr '\n' ' ' | sed 's/ $//')
+
+	set +o xtrace
+	if [[ -z ${before} ]]; then
+		echo "no pod-template-hash captured before scaling; cannot verify the rollout guard"
+		exit 1
+	fi
+	if [[ ${after} != "${before}" ]]; then
+		echo "scaling replaced the pod template (${before} -> ${after:-<none>}); it must only change replicas"
+		kubectl_bin get rs -l "app.kubernetes.io/instance=${sync_cr},app.kubernetes.io/component=pcsm" -o wide || true
+		exit 1
+	fi
+	echo "pod template unchanged across scale (${before})"
+	set_debug
+}
+
 sharded_ns="myApp.sharded"
 
 shard_source_collection() {
@@ -527,9 +553,18 @@ mongosh_on_mongos "${source_cluster}" "myApp" "myPass" \
 wait_target_doc_count 5 180
 
 desc 'HA: scale PCSM to 3 instances'
+template_hash_before=$(pod_template_hashes)
+active_before_scale=$(active_instance)
 kubectl_bin patch psmdb-clustersync "${sync_cr}" --type=merge -p '{"spec":{"size":3}}'
 wait_deployment_ready_replicas "${sync_cr}-pcsm" 3 300
 kubectl_bin get pdb "${sync_cr}-pcsm"
+
+desc 'HA: scaling up must add replicas, not roll the group'
+assert_no_rollout_on_scale "${template_hash_before}"
+if [[ -n ${active_before_scale} ]] && [[ $(active_instance) != "${active_before_scale}" ]]; then
+	echo "scaling up moved the active instance from ${active_before_scale} to $(active_instance)"
+	exit 1
+fi
 
 desc 'HA: standby instances must become Ready and the CR must report an active instance'
 wait_active_instance_present 300

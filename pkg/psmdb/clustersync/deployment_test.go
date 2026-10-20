@@ -83,8 +83,9 @@ func TestDeploymentSpecSizeAndStrategy(t *testing.T) {
 // pods in psmdb_defaults.go. A required term that cannot be satisfied
 // leaves the standby Pending forever with no error anywhere in the CR,
 // and since PCSM standbys hold no data the cost of co-scheduling is far
-// lower than the cost of never scheduling. A single-instance deployment
-// gets no affinity at all — there is nothing to spread away from.
+// lower than the cost of never scheduling. The same default applies at
+// size 1, so the pod template stays identical across a scale change; see
+// TestPodTemplateIsInvariantAcrossSize.
 //
 // User intent always wins: `advanced` is passed through verbatim and
 // `topologyKey: none` disables spreading entirely.
@@ -111,10 +112,14 @@ func TestPodAffinity(t *testing.T) {
 		spec   *api.PodAffinity
 		assert func(t *testing.T, got *corev1.Affinity, labels map[string]string)
 	}{
-		"single instance gets no affinity": {
+		"single instance gets the same default as an HA group": {
 			size: 1,
-			assert: func(t *testing.T, got *corev1.Affinity, _ map[string]string) {
-				assert.Nil(t, got)
+			assert: func(t *testing.T, got *corev1.Affinity, labels map[string]string) {
+				require.NotNil(t, got)
+				require.NotNil(t, got.PodAntiAffinity)
+				terms := got.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+				require.Len(t, terms, 1)
+				assert.Equal(t, labels, terms[0].PodAffinityTerm.LabelSelector.MatchLabels)
 			},
 		},
 		"HA group defaults to preferred anti-affinity across hosts": {
@@ -142,7 +147,7 @@ func TestPodAffinity(t *testing.T) {
 				assert.Equal(t, labels, terms[0].LabelSelector.MatchLabels)
 			},
 		},
-		"topologyKey none disables spreading even for an HA group": {
+		"topologyKey none disables spreading": {
 			size: 3,
 			spec: &api.PodAffinity{TopologyKey: &off},
 			assert: func(t *testing.T, got *corev1.Affinity, _ map[string]string) {
@@ -186,6 +191,23 @@ func TestPodAffinityDoesNotAliasLabels(t *testing.T) {
 	assert.Equal(t, Labels(cr), selector.MatchLabels)
 	assert.NotContains(t, selector.MatchLabels, "team")
 	assert.Contains(t, tmpl.Labels, "team", "user labels still reach the pod template")
+}
+
+// TestPodTemplateIsInvariantAcrossSize guards the regression where
+// podAffinity keyed off spec.size: scaling then changed the pod template
+// hash, so the Deployment controller replaced every pod through a new
+// ReplicaSet instead of just adding replicas. That forced a PCSM failover
+// and left Error pods behind on every scale change.
+func TestPodTemplateIsInvariantAcrossSize(t *testing.T) {
+	spec := func(size int32) api.PerconaServerMongoDBClusterSyncSpec {
+		return api.PerconaServerMongoDBClusterSyncSpec{Size: size}
+	}
+
+	base := PodTemplateSpec(syncCR(spec(1)))
+	for _, size := range []int32{0, 2, 3, 5} {
+		assert.Equal(t, base, PodTemplateSpec(syncCR(spec(size))),
+			"size %d must not change the pod template", size)
+	}
 }
 
 // TestPodDisruptionBudget covers the voluntary-disruption guard for an HA
