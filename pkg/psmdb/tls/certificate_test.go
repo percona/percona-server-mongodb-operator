@@ -90,6 +90,7 @@ func TestCertificate(t *testing.T) {
 					assert.Equal(t, "psmdb-mock-psmdb-psmdb-ca-issuer", obj.Spec.IssuerRef.Name)
 					assert.Equal(t, cm.ClusterIssuerKind, obj.Spec.IssuerRef.Kind)
 					assert.Equal(t, "cert-manager.io", obj.Spec.IssuerRef.Group)
+					assert.Equal(t, cm.RotationPolicyNever, obj.Spec.PrivateKey.RotationPolicy)
 				})
 				t.Run("old version", func(t *testing.T) {
 					cr := cr.DeepCopy()
