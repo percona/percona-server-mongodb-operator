@@ -349,6 +349,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		if rec || err != nil {
 			return rr, err
 		}
+		if len(cr.GetFinalizers()) == 0 {
+			return reconcile.Result{}, nil
+		}
 	}
 
 	err = r.reconcilePause(ctx, cr)

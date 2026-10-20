@@ -323,6 +323,64 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				Apply:      "latest",
 			},
 		},
+		{
+			name: "TestUpgradeFrom80To83WithPostfixVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "8.3-recommended",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "8.0.19-7",
+					},
+				},
+				fcv: "8.0",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "8.3",
+				Apply:      "recommended",
+			},
+		},
+		{
+			name: "TestUpgradeFrom80To83WithExactVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "8.3.11-3",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "8.0.19-7",
+					},
+				},
+				fcv: "8.0",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "8.3.11-3",
+			},
+		},
+		{
+			name: "TestUpgradeFrom70To83IsNotAllowed",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "8.3-recommended",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "7.0.30-16",
+					},
+				},
+				fcv: "7.0",
+			},
+			wantErrMsg: "can't upgrade to 8.3 with FCV set to 7.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -335,6 +393,30 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_canUpgradeVersion(t *testing.T) {
+	tests := []struct {
+		fcv  string
+		new  string
+		want bool
+	}{
+		{fcv: "6.0", new: "7.0", want: true},
+		{fcv: "7.0", new: "8.0", want: true},
+		{fcv: "8.0", new: "8.3", want: true},
+		{fcv: "7.0", new: "8.3", want: false},
+		{fcv: "8.0", new: "8.0", want: false},
+		{fcv: "8.3", new: "8.0", want: false},
+		{fcv: "8.3", new: "8.3", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fcv+"->"+tt.new, func(t *testing.T) {
+			if got := canUpgradeVersion(tt.fcv, tt.new); got != tt.want {
+				t.Errorf("canUpgradeVersion(%q, %q) = %v, want %v", tt.fcv, tt.new, got, tt.want)
+			}
 		})
 	}
 }
