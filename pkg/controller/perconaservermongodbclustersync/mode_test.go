@@ -145,17 +145,17 @@ func TestSkipAction(t *testing.T) {
 		state  api.ClusterSyncState
 		want   bool
 	}{
-		"none is never skipped":               {action: actionNone, state: api.ClusterSyncStateRunning, want: false},
-		"start skipped on running":            {action: actionStart, state: api.ClusterSyncStateRunning, want: true},
-		"start not skipped on paused":         {action: actionStart, state: api.ClusterSyncStatePaused, want: false},
-		"start not skipped on idle":           {action: actionStart, state: api.ClusterSyncStateIdle, want: false},
-		"resume skipped on running":           {action: actionResume, state: api.ClusterSyncStateRunning, want: true},
-		"resume not skipped on paused":        {action: actionResume, state: api.ClusterSyncStatePaused, want: false},
-		"pause skipped on paused":             {action: actionPause, state: api.ClusterSyncStatePaused, want: true},
-		"pause not skipped on running":        {action: actionPause, state: api.ClusterSyncStateRunning, want: false},
-		"finalize skipped on finalizing":      {action: actionFinalize, state: api.ClusterSyncStateFinalizing, want: true},
-		"finalize skipped on finalized":       {action: actionFinalize, state: api.ClusterSyncStateFinalized, want: true},
-		"finalize not skipped on running":     {action: actionFinalize, state: api.ClusterSyncStateRunning, want: false},
+		"none is never skipped":           {action: actionNone, state: api.ClusterSyncStateRunning, want: false},
+		"start skipped on running":        {action: actionStart, state: api.ClusterSyncStateRunning, want: true},
+		"start not skipped on paused":     {action: actionStart, state: api.ClusterSyncStatePaused, want: false},
+		"start not skipped on idle":       {action: actionStart, state: api.ClusterSyncStateIdle, want: false},
+		"resume skipped on running":       {action: actionResume, state: api.ClusterSyncStateRunning, want: true},
+		"resume not skipped on paused":    {action: actionResume, state: api.ClusterSyncStatePaused, want: false},
+		"pause skipped on paused":         {action: actionPause, state: api.ClusterSyncStatePaused, want: true},
+		"pause not skipped on running":    {action: actionPause, state: api.ClusterSyncStateRunning, want: false},
+		"finalize skipped on finalizing":  {action: actionFinalize, state: api.ClusterSyncStateFinalizing, want: true},
+		"finalize skipped on finalized":   {action: actionFinalize, state: api.ClusterSyncStateFinalized, want: true},
+		"finalize not skipped on running": {action: actionFinalize, state: api.ClusterSyncStateRunning, want: false},
 	}
 
 	for name, tc := range tests {

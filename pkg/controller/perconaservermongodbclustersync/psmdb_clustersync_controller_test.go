@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -369,6 +370,26 @@ func TestReadyReplicas(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+
+	// A missing deployment is a normal bootstrap state and reads as zero;
+	// any other read failure must not be flattened into the same answer,
+	// or an unreachable API server looks like a group that is still
+	// starting and reconcile silently skips every PCSM command.
+	t.Run("a non-NotFound read failure is returned", func(t *testing.T) {
+		boom := errors.New("apiserver down")
+		cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(context.Context, k8sclient.WithWatch, k8sclient.ObjectKey, k8sclient.Object, ...k8sclient.GetOption) error {
+					return boom
+				},
+			}).Build()
+		r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+
+		got, err := r.readyReplicas(t.Context(), cr)
+
+		require.ErrorIs(t, err, boom)
+		assert.Zero(t, got)
+	})
 }
 
 func deploymentWith(cr *psmdbv1.PerconaServerMongoDBClusterSync, generation, observed, ready int64) *appsv1.Deployment {
@@ -871,6 +892,226 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 			}
 			if tc.assert != nil {
 				tc.assert(t, tc.mc, tc.sec)
+			}
+		})
+	}
+}
+
+// TestReconcileDeploymentConvergesOnSize is the unit-level counterpart of
+// the HA scale steps in e2e-tests/clustersync/run.
+//
+// The assertion that matters is the pod template: spec.size must change
+// replicas and nothing else. When the template varies with size, the
+// Deployment controller rolls the group through a new ReplicaSet instead
+// of adding replicas, which terminates the ACTIVE instance and forces a
+// failover on every scale change. Asserting replicas alone misses that
+// entirely, which is how it reached a live cluster.
+func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+		Name: "sync", Namespace: "ns", UID: "u",
+		Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{Size: 1, Image: "pcsm:1.0.0"},
+	}
+	scheme := clusterSyncScheme(t)
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).Build()
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
+
+	get := func(t *testing.T) *appsv1.Deployment {
+		t.Helper()
+		dep := &appsv1.Deployment{}
+		require.NoError(t, cl.Get(t.Context(), types.NamespacedName{
+			Name:      clustersync.DeploymentName(cr),
+			Namespace: cr.Namespace,
+		}, dep))
+		return dep
+	}
+
+	require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+	initial := get(t)
+
+	require.NotNil(t, initial.Spec.Replicas)
+	assert.Equal(t, int32(1), *initial.Spec.Replicas)
+	assert.Equal(t, appsv1.RecreateDeploymentStrategyType, initial.Spec.Strategy.Type)
+	require.Len(t, initial.OwnerReferences, 1, "deployment must be garbage-collected with the CR")
+	assert.Equal(t, cr.Name, initial.OwnerReferences[0].Name)
+	assert.Equal(t, clustersync.Labels(cr), initial.Labels)
+
+	t.Run("reconcile is idempotent", func(t *testing.T) {
+		require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+		assert.Equal(t, initial.Spec, get(t).Spec)
+	})
+
+	for _, size := range []int32{3, 5, 1} {
+		t.Run(fmt.Sprintf("scaling to %d changes only replicas", size), func(t *testing.T) {
+			cr.Spec.Size = size
+			require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+			dep := get(t)
+
+			require.NotNil(t, dep.Spec.Replicas)
+			assert.Equal(t, size, *dep.Spec.Replicas)
+			assert.Equal(t, initial.Spec.Template, dep.Spec.Template,
+				"a template change rolls the whole group and forces a PCSM failover")
+		})
+	}
+
+	t.Run("HA group rolls one at a time without surging", func(t *testing.T) {
+		cr.Spec.Size = 3
+		require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+		strategy := get(t).Spec.Strategy
+
+		require.Equal(t, appsv1.RollingUpdateDeploymentStrategyType, strategy.Type)
+		require.NotNil(t, strategy.RollingUpdate)
+		assert.Equal(t, intstr.FromInt32(1), *strategy.RollingUpdate.MaxUnavailable)
+		assert.Equal(t, intstr.FromInt32(0), *strategy.RollingUpdate.MaxSurge,
+			"surging past spec.size would add an instance the PCSM group never agreed to")
+	})
+}
+
+// TestReconcileDeploymentApplyFailure checks the write error is wrapped
+// rather than swallowed: a silent failure here leaves the group at the
+// old size while status happily reports the new one.
+func TestReconcileDeploymentApplyFailure(t *testing.T) {
+	boom := errors.New("etcd unavailable")
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{Name: "sync", Namespace: "ns", UID: "u"}
+	scheme := clusterSyncScheme(t)
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(context.Context, k8sclient.WithWatch, k8sclient.Object, ...k8sclient.CreateOption) error {
+				return boom
+			},
+		}).Build()
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
+
+	err := r.reconcileDeployment(t.Context(), cr)
+
+	require.ErrorIs(t, err, boom)
+	assert.Contains(t, err.Error(), "apply clustersync deployment")
+}
+
+// TestReconcilePDBApplyFailure keeps the write error on the reconcile
+// return path. Swallowing it would leave an HA group with no disruption
+// budget while nothing anywhere says so.
+func TestReconcilePDBApplyFailure(t *testing.T) {
+	boom := errors.New("etcd unavailable")
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+		Name: "sync", Namespace: "ns", UID: "u",
+		Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{Size: 3},
+	}
+	scheme := clusterSyncScheme(t)
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Create: func(context.Context, k8sclient.WithWatch, k8sclient.Object, ...k8sclient.CreateOption) error {
+				return boom
+			},
+		}).Build()
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
+
+	err := r.reconcilePDB(t.Context(), cr)
+
+	require.ErrorIs(t, err, boom)
+	assert.Contains(t, err.Error(), "apply clustersync pdb")
+}
+
+// TestReconcileModeSurvivesPCSMFailures covers the failure paths around
+// the PCSM call itself.
+//
+// None of these may return an error to the controller. An HA group has no
+// ACTIVE instance for a few seconds on every election, and a failed sync
+// is retried on every requeue; returning an error in either case turns a
+// normal transient into exponential backoff and a reconcile-failure
+// metric. The condition belongs in status.error, which the requeue
+// interval already refreshes.
+func TestReconcileModeSurvivesPCSMFailures(t *testing.T) {
+	tests := map[string]struct {
+		prevError  string
+		statusErr  error
+		actionErr  error
+		mode       psmdbv1.ClusterSyncMode
+		state      psmdbv1.ClusterSyncState
+		wantError  string
+		wantPaused int
+	}{
+		"mid-election group reports no active instance": {
+			statusErr: client.ErrNoActivePCSM,
+			mode:      psmdbv1.ClusterSyncModeRunning,
+			wantError: client.ErrNoActivePCSM.Error(),
+		},
+		"no ready pod yet": {
+			statusErr: client.ErrPCSMNotReady,
+			mode:      psmdbv1.ClusterSyncModeRunning,
+			wantError: client.ErrPCSMNotReady.Error(),
+		},
+		"an unexpected status failure is recorded, not returned": {
+			statusErr: errors.New("exec failed"),
+			mode:      psmdbv1.ClusterSyncModeRunning,
+			wantError: "exec failed",
+		},
+		"a repeated status failure stays in status": {
+			prevError: "exec failed",
+			statusErr: errors.New("exec failed"),
+			mode:      psmdbv1.ClusterSyncModeRunning,
+			wantError: "exec failed",
+		},
+		"a failed transition is recorded, not returned": {
+			actionErr:  errors.New("pcsm pause refused"),
+			mode:       psmdbv1.ClusterSyncModePaused,
+			state:      psmdbv1.ClusterSyncStateRunning,
+			wantError:  "pcsm pause refused",
+			wantPaused: 1,
+		},
+		"a repeated failed transition stays in status": {
+			prevError:  "pcsm pause refused",
+			actionErr:  errors.New("pcsm pause refused"),
+			mode:       psmdbv1.ClusterSyncModePaused,
+			state:      psmdbv1.ClusterSyncStateRunning,
+			wantError:  "pcsm pause refused",
+			wantPaused: 1,
+		},
+		"a transition against an unreachable instance is not an error": {
+			actionErr:  client.ErrNoActivePCSM,
+			mode:       psmdbv1.ClusterSyncModePaused,
+			state:      psmdbv1.ClusterSyncStateRunning,
+			wantError:  client.ErrNoActivePCSM.Error(),
+			wantPaused: 1,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+				Name: "sync", Namespace: "ns", UID: "u",
+				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
+					ClusterName: "tgt", Mode: tc.mode, Size: 3,
+				},
+				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+					Mode:      psmdbv1.ClusterSyncModeRunning,
+					State:     tc.state,
+					StartedAt: &metav1.Time{Time: time.Unix(0, 0)},
+					Error:     tc.prevError,
+				},
+			}
+			cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).
+				WithStatusSubresource(cr).WithObjects(cr).Build()
+			rec := record.NewFakeRecorder(4)
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+			pcsm := &fakePCSM{
+				statusResp: client.Status{State: string(tc.state)},
+				statusErr:  tc.statusErr,
+				actionErr:  tc.actionErr,
+				active:     "sync-pcsm-0",
+			}
+
+			require.NoError(t, r.reconcileMode(t.Context(), cr, pcsm, 3),
+				"a PCSM-side failure must not fail the reconcile")
+
+			stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, stored))
+			assert.Equal(t, tc.wantError, stored.Status.Error)
+			assert.Equal(t, int32(3), stored.Status.ReadyReplicas)
+			assert.Equal(t, tc.wantPaused, pcsm.paused)
+
+			if tc.statusErr != nil {
+				assert.Equal(t, psmdbv1.ClusterSyncModeRunning, stored.Status.Mode,
+					"mode must not mirror spec while PCSM state is unknown")
 			}
 		})
 	}

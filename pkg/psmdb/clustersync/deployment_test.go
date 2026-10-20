@@ -154,6 +154,13 @@ func TestPodAffinity(t *testing.T) {
 				assert.Nil(t, got)
 			},
 		},
+		"empty affinity spec disables spreading": {
+			size: 3,
+			spec: &api.PodAffinity{},
+			assert: func(t *testing.T, got *corev1.Affinity, _ map[string]string) {
+				assert.Nil(t, got, "neither advanced nor topologyKey set means no opinion")
+			},
+		},
 		"advanced affinity is passed through untouched": {
 			size: 3,
 			spec: &api.PodAffinity{Advanced: advanced},

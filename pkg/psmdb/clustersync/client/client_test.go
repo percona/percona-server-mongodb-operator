@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -225,6 +226,14 @@ func TestClient_Status(t *testing.T) {
 			},
 			wantErr: "exec pcsm status on pcsm-0: boom: exit status 2",
 		},
+		"stateless JSON with non-zero exit returns the exec error": {
+			stub: stubExec{
+				stdout: []byte(`{"error":"not a pcsm payload"}`),
+				stderr: []byte("boom"),
+				err:    stderrors.New("exit status 1"),
+			},
+			wantErr: "exec pcsm status on pcsm-0: boom: exit status 1",
+		},
 		"bad JSON wraps decode error": {
 			stub:    stubExec{stdout: []byte(`not-json`)},
 			wantErr: "decode pcsm status output",
@@ -408,6 +417,26 @@ func TestClient_RoutesToActiveInstance(t *testing.T) {
 // documented contract; the substring fallbacks exist because the pcsm CLI
 // may surface the error as plain text on stderr instead of relaying the
 // body, and mistaking that for a hard failure would strand the group.
+// TestClient_ListFailure covers the branch where the pod lookup itself
+// fails. It must surface as a wrapped error rather than being mistaken
+// for an empty group, which isPCSMUnreachable would swallow as transient.
+func TestClient_ListFailure(t *testing.T) {
+	boom := stderrors.New("apiserver down")
+	c := newClient(&stubExec{})
+	c.k8s = fake.NewClientBuilder().WithScheme(scheme.Scheme).
+		WithInterceptorFuncs(interceptor.Funcs{
+			List: func(context.Context, k8sclient.WithWatch, k8sclient.ObjectList, ...k8sclient.ListOption) error {
+				return boom
+			},
+		}).Build()
+
+	_, err := c.Status(t.Context())
+
+	require.ErrorIs(t, err, boom)
+	assert.NotErrorIs(t, err, ErrPCSMNotReady)
+	assert.Contains(t, err.Error(), "list pcsm pods")
+}
+
 func TestNotActive(t *testing.T) {
 	tests := map[string]struct {
 		stdout string
