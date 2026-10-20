@@ -2,7 +2,6 @@ package perconaservermongodb
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -523,7 +522,67 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 	}
 }
 
-func TestShrinkAnnotationBlocksReconciliation(t *testing.T) {
+func TestMaxPVCCapacity(t *testing.T) {
+	labels := map[string]string{"app": "test"}
+	sts := newStatefulSet("ns", "my-sts", labels, resource.MustParse("10Gi"))
+
+	tests := []struct {
+		name     string
+		pvcs     []corev1.PersistentVolumeClaim
+		expected string
+	}{
+		{
+			name:     "no PVCs returns zero",
+			pvcs:     nil,
+			expected: "0",
+		},
+		{
+			name: "single matching PVC",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+			},
+			expected: "10Gi",
+		},
+		{
+			name: "returns largest capacity among matching PVCs",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-1", labels, resource.MustParse("10Gi"), resource.MustParse("15Gi")),
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-2", labels, resource.MustParse("10Gi"), resource.MustParse("12Gi")),
+			},
+			expected: "15Gi",
+		},
+		{
+			name: "skips non-matching PVCs",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-0", labels, resource.MustParse("5Gi"), resource.MustParse("5Gi")),
+				*newPVC("ns", config.MongodDataVolClaimName+"-other-sts-0", labels, resource.MustParse("20Gi"), resource.MustParse("20Gi")),
+			},
+			expected: "5Gi",
+		},
+		{
+			name: "skips PVCs with nil capacity",
+			pvcs: []corev1.PersistentVolumeClaim{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: config.MongodDataVolClaimName + "-my-sts-0", Namespace: "ns", Labels: labels},
+					Status:     corev1.PersistentVolumeClaimStatus{},
+				},
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-1", labels, resource.MustParse("8Gi"), resource.MustParse("8Gi")),
+			},
+			expected: "8Gi",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maxPVCCapacity(tt.pvcs, config.MongodDataVolClaimName, sts)
+			expected := resource.MustParse(tt.expected)
+			assert.True(t, got.Equal(expected), "got %s, expected %s", got.String(), expected.String())
+		})
+	}
+}
+
+func TestShrinkStatusBlocksReconciliation(t *testing.T) {
 	cr, err := readDefaultCR("some-cluster", "ns")
 	require.NoError(t, err)
 	require.NotEmpty(t, cr.Spec.Replsets)
@@ -542,17 +601,14 @@ func TestShrinkAnnotationBlocksReconciliation(t *testing.T) {
 	stsName := naming.MongodStatefulSetName(cr, rs)
 	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("10Gi"))
 
-	state := api.PVCShrinkState{
-		TargetSize:    "5Gi",
-		StartedAt:     time.Now().Format(time.RFC3339),
-		Phase:         "secondaries",
-		ProcessedPods: []string{},
-		PrimaryPod:    stsName + "-0",
-	}
-	stateJSON, err := json.Marshal(state)
-	require.NoError(t, err)
-	cr.Annotations = map[string]string{
-		api.AnnotationPVCShrinkInProgress(stsName): string(stateJSON),
+	cr.Status.PVCShrink = map[string]api.PVCShrinkState{
+		stsName: {
+			TargetSize:    "5Gi",
+			StartedAt:     time.Now().Format(time.RFC3339),
+			Phase:         "secondaries",
+			ProcessedPods: []string{},
+			PrimaryPod:    stsName + "-0",
+		},
 	}
 
 	pod := newPod(cr.Namespace, stsName+"-0", labels)

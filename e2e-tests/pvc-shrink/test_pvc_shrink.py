@@ -22,7 +22,6 @@ from lib.utils import Paths, retry
 logger = logging.getLogger(__name__)
 
 CLUSTER = "some-name"
-SHRINK_ANNOTATION_PREFIX = "percona.com/pvc-shrink-in-progress."
 
 
 # ---------------------------------------------------------------------------
@@ -59,27 +58,27 @@ def _cfg_storage() -> str:
     ).strip()
 
 
-def _has_shrink_annotation() -> bool:
-    annotations = kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o", "jsonpath={.metadata.annotations}"
+def _has_shrink_in_progress() -> bool:
+    raw = kubectl_bin(
+        "get", "psmdb", CLUSTER, "-o", "jsonpath={.status.pvcShrink}"
     ).strip()
-    return SHRINK_ANNOTATION_PREFIX in annotations
+    return raw != "" and raw != "{}"
 
 
-def _wait_no_shrink_annotation(max_attempts: int = 180, delay: int = 10) -> None:
-    logger.info("Waiting for shrink annotations to be removed")
+def _wait_no_shrink_in_progress(max_attempts: int = 180, delay: int = 10) -> None:
+    logger.info("Waiting for pvcShrink status to be cleared")
     try:
         retry(
-            _has_shrink_annotation,
+            _has_shrink_in_progress,
             max_attempts=max_attempts,
             delay=delay,
             condition=lambda has: not has,
         )
     except RuntimeError:
-        pytest.fail("Shrink annotation still present after timeout")
+        pytest.fail("pvcShrink status still present after timeout")
 
 
-def _patch_replset_storage(replset: str, size: str) -> None:
+def _replset_index(replset: str) -> int:
     idx_raw = kubectl_bin(
         "get", "psmdb", CLUSTER, "-o",
         "jsonpath={range .spec.replsets[*]}{.name}{'\\n'}{end}",
@@ -87,12 +86,40 @@ def _patch_replset_storage(replset: str, size: str) -> None:
     names = idx_raw.splitlines()
     if replset not in names:
         pytest.fail(f"Replset {replset} not found in CR, available: {names}")
-    idx = names.index(replset)
+    return names.index(replset)
+
+
+def _patch_replset_storage(replset: str, size: str) -> None:
+    idx = _replset_index(replset)
     kubectl_bin(
         "patch", "psmdb", CLUSTER, "--type=json", "-p",
         json.dumps([{
             "op": "replace",
             "path": f"/spec/replsets/{idx}/volumeSpec/persistentVolumeClaim/resources/requests/storage",
+            "value": size,
+        }]),
+    )
+
+
+def _patch_nonvoting_storage(replset: str, size: str) -> None:
+    idx = _replset_index(replset)
+    kubectl_bin(
+        "patch", "psmdb", CLUSTER, "--type=json", "-p",
+        json.dumps([{
+            "op": "replace",
+            "path": f"/spec/replsets/{idx}/nonvoting/volumeSpec/persistentVolumeClaim/resources/requests/storage",
+            "value": size,
+        }]),
+    )
+
+
+def _patch_hidden_storage(replset: str, size: str) -> None:
+    idx = _replset_index(replset)
+    kubectl_bin(
+        "patch", "psmdb", CLUSTER, "--type=json", "-p",
+        json.dumps([{
+            "op": "replace",
+            "path": f"/spec/replsets/{idx}/hidden/volumeSpec/persistentVolumeClaim/resources/requests/storage",
             "value": size,
         }]),
     )
@@ -256,12 +283,14 @@ class PVCShrinkConfig:
 # ---------------------------------------------------------------------------
 
 class TestPVCShrinkBasic:
-    """Shrink a 3-member replset from 10Gi to 5Gi, then test disable/enable cycle."""
+    """Shrink a 3-member replset (with nonvoting, hidden, arbiter) from 10Gi to 5Gi."""
 
     RS = "rs0"
     INITIAL_SIZE = "10Gi"
     SHRUNK_SIZE = "5Gi"
     PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs0-{i}" for i in range(3)]
+    NV_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs0-nv-{i}" for i in range(2)]
+    HIDDEN_PVCS: ClassVar[list[str]] = [f"mongod-data-{CLUSTER}-rs0-hidden-{i}" for i in range(2)]
 
     @pytest.fixture(scope="class", autouse=True)
     @classmethod
@@ -285,7 +314,10 @@ class TestPVCShrinkBasic:
     def test_01_create_cluster(self, config: PVCShrinkConfig, test_paths: Paths) -> None:
         apply_cluster(f"{test_paths['test_dir']}/conf/some-name.yml")
         wait_for_running(f"{config.cluster}-{self.RS}", 3)
-        for pvc in self.PVCS:
+        wait_for_running(f"{config.cluster}-{self.RS}-nv", 2, check_cluster_readyness=False)
+        wait_for_running(f"{config.cluster}-{self.RS}-hidden", 2, check_cluster_readyness=False)
+        wait_for_running(f"{config.cluster}-{self.RS}-arbiter", 1, check_cluster_readyness=False)
+        for pvc in self.PVCS + self.NV_PVCS + self.HIDDEN_PVCS:
             assert _pvc_size(pvc) == self.INITIAL_SIZE, f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_01_create_cluster"])
@@ -326,9 +358,9 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, self.SHRUNK_SIZE)
         time.sleep(10)
 
-        assert _has_shrink_annotation(), "Shrink annotation was not set"
+        assert _has_shrink_in_progress(), "Shrink status was not set"
 
-        _wait_no_shrink_annotation()
+        _wait_no_shrink_in_progress()
 
         for pvc in self.PVCS:
             _wait_pvc_size(pvc, self.SHRUNK_SIZE)
@@ -363,16 +395,38 @@ class TestPVCShrinkBasic:
         ).strip()
         assert count == "100", f"Pre-shrink data lost: expected 100, got {count}"
 
-    # -- Expand after shrink --
+    # -- Shrink nonvoting and hidden members --
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_03_shrink_with_live_traffic"])
+    def test_05a_shrink_nonvoting(self, config: PVCShrinkConfig) -> None:
+        """Shrink nonvoting PVCs from 10Gi to 5Gi."""
+        _patch_nonvoting_storage(self.RS, self.SHRUNK_SIZE)
+        time.sleep(10)
+        _wait_no_shrink_in_progress()
+        for pvc in self.NV_PVCS:
+            _wait_pvc_size(pvc, self.SHRUNK_SIZE)
+        wait_cluster_consistency(config.cluster, 900)
+
+    @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_05a_shrink_nonvoting"])
+    def test_05b_shrink_hidden(self, config: PVCShrinkConfig) -> None:
+        """Shrink hidden PVCs from 10Gi to 5Gi."""
+        _patch_hidden_storage(self.RS, self.SHRUNK_SIZE)
+        time.sleep(10)
+        _wait_no_shrink_in_progress()
+        for pvc in self.HIDDEN_PVCS:
+            _wait_pvc_size(pvc, self.SHRUNK_SIZE)
+        wait_cluster_consistency(config.cluster, 900)
+
+    # -- Expand after shrink --
+
+    @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_05b_shrink_hidden"])
     def test_06_expand_after_shrink(self, config: PVCShrinkConfig) -> None:
         """Expanding the PVC after a shrink should work normally (no shrink triggered)."""
         expand_size = "8Gi"
         _patch_replset_storage(self.RS, expand_size)
         time.sleep(10)
 
-        assert not _has_shrink_annotation(), "Shrink annotation should NOT be set for expand"
+        assert not _has_shrink_in_progress(), "Shrink status should NOT be set for expand"
 
         for pvc in self.PVCS:
             _wait_pvc_size(pvc, expand_size, max_attempts=60)
@@ -391,7 +445,7 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, "4Gi")
         time.sleep(15)
 
-        assert not _has_shrink_annotation(), "Shrink annotation should NOT be set when disabled"
+        assert not _has_shrink_in_progress(), "Shrink status should NOT be set when disabled"
 
         try:
             retry(
@@ -433,9 +487,9 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, shrink_to)
         time.sleep(10)
 
-        assert _has_shrink_annotation(), "Shrink annotation should be set after re-enabling"
+        assert _has_shrink_in_progress(), "Shrink status should be set after re-enabling"
 
-        _wait_no_shrink_annotation()
+        _wait_no_shrink_in_progress()
 
         for pvc in self.PVCS:
             _wait_pvc_size(pvc, shrink_to)
@@ -451,7 +505,7 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, expand_size)
         time.sleep(10)
 
-        assert not _has_shrink_annotation(), "Shrink annotation should NOT be set for expand"
+        assert not _has_shrink_in_progress(), "Shrink status should NOT be set for expand"
 
         for pvc in self.PVCS:
             _wait_pvc_size(pvc, expand_size, max_attempts=60)
@@ -465,9 +519,9 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, shrink_to)
         time.sleep(10)
 
-        assert _has_shrink_annotation(), "Shrink annotation should be set for second shrink"
+        assert _has_shrink_in_progress(), "Shrink status should be set for second shrink"
 
-        _wait_no_shrink_annotation()
+        _wait_no_shrink_in_progress()
 
         for pvc in self.PVCS:
             _wait_pvc_size(pvc, shrink_to)
@@ -479,7 +533,7 @@ class TestPVCShrinkBasic:
         """Disable shrink, reduce (revert), re-enable, then expand past original.
 
         Verifies no stale shrink target leaks: the operator should treat the
-        expand purely as an expand, with no shrink annotation set.
+        expand purely as an expand, with no shrink status set.
         """
         _patch_shrink_enabled(False)
         time.sleep(5)
@@ -487,7 +541,7 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, "3Gi")
         time.sleep(15)
 
-        assert not _has_shrink_annotation(), "Shrink annotation should NOT appear while disabled"
+        assert not _has_shrink_in_progress(), "Shrink status should NOT appear while disabled"
 
         try:
             retry(
@@ -507,7 +561,7 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, expand_size)
         time.sleep(10)
 
-        assert not _has_shrink_annotation(), "Shrink annotation should NOT be set for expand after re-enable"
+        assert not _has_shrink_in_progress(), "Shrink status should NOT be set for expand after re-enable"
 
         for pvc in self.PVCS:
             _wait_pvc_size(pvc, expand_size, max_attempts=60)
@@ -563,9 +617,9 @@ class TestPVCShrinkSharded:
         _patch_replset_storage("rs1", self.SHRUNK_SIZE)
         time.sleep(10)
 
-        assert _has_shrink_annotation(), "At least one shrink annotation should be set"
+        assert _has_shrink_in_progress(), "pvcShrink status should be set"
 
-        _wait_no_shrink_annotation(max_attempts=240)
+        _wait_no_shrink_in_progress(max_attempts=240)
 
         for pvc in self.RS0_PVCS + self.RS1_PVCS:
             _wait_pvc_size(pvc, self.SHRUNK_SIZE)
@@ -584,7 +638,7 @@ class TestPVCShrinkSharded:
         _patch_cfg_storage(self.SHRUNK_SIZE)
         time.sleep(10)
 
-        _wait_no_shrink_annotation()
+        _wait_no_shrink_in_progress()
 
         for pvc in self.CFG_PVCS:
             _wait_pvc_size(pvc, self.SHRUNK_SIZE)
@@ -664,7 +718,7 @@ class TestPVCShrinkMongosLog:
         _patch_mongos_log_storage(self.SHRUNK_SIZE)
         time.sleep(10)
 
-        _wait_no_shrink_annotation(max_attempts=120)
+        _wait_no_shrink_in_progress(max_attempts=120)
 
         for pvc in self.MONGOS_LOG_PVCS:
             _wait_pvc_size(pvc, self.SHRUNK_SIZE)
@@ -679,7 +733,7 @@ class TestPVCShrinkMongosLog:
         _patch_mongos_log_storage(self.INITIAL_SIZE)
         time.sleep(10)
 
-        assert not _has_shrink_annotation(), "Shrink annotation should NOT be set for expand"
+        assert not _has_shrink_in_progress(), "Shrink status should NOT be set for expand"
 
         for pvc in self.MONGOS_LOG_PVCS:
             _wait_pvc_size(pvc, self.INITIAL_SIZE)

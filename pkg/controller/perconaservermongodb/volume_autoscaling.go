@@ -69,9 +69,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return nil
 	}
 
-	// Skip autoscaling when PVC shrink is in progress
-	shrinkAnnotation := api.AnnotationPVCShrinkInProgress(sts.Name)
-	if _, ok := cr.Annotations[shrinkAnnotation]; ok {
+	if _, ok := cr.GetPVCShrinkState(sts.Name); ok {
 		log.V(1).Info("PVC shrink in progress, skipping autoscaling")
 		return nil
 	}

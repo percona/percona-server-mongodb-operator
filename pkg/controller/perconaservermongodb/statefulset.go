@@ -54,8 +54,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	// recreated with the new VolumeClaimTemplate before pods can be processed.
 	// Ensure the STS exists first, then run the shrink state machine, and skip
 	// smartUpdate/PDB/autoscaling which would conflict with the rolling process.
-	shrinkAnnotation := api.AnnotationPVCShrinkInProgress(sfs.Name)
-	if _, ok := cr.Annotations[shrinkAnnotation]; ok {
+	if _, ok := cr.GetPVCShrinkState(sfs.Name); ok {
 		err = r.createOrUpdate(ctx, sfs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)

@@ -412,6 +412,7 @@ type PerconaServerMongoDBStatus struct {
 	Size                 int32                               `json:"size"`
 	Ready                int32                               `json:"ready"`
 	StorageAutoscaling   map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	PVCShrink            map[string]PVCShrinkState           `json:"pvcShrink,omitempty"`
 	Search               map[string]SearchStatus             `json:"search,omitempty"`
 	VaultLastRequestedAt *metav1.Time                        `json:"vaultLastRequestedAt,omitempty"`
 }
@@ -1944,15 +1945,10 @@ const (
 	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
 	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
-	annotationPVCShrinkInProgressBase  = "percona.com/pvc-shrink-in-progress"
 )
 
 func AnnotationPreservedRestartedAt(stsName string) string {
 	return annotationPreservedRestartedAtBase + "." + stsName
-}
-
-func AnnotationPVCShrinkInProgress(stsName string) string {
-	return annotationPVCShrinkInProgressBase + "." + stsName
 }
 
 type PVCShrinkState struct {
@@ -1964,12 +1960,26 @@ type PVCShrinkState struct {
 }
 
 func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {
-	for key := range cr.Annotations {
-		if strings.HasPrefix(key, annotationPVCShrinkInProgressBase+".") {
-			return true
-		}
+	return len(cr.Status.PVCShrink) > 0
+}
+
+func (cr *PerconaServerMongoDB) GetPVCShrinkState(stsName string) (PVCShrinkState, bool) {
+	if cr.Status.PVCShrink == nil {
+		return PVCShrinkState{}, false
 	}
-	return false
+	state, ok := cr.Status.PVCShrink[stsName]
+	return state, ok
+}
+
+func (cr *PerconaServerMongoDB) SetPVCShrinkState(stsName string, state PVCShrinkState) {
+	if cr.Status.PVCShrink == nil {
+		cr.Status.PVCShrink = make(map[string]PVCShrinkState)
+	}
+	cr.Status.PVCShrink[stsName] = state
+}
+
+func (cr *PerconaServerMongoDB) ClearPVCShrinkState(stsName string) {
+	delete(cr.Status.PVCShrink, stsName)
 }
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {

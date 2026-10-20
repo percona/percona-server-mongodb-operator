@@ -1533,9 +1533,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 			return nil
 		}
 
-		// Check for PVC shrink in progress on the CR
-		shrinkAnnotation := api.AnnotationPVCShrinkInProgress(sts.Name)
-		if _, ok := cr.Annotations[shrinkAnnotation]; ok {
+		if _, ok := cr.GetPVCShrinkState(sts.Name); ok {
 			log.V(1).Info("PVC shrink in progress, skipping reconciliation of mongos statefulset", "name", sts.Name)
 			return nil
 		}

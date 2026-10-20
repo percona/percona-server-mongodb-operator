@@ -10,6 +10,8 @@ spec:
   image:
   imagePullPolicy: Always
   allowUnsafeConfigurations: false
+  unsafeFlags:
+    replsetSize: true
   storageScaling:
     enableVolumeScaling: true
     enableVolumeShrink: true
@@ -56,5 +58,51 @@ spec:
           requests:
             storage: 10Gi
     size: 3
+    nonvoting:
+      enabled: true
+      size: 2
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.5G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 10Gi
+    hidden:
+      enabled: true
+      size: 2
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.5G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 10Gi
+    arbiter:
+      enabled: true
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 300m
+          memory: 0.5G
+        requests:
+          cpu: 100m
+          memory: 0.1G
   secrets:
     users: some-users

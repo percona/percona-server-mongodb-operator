@@ -2225,6 +2225,13 @@ func (in *PerconaServerMongoDBStatus) DeepCopyInto(out *PerconaServerMongoDBStat
 			(*out)[key] = *val.DeepCopy()
 		}
 	}
+	if in.PVCShrink != nil {
+		in, out := &in.PVCShrink, &out.PVCShrink
+		*out = make(map[string]PVCShrinkState, len(*in))
+		for key, val := range *in {
+			(*out)[key] = *val.DeepCopy()
+		}
+	}
 	if in.Search != nil {
 		in, out := &in.Search, &out.Search
 		*out = make(map[string]SearchStatus, len(*in))
