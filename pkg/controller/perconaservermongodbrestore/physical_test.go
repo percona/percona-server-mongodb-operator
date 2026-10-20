@@ -397,6 +397,36 @@ func TestIsTransientNetworkError(t *testing.T) {
 	}
 }
 
+func TestIsContainerUnavailableError(t *testing.T) {
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"container not created": {
+			err:  errors.New("container is not created or running"),
+			want: true,
+		},
+		"container not found": {
+			err:  errors.New("container not found (\"mongod\")"),
+			want: true,
+		},
+		"container stopped": {
+			err:  errors.New(`describe restore stderr:  stdout: : Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "5611bd31": OCI runtime exec failed: exec failed: cannot exec in a stopped container`),
+			want: true,
+		},
+		"pbm error": {
+			err:  errors.New("describe restore stderr: Error: get restore meta: not found stdout: "),
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isContainerUnavailableError(tt.err))
+		})
+	}
+}
+
 func TestCheckStatefulSetForPhysicalRestore(t *testing.T) {
 	const ns = "some-ns"
 
