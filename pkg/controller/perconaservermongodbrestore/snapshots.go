@@ -380,7 +380,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
 				sfs.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
 
-				return r.client.Patch(ctx, &sfs, client.MergeFrom(orig))
+				if err := r.client.Patch(ctx, &sfs, client.MergeFrom(orig)); err != nil {
+					return err
+				}
+
+				if err := r.terminateStatefulSetPods(ctx, &sfs); err != nil {
+					return err
+				}
+
+				return nil
 			}); err != nil {
 				return false, errors.Wrapf(err, "prepare statefulset %s for snapshot restore", nn.Name)
 			}
