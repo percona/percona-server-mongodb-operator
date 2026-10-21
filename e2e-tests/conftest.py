@@ -206,6 +206,11 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
 @pytest.fixture(scope="session", autouse=True)
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
+    init_env()
+
+
+def init_env() -> list[str]:
+    """Fill os.environ with e2e defaults and return the managed variable names."""
     git_branch = get_git_branch()
     platform = detect_platform()
 
@@ -265,6 +270,7 @@ def setup_env_vars() -> None:
     logger.info(
         "Environment variables:\n" + "\n".join(f"{key}={os.environ.get(key)}" for key in defaults)
     )
+    return [*defaults, "IMAGE_OPERATOR"]
 
 
 @pytest.fixture(scope="class")
@@ -764,3 +770,11 @@ def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
         _delete_cert_manager()
     finally:
         _cleanup_infra(test_paths, namespaces)
+
+
+if __name__ == "__main__":
+    import shlex
+
+    _console.stderr = True
+    for key in init_env():
+        print(f"export {key}={shlex.quote(os.environ.get(key, ''))}")
