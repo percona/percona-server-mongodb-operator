@@ -266,6 +266,8 @@ spec:
                 optional: false
           - name: MONGODB_TLS_ENABLED
             value: "true"
+          - name: MONGODB_TLS_INSECURE
+            value: "true"
           - name: LOGROTATE_SCHEDULE
             value: "0 0 */2 * *"
         resources:

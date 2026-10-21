@@ -193,6 +193,8 @@ spec:
                   optional: false
             - name: MONGODB_TLS_ENABLED
               value: "true"
+            - name: MONGODB_TLS_INSECURE
+              value: "true"
           imagePullPolicy: IfNotPresent
           name: logrotate
           resources: {}

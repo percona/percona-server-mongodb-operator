@@ -92,6 +92,12 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogV
 			Value: strconv.FormatBool(cr.TLSEnabled()),
 		})
 		if cr.TLSEnabled() {
+			if cr.Spec.TLS != nil && cr.Spec.TLS.AllowInvalidCertificates != nil && *cr.Spec.TLS.AllowInvalidCertificates {
+				container.Env = append(container.Env, corev1.EnvVar{
+					Name:  "MONGODB_TLS_INSECURE",
+					Value: "true",
+				})
+			}
 			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
 				Name:      "ssl",
 				MountPath: config.SSLDir,

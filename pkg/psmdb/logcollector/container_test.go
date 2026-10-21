@@ -56,28 +56,48 @@ func TestContainers(t *testing.T) {
 				ImagePullPolicy: corev1.PullIfNotPresent,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("", nil, nil, nil, new(true)),
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(true), false),
 		},
-		"logcollector enabled with TLS disabled": {
-			tls: &api.TLSSpec{Mode: api.TLSModeDisabled},
+		"logcollector enabled with invalid certificates allowed": {
+			tls: &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(true)},
 			logCollector: &api.LogCollectorSpec{
 				Enabled:         true,
 				Image:           "log-test-image",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("", nil, nil, nil, new(false)),
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(true), true),
+		},
+		"logcollector enabled with invalid certificates disallowed": {
+			tls: &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(false)},
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(true), false),
+		},
+		"logcollector enabled with TLS disabled": {
+			tls: &api.TLSSpec{Mode: api.TLSModeDisabled, AllowInvalidCertificates: new(true)},
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(false), false),
 		},
 		"logcollector enabled on 1.23.0": {
 			crVersion: "1.23.0",
-			tls:       &api.TLSSpec{Mode: api.TLSModeRequire},
+			tls:       &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(true)},
 			logCollector: &api.LogCollectorSpec{
 				Enabled:         true,
 				Image:           "log-test-image",
 				ImagePullPolicy: corev1.PullIfNotPresent,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("", nil, nil, nil, nil),
+			expectedContainers:     expectedContainers("", nil, nil, nil, nil, false),
 		},
 		"logcollector enabled with configuration": {
 			logCollector: &api.LogCollectorSpec{
@@ -87,7 +107,7 @@ func TestContainers(t *testing.T) {
 				Configuration:   "my-config",
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("my-config", nil, nil, nil, new(true)),
+			expectedContainers:     expectedContainers("my-config", nil, nil, nil, new(true), false),
 		},
 		"logcollector enabled with env variable": {
 			logCollector: &api.LogCollectorSpec{
@@ -99,7 +119,7 @@ func TestContainers(t *testing.T) {
 				EnvFrom:         testEnvFrom,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("my-config", testEnvVar, testEnvFrom, nil, new(true)),
+			expectedContainers:     expectedContainers("my-config", testEnvVar, testEnvFrom, nil, new(true), false),
 		},
 		"logcollector enabled with logrotate": {
 			logCollector: &api.LogCollectorSpec{
@@ -109,7 +129,7 @@ func TestContainers(t *testing.T) {
 			},
 			logRotate:              testLogRotate,
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("", nil, nil, testLogRotate, new(true)),
+			expectedContainers:     expectedContainers("", nil, nil, testLogRotate, new(true), false),
 		},
 	}
 
@@ -262,6 +282,7 @@ func expectedContainers(
 	envFrom []corev1.EnvFromSource,
 	logrotateConfig *api.LogRotateSpec,
 	tlsEnabled *bool,
+	allowInvalidCertificates bool,
 ) []corev1.Container {
 	envs := []corev1.EnvVar{
 		{Name: "LOG_DATA_DIR", Value: config.MongodContainerDataLogsDir},
@@ -351,6 +372,10 @@ func expectedContainers(
 			})
 		}
 		logRotateC.Env = append(logRotateC.Env, corev1.EnvVar{Name: "MONGODB_TLS_ENABLED", Value: tlsValue})
+	}
+
+	if allowInvalidCertificates {
+		logRotateC.Env = append(logRotateC.Env, corev1.EnvVar{Name: "MONGODB_TLS_INSECURE", Value: "true"})
 	}
 
 	if logrotateConfig != nil {
