@@ -595,7 +595,7 @@ func TestNeedsManualSSLUpdateVersionGate(t *testing.T) {
 }
 
 func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
-	newCR := func(allowInvalidCerts bool) *api.PerconaServerMongoDB {
+	newCR := func(allowInvalidCerts bool, mongosSize int32) *api.PerconaServerMongoDB {
 		cr := newTestCR()
 		cr.Spec.UpdateStrategy = api.SmartUpdateStatefulSetStrategyType
 		cr.Spec.TLS = &api.TLSSpec{
@@ -604,46 +604,54 @@ func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
 		}
 		cr.Spec.Sharding = api.Sharding{
 			Enabled: true,
-			Mongos:  &api.MongosSpec{Size: 2},
+			Mongos:  &api.MongosSpec{Size: mongosSize},
 		}
 		return cr
 	}
-	secrets := []client.Object{
-		&corev1.Secret{
-			Name:      "test-cluster-ssl",
-			Namespace: "test-ns",
-			Data:      map[string][]byte{"tls.crt": []byte("cert-data")},
-		},
-		&corev1.Secret{
-			Name:      "test-cluster-ssl-internal",
-			Namespace: "test-ns",
-			Data:      map[string][]byte{"tls.crt": []byte("internal-cert-data")},
-		},
+	current := map[string]string{
+		naming.AnnotationSSLHash:         "current-hash",
+		naming.AnnotationSSLInternalHash: "current-internal-hash",
 	}
 
 	tests := []struct {
 		name              string
 		allowInvalidCerts bool
+		mongosSize        int32
 		podHashes         []string
 		wantMongosFirst   bool
 	}{
 		{
 			name:            "mongos runs an outdated certificate",
+			mongosSize:      2,
 			podHashes:       []string{"current", "outdated"},
 			wantMongosFirst: true,
 		},
 		{
+			name:            "mongos runs an outdated internal certificate",
+			mongosSize:      2,
+			podHashes:       []string{"current", "outdated-internal"},
+			wantMongosFirst: true,
+		},
+		{
 			name:            "mongos runs the current certificate",
+			mongosSize:      2,
 			podHashes:       []string{"current", "current"},
 			wantMongosFirst: false,
 		},
 		{
 			name:            "no mongos pods",
+			mongosSize:      2,
+			wantMongosFirst: false,
+		},
+		{
+			name:            "mongos is scaled to zero",
+			podHashes:       []string{"outdated", "outdated"},
 			wantMongosFirst: false,
 		},
 		{
 			name:              "hostname verification is disabled",
 			allowInvalidCerts: true,
+			mongosSize:        2,
 			podHashes:         []string{"outdated", "outdated"},
 			wantMongosFirst:   false,
 		},
@@ -651,31 +659,40 @@ func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cr := newCR(tt.allowInvalidCerts)
-			r := buildFakeClient(append([]client.Object{cr}, secrets...)...)
-
-			current, err := r.sslAnnotation(t.Context(), cr)
-			require.NoError(t, err)
+			cr := newCR(tt.allowInvalidCerts, tt.mongosSize)
+			objs := []client.Object{cr}
 
 			for i, hash := range tt.podHashes {
 				ann := maps.Clone(current)
-				if hash == "outdated" {
+				switch hash {
+				case "outdated":
 					ann[naming.AnnotationSSLHash] = "outdated-hash"
+				case "outdated-internal":
+					ann[naming.AnnotationSSLInternalHash] = "outdated-internal-hash"
 				}
-				pod := &corev1.Pod{
+				objs = append(objs, &corev1.Pod{
 					Name:        fmt.Sprintf("test-cluster-mongos-%d", i),
 					Namespace:   "test-ns",
 					Labels:      naming.MongosLabels(cr),
 					Annotations: ann,
-				}
-				require.NoError(t, r.client.Create(t.Context(), pod))
+				})
 			}
 
-			require.NoError(t, r.updateMongosFirstIfTLSOutdated(t.Context(), cr))
+			r := buildFakeClient(objs...)
+
+			cfg := &appsv1.StatefulSet{}
+			cfg.Spec.Template.Annotations = maps.Clone(current)
+
+			require.NoError(t, r.updateMongosFirstIfTLSOutdated(t.Context(), cr, cfg))
 
 			mongosFirst, err := r.shouldUpdateMongosFirst(t.Context(), cr)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantMongosFirst, mongosFirst)
+
+			stored := new(api.PerconaServerMongoDB)
+			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+			_, ok := stored.Annotations[api.AnnotationUpdateMongosFirst]
+			assert.Equal(t, tt.wantMongosFirst, ok, "annotation must be stored in the API server")
 		})
 	}
 }

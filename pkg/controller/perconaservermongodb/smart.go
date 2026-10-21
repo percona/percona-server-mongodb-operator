@@ -68,6 +68,10 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
+	if err := r.updateMongosFirstIfTLSOutdated(ctx, cr, sfs); err != nil {
+		return errors.Wrap(err, "update mongos first if TLS is outdated")
+	}
+
 	mongosFirst, err := r.shouldUpdateMongosFirst(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "should update mongos first")
@@ -246,12 +250,7 @@ func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Cont
 		return false, nil
 	}
 
-	c := new(api.PerconaServerMongoDB)
-	if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
-		return false, errors.Wrap(err, "failed to get cr")
-	}
-
-	_, ok := c.Annotations[api.AnnotationUpdateMongosFirst]
+	_, ok := cr.Annotations[api.AnnotationUpdateMongosFirst]
 	return ok, nil
 }
 
@@ -259,8 +258,11 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
+	if _, ok := cr.Annotations[api.AnnotationUpdateMongosFirst]; ok {
+		return nil
+	}
 
-	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		c := new(api.PerconaServerMongoDB)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 			return err
@@ -275,13 +277,23 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 
 		return r.client.Update(ctx, c)
 	})
+	if err != nil {
+		return err
+	}
+
+	if cr.Annotations == nil {
+		cr.Annotations = make(map[string]string)
+	}
+	cr.Annotations[api.AnnotationUpdateMongosFirst] = "true"
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
-	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		c := new(api.PerconaServerMongoDB)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 			return err
@@ -294,6 +306,13 @@ func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Conte
 
 		return r.client.Update(ctx, c)
 	})
+	if err != nil {
+		return err
+	}
+
+	delete(cr.Annotations, api.AnnotationUpdateMongosFirst)
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, expectedPrimary corev1.Pod) error {
@@ -414,6 +433,10 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	log := logf.FromContext(ctx)
 
 	if cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
+		// there is no mongos smart update to wait for
+		if err := r.unsetUpdateMongosFirst(ctx, cr); err != nil {
+			return errors.Wrap(err, "unset update mongos first")
+		}
 		return nil
 	}
 
