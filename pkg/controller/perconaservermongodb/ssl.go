@@ -1,12 +1,12 @@
 package perconaservermongodb
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"slices"
 	"sort"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,22 +29,25 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
-	secretObj := corev1.Secret{}
-	secretInternalObj := corev1.Secret{}
+	secretObj := new(corev1.Secret)
+	secretInternalObj := new(corev1.Secret)
 	errSecret := r.client.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      api.SSLSecretName(cr),
 		},
-		&secretObj,
+		secretObj,
 	)
 	if client.IgnoreNotFound(errSecret) != nil {
 		return errors.Wrap(errSecret, "get SSL secret")
 	}
-	isCustomSecret, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretObj)
+	isCustomSecret, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, secretObj)
 	if serr != nil {
 		return errors.Wrap(serr, "failed to check if secret is created by user")
+	}
+	if errSecret != nil {
+		secretObj = nil
 	}
 	errInternalSecret := r.client.Get(
 		ctx,
@@ -52,14 +55,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 			Namespace: cr.Namespace,
 			Name:      api.SSLInternalSecretName(cr),
 		},
-		&secretInternalObj,
+		secretInternalObj,
 	)
 	if client.IgnoreNotFound(errInternalSecret) != nil {
 		return errors.Wrap(errInternalSecret, "get internal SSL secret")
 	}
-	isCustomSecretInternal, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretInternalObj)
+	isCustomSecretInternal, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, secretInternalObj)
 	if serr != nil {
 		return errors.Wrap(serr, "failed to check if internal secret is created by user")
+	}
+	if errInternalSecret != nil {
+		secretInternalObj = nil
 	}
 
 	if errSecret == nil && isCustomSecret {
@@ -106,31 +112,33 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
-	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace)
+	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace, secretObj, secretInternalObj)
 	if err != nil {
 		return errors.Wrap(err, "check cert-manager")
 	}
 	if !ok {
 		if errSecret == nil && errInternalSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, &secretObj) {
+			if r.needsManualSSLUpdate(ctx, cr, secretObj) {
 				return r.updateSSLManually(ctx, cr)
 			}
 			return nil
 		}
-		err = r.createSSLManually(ctx, cr)
-		if err != nil {
+		if err := r.createSSLManually(ctx, cr); err != nil {
 			return errors.Wrap(err, "create ssl manually")
 		}
 		return nil
 	}
-	err = r.createSSLByCertManager(ctx, cr)
-	if err != nil {
+	if err := r.createSSLByCertManager(ctx, cr); err != nil {
 		return errors.Wrap(err, "create ssl by cert-manager")
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string, secret, internalSecret *corev1.Secret) (bool, error) {
+	if secret != nil && internalSecret != nil {
+		return secret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true" || internalSecret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true", nil
+	}
+
 	c := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
 	err := c.Check(ctx, r.restConfig, ns)
 	if err != nil {
@@ -286,7 +294,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 					return errors.Wrap(err, "get secret")
 				}
 
-				if bytes.Equal(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
+				if tls.EqualPEM(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
 					continue
 				}
 
@@ -429,7 +437,7 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 		}
 
 		// If secret was already updated, we should delete the old one
-		if bytes.Equal(mergedCA, secret.Data["ca.crt"]) {
+		if tls.EqualPEM(mergedCA, secret.Data["ca.crt"]) {
 			if err := r.client.Delete(ctx, oldSecret); err != nil {
 				return err
 			}
