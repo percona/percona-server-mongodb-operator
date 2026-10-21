@@ -446,7 +446,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		if cluster.CompareVersion("1.19.0") < 0 {
 			for i, v := range pbmEnvVars {
 				pbmEnvVars[i].ValueFrom.SecretKeyRef.Key = strings.TrimSuffix(v.ValueFrom.SecretKeyRef.Key, "_ESCAPED")
-				pbmEnvVars[i].ValueFrom.SecretKeyRef.LocalObjectReference.Name = cluster.Spec.Secrets.Users
+				pbmEnvVars[i].ValueFrom.SecretKeyRef.Name = cluster.Spec.Secrets.Users
 				pbmEnvVars[i].ValueFrom.SecretKeyRef.Optional = nil
 			}
 		}

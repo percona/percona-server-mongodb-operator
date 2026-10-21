@@ -75,7 +75,7 @@ func HasStatefulSetChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) boo
 		if pod.Labels[naming.LabelKubernetesComponent] != sfs.Labels[naming.LabelKubernetesComponent] {
 			continue
 		}
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
+		if pod.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
 			return true
 		}
 	}
