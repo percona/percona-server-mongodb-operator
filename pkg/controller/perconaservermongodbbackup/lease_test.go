@@ -27,6 +27,8 @@ func backupScheme(t *testing.T) *runtime.Scheme {
 }
 
 func TestCheckClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "tgt"
@@ -120,6 +122,8 @@ func TestCheckClusterSyncLease(t *testing.T) {
 }
 
 func TestTryAcquireLease(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "tgt"

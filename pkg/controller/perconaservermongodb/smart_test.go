@@ -9,6 +9,8 @@ import (
 )
 
 func TestSortPodsByOrdinal(t *testing.T) {
+	t.Parallel()
+
 	ordinalPod := func(i int) corev1.Pod {
 		return corev1.Pod{
 			Name:   "pod-" + strconv.Itoa(i),

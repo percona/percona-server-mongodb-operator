@@ -48,6 +48,8 @@ func (c *sslCertManagerController) ApplyCAIssuer(context.Context, *api.PerconaSe
 }
 
 func TestReconcileSSLCertManagerCheck(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name                            string
 		external, internal, certManager bool
@@ -122,6 +124,8 @@ func newTestCR() *api.PerconaServerMongoDB {
 }
 
 func TestCurrentSSLAnnotation(t *testing.T) {
+	t.Parallel()
+
 	sts := &appsv1.StatefulSet{
 		Name:      "test-cluster-rs0",
 		Namespace: "test-ns",
@@ -175,6 +179,8 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 }
 
 func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
+	t.Parallel()
+
 	sts := &appsv1.StatefulSet{
 		Name:      "test-cluster-rs0",
 		Namespace: "test-ns",
@@ -255,6 +261,8 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 }
 
 func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.TLS = &api.TLSSpec{
 		CertManagementPolicy: api.CertManagementUserProvidedOnly,
@@ -291,6 +299,8 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 }
 
 func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.TLS = &api.TLSSpec{
 		CertManagementPolicy: api.CertManagementUserProvidedOnly,
@@ -305,6 +315,8 @@ func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {
 }
 
 func TestApplyCertManagerCertificatesExternalIssuer(t *testing.T) {
+	t.Parallel()
+
 	newExternalIssuerCR := func() *api.PerconaServerMongoDB {
 		cr := newTestCR()
 		cr.Spec.TLS = &api.TLSSpec{
@@ -355,6 +367,8 @@ func TestApplyCertManagerCertificatesExternalIssuer(t *testing.T) {
 }
 
 func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
+	t.Parallel()
+
 	newClusterIssuerCR := func(crVersion string) *api.PerconaServerMongoDB {
 		cr := newTestCR()
 		cr.Spec.CRVersion = crVersion
@@ -439,6 +453,8 @@ func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
 }
 
 func TestIsExternalIssuer(t *testing.T) {
+	t.Parallel()
+
 	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
 		return &cm.ClusterIssuer{
 			Name:   "user-cluster-issuer",
@@ -543,6 +559,8 @@ func TestIsExternalIssuer(t *testing.T) {
 }
 
 func TestNeedsManualSSLUpdateVersionGate(t *testing.T) {
+	t.Parallel()
+
 	sslSecret := func(t *testing.T, cr *api.PerconaServerMongoDB, sans []string) *corev1.Secret {
 		t.Helper()
 

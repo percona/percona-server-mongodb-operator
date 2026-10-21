@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
@@ -11,6 +12,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
@@ -23,9 +26,12 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-// creates a fake client to mock API calls with the mock objects
-func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
-	s := scheme.Scheme
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	if err := scheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
 
 	s.AddKnownTypes(api.SchemeGroupVersion,
 		new(api.PerconaServerMongoDB),
@@ -43,6 +49,15 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 		panic(err)
 	}
 
+	metav1.AddToGroupVersion(s, api.SchemeGroupVersion)
+
+	return s
+})
+
+// creates a fake client to mock API calls with the mock objects
+func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
+	s := testScheme()
+
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &ReconcilePerconaServerMongoDB{
@@ -51,6 +66,8 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 		lockers:                newLockStore(),
 		newPBM:                 fakeBackup.NewPBM,
 		newCertManagerCtrlFunc: faketls.NewCertManagerController,
+		pvcUsageBackoff:        testPVCUsageBackoff,
+		podRestartPoll:         testPodRestartPoll,
 	}
 }
 
@@ -97,6 +114,8 @@ func mockReadyReplsetPod(name, namespace, crName, rsName, component string) *cor
 }
 
 func TestUpdateStatus(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		cr            *api.PerconaServerMongoDB
@@ -338,6 +357,8 @@ func TestUpdateStatus(t *testing.T) {
 }
 
 func TestWriteStatusRecreatedCR(t *testing.T) {
+	t.Parallel()
+
 	existing := &api.PerconaServerMongoDB{
 		Name:      "some-name",
 		Namespace: "some-namespace",
@@ -375,6 +396,8 @@ func fakeVolumeSpec(t *testing.T) *api.VolumeSpec {
 }
 
 func TestConnectionEndpoint(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cr := &api.PerconaServerMongoDB{
 		Name: "psmdb-mock", Namespace: "psmdb",
@@ -604,6 +627,8 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 }
 
 func TestIsAwaitingSmartUpdate(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	cr := &api.PerconaServerMongoDB{
 		Name:       "psmdb-mock",

@@ -18,6 +18,8 @@ import (
 )
 
 func TestPMMAgentScriptPreservesCredentials(t *testing.T) {
+	t.Parallel()
+
 	const user = "monitor'user"
 	const password = "literal\"quote' with spaces $HOME $(printf wrong) `printf wrong` \\backslash\nnext"
 	const cluster = "cluster \"name\" with spaces"
@@ -50,6 +52,8 @@ func TestPMMAgentScriptPreservesCredentials(t *testing.T) {
 }
 
 func TestContainer(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	tokenSecret := &corev1.Secret{
@@ -164,6 +168,8 @@ func TestContainer(t *testing.T) {
 }
 
 func TestPMMConfigFile(t *testing.T) {
+	t.Parallel()
+
 	newCR := func(crVersion string) *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
 			Spec: api.PerconaServerMongoDBSpec{CRVersion: crVersion},
@@ -182,6 +188,8 @@ func TestPMMConfigFile(t *testing.T) {
 }
 
 func TestTmpVolumeRequired(t *testing.T) {
+	t.Parallel()
+
 	newCR := func(crVersion string, pmmEnabled, readOnlyRootFilesystem bool) *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
 			Spec: api.PerconaServerMongoDBSpec{CRVersion: crVersion, PMM: api.PMMSpec{Enabled: pmmEnabled, ContainerSecurityContext: &corev1.SecurityContext{ReadOnlyRootFilesystem: &readOnlyRootFilesystem}}},
