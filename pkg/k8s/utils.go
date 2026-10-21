@@ -6,7 +6,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,4 +64,20 @@ func DeleteIfExists(ctx context.Context, c client.Client, obj client.Object) err
 		return errors.Wrapf(err, "failed to delete %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
 	}
 	return nil
+}
+
+func HasStatefulSetChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {
+	if sfs.Status.UpdateRevision == "" {
+		return false
+	}
+
+	for _, pod := range podList.Items {
+		if pod.Labels[naming.LabelKubernetesComponent] != sfs.Labels[naming.LabelKubernetesComponent] {
+			continue
+		}
+		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
+			return true
+		}
+	}
+	return false
 }

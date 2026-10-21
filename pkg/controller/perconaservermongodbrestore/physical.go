@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
@@ -526,33 +525,31 @@ func (r *ReconcilePerconaServerMongoDBRestore) terminateStatefulSetPods(
 	ctx context.Context,
 	sfs *appsv1.StatefulSet,
 ) error {
-	targetGen := sfs.Generation
-	bo := backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(time.Second*2), 3), ctx)
-	if err := backoff.Retry(func() error {
-		observed := &appsv1.StatefulSet{}
-		if err := r.client.Get(ctx, client.ObjectKeyFromObject(sfs), observed); err != nil {
-			return err
-		}
-
-		// When sfs is updated/patched, the client writes back the updated generation into the local object.
-		// We use it to ensure that the informers have been synced before deleting the pods.
-		if observed.Status.ObservedGeneration < targetGen {
-			return errors.New("updated statefulset not yet observed by informer")
-		}
-
-		podList := &corev1.PodList{}
-		if err := r.client.List(ctx, podList, client.InNamespace(sfs.Namespace), client.MatchingLabels(sfs.Spec.Selector.MatchLabels)); err != nil {
-			return err
-		}
-
-		for _, pod := range podList.Items {
-			if err := r.client.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
-				return err
+	if err := wait.PollUntilContextTimeout(ctx, 1*time.Second, 10*time.Second, false,
+		func(ctx context.Context) (done bool, err error) {
+			observed := &appsv1.StatefulSet{}
+			if err := r.client.Get(ctx, client.ObjectKeyFromObject(sfs), observed); err != nil {
+				return false, err
 			}
-		}
-		return nil
-	}, bo); err != nil {
+
+			podList := &corev1.PodList{}
+			if err := r.client.List(ctx, podList, client.InNamespace(sfs.Namespace), client.MatchingLabels(sfs.Spec.Selector.MatchLabels)); err != nil {
+				return false, err
+			}
+
+			if !k8s.HasStatefulSetChanged(observed, podList) {
+				return false, nil
+			}
+
+			for _, pod := range podList.Items {
+				if err := r.client.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
+					return false, err
+				}
+			}
+			return true, nil
+		}); err != nil {
 		return err
+
 	}
 	return nil
 }

@@ -20,6 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
@@ -333,7 +334,7 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 		}); err != nil {
 			return false, errors.Wrap(err, "get pod list")
 		}
-		if isSfsChanged(sts, &pods) {
+		if k8s.HasStatefulSetChanged(sts, &pods) {
 			updated += sts.Status.UpdatedReplicas
 			stsChanged = true
 		}
