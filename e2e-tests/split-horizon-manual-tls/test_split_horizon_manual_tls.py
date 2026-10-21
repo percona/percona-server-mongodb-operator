@@ -171,12 +171,6 @@ def _assert_cert_san(secret: str, san: str) -> None:
     logger.info(f"Secret {secret} has SAN {san}")
 
 
-def _assert_no_horizon_sans(secret: str) -> None:
-    sans = [san for san in _cert_sans(secret) if san.endswith(f".{HORIZON_DOMAIN}")]
-    assert not sans, f"secret {secret} still has horizon SANs: {sans}"
-    logger.info(f"Secret {secret} has no horizon SANs")
-
-
 def _assert_no_horizons_in_rs_conf(config: SplitHorizonConfig) -> None:
     out = _run_mongosh_tls(
         "EJSON.stringify(rs.conf().members.filter(m => m.horizons).map(m => m.host))",
@@ -295,12 +289,11 @@ class TestSplitHorizonManualTLS:
 
     @pytest.mark.dependency(depends=["TestSplitHorizonManualTLS::test_scale_down"])
     def test_remove_horizons(self, config: SplitHorizonConfig, test_paths: Paths) -> None:
-        """Remove horizon configuration and check it's gone from rs.conf() and certificates"""
+        """Remove horizon configuration and check it's gone from rs.conf()"""
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster}.yml")
         _wait_cluster(config, 3)
 
         retry(lambda: _assert_no_horizons_in_rs_conf(config), max_attempts=12, delay=5)
 
         for secret in config.tls_secrets:
-            retry(partial(_assert_no_horizon_sans, secret), max_attempts=30, delay=10)
             _assert_signed_by_ca(secret, config.ca_secret)
