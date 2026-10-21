@@ -21,7 +21,19 @@ func TestBuildTargetURI(t *testing.T) {
 		want     string
 		wantErr  string
 	}{
-		"replicaset target": {
+		"replicaset target with tls disabled": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "cluster1", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					TLS:      &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
+					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+				},
+			},
+			username: "sync",
+			password: "syncpass",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0",
+		},
+		"replicaset target with tls enabled by default": {
 			target: &psmdbv1.PerconaServerMongoDB{
 				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
@@ -30,13 +42,26 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true",
+		},
+		"replicaset target with requireTLS": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "cluster1", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					TLS:      &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire},
+					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+				},
+			},
+			username: "sync",
+			password: "syncpass",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true",
 		},
 		"replicaset target with custom dns suffix": {
 			target: &psmdbv1.PerconaServerMongoDB{
 				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					ClusterServiceDNSSuffix: psmdbv1.MultiClusterDefaultDNSSuffix,
+					TLS:                     &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
 					Replsets:                []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
 				},
 			},
@@ -48,6 +73,7 @@ func TestBuildTargetURI(t *testing.T) {
 			target: &psmdbv1.PerconaServerMongoDB{
 				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					TLS:      &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
 					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
 					Sharding: psmdbv1.Sharding{
 						Enabled: true,
@@ -59,10 +85,27 @@ func TestBuildTargetURI(t *testing.T) {
 			password: "syncpass",
 			want:     "mongodb://sync:syncpass@cluster1-mongos.ns.svc.cluster.local:27019/",
 		},
+		"sharded target with tls": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "cluster1", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					TLS:      &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire},
+					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+					Sharding: psmdbv1.Sharding{
+						Enabled: true,
+						Mongos:  &psmdbv1.MongosSpec{Port: 27019},
+					},
+				},
+			},
+			username: "sync",
+			password: "syncpass",
+			want:     "mongodb://sync:syncpass@cluster1-mongos.ns.svc.cluster.local:27019/?tls=true&tlsAllowInvalidCertificates=true",
+		},
 		"credentials are percent-encoded": {
 			target: &psmdbv1.PerconaServerMongoDB{
 				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					TLS:      &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
 					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
 				},
 			},

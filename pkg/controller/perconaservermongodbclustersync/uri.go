@@ -65,10 +65,14 @@ func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password str
 		Host:   host,
 		Path:   "/",
 	}
+	q := u.Query()
 	if rsName != "" {
-		q := u.Query()
 		q.Set("replicaSet", rsName)
-		u.RawQuery = q.Encode()
 	}
+	if target.TLSEnabled() {
+		q.Set("tls", "true")
+		q.Set("tlsAllowInvalidCertificates", "true")
+	}
+	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

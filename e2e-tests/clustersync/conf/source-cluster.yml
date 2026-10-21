@@ -8,6 +8,8 @@ spec:
   unsafeFlags:
     replsetSize: true
     mongosSize: true
+  tls:
+    mode: requireTLS
   secrets:
     users: source-users
   sharding:
