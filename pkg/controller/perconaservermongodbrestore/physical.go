@@ -530,6 +530,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) terminateStatefulSetPods(
 ) (bool, error) {
 	rolledOut := func(pods *corev1.PodList) bool {
 		for _, pod := range pods.Items {
+			if !pod.GetDeletionTimestamp().IsZero() {
+				continue
+			}
 			if _, ok := pod.GetAnnotations()[psmdbv1.AnnotationRestoreInProgress]; !ok {
 				return false
 			}
