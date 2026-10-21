@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"sort"
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -648,7 +647,7 @@ func certSANs(t *testing.T, secret *corev1.Secret) []string {
 
 	sans, err := tls.GetDNSNamesFromCert(secret.Data["tls.crt"])
 	require.NoError(t, err)
-	sort.Strings(sans)
+	slices.Sort(sans)
 	return sans
 }
 
@@ -667,7 +666,7 @@ func TestReconcileSSL_Manual(t *testing.T) {
 
 	expectedSANs := func(cr *api.PerconaServerMongoDB) []string {
 		sans := tls.GetCertificateSans(cr)
-		sort.Strings(sans)
+		slices.Sort(sans)
 		return sans
 	}
 
@@ -709,6 +708,22 @@ func TestReconcileSSL_Manual(t *testing.T) {
 		caSecret, caCrt, caKey := manualCASecret(t, cr)
 		r := buildFakeClient(cr, caSecret,
 			manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true),
+		)
+
+		updated := withHorizons(cr)
+		require.NoError(t, r.reconcileSSL(t.Context(), updated))
+
+		for _, name := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+			secret := getTestSecret(t, r, cr, name)
+			assert.Equal(t, caCrt, secret.Data["ca.crt"])
+			assert.Equal(t, expectedSANs(updated), certSANs(t, secret))
+		}
+	})
+
+	t.Run("creates missing secret and re-signs existing internal one", func(t *testing.T) {
+		caSecret, caCrt, caKey := manualCASecret(t, cr)
+		r := buildFakeClient(cr, caSecret,
+			manualTLSSecret(t, cr, api.SSLInternalSecretName(cr), tls.GetCertificateSans(cr), caCrt, caKey, true),
 		)
 
 		updated := withHorizons(cr)
