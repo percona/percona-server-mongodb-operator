@@ -373,6 +373,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
 
+  logcollector:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [monitoring]
+
   mongod-major-upgrade:
     suites: [pr, release, minikube, distro]
     operatorModes: [cluster-wide, namespaced]

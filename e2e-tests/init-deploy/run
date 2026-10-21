@@ -6,76 +6,6 @@ test_dir="$(realpath "$(dirname "$0")")"
 . "${test_dir}/../functions"
 set_debug
 
-check_log_rotation() {
-	local pod="$1"
-	local tls_enabled="$2"
-	local log_dir="/data/db/logs"
-	local config="/opt/percona/logcollector/logrotate/logrotate.conf"
-	local marker="e2e-logrotate-success-$(date +%s)"
-	local old_file
-	local new_file
-	local pem_permissions
-
-	desc "force log rotation on ${pod}"
-	kubectl_bin exec "${pod}" -c logrotate -- \
-		sh -c 'printf "%s\n" "$1" >> "$2"' sh "${marker}" "${log_dir}/mongod.full.log"
-	old_file=$(kubectl_bin exec "${pod}" -c logrotate -- stat -c %i "${log_dir}/mongod.log")
-	kubectl_bin exec "${pod}" -c logrotate -- touch -t 200001010000 "${log_dir}/mongod.log.e2e-expired"
-
-	kubectl_bin exec "${pod}" -c logrotate -- \
-		sh -c 'export PATH="${PATH}:/opt/fluent-bit/bin"; exec "$@"' sh \
-		logrotate -f -s /tmp/e2e-logrotate.status "${config}"
-
-	new_file=$(kubectl_bin exec "${pod}" -c logrotate -- stat -c %i "${log_dir}/mongod.log")
-	[[ ${new_file} != "${old_file}" ]]
-	kubectl_bin exec "${pod}" -c logrotate -- grep -Fq "${marker}" "${log_dir}/mongod.full.log.1"
-	if kubectl_bin exec "${pod}" -c logrotate -- grep -Fq "${marker}" "${log_dir}/mongod.full.log"; then
-		echo "error: mongod.full.log was not truncated" >&2
-		exit 1
-	fi
-	kubectl_bin exec "${pod}" -c logrotate -- test ! -e "${log_dir}/mongod.log.e2e-expired"
-	if [[ ${tls_enabled} == true ]]; then
-		pem_permissions=$(kubectl_bin exec "${pod}" -c logrotate -- \
-			stat -c %a /tmp/logrotate-mongosh.pem)
-		if [[ ${pem_permissions} != 600 ]]; then
-			echo "error: /tmp/logrotate-mongosh.pem on ${pod} has permissions ${pem_permissions}, expected 600" >&2
-			exit 1
-		fi
-	fi
-}
-
-check_log_rotation_failure() {
-	local pod="$1"
-	local tls_enabled="$2"
-	local log_dir="/data/db/logs"
-	local config="/opt/percona/logcollector/logrotate/logrotate.conf"
-	local error_log="/tmp/e2e-logrotate-error"
-	local pem_permissions
-
-	desc 'check authentication failure propagates and retains the client PEM'
-	kubectl_bin exec "${pod}" -c logrotate -- \
-		sh -c 'printf "%s\n" "$1" >> "$2"' sh 'e2e-logrotate-failure' "${log_dir}/mongod.full.log"
-
-	if kubectl_bin exec "${pod}" -c logrotate -- \
-		env MONGODB_PASSWORD=e2e-invalid-password \
-		sh -c 'export PATH="${PATH}:/opt/fluent-bit/bin"; exec logrotate -f -s /tmp/e2e-logrotate.status "$1" > "$2" 2>&1' sh \
-		"${config}" "${error_log}"; then
-		echo "error: logrotate succeeded with an invalid password" >&2
-		exit 1
-	fi
-	kubectl_bin exec "${pod}" -c logrotate -- \
-		grep -Fq 'ERROR: failed to rotate mongod.log with mongosh' "${error_log}"
-
-	if [[ ${tls_enabled} == true ]]; then
-		pem_permissions=$(kubectl_bin exec "${pod}" -c logrotate -- \
-			stat -c %a /tmp/logrotate-mongosh.pem)
-		if [[ ${pem_permissions} != 600 ]]; then
-			echo "error: /tmp/logrotate-mongosh.pem on ${pod} has permissions ${pem_permissions}, expected 600" >&2
-			exit 1
-		fi
-	fi
-}
-
 max_conn=17
 
 create_infra "${namespace}"
@@ -89,11 +19,7 @@ create_runtime_class
 
 cluster="some-name-rs0"
 desc "create first PSMDB cluster $cluster"
-yq eval '
-	.spec.logcollector.enabled = true |
-	.spec.logcollector.image = "docker.io/perconalab/fluentbit:main-logcollector"' \
-	"${conf_dir}/${cluster}.yml" >"${tmp_dir}/${cluster}.yml"
-apply_cluster "${tmp_dir}/${cluster}.yml"
+apply_cluster "${conf_dir}/${cluster}.yml"
 
 desc 'check if all 3 Pods started'
 wait_for_running "${cluster}" 3
@@ -214,26 +140,6 @@ if [[ ${conn_count} -gt ${max_conn} ]]; then
 	echo "error: connection count (${conn_count}) exceeds maximum allowed (${max_conn}) with backup enabled"
 	exit 1
 fi
-
-desc 'check if mongod log files exist in pod'
-log_files=$(kubectl_bin exec "${cluster2}-0" -c mongod -- ls /data/db/logs 2>/dev/null)
-if ! echo "$log_files" | grep -q 'mongod.log' || ! echo "$log_files" | grep -q 'mongod.full.log'; then
-	echo "error, files found:"
-	echo "$log_files"
-	exit 1
-fi
-echo "found mongod.log and mongod.full.log in /data/db/logs"
-
-desc 'check TLS log rotation'
-for i in 0 1 2; do
-	check_log_rotation "${cluster}-${i}" true
-done
-check_log_rotation_failure "${cluster}-0" true
-
-desc 'check plaintext log rotation'
-for i in 0 1 2; do
-	check_log_rotation "${cluster2}-${i}" false
-done
 
 # Temporarily skipping this check
 # desc 'check for passwords leak'
