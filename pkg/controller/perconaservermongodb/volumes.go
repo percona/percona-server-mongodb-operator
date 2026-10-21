@@ -132,7 +132,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			continue
 		}
 
-		podName := strings.SplitN(pvc.Name, "-", 3)[2]
+		podName := pvc.Name[len(claimName)+1:]
 		if !slices.Contains(podNames, podName) {
 			continue
 		}
@@ -267,15 +267,13 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	if requested.Cmp(actual) < 0 {
 		if cr.Spec.IsVolumeShrinkEnabled() {
 			err := r.shrinkVolumesIfNeeded(ctx, cr, sts, ls, claimName, pvcSpec, psmdbv1.PVCShrinkState{})
-			if err == nil {
-				// Align the original STS VolumeClaimTemplate with the actual PVC
-				// size so that createOrUpdate (which runs after reconcilePVCs) does
-				// not attempt to change the immutable VCT field.
-				for i := range origSts.Spec.VolumeClaimTemplates {
-					if origSts.Spec.VolumeClaimTemplates[i].Name == claimName {
-						origSts.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests[corev1.ResourceStorage] = actual
-						break
-					}
+			// Always align the original STS VolumeClaimTemplate with the actual
+			// PVC size so that createOrUpdate (which runs after reconcilePVCs)
+			// does not attempt to change the immutable VCT field.
+			for i := range origSts.Spec.VolumeClaimTemplates {
+				if origSts.Spec.VolumeClaimTemplates[i].Name == claimName {
+					origSts.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests[corev1.ResourceStorage] = actual
+					break
 				}
 			}
 			return err
@@ -639,7 +637,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 	if sc.isRSComponent && sc.replset != nil {
 		rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin)
 		if err != nil {
-			return errors.Wrap(err, "create mongo client for RS health check")
+			log.Info("PVC shrink waiting: failed to create mongo client for RS health check", "error", err)
+			revertVCT()
+			return nil
 		}
 		defer func() {
 			if err := rsClient.Disconnect(ctx); err != nil {
@@ -649,7 +649,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 
 		rsStatus, err := rsClient.RSStatus(ctx)
 		if err != nil {
-			return errors.Wrap(err, "get RS status for health check")
+			log.Info("PVC shrink waiting: failed to get RS status", "error", err)
+			revertVCT()
+			return nil
 		}
 
 		for _, member := range rsStatus.Members {
@@ -761,7 +763,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		if !validatePVCName(sc.claimName, *pvc, sc.sts) {
 			continue
 		}
-		podName := strings.SplitN(pvc.Name, "-", 3)[2]
+		podName := pvc.Name[len(sc.claimName)+1:]
 		pvcByPod[podName] = pvc
 	}
 
@@ -841,20 +843,21 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 		// PVC has new size and pod is Ready
 		if sc.isRSComponent && sc.replset != nil {
-			isSecondary, err := r.isPodNonPrimary(ctx, sc.cr, pod, sc.replset)
+			isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
 			if err != nil {
 				log.Info("Failed to check RS membership, waiting", "pod", pod.Name, "error", err)
 				return nil
 			}
-			if !isSecondary {
+			if isPrimary {
 				if !isPrimaryPhase {
 					// Primary election happened during shrink. Update the
 					// tracked primary so this pod is skipped and processed
-					// in the primary phase instead.
+					// in the primary phase instead. Return so the next
+					// reconcile revisits the former primary as a secondary.
 					log.Info("Pod became primary during shrink, updating tracked primary", "pod", pod.Name, "previousPrimary", state.PrimaryPod)
 					state.PrimaryPod = pod.Name
 					sc.cr.SetPVCShrinkState(sc.sts.Name, state)
-					continue
+					return nil
 				}
 				log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				return nil
@@ -878,28 +881,6 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 
 	return nil
-}
-
-func (r *ReconcilePerconaServerMongoDB) isPodNonPrimary(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, pod corev1.Pod, rs *psmdbv1.ReplsetSpec) (bool, error) {
-	mgoClient, err := r.standaloneClientWithRole(ctx, cr, rs, psmdbv1.RoleClusterAdmin, pod)
-	if err != nil {
-		return false, errors.Wrap(err, "create standalone client")
-	}
-	defer func() {
-		if err := mgoClient.Disconnect(ctx); err != nil {
-			logf.FromContext(ctx).Error(err, "failed to disconnect mongo client")
-		}
-	}()
-
-	isMaster, err := mgoClient.IsMaster(ctx)
-	if err != nil {
-		return false, errors.Wrap(err, "is master check")
-	}
-
-	// IsMasterResp has no IsSecondary field; a non-primary Ready member
-	// is either SECONDARY or RECOVERING. Combined with the pod Ready check
-	// that precedes this call, !IsMaster is sufficient.
-	return !isMaster.IsMaster, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
@@ -927,9 +908,18 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 			return errors.Wrapf(err, "get primary pod %s", state.PrimaryPod)
 		}
 	} else {
-		log.Info("Stepping down primary", "pod", state.PrimaryPod)
-		if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
-			return errors.Wrap(err, "step down primary for PVC shrink")
+		isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+		if err != nil {
+			log.Info("Failed to check if pod is still primary, retrying", "pod", state.PrimaryPod, "error", err)
+			return nil
+		}
+		if !isPrimary {
+			log.Info("Primary already stepped down, advancing to primary phase", "pod", state.PrimaryPod)
+		} else {
+			log.Info("Stepping down primary", "pod", state.PrimaryPod)
+			if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
+				return errors.Wrap(err, "step down primary for PVC shrink")
+			}
 		}
 		state.Phase = "primary"
 	}
