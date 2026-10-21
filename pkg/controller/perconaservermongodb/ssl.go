@@ -370,22 +370,23 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 	if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
 		secretNames = append(secretNames, tls.CertificatePBMClient(cr).SecretName())
 	}
-	// All certificates share a CA, so we are getting ca only from ssl secret
-	oldCASecret, err := r.getSecret(ctx, cr, api.SSLSecretName(cr)+"-old")
-	if k8serrors.IsNotFound(err) {
-		return nil
+	oldSecretNames := make([]string, 0, len(secretNames))
+	for _, name := range secretNames {
+		oldSecretNames = append(oldSecretNames, name+"-old")
 	}
+	c := tls.NewCertManagerController(r.client, r.scheme, false)
+	oldCA, err := c.GetMergedCA(ctx, cr, oldSecretNames)
 	if err != nil {
 		return errors.Wrap(err, "get old ca")
 	}
-	if len(oldCASecret.Data["ca.crt"]) == 0 {
+	if len(oldCA) == 0 {
 		return nil
 	}
-	server, err := r.getSecret(ctx, cr, api.SSLSecretName(cr))
+	newCA, err := c.GetMergedCA(ctx, cr, secretNames)
 	if err != nil {
 		return errors.Wrap(err, "get new ca")
 	}
-	mergedCA, err := tls.MergePEM(oldCASecret.Data["ca.crt"], server.Data["ca.crt"])
+	mergedCA, err := tls.MergePEM(oldCA, newCA)
 	if err != nil {
 		return errors.Wrap(err, "failed to merge ca")
 	}
