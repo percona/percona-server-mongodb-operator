@@ -267,10 +267,12 @@ def init_env() -> list[str]:
         if images:
             os.environ[var] = "\n".join(qualify_image(i, registry) for i in images if i)
 
+    os.environ["E2E_ENV_INITIALIZED"] = "1"
+
     logger.info(
         "Environment variables:\n" + "\n".join(f"{key}={os.environ.get(key)}" for key in defaults)
     )
-    return [*defaults, "IMAGE_OPERATOR"]
+    return [*defaults, "IMAGE_OPERATOR", "E2E_ENV_INITIALIZED"]
 
 
 @pytest.fixture(scope="class")

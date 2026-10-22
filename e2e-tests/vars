@@ -8,7 +8,7 @@ with_registry() {
 			printf '%s' "$ref"
 			;;
 		percona/*|perconalab/*)
-			printf '%s%s' "$REGISTRY_NAME_FULL" "$ref"
+			printf '%s/%s' "${REGISTRY_NAME%/}" "$ref"
 			;;
 		*)
 			printf '%s' "$ref"
@@ -49,7 +49,7 @@ setup_logging() {
 }
 
 # Shared env (images, platform, versions, flags) is set by init_env in conftest.py
-if [[ -z ${IMAGE_MONGOD} ]]; then
+if [[ ${E2E_ENV_INITIALIZED} != 1 ]]; then
 	echo "ERROR: e2e env is not initialized. Running test scripts directly is no longer supported." >&2
 	echo "Run the test via pytest instead: make e2e-test TEST=$(basename "$test_dir")" >&2
 	exit 1
@@ -66,7 +66,6 @@ export replica_namespace="${test_name}-replica-${RANDOM}"
 export conf_dir=$(realpath "$test_dir/../conf" || :)
 export src_dir=$(realpath "$test_dir/../..")
 export logs_dir="$test_dir/../logs"
-export REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
 
 # Test logging
 setup_logging
