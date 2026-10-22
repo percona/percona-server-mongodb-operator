@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import logging
 import os
 import tarfile
@@ -12,6 +13,18 @@ logger = logging.getLogger(__name__)
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "reports")
 OPERATOR_LABEL = "app.kubernetes.io/name=percona-server-mongodb-operator"
+MONGOD_LOG_LINES = 300
+
+
+def is_relevant_mongod_line(line: str) -> bool:
+    """Keep warnings, errors and replication events; drop routine connection and auth noise"""
+    try:
+        entry = json.loads(line)
+    except ValueError:
+        return True
+    if not isinstance(entry, dict):
+        return True
+    return entry.get("s") in ("W", "E", "F") or entry.get("c") in ("REPL", "ELECTION")
 
 
 class K8sCollector:
@@ -214,6 +227,7 @@ class K8sCollector:
             "logs": "\n\n".join(logs),
             "events": f"=== Kubernetes Events ===\n{events or '(no output)'}",
             "pbm": self.capture_pbm(),
+            "mongod": self.capture_mongod(),
         }
 
     def capture_pbm(self) -> str:
@@ -257,6 +271,35 @@ class K8sCollector:
             sections.append("")
 
         return "\n".join(sections) or "(no backup-agent pods)"
+
+    def capture_mongod(self) -> str:
+        """Capture warnings, errors and replication logs of every mongod container"""
+        pods = self.kubectl_ns(
+            "get",
+            "pods",
+            "-o",
+            'jsonpath={range .items[*]}{.metadata.name}{" "}'
+            '{.status.containerStatuses[?(@.name=="mongod")].restartCount}{"\\n"}{end}',
+        )
+
+        sections = []
+        for line in pods.splitlines():
+            pod, *restarts = line.split()
+            if not restarts:
+                continue
+
+            runs = [("current", [])]
+            if int(restarts[0]) > 0:
+                runs.insert(0, ("previous", ["--previous"]))
+
+            for run, flags in runs:
+                logs = self.kubectl_ns("logs", pod, "-c", "mongod", *flags)
+                relevant = [log for log in logs.splitlines() if is_relevant_mongod_line(log)]
+                sections.append(f"=== {pod}: mongod ({run} container) ===")
+                sections.append("\n".join(relevant[-MONGOD_LOG_LINES:]) or "(no output)")
+                sections.append("")
+
+        return "\n".join(sections) or "(no mongod pods)"
 
     def collect_all(self) -> None:
         """Main collection method"""
