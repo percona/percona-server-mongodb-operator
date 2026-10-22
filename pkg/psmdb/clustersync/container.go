@@ -34,9 +34,18 @@ func pcsmEnv(cr *api.PerconaServerMongoDBClusterSync) []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{Name: "PCSM_SOURCE_URI", ValueFrom: uriEnvSource(secretName, URISecretSourceKey)},
 		{Name: "PCSM_TARGET_URI", ValueFrom: uriEnvSource(secretName, URISecretTargetKey)},
+		{Name: "PCSM_GROUP_NAME", Value: GroupName(cr)},
 	}
+	// User env comes last so a duplicate name wins: kubelet keeps the
+	// last value for a repeated variable.
 	env = append(env, cr.Spec.Env...)
 	return env
+}
+
+// GroupName scopes PCSM's leader election to this CR. PCSM defaults to
+// "default", which two ClusterSync CRs sharing a target would collide on.
+func GroupName(cr *api.PerconaServerMongoDBClusterSync) string {
+	return cr.Namespace + "-" + cr.Name
 }
 
 func uriEnvSource(secretName, key string) *corev1.EnvVarSource {
@@ -66,12 +75,16 @@ func probeOrDefault(override *corev1.Probe, def func() *corev1.Probe) *corev1.Pr
 	return def()
 }
 
+// Probes hit /metrics, not /status: a STANDBY instance answers /status
+// with HTTP 409, which would keep every standby NotReady and break the
+// HA group. /metrics is served by ACTIVE and STANDBY alike.
+//
 // PCSM 0.9.0 binds its HTTP server to 127.0.0.1 only, so TCP/HTTPGet probes
 // against the pod IP get connection-refused. Until PCSM-345 lands upstream
 // (https://perconadev.atlassian.net/browse/PCSM-345) we probe via curl on
 // loopback from inside the container. Revert to TCPSocket/HTTPGet once
 // PCSM binds to 0.0.0.0.
-func loopbackStatusProbe(timeoutSeconds int32) corev1.ProbeHandler {
+func loopbackProbe(path string, timeoutSeconds int32) corev1.ProbeHandler {
 	maxTime := timeoutSeconds
 	if maxTime > 1 {
 		maxTime--
@@ -83,7 +96,7 @@ func loopbackStatusProbe(timeoutSeconds int32) corev1.ProbeHandler {
 				"curl", "-fsS",
 				"--connect-timeout", strconv.Itoa(int(connectTimeout)),
 				"--max-time", strconv.Itoa(int(maxTime)),
-				fmt.Sprintf("http://127.0.0.1:%d/status", HTTPPort),
+				fmt.Sprintf("http://127.0.0.1:%d%s", HTTPPort, path),
 			},
 		},
 	}
@@ -92,7 +105,7 @@ func loopbackStatusProbe(timeoutSeconds int32) corev1.ProbeHandler {
 func livenessProbe() *corev1.Probe {
 	const timeoutSeconds int32 = 5
 	return &corev1.Probe{
-		ProbeHandler:        loopbackStatusProbe(timeoutSeconds),
+		ProbeHandler:        loopbackProbe(MetricsPath, timeoutSeconds),
 		InitialDelaySeconds: 30,
 		PeriodSeconds:       10,
 		TimeoutSeconds:      timeoutSeconds,
@@ -103,7 +116,7 @@ func livenessProbe() *corev1.Probe {
 func readinessProbe() *corev1.Probe {
 	const timeoutSeconds int32 = 5
 	return &corev1.Probe{
-		ProbeHandler:        loopbackStatusProbe(timeoutSeconds),
+		ProbeHandler:        loopbackProbe(MetricsPath, timeoutSeconds),
 		InitialDelaySeconds: 5,
 		PeriodSeconds:       10,
 		TimeoutSeconds:      timeoutSeconds,

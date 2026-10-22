@@ -101,7 +101,7 @@ export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:
 export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
 export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:3-dev-latest"}
 export IMAGE_LOGCOLLECTOR=${IMAGE_LOGCOLLECTOR:-"perconalab/fluentbit:main-logcollector"}
-export IMAGE_CLUSTERSYNC=${IMAGE_CLUSTERSYNC:-"percona/percona-clustersync-mongodb:0.9.0"}
+export IMAGE_CLUSTERSYNC=${IMAGE_CLUSTERSYNC:-"percona/percona-clustersync-mongodb:1.0.0"}
 
 
 for image in \

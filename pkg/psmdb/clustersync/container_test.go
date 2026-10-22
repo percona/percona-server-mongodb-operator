@@ -1,6 +1,7 @@
 package clustersync
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,32 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
+
+// TestDefaultProbesTargetMetrics is the HA-critical probe assertion.
+//
+// A STANDBY instance answers /status with HTTP 409, so probing /status
+// would hold every standby NotReady: the deployment would never finish a
+// rollout, a PDB could never allow an eviction, and the group would have
+// no eligible successor at the moment it needs one. /metrics is served by
+// ACTIVE and STANDBY alike, so readiness means "healthy and eligible"
+// rather than "currently the writer" — which is exactly the question
+// Kubernetes is asking. Which instance holds the lease is reported in
+// status.activeInstance instead.
+func TestDefaultProbesTargetMetrics(t *testing.T) {
+	c := Container(&api.PerconaServerMongoDBClusterSync{})
+
+	for name, probe := range map[string]*corev1.Probe{
+		"liveness":  c.LivenessProbe,
+		"readiness": c.ReadinessProbe,
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.NotNil(t, probe.Exec)
+			cmd := strings.Join(probe.Exec.Command, " ")
+			assert.Contains(t, cmd, "http://127.0.0.1:2242/metrics")
+			assert.NotContains(t, cmd, "/status", "a standby answers /status with 409 and would never become Ready")
+		})
+	}
+}
 
 func TestContainerProbes(t *testing.T) {
 	customLiveness := &corev1.Probe{
@@ -88,18 +115,40 @@ func TestContainerProbes(t *testing.T) {
 	}
 }
 
+// TestContainerEnv checks the env the operator owns and the ordering rule
+// that makes user overrides work.
+//
+// PCSM_GROUP_NAME is what scopes leader election. PCSM defaults it to
+// "default", so two ClusterSync CRs pointed at the same target would join
+// one election and fight over a single lease; deriving it from
+// namespace+CR name makes that impossible. User env is appended last on
+// purpose: kubelet keeps the last value for a repeated variable, so a user
+// can still override any managed variable without the operator having to
+// special-case it.
 func TestContainerEnv(t *testing.T) {
-	const crName = "mysync"
+	const (
+		crName = "mysync"
+		crNS   = "ns"
+	)
 	managed := []corev1.EnvVar{
 		{Name: "PCSM_SOURCE_URI", ValueFrom: uriEnvSource(crName+"-pcsm-secret", URISecretSourceKey)},
 		{Name: "PCSM_TARGET_URI", ValueFrom: uriEnvSource(crName+"-pcsm-secret", URISecretTargetKey)},
+		{Name: "PCSM_GROUP_NAME", Value: crNS + "-" + crName},
 	}
 
 	tests := map[string]struct {
 		spec api.PerconaServerMongoDBClusterSyncSpec
 		want []corev1.EnvVar
 	}{
-		"defaults: only managed URIs, source before target": {
+		"user override of a managed variable wins by coming last": {
+			spec: api.PerconaServerMongoDBClusterSyncSpec{
+				Env: []corev1.EnvVar{{Name: "PCSM_GROUP_NAME", Value: "custom-group"}},
+			},
+			want: append(append([]corev1.EnvVar{}, managed...),
+				corev1.EnvVar{Name: "PCSM_GROUP_NAME", Value: "custom-group"},
+			),
+		},
+		"defaults: managed URIs and the per-CR group name": {
 			spec: api.PerconaServerMongoDBClusterSyncSpec{},
 			want: managed,
 		},
@@ -156,8 +205,9 @@ func TestContainerEnv(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDBClusterSync{
-				Name: crName,
-				Spec: tc.spec,
+				Name:      crName,
+				Namespace: crNS,
+				Spec:      tc.spec,
 			}
 			c := Container(cr)
 			assert.Equal(t, tc.want, c.Env)
