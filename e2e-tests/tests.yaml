@@ -463,6 +463,21 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
 
+  pvc-shrink:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage]
+
+  pvc-shrink-sharded:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage, sharding]
+
+  pvc-shrink-mongos-log:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage, sharding]
+
   recover-no-primary:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
