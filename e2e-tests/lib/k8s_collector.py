@@ -11,6 +11,7 @@ from lib.kubectl import kubectl_bin
 logger = logging.getLogger(__name__)
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "reports")
+OPERATOR_LABEL = "app.kubernetes.io/name=percona-server-mongodb-operator"
 
 
 class K8sCollector:
@@ -38,6 +39,29 @@ class K8sCollector:
         except ValueError:
             return 3600
         return int((datetime.now(tz=UTC) - started).total_seconds()) + 60
+
+    def operator_namespaces(self) -> list[str]:
+        """Namespaces of this test that run an operator pod.
+
+        OPERATOR_NS may be set even when a test unsets it and deploys the operator
+        in its own namespace, and multi-cluster tests run a second operator in
+        the "<test>-replica-<id>" namespace.
+        """
+        out = self.kubectl(
+            "get",
+            "pods",
+            "-A",
+            "-l",
+            OPERATOR_LABEL,
+            "-o",
+            'jsonpath={range .items[*]}{.metadata.namespace}{"\\n"}{end}',
+        )
+        running = set(out.split())
+        replica_prefix = self.namespace.rsplit("-", 1)[0] + "-replica-"
+        candidates = [os.environ.get("OPERATOR_NS"), self.namespace] + sorted(
+            ns for ns in running if ns.startswith(replica_prefix)
+        )
+        return [ns for ns in dict.fromkeys(candidates) if ns and ns in running]
 
     def get_names(self, resource_type: str) -> list[str]:
         """Get list of resource names"""
@@ -168,23 +192,26 @@ class K8sCollector:
         sections.append(self.kubectl_ns("get", "psmdb-restore") or "(no output)")
         sections.append(self.kubectl_ns("get", "psmdb-restore", "-o", errors_jsonpath))
 
-        # In cluster-wide mode the operator runs in OPERATOR_NS, not the test namespace.
-        operator_ns = os.environ.get("OPERATOR_NS") or self.namespace
-        logs = self.kubectl(
-            "logs",
-            "-n",
-            operator_ns,
-            "-l",
-            "app.kubernetes.io/name=percona-server-mongodb-operator",
-            "--tail=-1",
-            f"--since={self.seconds_since_created(operator_ns)}s",
-        )
+        logs = []
+        for ns in self.operator_namespaces():
+            out = self.kubectl(
+                "logs",
+                "-n",
+                ns,
+                "-l",
+                OPERATOR_LABEL,
+                "--tail=-1",
+                f"--since={self.seconds_since_created(ns)}s",
+            )
+            logs.append(f"=== PSMDB Operator Logs (namespace {ns}) ===\n{out or '(no output)'}")
+        if not logs:
+            logs.append("=== PSMDB Operator Logs ===\n(no operator pods found)")
 
         events = self.kubectl_ns("get", "events", "--sort-by=.lastTimestamp")
 
         return {
             "resources": "\n".join(sections),
-            "logs": f"=== PSMDB Operator Logs (namespace {operator_ns}) ===\n{logs or '(no output)'}",
+            "logs": "\n\n".join(logs),
             "events": f"=== Kubernetes Events ===\n{events or '(no output)'}",
             "pbm": self.capture_pbm(),
         }
