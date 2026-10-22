@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
@@ -77,7 +78,8 @@ func TestReconcileSSLCertManagerCheck(t *testing.T) {
 				}
 				secret := &corev1.Secret{
 					Name: name, Namespace: cr.Namespace,
-					OwnerReferences: []metav1.OwnerReference{{UID: cr.UID, Controller: &controller}}}
+					OwnerReferences: []metav1.OwnerReference{{UID: cr.UID, Controller: &controller}},
+				}
 				if tt.certManager {
 					secret.Labels = map[string]string{cm.PartOfCertManagerControllerLabelKey: "true"}
 				}
@@ -118,6 +120,111 @@ func newTestCR() *api.PerconaServerMongoDB {
 				},
 			},
 		},
+	}
+}
+
+func TestReconcileSSLCustomTLSRequiresPBMSecret(t *testing.T) {
+	tests := []struct {
+		name                 string
+		crVersion            string
+		backupsEnabled       bool
+		tlsMode              api.TLSMode
+		pbmSecretExists      bool
+		certManagementPolicy api.CertManagementPolicy
+		expectError          bool
+	}{
+		{
+			name:           "missing PBM secret returns an error",
+			backupsEnabled: true,
+			tlsMode:        api.TLSModeRequire,
+			expectError:    true,
+		},
+		{
+			name:            "existing PBM secret is preserved",
+			backupsEnabled:  true,
+			tlsMode:         api.TLSModeRequire,
+			pbmSecretExists: true,
+		},
+		{
+			name:                 "userProvidedOnly requires a PBM secret",
+			backupsEnabled:       true,
+			tlsMode:              api.TLSModeRequire,
+			certManagementPolicy: api.CertManagementUserProvidedOnly,
+			expectError:          true,
+		},
+		{
+			name:                 "userProvidedOnly accepts an existing PBM secret",
+			backupsEnabled:       true,
+			tlsMode:              api.TLSModeRequire,
+			pbmSecretExists:      true,
+			certManagementPolicy: api.CertManagementUserProvidedOnly,
+		},
+		{
+			name:           "CR versions before 1.24 do not require a PBM secret",
+			crVersion:      "1.23.0",
+			backupsEnabled: true,
+			tlsMode:        api.TLSModeRequire,
+		},
+		{
+			name:    "disabled backups do not require a PBM secret",
+			tlsMode: api.TLSModeRequire,
+		},
+		{
+			name:           "disabled TLS does not require a PBM secret",
+			backupsEnabled: true,
+			tlsMode:        api.TLSModeDisabled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.crVersion == "" {
+				tt.crVersion = version.Version()
+			}
+
+			cr := newTestCR()
+			cr.Spec.CRVersion = tt.crVersion
+			cr.Spec.Backup.Enabled = tt.backupsEnabled
+			cr.Spec.TLS = &api.TLSSpec{
+				Mode:                 tt.tlsMode,
+				CertManagementPolicy: tt.certManagementPolicy,
+			}
+			cr.Spec.Secrets.SSLPBM = "custom-pbm-tls"
+
+			serverSecret := &corev1.Secret{
+				Name:        api.SSLSecretName(cr),
+				Namespace:   cr.Namespace,
+				Labels:      map[string]string{cm.PartOfCertManagerControllerLabelKey: "true"},
+				Annotations: map[string]string{cm.CertificateNameKey: "user-server-cert"},
+			}
+			r := buildFakeClient(cr, serverSecret)
+			pbmSecret := &corev1.Secret{
+				Name:      cr.Spec.Secrets.SSLPBM,
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"tls.crt": []byte("client-cert"),
+					"tls.key": []byte("client-key"),
+				},
+			}
+			if tt.pbmSecretExists {
+				require.NoError(t, r.client.Create(t.Context(), pbmSecret))
+			}
+
+			err := r.reconcileSSL(t.Context(), cr)
+			if tt.expectError {
+				require.EqualError(t, err, "PBM client TLS secret custom-pbm-tls is required when custom SSL secret test-cluster-ssl is provided and backups are enabled")
+			} else {
+				require.NoError(t, err)
+			}
+
+			actualPBMSecret, err := r.getSecret(t.Context(), cr, tls.CertificatePBMClient(cr).SecretName())
+			if tt.pbmSecretExists {
+				require.NoError(t, err)
+				require.Equal(t, pbmSecret, actualPBMSecret, "reconciliation must preserve the supplied PBM secret")
+			} else {
+				require.True(t, k8serrors.IsNotFound(err), "reconciliation must not create a PBM secret for custom TLS")
+			}
+		})
 	}
 }
 

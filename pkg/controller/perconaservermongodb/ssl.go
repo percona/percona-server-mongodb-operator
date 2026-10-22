@@ -69,6 +69,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 	}
 
 	if errSecret == nil && isCustomSecret {
+		if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
+			name := tls.CertificatePBMClient(cr).SecretName()
+			_, err := r.getSecret(ctx, cr, name)
+			if k8serrors.IsNotFound(err) {
+				return errors.Errorf("PBM client TLS secret %s is required when custom SSL secret %s is provided and backups are enabled", name, api.SSLSecretName(cr))
+			}
+			if err != nil {
+				return errors.Wrap(err, "get PBM client TLS secret")
+			}
+		}
 		// We shouldn't do anything if the user has created a custom ssl secret.
 		// We should also allow the use of operator without internal ssl secret, so we only check for non-internal secret here.
 		return nil
@@ -219,7 +229,21 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				api.SSLSecretName(cr),
 			}
 			if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
-				secretNames = append(secretNames, tls.CertificatePBMClient(cr).SecretName())
+				name := tls.CertificatePBMClient(cr).SecretName()
+				secret, err := r.getSecret(ctx, cr, name)
+				if client.IgnoreNotFound(err) != nil {
+					return errors.Wrap(err, "get PBM client TLS secret")
+				}
+				isCustomSecret := false
+				if err == nil {
+					isCustomSecret, err = tls.IsSecretCreatedByUser(ctx, r.client, cr, secret)
+					if err != nil {
+						return errors.Wrap(err, "check PBM client TLS secret ownership")
+					}
+				}
+				if !isCustomSecret {
+					secretNames = append(secretNames, name)
+				}
 			}
 			// We should be sure that old CA is merged.
 			// mergeNewCA will delete old secrets if they are not needed.
@@ -324,7 +348,21 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 		api.SSLInternalSecretName(cr),
 	}
 	if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
-		secrets = append(secrets, tls.CertificatePBMClient(cr).SecretName())
+		name := tls.CertificatePBMClient(cr).SecretName()
+		secret, err := r.getSecret(ctx, cr, name)
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "get PBM client TLS secret")
+		}
+		isCustomSecret := false
+		if err == nil {
+			isCustomSecret, err = tls.IsSecretCreatedByUser(ctx, r.client, cr, secret)
+			if err != nil {
+				return errors.Wrap(err, "check PBM client TLS secret ownership")
+			}
+		}
+		if !isCustomSecret {
+			secrets = append(secrets, name)
+		}
 	}
 	log.Info("Creating old secrets")
 	for _, name := range secrets {
@@ -368,7 +406,21 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 	log := logf.FromContext(ctx)
 	secretNames := []string{api.SSLInternalSecretName(cr), api.SSLSecretName(cr)}
 	if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
-		secretNames = append(secretNames, tls.CertificatePBMClient(cr).SecretName())
+		name := tls.CertificatePBMClient(cr).SecretName()
+		secret, err := r.getSecret(ctx, cr, name)
+		if client.IgnoreNotFound(err) != nil {
+			return errors.Wrap(err, "get PBM client TLS secret")
+		}
+		isCustomSecret := false
+		if err == nil {
+			isCustomSecret, err = tls.IsSecretCreatedByUser(ctx, r.client, cr, secret)
+			if err != nil {
+				return errors.Wrap(err, "check PBM client TLS secret ownership")
+			}
+		}
+		if !isCustomSecret {
+			secretNames = append(secretNames, name)
+		}
 	}
 	oldSecretNames := make([]string, 0, len(secretNames))
 	for _, name := range secretNames {
@@ -494,7 +546,21 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 		certificates = append(certificates, internalCert)
 	}
 	if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
-		certificates = append(certificates, tls.CertificatePBMClient(cr))
+		cert := tls.CertificatePBMClient(cr)
+		secret, err := r.getSecret(ctx, cr, cert.SecretName())
+		if client.IgnoreNotFound(err) != nil {
+			return "", errors.Wrap(err, "get PBM client TLS secret")
+		}
+		isCustomSecret := false
+		if err == nil {
+			isCustomSecret, err = tls.IsSecretCreatedByUser(ctx, r.client, cr, secret)
+			if err != nil {
+				return "", errors.Wrap(err, "check PBM client TLS secret ownership")
+			}
+		}
+		if !isCustomSecret {
+			certificates = append(certificates, cert)
+		}
 	}
 	for _, cert := range certificates {
 		if err := applyFunc(func() (util.ApplyStatus, error) {
@@ -656,6 +722,15 @@ func (r *ReconcilePerconaServerMongoDB) updateSSLManually(ctx context.Context, c
 				continue
 			}
 			return errors.Wrapf(err, "get secret %s", secretName)
+		}
+		if secretName == pbmSecretName {
+			isCustomSecret, err := tls.IsSecretCreatedByUser(ctx, r.client, cr, secret)
+			if err != nil {
+				return errors.Wrap(err, "check PBM client TLS secret ownership")
+			}
+			if isCustomSecret {
+				continue
+			}
 		}
 
 		var tlsCert, tlsKey []byte
