@@ -386,6 +386,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) tryAcquireLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	// The lease is acquired before the backup command is sent, so a backup past
+	// New/Waiting already holds it. Re-acquiring it against a stale cache could
+	// move the backup back to Waiting and send a second backup command.
+	if cr.Status.State != psmdbv1.BackupStateNew && cr.Status.State != psmdbv1.BackupStateWaiting {
+		return true, nil
+	}
+
 	log := logf.FromContext(ctx)
 	leaseName := naming.BackupLeaseName(cluster.Name)
 	holderID := naming.BackupHolderId(cr)
