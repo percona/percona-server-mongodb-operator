@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -183,6 +184,7 @@ type Client interface {
 	RemoveShard(ctx context.Context, shard string) (ShardRemoveResp, error)
 	RSBuildInfo(ctx context.Context) (BuildInfo, error)
 	StepDown(ctx context.Context, seconds int, force bool) error
+	WaitSecondaryCatchUp(ctx context.Context, maxLag, timeout time.Duration) error
 	Freeze(ctx context.Context, seconds int) error
 	IsMaster(ctx context.Context) (*IsMasterResp, error)
 	GetUserInfo(ctx context.Context, username, db string) (*User, error)
@@ -769,6 +771,77 @@ func (client *mongoClient) StepDown(ctx context.Context, seconds int, force bool
 	}
 
 	return nil
+}
+
+// WaitSecondaryCatchUp waits until some electable secondary is at most maxLag behind the primary.
+func (client *mongoClient) WaitSecondaryCatchUp(ctx context.Context, maxLag, timeout time.Duration) error {
+	log := logf.FromContext(ctx)
+
+	deadline := time.Now().Add(timeout)
+	for {
+		member, lag, err := client.electableSecondaryLag(ctx)
+		if err != nil {
+			return err
+		}
+		if lag <= maxLag {
+			log.Info("secondary caught up", "member", member, "lag", lag.String())
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.Errorf("no electable secondary caught up in %s, lag %s", timeout, lag)
+		}
+
+		log.Info("waiting for secondary to catch up", "member", member, "lag", lag.String())
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+// electableSecondaryLag returns the least lagging electable secondary and its lag behind the primary.
+func (client *mongoClient) electableSecondaryLag(ctx context.Context) (string, time.Duration, error) {
+	cfg, err := client.ReadConfig(ctx)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "read replset config")
+	}
+
+	electable := make(map[string]bool, len(cfg.Members))
+	for _, m := range cfg.Members {
+		if !m.ArbiterOnly && !m.Hidden && m.Priority > 0 && m.Votes > 0 {
+			electable[m.Host] = true
+		}
+	}
+
+	status, err := client.RSStatus(ctx)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "get replset status")
+	}
+
+	var primaryOptime time.Time
+	for _, m := range status.Members {
+		if m.State == MemberStatePrimary {
+			primaryOptime = m.OptimeDate
+		}
+	}
+	if primaryOptime.IsZero() {
+		return "", 0, errors.New("primary not found in replset status")
+	}
+
+	best, bestLag := "", time.Duration(math.MaxInt64)
+	for _, m := range status.Members {
+		if m.State != MemberStateSecondary || m.Health != MemberHealthUp || !electable[m.Name] {
+			continue
+		}
+		lag := max(primaryOptime.Sub(m.OptimeDate), 0)
+		if lag < bestLag {
+			best, bestLag = m.Name, lag
+		}
+	}
+
+	return best, bestLag, nil
 }
 
 func (client *mongoClient) Freeze(ctx context.Context, seconds int) error {
