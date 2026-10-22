@@ -10,10 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -303,4 +305,69 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 	if !reflect.DeepEqual(got.Status, want.Status) {
 		t.Fatal(cmp.Diff(want.Status, got.Status))
 	}
+}
+
+func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		ns     = "sts-config-not-in-cache"
+		crName = ns + "-cr"
+	)
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	cr.Spec.Replsets[0].Configuration = "operationProfiling:\n  mode: slowOp\n"
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+	rs := cr.Spec.Replset("rs0")
+	configMapName := naming.MongodCustomConfigName(cr, rs)
+	objs := []client.Object{
+		cr,
+		&corev1.Secret{
+			Name:      crName + "-ssl",
+			Namespace: ns,
+		},
+		&corev1.Secret{
+			Name:      crName + "-ssl-internal",
+			Namespace: ns,
+		},
+		&corev1.ConfigMap{
+			Name:      configMapName,
+			Namespace: ns,
+			Data: map[string]string{
+				"mongod.conf": string(rs.Configuration),
+			},
+		},
+	}
+
+	want, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, naming.MongodLabels(cr, rs))
+	require.NoError(t, err)
+
+	// staleCache hides the config map from the first `misses` reads
+	staleCache := func(misses int) *ReconcilePerconaServerMongoDB {
+		r := buildFakeClient(objs...)
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == configMapName && misses > 0 {
+					misses--
+					return k8serrors.NewNotFound(corev1.Resource("configmaps"), key.Name)
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		})
+		return r
+	}
+
+	t.Run("config map appears in cache", func(t *testing.T) {
+		got, err := staleCache(2).getStatefulsetFromReplset(ctx, cr, rs, naming.MongodLabels(cr, rs))
+		require.NoError(t, err)
+		require.NotEmpty(t, got.Spec.Template.Annotations[naming.AnnotationConfigHash])
+		require.Equal(t, want.Spec, got.Spec)
+	})
+
+	t.Run("config map never appears in cache", func(t *testing.T) {
+		_, err := staleCache(100).getStatefulsetFromReplset(ctx, cr, rs, naming.MongodLabels(cr, rs))
+		require.ErrorIs(t, err, errConfigNotInCache)
+	})
 }
