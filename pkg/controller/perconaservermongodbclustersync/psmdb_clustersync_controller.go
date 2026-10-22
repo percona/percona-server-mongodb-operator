@@ -354,7 +354,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) releaseClusterSyncLease(ctx c
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) targetTLS(ctx context.Context, target *psmdbv1.PerconaServerMongoDB) (clustersync.TLS, error) {
-	if !clientCertEnabled(target) {
+	if !pcsmTLSEnabled(target) {
 		return clustersync.TLS{}, nil
 	}
 
@@ -371,7 +371,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) targetTLS(ctx context.Context
 
 	return clustersync.TLS{
 		SecretName: nn.Name,
-		Hash:       fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintln(secret.Data)))),
+		Hash:       fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintln(secret.Data, allowInvalidCerts(target))))),
 	}, nil
 }
 

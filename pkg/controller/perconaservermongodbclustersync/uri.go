@@ -38,7 +38,9 @@ func buildSourceURI(ctx context.Context, cl client.Client, cr *psmdbv1.PerconaSe
 	return u.String(), nil
 }
 
-func clientCertEnabled(target *psmdbv1.PerconaServerMongoDB) bool {
+// Gates the whole TLS config: pre-1.24.0 targets keep the 1.23 rendering
+// so an operator upgrade doesn't restart PCSM.
+func pcsmTLSEnabled(target *psmdbv1.PerconaServerMongoDB) bool {
 	return target.TLSEnabled() && target.CompareVersion("1.24.0") >= 0
 }
 
@@ -82,12 +84,10 @@ func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password str
 	if rsName != "" {
 		q.Set("replicaSet", rsName)
 	}
-	if target.TLSEnabled() {
+	if pcsmTLSEnabled(target) {
 		q.Set("tls", "true")
-		if clientCertEnabled(target) {
-			q.Set("tlsCertificateKeyFile", clustersync.TLSPEMFile)
-			q.Set("tlsCAFile", clustersync.TLSCAFile)
-		}
+		q.Set("tlsCertificateKeyFile", clustersync.TLSPEMFile)
+		q.Set("tlsCAFile", clustersync.TLSCAFile)
 		if allowInvalidCerts(target) {
 			q.Set("tlsAllowInvalidCertificates", "true")
 		}

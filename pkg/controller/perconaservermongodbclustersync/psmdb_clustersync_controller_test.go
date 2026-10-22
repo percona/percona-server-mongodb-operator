@@ -549,7 +549,7 @@ func TestTargetTLS(t *testing.T) {
 			target:  targetWithTLS(),
 			wantErr: "get target ssl secret",
 		},
-		"target pinned to an older crVersion skips the client certificate": {
+		"target pinned to an older crVersion keeps the 1.23 pod template": {
 			target: &psmdbv1.PerconaServerMongoDB{
 				Name: "tgt", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
@@ -614,4 +614,33 @@ func TestTargetTLSHashTracksRotation(t *testing.T) {
 	after, err := r.targetTLS(context.Background(), target)
 	require.NoError(t, err)
 	assert.NotEqual(t, before.Hash, after.Hash, "rotated certificate must change the pod template hash")
+}
+
+func TestTargetTLSHashTracksCertificateVerification(t *testing.T) {
+	target := &psmdbv1.PerconaServerMongoDB{
+		Name: "tgt", Namespace: "ns",
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			TLS:       &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire, AllowInvalidCertificates: new(true)},
+			Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+		},
+	}
+	secret := &corev1.Secret{
+		Name: "tgt-ssl", Namespace: "ns",
+		Data: map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT"), "tls.key": []byte("KEY")},
+	}
+
+	s := clusterSyncScheme(t)
+	require.NoError(t, corev1.AddToScheme(s))
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(secret).Build()
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
+
+	before, err := r.targetTLS(context.Background(), target)
+	require.NoError(t, err)
+
+	target.Spec.TLS.AllowInvalidCertificates = new(false)
+
+	after, err := r.targetTLS(context.Background(), target)
+	require.NoError(t, err)
+	assert.NotEqual(t, before.Hash, after.Hash, "certificate verification change must change the pod template hash")
 }

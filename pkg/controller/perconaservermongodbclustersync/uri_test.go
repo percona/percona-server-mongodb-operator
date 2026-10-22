@@ -149,7 +149,7 @@ func TestBuildTargetURI(t *testing.T) {
 			password: "syncpass",
 			want:     "mongodb://sync:syncpass@cluster1-mongos.ns.svc.cluster.local:27019/?tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
 		},
-		"target pinned to an older crVersion keeps the plain TLS uri": {
+		"target pinned to an older crVersion keeps the 1.23 plain uri": {
 			target: &psmdbv1.PerconaServerMongoDB{
 				Name: "cluster1", Namespace: "ns",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
@@ -160,7 +160,23 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0",
+		},
+		"older crVersion target ignores certificate verification settings": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "cluster1", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: "1.23.0",
+					TLS: &psmdbv1.TLSSpec{
+						Mode:                     psmdbv1.TLSModeRequire,
+						AllowInvalidCertificates: new(false),
+					},
+					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+				},
+			},
+			username: "sync",
+			password: "syncpass",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0",
 		},
 		"credentials are percent-encoded": {
 			target: &psmdbv1.PerconaServerMongoDB{
