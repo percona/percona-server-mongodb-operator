@@ -1,0 +1,52 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+    - percona.com/delete-psmdb-pvc
+spec:
+  image:
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  updateStrategy: SmartUpdate
+  vpa:
+    enabled: true
+    # Start in Off mode so we can verify the recommendation is observed
+    # before switching to Auto and letting the operator apply it.
+    updateMode: "Off"
+    controlledValues: RequestsOnly
+    minAllowed:
+      cpu: 100m
+      memory: 128Mi
+    maxAllowed:
+      cpu: "2"
+      memory: 2Gi
+    # Use a longer stabilization window so the VPA Recommender has time to
+    # produce stable recommendations before the operator applies them.
+    stabilizationWindow: 300s
+  backup:
+    enabled: false
+  replsets:
+  - name: rs0
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: none
+    # Goldilocks creates VPA objects with a "goldilocks-" prefix: goldilocks-<statefulset-name>.
+    # Override the VPA object name here to match what Goldilocks creates.
+    vpa:
+      objectName: goldilocks-some-name-rs0
+    resources:
+      limits:
+        cpu: 500m
+        memory: 500M
+      requests:
+        cpu: 100m
+        memory: 100M
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+  secrets:
+    users: some-users
