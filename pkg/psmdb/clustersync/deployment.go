@@ -9,6 +9,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 const (
@@ -20,7 +21,25 @@ const (
 
 	URISecretSourceKey = "source-uri"
 	URISecretTargetKey = "target-uri"
+
+	sslVolumeName = "ssl"
+	tmpVolumeName = "tmp"
+	tmpMountPath  = "/tmp"
+
+	TLSPEMFile = tmpMountPath + "/tls.pem"
+	TLSCAFile  = config.SSLDir + "/ca.crt"
 )
+
+var secretFileMode int32 = 0o444
+
+type TLS struct {
+	SecretName string
+	Hash       string
+}
+
+func (t TLS) Enabled() bool {
+	return t.SecretName != ""
+}
 
 func DeploymentName(cr *api.PerconaServerMongoDBClusterSync) string {
 	return cr.Name + "-pcsm"
@@ -63,7 +82,7 @@ func DeploymentSpec(cr *api.PerconaServerMongoDBClusterSync, template corev1.Pod
 }
 
 // PodTemplateSpec wires the PCSM container into a PodSpec.
-func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplateSpec {
+func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync, tls TLS) corev1.PodTemplateSpec {
 	ls := Labels(cr)
 	for k, v := range cr.Spec.Labels {
 		if _, ok := ls[k]; !ok {
@@ -71,11 +90,21 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplate
 		}
 	}
 
+	annotations := cr.Spec.Annotations
+	if tls.Enabled() {
+		annotations = maps.Clone(annotations)
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		annotations[naming.AnnotationSSLHash] = tls.Hash
+	}
+
 	return corev1.PodTemplateSpec{
 		Labels:      ls,
-		Annotations: cr.Spec.Annotations,
+		Annotations: annotations,
 		Spec: corev1.PodSpec{
-			Containers:       []corev1.Container{Container(cr)},
+			Containers:       []corev1.Container{Container(cr, tls)},
+			Volumes:          volumes(cr, tls),
 			ImagePullSecrets: cr.Spec.ImagePullSecrets,
 			NodeSelector:     cr.Spec.NodeSelector,
 			Tolerations:      cr.Spec.Tolerations,
@@ -84,6 +113,31 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplate
 			SecurityContext:  cr.Spec.PodSecurityContext,
 		},
 	}
+}
+
+func volumes(cr *api.PerconaServerMongoDBClusterSync, tls TLS) []corev1.Volume {
+	if !tls.Enabled() {
+		return nil
+	}
+
+	volumes := []corev1.Volume{{
+		Name: sslVolumeName,
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  tls.SecretName,
+			DefaultMode: &secretFileMode,
+		},
+	}}
+	if readOnlyRootFilesystemEnabled(cr.Spec.ContainerSecurityContext) {
+		volumes = append(volumes, corev1.Volume{
+			Name:     tmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		})
+	}
+	return volumes
+}
+
+func readOnlyRootFilesystemEnabled(sc *corev1.SecurityContext) bool {
+	return sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
 }
 
 func podAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity {

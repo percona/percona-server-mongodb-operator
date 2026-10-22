@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestApplyObservedStatus(t *testing.T) {
@@ -497,4 +498,120 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTargetTLS(t *testing.T) {
+	targetWithTLS := func() *psmdbv1.PerconaServerMongoDB {
+		return &psmdbv1.PerconaServerMongoDB{
+			Name: "tgt", Namespace: "ns",
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+				Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+			},
+		}
+	}
+	sslSecret := func(data map[string][]byte) *corev1.Secret {
+		return &corev1.Secret{Name: "tgt-ssl", Namespace: "ns", Data: data}
+	}
+	complete := map[string][]byte{
+		"ca.crt":  []byte("CA"),
+		"tls.crt": []byte("CERT"),
+		"tls.key": []byte("KEY"),
+	}
+
+	tests := map[string]struct {
+		target      *psmdbv1.PerconaServerMongoDB
+		secret      *corev1.Secret
+		wantEnabled bool
+		wantErr     string
+	}{
+		"tls disabled target needs no certificates": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "tgt", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
+					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+				},
+			},
+		},
+		"complete ssl secret resolves": {
+			target:      targetWithTLS(),
+			secret:      sslSecret(complete),
+			wantEnabled: true,
+		},
+		"missing key is reported": {
+			target:  targetWithTLS(),
+			secret:  sslSecret(map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT")}),
+			wantErr: "missing tls.key",
+		},
+		"missing secret is reported": {
+			target:  targetWithTLS(),
+			wantErr: "get target ssl secret",
+		},
+		"target pinned to an older crVersion skips the client certificate": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "tgt", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: "1.23.0",
+					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+				},
+			},
+			secret: sslSecret(complete),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := clusterSyncScheme(t)
+			require.NoError(t, corev1.AddToScheme(s))
+			b := fake.NewClientBuilder().WithScheme(s)
+			if tc.secret != nil {
+				b = b.WithObjects(tc.secret)
+			}
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: b.Build(), scheme: s}
+
+			got, err := r.targetTLS(context.Background(), tc.target)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantEnabled, got.Enabled())
+			if tc.wantEnabled {
+				assert.Equal(t, "tgt-ssl", got.SecretName)
+				assert.NotEmpty(t, got.Hash)
+			}
+		})
+	}
+}
+
+func TestTargetTLSHashTracksRotation(t *testing.T) {
+	target := &psmdbv1.PerconaServerMongoDB{
+		Name: "tgt", Namespace: "ns",
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+		},
+	}
+	secret := &corev1.Secret{
+		Name: "tgt-ssl", Namespace: "ns",
+		Data: map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT"), "tls.key": []byte("KEY")},
+	}
+
+	s := clusterSyncScheme(t)
+	require.NoError(t, corev1.AddToScheme(s))
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(secret).Build()
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
+
+	before, err := r.targetTLS(context.Background(), target)
+	require.NoError(t, err)
+
+	secret.Data["tls.crt"] = []byte("ROTATED")
+	require.NoError(t, cl.Update(context.Background(), secret))
+
+	after, err := r.targetTLS(context.Background(), target)
+	require.NoError(t, err)
+	assert.NotEqual(t, before.Hash, after.Hash, "rotated certificate must change the pod template hash")
 }

@@ -1,6 +1,9 @@
 package perconaservermongodbclustersync
 
 import (
+	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,7 +14,37 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
+	tlsutil "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+func withLocalCertFiles(t *testing.T, uri string) string {
+	t.Helper()
+
+	u, err := url.Parse(uri)
+	require.NoError(t, err)
+	q := u.Query()
+	if q.Get("tlsCertificateKeyFile") == "" {
+		return uri
+	}
+	require.Equal(t, clustersync.TLSPEMFile, q.Get("tlsCertificateKeyFile"))
+	require.Equal(t, clustersync.TLSCAFile, q.Get("tlsCAFile"))
+
+	ca, cert, key, err := tlsutil.Issue([]string{"localhost"})
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	pemFile := filepath.Join(dir, "tls.pem")
+	caFile := filepath.Join(dir, "ca.crt")
+	require.NoError(t, os.WriteFile(pemFile, append(key, cert...), 0o600))
+	require.NoError(t, os.WriteFile(caFile, ca, 0o600))
+
+	q.Set("tlsCertificateKeyFile", pemFile)
+	q.Set("tlsCAFile", caFile)
+	u.RawQuery = q.Encode()
+	return u.String()
+}
 
 func TestBuildTargetURI(t *testing.T) {
 	tests := map[string]struct {
@@ -42,7 +75,7 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
 		},
 		"replicaset target with requireTLS": {
 			target: &psmdbv1.PerconaServerMongoDB{
@@ -54,7 +87,7 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
 		},
 		"replicaset target with custom dns suffix": {
 			target: &psmdbv1.PerconaServerMongoDB{
@@ -99,7 +132,20 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-mongos.ns.svc.cluster.local:27019/?tls=true&tlsAllowInvalidCertificates=true",
+			want:     "mongodb://sync:syncpass@cluster1-mongos.ns.svc.cluster.local:27019/?tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
+		},
+		"target pinned to an older crVersion keeps the plain TLS uri": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "cluster1", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: "1.23.0",
+					TLS:       &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire},
+					Replsets:  []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+				},
+			},
+			username: "sync",
+			password: "syncpass",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true",
 		},
 		"credentials are percent-encoded": {
 			target: &psmdbv1.PerconaServerMongoDB{
@@ -129,6 +175,9 @@ func TestBuildTargetURI(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			if tc.target.Spec.CRVersion == "" {
+				tc.target.Spec.CRVersion = version.Version()
+			}
 			got, err := buildTargetURI(tc.target, tc.username, tc.password)
 			if tc.wantErr != "" {
 				require.Error(t, err)
@@ -137,7 +186,7 @@ func TestBuildTargetURI(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
-			require.NoError(t, options.Client().ApplyURI(got).Validate())
+			require.NoError(t, options.Client().ApplyURI(withLocalCertFiles(t, got)).Validate())
 		})
 	}
 }
@@ -201,7 +250,7 @@ func TestBuildSourceURI(t *testing.T) {
 			}
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
-			require.NoError(t, options.Client().ApplyURI(got).Validate())
+			require.NoError(t, options.Client().ApplyURI(withLocalCertFiles(t, got)).Validate())
 		})
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 )
 
 func buildSourceURI(ctx context.Context, cl client.Client, cr *psmdbv1.PerconaServerMongoDBClusterSync) (string, error) {
@@ -34,6 +35,10 @@ func buildSourceURI(ctx context.Context, cl client.Client, cr *psmdbv1.PerconaSe
 		u.Path = "/"
 	}
 	return u.String(), nil
+}
+
+func clientCertEnabled(target *psmdbv1.PerconaServerMongoDB) bool {
+	return target.TLSEnabled() && target.CompareVersion("1.24.0") >= 0
 }
 
 func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password string) (string, error) {
@@ -71,6 +76,10 @@ func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password str
 	}
 	if target.TLSEnabled() {
 		q.Set("tls", "true")
+		if clientCertEnabled(target) {
+			q.Set("tlsCertificateKeyFile", clustersync.TLSPEMFile)
+			q.Set("tlsCAFile", clustersync.TLSCAFile)
+		}
 		q.Set("tlsAllowInvalidCertificates", "true")
 	}
 	u.RawQuery = q.Encode()

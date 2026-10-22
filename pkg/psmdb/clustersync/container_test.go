@@ -9,6 +9,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 func TestContainerProbes(t *testing.T) {
@@ -67,7 +69,7 @@ func TestContainerProbes(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &api.PerconaServerMongoDBClusterSync{Spec: tc.spec}
-			c := Container(cr)
+			c := Container(cr, TLS{})
 
 			require.NotNil(t, c.LivenessProbe)
 			require.NotNil(t, c.ReadinessProbe)
@@ -159,7 +161,7 @@ func TestContainerEnv(t *testing.T) {
 				Name: crName,
 				Spec: tc.spec,
 			}
-			c := Container(cr)
+			c := Container(cr, TLS{})
 			assert.Equal(t, tc.want, c.Env)
 		})
 	}
@@ -200,8 +202,73 @@ func TestContainerArgs(t *testing.T) {
 			cr := &api.PerconaServerMongoDBClusterSync{
 				Spec: api.PerconaServerMongoDBClusterSyncSpec{PCSMConfig: tc.pcsm},
 			}
-			c := Container(cr)
+			c := Container(cr, TLS{})
 			assert.Equal(t, tc.want, c.Args)
 		})
 	}
+}
+
+func TestContainerTLS(t *testing.T) {
+	readOnlyRoot := &corev1.SecurityContext{ReadOnlyRootFilesystem: new(true)}
+	tls := TLS{SecretName: "target-ssl", Hash: "abc123"}
+
+	t.Run("tls disabled: image entrypoint and no volumes", func(t *testing.T) {
+		pod := PodTemplateSpec(&api.PerconaServerMongoDBClusterSync{Name: "mysync"}, TLS{})
+
+		assert.Empty(t, pod.Spec.Containers[0].Command)
+		assert.Empty(t, pod.Spec.Containers[0].VolumeMounts)
+		assert.Empty(t, pod.Spec.Volumes)
+		assert.NotContains(t, pod.Annotations, naming.AnnotationSSLHash)
+	})
+
+	t.Run("tls enabled: ssl secret mounted and PEM assembled before entrypoint", func(t *testing.T) {
+		pod := PodTemplateSpec(&api.PerconaServerMongoDBClusterSync{Name: "mysync"}, tls)
+
+		require.Len(t, pod.Spec.Volumes, 1)
+		require.NotNil(t, pod.Spec.Volumes[0].Secret)
+		assert.Equal(t, sslVolumeName, pod.Spec.Volumes[0].Name)
+		assert.Equal(t, "target-ssl", pod.Spec.Volumes[0].Secret.SecretName)
+
+		c := pod.Spec.Containers[0]
+		require.Len(t, c.VolumeMounts, 1)
+		assert.Equal(t, sslVolumeName, c.VolumeMounts[0].Name)
+		assert.Equal(t, config.SSLDir, c.VolumeMounts[0].MountPath)
+		assert.True(t, c.VolumeMounts[0].ReadOnly)
+
+		require.Len(t, c.Command, 4)
+		assert.Equal(t, "/bin/bash", c.Command[0])
+		assert.Contains(t, c.Command[2], "cat "+config.SSLDir+"/tls.key "+config.SSLDir+"/tls.crt > "+TLSPEMFile)
+		assert.Contains(t, c.Command[2], `exec `+imageEntrypoint+` pcsm "$@"`)
+		assert.Equal(t, "abc123", pod.Annotations[naming.AnnotationSSLHash])
+	})
+
+	t.Run("tls enabled with read-only root: writable /tmp added", func(t *testing.T) {
+		cr := &api.PerconaServerMongoDBClusterSync{
+			Name: "mysync",
+			Spec: api.PerconaServerMongoDBClusterSyncSpec{ContainerSecurityContext: readOnlyRoot},
+		}
+		pod := PodTemplateSpec(cr, tls)
+
+		require.Len(t, pod.Spec.Volumes, 2)
+		assert.Equal(t, tmpVolumeName, pod.Spec.Volumes[1].Name)
+		require.NotNil(t, pod.Spec.Volumes[1].EmptyDir)
+
+		mounts := pod.Spec.Containers[0].VolumeMounts
+		require.Len(t, mounts, 2)
+		assert.Equal(t, tmpVolumeName, mounts[1].Name)
+		assert.Equal(t, tmpMountPath, mounts[1].MountPath)
+	})
+
+	t.Run("user annotations are preserved and not mutated", func(t *testing.T) {
+		userAnnotations := map[string]string{"team": "sre"}
+		cr := &api.PerconaServerMongoDBClusterSync{
+			Name: "mysync",
+			Spec: api.PerconaServerMongoDBClusterSyncSpec{Annotations: userAnnotations},
+		}
+		pod := PodTemplateSpec(cr, tls)
+
+		assert.Equal(t, "sre", pod.Annotations["team"])
+		assert.Equal(t, "abc123", pod.Annotations[naming.AnnotationSSLHash])
+		assert.NotContains(t, userAnnotations, naming.AnnotationSSLHash, "spec annotations must not be mutated")
+	})
 }
