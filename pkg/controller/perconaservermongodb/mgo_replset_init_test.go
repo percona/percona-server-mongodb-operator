@@ -27,6 +27,8 @@ import (
 )
 
 func TestMongoInitAdminUserEscaping(t *testing.T) {
+	t.Parallel()
+
 	const prefix = `db.getSiblingDB("admin").createUser(`
 
 	for _, tc := range []struct {
@@ -64,6 +66,8 @@ func TestMongoInitAdminUserEscaping(t *testing.T) {
 }
 
 func TestHandleReplsetInitPassesConfigWithoutShell(t *testing.T) {
+	t.Parallel()
+
 	const replsetName = "rs'$(echo name)"
 	const tagValue = "literal\"quote'$(echo tag)\nnext"
 
@@ -116,7 +120,7 @@ func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 		if p.userAdminErr != nil {
 			return nil, p.userAdminErr
 		}
-		return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+		return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 	}
 	p.clusterAdminConf = &mongo.DialConfig{Backoff: mongo.DefaultBackoff()}
 	for _, opt := range opts {
@@ -125,15 +129,15 @@ func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 	if p.clusterAdminErr != nil {
 		return nil, p.clusterAdminErr
 	}
-	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
 
 func (p *initMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
 
 func (p *initMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
 
 // replsetInitExecRecorder mocks the in-pod command execution performed by
