@@ -221,9 +221,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateInit, nil, errors.Wrap(err, "failed to check running restore")
 	}
 
+	// mongos may not be reachable until it's updated
+	mongosFirst, err := r.shouldUpdateMongosFirst(ctx, cr)
+	if err != nil {
+		return api.AppStateError, nil, errors.Wrap(err, "should update mongos first")
+	}
+
 	if cr.Spec.Sharding.Enabled &&
 		cr.Spec.Sharding.Mongos.Size > 0 &&
 		!rstRunning &&
+		!mongosFirst &&
 		replset.ClusterRole == api.ClusterRoleShardSvr {
 
 		rsStatus := cr.Status.Replsets[replset.Name]
