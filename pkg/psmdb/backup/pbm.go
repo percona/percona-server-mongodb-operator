@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -195,11 +196,10 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 		return "", errors.Wrapf(err, "error checking and writing CA certificate to file %s", tlsPemFile)
 	}
 
-	murl += fmt.Sprintf(
-		"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true&tlsInsecure=true",
-		tlsPemFile,
-		caCertFile,
-	)
+	murl += fmt.Sprintf("?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s", tlsPemFile, caCertFile)
+	if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
+		murl += "&tlsInsecure=true"
+	}
 
 	return murl, nil
 }
