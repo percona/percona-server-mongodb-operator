@@ -164,10 +164,3 @@ func (p *PerconaServerMongoDBBackup) IsBackupTypeIncrementalBase() bool {
 func (p *PerconaServerMongoDBBackupSpec) GetClusterName() string {
 	return p.ClusterName
 }
-
-func (s SnapshotInfos) GetReplsetSnapshotInfo(rs *ReplsetSpec) *SnapshotInfo {
-	if info := s.GetSnapshotInfo(rs.Name); info != nil {
-		return info
-	}
-	return s.GetSnapshotInfo(rs.MongoReplsetName())
-}

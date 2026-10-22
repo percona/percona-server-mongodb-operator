@@ -457,7 +457,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	allInfos := make([]replsetInfo, 0, len(replsets))
 	for _, rs := range replsets {
 		pvcs := make([]pvcInfo, 0)
-		snapshot := backup.Status.Snapshots.GetReplsetSnapshotInfo(rs)
+		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName())
 		if snapshot == nil {
 			return false, fmt.Errorf("no snapshots found for replset %s", rs.Name)
 		}
