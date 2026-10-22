@@ -123,11 +123,6 @@ func (c *pbmClientCert) SecretName() string {
 
 func (c *pbmClientCert) Object() *cm.Certificate {
 	cr := c.cr
-	issuerKind := cr.Spec.TLS.IssuerConf.Kind
-	issuerGroup := cr.Spec.TLS.IssuerConf.Group
-	if cr.Spec.TLS.IssuerConf.Name == "" {
-		issuerKind, issuerGroup = cm.IssuerKind, ""
-	}
 
 	labels := naming.ClusterLabels(cr)
 
@@ -148,8 +143,8 @@ func (c *pbmClientCert) Object() *cm.Certificate {
 			Duration: &cr.Spec.TLS.CertValidityDuration,
 			IssuerRef: cmmeta.IssuerReference{
 				Name:  issuerName(cr),
-				Kind:  issuerKind,
-				Group: issuerGroup,
+				Kind:  cr.Spec.TLS.IssuerConf.Kind,
+				Group: cr.Spec.TLS.IssuerConf.Group,
 			},
 		},
 	}
