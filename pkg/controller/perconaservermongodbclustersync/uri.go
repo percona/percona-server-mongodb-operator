@@ -8,9 +8,11 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 )
 
 func buildSourceURI(ctx context.Context, cl client.Client, cr *psmdbv1.PerconaServerMongoDBClusterSync) (string, error) {
@@ -34,6 +36,19 @@ func buildSourceURI(ctx context.Context, cl client.Client, cr *psmdbv1.PerconaSe
 		u.Path = "/"
 	}
 	return u.String(), nil
+}
+
+// Gates the whole TLS config: pre-1.24.0 targets keep the 1.23 rendering
+// so an operator upgrade doesn't restart PCSM.
+func pcsmTLSEnabled(target *psmdbv1.PerconaServerMongoDB) bool {
+	return target.TLSEnabled() && target.CompareVersion("1.24.0") >= 0
+}
+
+func allowInvalidCerts(target *psmdbv1.PerconaServerMongoDB) bool {
+	if target.Spec.TLS == nil {
+		return psmdbv1.DefaultAllowInvalidCertificates
+	}
+	return ptr.Deref(target.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates)
 }
 
 func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password string) (string, error) {
@@ -65,10 +80,18 @@ func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password str
 		Host:   host,
 		Path:   "/",
 	}
+	q := u.Query()
 	if rsName != "" {
-		q := u.Query()
 		q.Set("replicaSet", rsName)
-		u.RawQuery = q.Encode()
 	}
+	if pcsmTLSEnabled(target) {
+		q.Set("tls", "true")
+		q.Set("tlsCertificateKeyFile", clustersync.TLSPEMFile)
+		q.Set("tlsCAFile", clustersync.TLSCAFile)
+		if allowInvalidCerts(target) {
+			q.Set("tlsAllowInvalidCertificates", "true")
+		}
+	}
+	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
