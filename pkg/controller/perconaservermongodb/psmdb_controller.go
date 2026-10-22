@@ -347,6 +347,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		if rec || err != nil {
 			return rr, err
 		}
+		if len(cr.GetFinalizers()) == 0 {
+			return reconcile.Result{}, nil
+		}
 	}
 
 	err = r.reconcilePause(ctx, cr)
@@ -1612,6 +1615,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	pmmC := pmm.Container(ctx, cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
+		templateSpec.Spec.Volumes = psmdb.AddPMMTmpVolume(cr, pmmC, templateSpec.Spec.Volumes)
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
 			*pmmC,

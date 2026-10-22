@@ -44,6 +44,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	caCert, tlsCert, tlsKey, err := tls.Issue(tls.GetCertificateSans(defaultCR))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	defaultCR.Spec.Replsets[0].Env = []corev1.EnvVar{
 		{Name: "TEST_ENV1", Value: "test-value1"},
 		{Name: "TEST_ENV2", Value: "test-value2"},
@@ -179,9 +184,9 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Name:      crName + "-ssl",
 					Namespace: tt.cr.Namespace,
 					Data: map[string][]byte{
-						"ca.crt":  []byte("fake-ca-cert"),
-						"tls.crt": []byte("fake-tls-cert"),
-						"tls.key": []byte("fake-tls-key"),
+						"ca.crt":  caCert,
+						"tls.crt": tlsCert,
+						"tls.key": tlsKey,
 					},
 				},
 				&corev1.Secret{

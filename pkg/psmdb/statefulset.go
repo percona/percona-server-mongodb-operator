@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -50,6 +51,37 @@ const (
 // context requests a read-only root filesystem.
 func readOnlyRootFilesystemEnabled(sc *corev1.SecurityContext) bool {
 	return sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
+}
+
+// hasVolume reports whether a volume with the given name is already present in
+// the slice, so the shared /tmp emptyDir is not added more than once.
+func hasVolume(volumes []corev1.Volume, name string) bool {
+	for i := range volumes {
+		if volumes[i].Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// AddPMMTmpVolume mounts the shared writable /tmp emptyDir into the pmm
+// container and adds the volume to the pod when the PMM sidecar runs with a
+// read-only root filesystem. It returns the (possibly updated) volumes slice.
+func AddPMMTmpVolume(cr *api.PerconaServerMongoDB, pmmC *corev1.Container, volumes []corev1.Volume) []corev1.Volume {
+	if pmmC == nil || !pmm.TmpVolumeRequired(cr) {
+		return volumes
+	}
+	pmmC.VolumeMounts = append(pmmC.VolumeMounts, corev1.VolumeMount{
+		Name:      tmpVolumeName,
+		MountPath: tmpMountPath,
+	})
+	if !hasVolume(volumes, tmpVolumeName) {
+		volumes = append(volumes, corev1.Volume{
+			Name:     tmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		})
+	}
+	return volumes
 }
 
 // needsTmpVolume reports whether a shared writable /tmp emptyDir must be added
@@ -392,6 +424,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
+			volumes = AddPMMTmpVolume(cr, pmmC, volumes)
 			containers = append(containers, *pmmC)
 		}
 
@@ -614,7 +647,7 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 
 	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 	if cr.CompareVersion("1.20.0") >= 0 {
-		mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
+		mongoDBURI = BuildMongoDBURI(ctx, cr, tlsEnabled, sslSecret)
 	}
 
 	c.Env = append(c.Env, []corev1.EnvVar{
@@ -741,15 +774,15 @@ func OCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	}
 }
 
-func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
+func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabled bool, sslSecret *corev1.Secret) string {
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
-			uri += fmt.Sprintf(
-				"/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
-				config.SSLDir,
-			)
+			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt", config.SSLDir)
+			if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
+				uri += "&tlsInsecure=true"
+			}
 		}
 	}
 	return uri

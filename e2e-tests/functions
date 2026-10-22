@@ -2,13 +2,33 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/vars"
 
+# keep in sync with TRANSIENT_ERRORS in lib/kubectl.py
+KUBECTL_TRANSIENT_ERRORS='ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout|etcdserver: request timed out|the server is currently unable to handle the request|Unable to connect to the server|connection reset by peer'
+
 kubectl_bin() {
 	local LAST_OUT="$(mktemp)"
 	local LAST_ERR="$(mktemp)"
 	local exit_status=0
 	local timeout=4
+	local i
 	local args=("$@")
 	local transformed_files=()
+	local stdin_manifest
+
+	# stdin can be read only once, save it to a file so retries can send it again
+	for i in "${!args[@]}"; do
+		if [[ ${args[$i]} == "-" && $i -gt 0 && ${args[$((i - 1))]} =~ ^(-f|--filename)$ ]]; then
+			stdin_manifest="$(mktemp)"
+			cat >"${stdin_manifest}"
+			transformed_files+=("${stdin_manifest}")
+			args[$i]="${stdin_manifest}"
+		elif [[ ${args[$i]} =~ ^(-f|--filename)=-$ ]]; then
+			stdin_manifest="$(mktemp)"
+			cat >"${stdin_manifest}"
+			transformed_files+=("${stdin_manifest}")
+			args[$i]="${args[$i]%%=*}=${stdin_manifest}"
+		fi
+	done
 
 	if arch_scheduling_enabled && [[ ${args[0]} == "run" ]]; then
 		local has_overrides=0
@@ -85,18 +105,29 @@ kubectl_bin() {
 		args=("${apply_args[@]}")
 	fi
 
-	for i in $(seq 0 2); do
+	local attempt
+	local delay
+	for attempt in $(seq 0 9); do
 		set +e
 		kubectl "${args[@]}" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
-		if [ ${exit_status} != 0 -a -n "${DEBUG_TESTS}" ]; then
-			cat "$LAST_OUT"
-			cat "$LAST_ERR" >&2
-			sleep "$((timeout * i))"
+		if [[ ${exit_status} == 0 || ${attempt} == 9 ]] || grep -q 'Error from server (NotFound)' "$LAST_ERR"; then
+			break
+		fi
+
+		# API server overload can last for minutes, keep retrying it longer than other errors
+		if grep -qE "${KUBECTL_TRANSIENT_ERRORS}" "$LAST_ERR"; then
+			delay=$((5 * (attempt + 1) > 30 ? 30 : 5 * (attempt + 1)))
+		elif [[ -n ${DEBUG_TESTS} && ${attempt} -lt 2 ]]; then
+			delay=$((timeout * attempt))
 		else
 			break
 		fi
+
+		# output of a failed attempt must not end up in the caller's captured stdout
+		cat "$LAST_OUT" "$LAST_ERR" >&2
+		sleep "${delay}"
 	done
 
 	cat "$LAST_OUT"
@@ -1459,7 +1490,7 @@ get_service_ip() {
 		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi
-	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | grep -E -q "hostname|ip"; do
+	until [[ -n "$(kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}{.status.loadBalancer.ingress[].hostname}')" ]]; do
 		sleep 1
 	done
 	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
@@ -1724,7 +1755,9 @@ delete_crd() {
 			| grep -v 'NAMESPACE' \
 			| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
 			|| :
-		kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' --ignore-not-found || :
+		if kubectl get crd "${crd_name}" >/dev/null 2>&1; then
+			kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' || :
+		fi
 	done
 
 	local rbac_yaml='rbac.yaml'
@@ -2802,14 +2835,24 @@ compare_latest_restorable_time() {
 	local backup_name=$2
 	local latest_restorable_time
 	local backup_time
+	local retry=0
 
-	latest_restorable_time=$(get_latest_restorable_time "$cluster")
-	backup_time=$(get_latest_restorable_time_from_backup_object "$backup_name")
+	# PITR keeps advancing the timeline and the operator refreshes the backup status
+	# only on reconcile, so re-read both values every five seconds until they converge.
+	while [[ $retry -lt 12 ]]; do
+		((retry += 1))
+		latest_restorable_time=$(get_latest_restorable_time "$cluster")
+		backup_time=$(get_latest_restorable_time_from_backup_object "$backup_name")
+		if [[ -n $latest_restorable_time && $latest_restorable_time == "$backup_time" ]]; then
+			return 0
+		fi
+		if [[ $retry -lt 12 ]]; then
+			sleep 5
+		fi
+	done
 
-	if [[ $latest_restorable_time != "$backup_time" ]]; then
-		echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
-		exit 1
-	fi
+	echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
+	exit 1
 }
 
 pause_cluster() {
@@ -3336,4 +3379,90 @@ create_runtime_class() {
 	desc "Create RuntimeClass with handler $handler"
 	yq eval ".handler = \"$handler\"" "$conf_dir/container-rc.yaml" \
 		| kubectl_bin apply -f -
+}
+
+# image_upgrade_message_has_container reports whether the condition message lists container.
+image_upgrade_message_has_container() {
+	local message="$1"
+	local container="$2"
+	local names
+
+	names=$(printf '%s' "${message}" | sed -E 's/^Image upgrade is in progress for container(\(s\)|s)? //')
+	printf ', %s,' "${names}" | grep -q ", ${container},"
+}
+
+wait_for_image_upgrade_condition() {
+	local cluster="$1"
+	shift
+	local timeout=0
+	local status=""
+	local condition_type="ImageUpgradeInProgress"
+
+	set +o xtrace
+	echo -n "Waiting for ${condition_type} on ${cluster}"
+	until [[ ${status} == "True" ]]; do
+		status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].status}")
+		if [[ ${status} == "True" ]]; then
+			break
+		fi
+		sleep 1
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 180 ]]; then
+			echo
+			echo "${condition_type} was not set on ${cluster}. Exiting..."
+			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
+			echo
+			exit 1
+		fi
+	done
+	echo
+
+	local reason message container
+	reason=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].reason}")
+	message=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].message}")
+	if [[ ${reason} != "ImageUpgrade" ]]; then
+		echo "unexpected ${condition_type} reason: ${reason}"
+		exit 1
+	fi
+	if [[ ${message} != "Image upgrade is in progress for container"* ]]; then
+		echo "unexpected ${condition_type} message: ${message}"
+		exit 1
+	fi
+	for container in "$@"; do
+		if ! image_upgrade_message_has_container "${message}" "${container}"; then
+			echo "${condition_type} message '${message}' does not mention container ${container}"
+			exit 1
+		fi
+	done
+	echo "${condition_type}: ${message}"
+	set_debug
+}
+
+wait_for_no_image_upgrade_condition() {
+	local cluster="$1"
+	local timeout=0
+	local condition_type="placeholder"
+	local expected_type="ImageUpgradeInProgress"
+
+	set +o xtrace
+	echo -n "Waiting for ${expected_type} to clear on ${cluster}"
+	until [[ -z ${condition_type} ]]; do
+		condition_type=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${expected_type}\")].type}")
+		if [[ -z ${condition_type} ]]; then
+			break
+		fi
+		sleep 2
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 300 ]]; then
+			echo
+			echo "${expected_type} is still set on ${cluster}. Exiting..."
+			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
+			echo
+			exit 1
+		fi
+	done
+	echo
+	set_debug
 }
