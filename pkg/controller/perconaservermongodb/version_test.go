@@ -381,6 +381,64 @@ func Test_majorUpgradeRequested(t *testing.T) {
 			},
 			wantErrMsg: "can't upgrade to 8.3 with FCV set to 7.0",
 		},
+		{
+			name: "TestUpgradeFrom83To90WithPostfixVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "9.0-recommended",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "8.3.11-3",
+					},
+				},
+				fcv: "8.3",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "9.0",
+				Apply:      "recommended",
+			},
+		},
+		{
+			name: "TestUpgradeFrom83To90WithExactVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "9.0.4-1",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "8.3.11-3",
+					},
+				},
+				fcv: "8.3",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "9.0.4-1",
+			},
+		},
+		{
+			name: "TestUpgradeFrom80To90IsNotAllowed",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "9.0-recommended",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "8.0.19-7",
+					},
+				},
+				fcv: "8.0",
+			},
+			wantErrMsg: "can't upgrade to 9.0 with FCV set to 8.0",
+		},
 	}
 
 	for _, tt := range tests {
@@ -410,6 +468,10 @@ func Test_canUpgradeVersion(t *testing.T) {
 		{fcv: "8.0", new: "8.0", want: false},
 		{fcv: "8.3", new: "8.0", want: false},
 		{fcv: "8.3", new: "8.3", want: false},
+		{fcv: "8.3", new: "9.0", want: true},
+		{fcv: "8.0", new: "9.0", want: false},
+		{fcv: "9.0", new: "8.3", want: false},
+		{fcv: "9.0", new: "9.0", want: false},
 	}
 
 	for _, tt := range tests {
