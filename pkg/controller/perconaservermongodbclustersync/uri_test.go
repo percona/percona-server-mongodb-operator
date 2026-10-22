@@ -13,6 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"k8s.io/utils/ptr"
+
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 	tlsutil "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -88,6 +90,21 @@ func TestBuildTargetURI(t *testing.T) {
 			username: "sync",
 			password: "syncpass",
 			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
+		},
+		"replicaset target with certificate verification enabled": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "cluster1", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					TLS: &psmdbv1.TLSSpec{
+						Mode:                     psmdbv1.TLSModeRequire,
+						AllowInvalidCertificates: ptr.To(false),
+					},
+					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+				},
+			},
+			username: "sync",
+			password: "syncpass",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
 		},
 		"replicaset target with custom dns suffix": {
 			target: &psmdbv1.PerconaServerMongoDB{
