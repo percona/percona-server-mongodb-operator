@@ -132,6 +132,7 @@ func (c *pbmClientCert) Object() *cm.Certificate {
 		Labels:    labels,
 		Spec: cm.CertificateSpec{
 			SecretName: c.SecretName(),
+			CommonName: c.Name(),
 			Subject: &cm.X509Subject{
 				Organizations: []string{naming.CertificateOrganizationPBM},
 			},
