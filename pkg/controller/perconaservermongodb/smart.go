@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -60,7 +61,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	if !isSfsChanged(sfs, &list) {
+	if !k8s.HasStatefulSetChanged(sfs, &list) {
 		return nil
 	}
 
@@ -90,7 +91,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		if err != nil {
 			return errors.Wrap(err, "get cfg pod list")
 		}
-		if isSfsChanged(&cfgSfs, &cfgList) {
+		if k8s.HasStatefulSetChanged(&cfgSfs, &cfgList) {
 			log.Info("waiting for config RS update")
 			return nil
 		}
@@ -445,7 +446,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return errors.Wrap(err, "get mongos pods")
 	}
 
-	if !isSfsChanged(sts, &list) {
+	if !k8s.HasStatefulSetChanged(sts, &list) {
 		return nil
 	}
 
@@ -536,7 +537,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 			}); err != nil {
 			return false, errors.Errorf("failed to get statefulset %s pods: %v", s.Name, err)
 		}
-		if s.Status.UpdatedReplicas < s.Status.Replicas || isSfsChanged(&s, podList) {
+		if s.Status.UpdatedReplicas < s.Status.Replicas || k8s.HasStatefulSetChanged(&s, podList) {
 			logf.FromContext(ctx).Info("StatefulSet is not up to date", "sts", s.Name)
 			return false, nil
 		}
@@ -605,20 +606,4 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 	}
 
 	return errors.New("reach pod wait limit")
-}
-
-func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {
-	if sfs.Status.UpdateRevision == "" {
-		return false
-	}
-
-	for _, pod := range podList.Items {
-		if pod.Labels[naming.LabelKubernetesComponent] != sfs.Labels[naming.LabelKubernetesComponent] {
-			continue
-		}
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
-			return true
-		}
-	}
-	return false
 }
