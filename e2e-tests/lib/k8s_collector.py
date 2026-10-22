@@ -288,7 +288,7 @@ class K8sCollector:
             if not restarts:
                 continue
 
-            runs = [("current", [])]
+            runs: list[tuple[str, list[str]]] = [("current", [])]
             if int(restarts[0]) > 0:
                 runs.insert(0, ("previous", ["--previous"]))
 
