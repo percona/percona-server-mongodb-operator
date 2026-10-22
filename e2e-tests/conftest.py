@@ -226,7 +226,7 @@ def setup_env_vars() -> None:
         "GIT_BRANCH": git_branch,
         "OPERATOR_VERSION": get_cr_version(),
         "IMAGE": f"perconalab/percona-server-mongodb-operator:{git_branch}",
-        "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
+        "IMAGE_MONGOD": "perconalab/percona-server-mongodb:9.0.4-1",
         "IMAGE_MONGOD_CHAIN": (
             "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
             "perconalab/percona-server-mongodb-operator:main-mongod8.0\n"
