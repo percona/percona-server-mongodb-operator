@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -16,9 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestEnsureSecurityKeys(t *testing.T) {
@@ -476,5 +479,61 @@ func TestDeleteConfigMapIfExistsIgnoresNotFoundOnDelete(t *testing.T) {
 		})
 
 		require.Error(t, deleteConfigMapIfExists(t.Context(), cl, cr, cmName))
+	})
+}
+
+func TestHandleShardingToggleConditionNotInCache(t *testing.T) {
+	ctx := context.Background()
+
+	const ns = "sharding-toggle-not-in-cache"
+
+	cr, err := readDefaultCR(ns+"-cr", ns)
+	require.NoError(t, err)
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+	cr.Status.AddCondition(psmdbv1.ClusterCondition{
+		Type:   psmdbv1.AppStateSharding,
+		Status: psmdbv1.ConditionFalse,
+	})
+	staleConditions := slices.Clone(cr.Status.Conditions)
+
+	// staleCache returns the cluster with the old conditions for the first `misses` reads after the status write
+	staleCache := func(misses int) *ReconcilePerconaServerMongoDB {
+		r := buildFakeClient(cr.DeepCopy())
+		r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+		written := false
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if err := c.Get(ctx, key, obj, opts...); err != nil {
+					return err
+				}
+				if cluster, ok := obj.(*psmdbv1.PerconaServerMongoDB); ok && written && misses > 0 {
+					misses--
+					cluster.Status.Conditions = slices.Clone(staleConditions)
+				}
+				return nil
+			},
+			SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				written = true
+				return c.SubResource(subResourceName).Update(ctx, obj, opts...)
+			},
+		})
+		return r
+	}
+
+	t.Run("condition appears in cache", func(t *testing.T) {
+		r := staleCache(2)
+		c := cr.DeepCopy()
+		require.NoError(t, r.handleShardingToggle(ctx, c))
+		assert.False(t, c.Spec.Pause)
+		assert.True(t, c.Spec.Sharding.Enabled)
+
+		got := new(psmdbv1.PerconaServerMongoDB)
+		require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(cr), got))
+		assert.Equal(t, psmdbv1.ConditionTrue, got.Status.FindCondition(psmdbv1.AppStateSharding).Status)
+	})
+
+	t.Run("condition never appears in cache", func(t *testing.T) {
+		err := staleCache(100).handleShardingToggle(ctx, cr.DeepCopy())
+		require.ErrorIs(t, err, errShardingConditionNotInCache)
 	})
 }
