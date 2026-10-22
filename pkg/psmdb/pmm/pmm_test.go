@@ -1,7 +1,10 @@
 package pmm
 
 import (
+	"os"
+	"os/exec"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +16,38 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+func TestPMMAgentScriptPreservesCredentials(t *testing.T) {
+	const user = "monitor'user"
+	const password = "literal\"quote' with spaces $HOME $(printf wrong) `printf wrong` \\backslash\nnext"
+	const cluster = "cluster \"name\" with spaces"
+
+	cr := &api.PerconaServerMongoDB{Spec: api.PerconaServerMongoDBSpec{
+		CRVersion: "1.24.0",
+		TLS:       &api.TLSSpec{Mode: api.TLSModeDisabled},
+	}}
+	script := pmmAgentScript(cr)[0].Value
+	script = strings.NewReplacer(
+		"$(PMM_ADMIN_CUSTOM_PARAMS)", "",
+		"$(DB_TYPE)", "mongodb",
+		"$(DB_USER)", user,
+		"$(DB_PASSWORD)", password,
+		"$(CLUSTER_NAME)", cluster,
+		"$(PMM_AGENT_SETUP_NODE_NAME)", "node",
+		"$(DB_HOST)", "localhost",
+		"$(DB_PORT)", "27017",
+	).Replace(script)
+
+	command := exec.Command("bash", "-c", `pmm-admin() { if [ "$1" = add ]; then printf '%s\0' "$@"; fi; }`+"\n"+script)
+	command.Env = append(os.Environ(), "DB_USER="+user, "DB_PASSWORD="+password, "CLUSTER_NAME="+cluster)
+	output, err := command.Output()
+	if assert.NoError(t, err) {
+		args := strings.Split(strings.TrimSuffix(string(output), "\x00"), "\x00")
+		assert.Contains(t, args, "--username="+user)
+		assert.Contains(t, args, "--password="+password)
+		assert.Contains(t, args, "--cluster="+cluster)
+	}
+}
 
 func TestContainer(t *testing.T) {
 	ctx := t.Context()
@@ -126,6 +161,47 @@ func TestContainer(t *testing.T) {
 			tt.assert(t, container)
 		})
 	}
+}
+
+func TestPMMConfigFile(t *testing.T) {
+	newCR := func(crVersion string) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{CRVersion: crVersion},
+		}
+	}
+
+	t.Run("v1.24.0 PMM3", func(t *testing.T) {
+		assert.Equal(t, "/tmp/pmm-agent.yaml", pmmConfigFile(newCR("1.24.0")))
+	})
+	t.Run("newer than 1.24.0", func(t *testing.T) {
+		assert.Equal(t, "/tmp/pmm-agent.yaml", pmmConfigFile(newCR("1.25.0")))
+	})
+	t.Run("older than 1.24.0 PMM3", func(t *testing.T) {
+		assert.Equal(t, "/usr/local/percona/pmm/config/pmm-agent.yaml", pmmConfigFile(newCR("1.23.0")))
+	})
+}
+
+func TestTmpVolumeRequired(t *testing.T) {
+	newCR := func(crVersion string, pmmEnabled, readOnlyRootFilesystem bool) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{CRVersion: crVersion, PMM: api.PMMSpec{Enabled: pmmEnabled, ContainerSecurityContext: &corev1.SecurityContext{ReadOnlyRootFilesystem: &readOnlyRootFilesystem}}},
+		}
+	}
+	t.Run("PMM enabled, v1.24.0, and readOnlyRootFilesystem is true", func(t *testing.T) {
+		assert.Equal(t, true, TmpVolumeRequired(newCR("1.24.0", true, true)))
+	})
+	t.Run("PMM enabled, v1.24.0, and readOnlyRootFilesystem is false", func(t *testing.T) {
+		assert.Equal(t, false, TmpVolumeRequired(newCR("1.24.0", true, false)))
+	})
+	t.Run("PMM disabled", func(t *testing.T) {
+		assert.Equal(t, false, TmpVolumeRequired(newCR("1.24.0", false, true)))
+	})
+	t.Run("PMM enabled, newer than 1.24.0 and readOnlyRootFilesystem is true", func(t *testing.T) {
+		assert.Equal(t, true, TmpVolumeRequired(newCR("1.25.0", true, true)))
+	})
+	t.Run("PMM enabled, older than 1.24.0", func(t *testing.T) {
+		assert.Equal(t, false, TmpVolumeRequired(newCR("1.23.0", true, true)))
+	})
 }
 
 func defaultPMMCR() *api.PerconaServerMongoDB {
@@ -307,11 +383,11 @@ func buildExpectedPMMContainer() *corev1.Container {
 		portStart    = 30100
 		portEnd      = 30105
 		listenPort   = 7777
-		configFile   = "/usr/local/percona/pmm/config/pmm-agent.yaml"
+		configFile   = "/tmp/pmm-agent.yaml"
 		tempDir      = "/tmp/pmm"
 		prerunScript = `cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem;
 pmm-admin status --wait=10s;
-pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username=$(DB_USER) --password=$(DB_PASSWORD) --cluster=$(CLUSTER_NAME) --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-256 --authentication-database=admin;
+pmm-admin add $(DB_TYPE) $(PMM_ADMIN_CUSTOM_PARAMS) --skip-connection-check --metrics-mode=push  --username="${DB_USER}" --password="${DB_PASSWORD}" --cluster="${CLUSTER_NAME}" --service-name=$(PMM_AGENT_SETUP_NODE_NAME) --host=$(DB_HOST) --port=$(DB_PORT) --tls --tls-skip-verify --tls-certificate-key-file=/tmp/tls.pem --tls-ca-file=/etc/mongodb-ssl/ca.crt --authentication-mechanism=SCRAM-SHA-256 --authentication-database=admin;
 pmm-admin annotate --service-name=$(PMM_AGENT_SETUP_NODE_NAME) 'Service restarted'`
 	)
 
