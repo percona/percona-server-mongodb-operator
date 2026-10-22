@@ -744,6 +744,34 @@ def psmdb_client(test_paths: Paths) -> MongoManager:
     return MongoManager(pod_name)
 
 
+@pytest.fixture(scope="class")
+def psmdb_client_tls(test_paths: Paths) -> MongoManager:
+    """Deploy the TLS client and get the pod name.
+
+    The deployment builds its client PEM from the some-name-ssl secret, so only
+    request this once the cluster owning that secret exists.
+    """
+    kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70-tls.yml")
+    kubectl_bin("rollout", "status", "deployment/psmdb-client", "--timeout=360s")
+
+    result = retry(
+        lambda: kubectl_bin(
+            "get",
+            "pods",
+            "--selector=name=psmdb-client",
+            "-o",
+            "jsonpath={range .items[*]}{.metadata.name}{end}",
+        ),
+        max_attempts=30,
+        delay=2,
+        condition=lambda result: result.strip() != "",
+    )
+
+    pod_name = result.strip()
+    wait_pod(pod_name)
+    return MongoManager(pod_name, tls=True)
+
+
 @pytest.fixture
 def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
     """Tear down a bash-wrapped test after diagnostics are collected."""
