@@ -13,8 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"k8s.io/utils/ptr"
-
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 	tlsutil "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -97,7 +95,7 @@ func TestBuildTargetURI(t *testing.T) {
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					TLS: &psmdbv1.TLSSpec{
 						Mode:                     psmdbv1.TLSModeRequire,
-						AllowInvalidCertificates: ptr.To(false),
+						AllowInvalidCertificates: new(false),
 					},
 					Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
 				},
