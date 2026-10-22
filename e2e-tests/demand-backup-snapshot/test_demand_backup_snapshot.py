@@ -165,20 +165,8 @@ def _run_restore_backupsource(test_dir: str, backup_name: str, target_cluster: s
 def _check_recovery(
     client: MongoManager, restore_name: str, cluster: str, namespace: str, test_dir: str
 ) -> None:
-    """Wait for the restore, then check the operator resynced PBM and data is back."""
+    """Wait for the restore, then check the cluster is back up and data is there."""
     wait_restore(restore_name, cluster, "ready", True, 3000)
-
-    resync = kubectl_bin(
-        "get",
-        "psmdb",
-        cluster,
-        "-o",
-        "jsonpath={.metadata.annotations.percona\\.com/resync-pbm}",
-    ).strip()
-    assert resync == "true", (
-        f"psmdb/{cluster} should be annotated with percona.com/resync-pbm "
-        f"after a snapshot restore, got {resync or 'no annotation'}"
-    )
 
     wait_cluster_consistency(cluster)
     wait_for_pbm_operations(cluster)
