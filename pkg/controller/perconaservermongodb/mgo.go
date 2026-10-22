@@ -290,9 +290,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	rsMembers, liveMembers, err := r.updateConfigMembers(ctx, cli, cr, replset)
+	rsMembers, liveMembers, votesPending, err := r.updateConfigMembers(ctx, cli, cr, replset)
 	if err != nil {
 		return api.AppStateError, nil, errors.Wrap(err, "failed to update config members")
+	}
+
+	if votesPending {
+		log.Info("Replset is not ready, voting changes are pending", "replset", replset.Name)
+		return api.AppStateInit, rsMembers, nil
 	}
 
 	if liveMembers == len(pods.Items) {
@@ -408,7 +413,7 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 	return member
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (map[string]api.ReplsetMemberStatus, int, error) {
+func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (map[string]api.ReplsetMemberStatus, int, bool, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
 	rsMembers := make(map[string]api.ReplsetMemberStatus)
@@ -416,17 +421,17 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
-		return rsMembers, 0, errors.Wrap(err, "get rs pods")
+		return rsMembers, 0, false, errors.Wrap(err, "get rs pods")
 	}
 
 	cnf, err := cli.ReadConfig(ctx)
 	if err != nil {
-		return rsMembers, 0, errors.Wrap(err, "get replset config")
+		return rsMembers, 0, false, errors.Wrap(err, "get replset config")
 	}
 
 	rsStatus, err := cli.RSStatus(ctx)
 	if err != nil {
-		return rsMembers, 0, errors.Wrap(err, "get replset status")
+		return rsMembers, 0, false, errors.Wrap(err, "get replset status")
 	}
 
 	members := mongo.ConfigMembers{}
@@ -438,7 +443,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		member, err := r.getConfigMemberForPod(ctx, cr, rs, key, &pod)
 		if err != nil {
-			return rsMembers, 0, errors.Wrapf(err, "get config member for pod %s", pod.Name)
+			return rsMembers, 0, false, errors.Wrapf(err, "get config member for pod %s", pod.Name)
 		}
 
 		members = append(members, member)
@@ -463,7 +468,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		if member.State == mongo.MemberStatePrimary {
 			log.Info("Stepping down the primary", "member", member.Name)
 			if err := cli.StepDown(ctx, 60, false); err != nil {
-				return rsMembers, 0, errors.Wrap(err, "step down primary")
+				return rsMembers, 0, false, errors.Wrap(err, "step down primary")
 			}
 		}
 
@@ -472,10 +477,10 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		log.Info("Fixing hostname of member", "replset", rs.Name, "id", member.Id, "member", member.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return rsMembers, 0, errors.Wrap(err, "fix member hostname: write mongo config")
+			return rsMembers, 0, false, errors.Wrap(err, "fix member hostname: write mongo config")
 		}
 
-		return rsMembers, 0, nil
+		return rsMembers, 0, false, nil
 	}
 
 	if cnf.Members.FixMemberConfigs(ctx, members) {
@@ -484,7 +489,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		log.Info("Fixing member configurations", "replset", rs.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return rsMembers, 0, errors.Wrap(err, "fix member configurations: write mongo config")
+			return rsMembers, 0, false, errors.Wrap(err, "fix member configurations: write mongo config")
 		}
 	}
 
@@ -497,9 +502,9 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		if err != nil {
 			if strings.Contains(err.Error(), "NodeNotFound") {
 				log.V(1).Info("NodeNotFound error during replset reconfig after removing old members, will retry on next reconcile", "replset", rs.Name)
-				return rsMembers, 0, nil
+				return rsMembers, 0, false, nil
 			}
-			return rsMembers, 0, errors.Wrap(err, "delete: write mongo config")
+			return rsMembers, 0, false, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
@@ -509,7 +514,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		log.Info("Removing arbiter members", "replset", rs.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return rsMembers, 0, errors.Wrap(err, "remove arbiter if needed: write mongo config")
+			return rsMembers, 0, false, errors.Wrap(err, "remove arbiter if needed: write mongo config")
 		}
 	} else if cnf.Members.AddNew(ctx, members) {
 		cnf.Version++
@@ -517,7 +522,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 		log.Info("Adding new nodes", "replset", rs.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return rsMembers, 0, errors.Wrap(err, "add new: write mongo config")
+			return rsMembers, 0, false, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
 
@@ -528,31 +533,34 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
-			return rsMembers, 0, errors.Wrap(err, "update external nodes: write mongo config")
+			return rsMembers, 0, false, errors.Wrap(err, "update external nodes: write mongo config")
 		}
 	}
 
-	currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-	cnf.Members.SetVotes(members, unsafePSA)
-	if !reflect.DeepEqual(currMembers, cnf.Members) {
+	primary := ""
+	if p := rsStatus.Primary(); p != nil {
+		primary = p.Name
+	}
+	votesChanged, votesPending := cnf.Members.UpdateVotes(ctx, members, unsafePSA, primary)
+	if votesChanged {
 		cnf.Version++
 
 		log.Info("Configuring member votes and priorities", "replset", rs.Name)
 
 		err := cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
-			return rsMembers, 0, errors.Wrap(err, "set votes: write mongo config")
+			return rsMembers, 0, false, errors.Wrap(err, "set votes: write mongo config")
 		}
 	}
 
 	rsStatus, err = cli.RSStatus(ctx)
 	if err != nil {
-		return rsMembers, 0, errors.Wrap(err, "unable to get replset members")
+		return rsMembers, 0, false, errors.Wrap(err, "unable to get replset members")
 	}
 
 	liveMembers := countLiveMembers(rsStatus, cnf, rs, rsMembers)
 
-	return rsMembers, liveMembers, nil
+	return rsMembers, liveMembers, votesPending, nil
 }
 
 // countLiveMembers counts the members reported as live (primary, secondary or
