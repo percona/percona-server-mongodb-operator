@@ -160,7 +160,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || cr.Status.WaitingReason != status.WaitingReason {
 			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
@@ -322,6 +322,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	if cjobs {
 		log.Info("Waiting to finish another backup/restore.")
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonConcurrentJob
 		return status, nil
 	}
 
@@ -329,8 +330,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, err
 	} else if blocked {
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonClusterSync
 		return status, nil
 	}
+	status.WaitingReason = ""
 
 	acquired, err := r.tryAcquireLease(ctx, cr, cluster)
 	if err != nil {
@@ -338,6 +341,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 	if !acquired {
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonBackupLease
 		return status, nil
 	}
 
@@ -379,9 +383,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.
 		return false, nil
 	}
 	logf.FromContext(ctx).Info("Waiting for ClusterSync to release the cluster.", "lease", csLeaseName)
-	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
-		"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
-		cluster.Name, csLeaseName)
+	if cr.Status.WaitingReason != psmdbv1.BackupWaitingReasonClusterSync {
+		r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+			"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
+			cluster.Name, csLeaseName)
+	}
 	return true, nil
 }
 

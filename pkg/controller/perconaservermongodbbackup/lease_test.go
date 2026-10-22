@@ -41,10 +41,11 @@ func TestCheckClusterSyncLease(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		state       psmdbv1.BackupState
-		seedLease   bool
-		wantBlocked bool
-		wantEvent   bool
+		state         psmdbv1.BackupState
+		waitingReason psmdbv1.BackupWaitingReason
+		seedLease     bool
+		wantBlocked   bool
+		wantEvent     bool
 	}{
 		"New + clustersync lease active: blocked, event emitted": {
 			state:       psmdbv1.BackupStateNew,
@@ -52,11 +53,18 @@ func TestCheckClusterSyncLease(t *testing.T) {
 			wantBlocked: true,
 			wantEvent:   true,
 		},
-		"Waiting + clustersync lease active: blocked, event emitted": {
-			state:       psmdbv1.BackupStateWaiting,
-			seedLease:   true,
-			wantBlocked: true,
-			wantEvent:   true,
+		"Waiting + clustersync lease active: blocked, no repeated event": {
+			state:         psmdbv1.BackupStateWaiting,
+			waitingReason: psmdbv1.BackupWaitingReasonClusterSync,
+			seedLease:     true,
+			wantBlocked:   true,
+		},
+		"Waiting for another reason + clustersync lease active: blocked, event emitted": {
+			state:         psmdbv1.BackupStateWaiting,
+			waitingReason: psmdbv1.BackupWaitingReasonConcurrentJob,
+			seedLease:     true,
+			wantBlocked:   true,
+			wantEvent:     true,
 		},
 		"Running + clustersync lease active: NOT blocked (in-flight backups keep going)": {
 			state:       psmdbv1.BackupStateRunning,
@@ -82,7 +90,7 @@ func TestCheckClusterSyncLease(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := &psmdbv1.PerconaServerMongoDBBackup{
 				Name: "bcp", Namespace: ns,
-				Status: psmdbv1.PerconaServerMongoDBBackupStatus{State: tc.state},
+				Status: psmdbv1.PerconaServerMongoDBBackupStatus{State: tc.state, WaitingReason: tc.waitingReason},
 			}
 			cluster := &psmdbv1.PerconaServerMongoDB{
 				Name: clusterName, Namespace: ns,
