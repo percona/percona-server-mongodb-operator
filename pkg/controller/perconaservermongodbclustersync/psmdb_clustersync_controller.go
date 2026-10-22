@@ -2,7 +2,7 @@ package perconaservermongodbclustersync
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	stderrors "errors"
 	"fmt"
 	"slices"
@@ -371,7 +371,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) targetTLS(ctx context.Context
 
 	return clustersync.TLS{
 		SecretName: nn.Name,
-		Hash:       fmt.Sprintf("%x", md5.Sum([]byte(fmt.Sprintln(secret.Data)))),
+		Hash:       fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintln(secret.Data)))),
 	}, nil
 }
 
