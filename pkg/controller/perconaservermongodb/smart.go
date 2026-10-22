@@ -139,7 +139,15 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
-	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok && rsStatus.Members != nil {
+	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
+		// Members are reported only after the replset is reconciled (e.g. added
+		// as a shard). Until then, pods outside the replset have no users and
+		// can't be checked for primary.
+		if len(rsStatus.Members) == 0 {
+			log.Info("can't start/continue 'SmartUpdate': waiting for replset members")
+			return nil
+		}
+
 		for _, pod := range list.Items {
 			if _, ok := rsStatus.Members[pod.Name]; !ok {
 				log.Info("pod is not a member of replset, updating it", "pod", pod.Name, "members", rsStatus.Members)
