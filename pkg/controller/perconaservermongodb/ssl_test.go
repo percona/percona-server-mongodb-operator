@@ -281,7 +281,7 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 	}
 }
 
-func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
+func TestSSLAnnotation(t *testing.T) {
 	sts := &appsv1.StatefulSet{
 		Name:      "test-cluster-rs0",
 		Namespace: "test-ns",
@@ -294,6 +294,7 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 					Annotations: map[string]string{
 						naming.AnnotationSSLHash:         "existing-hash",
 						naming.AnnotationSSLInternalHash: "existing-internal-hash",
+						naming.AnnotationPBMTLSHash:      "existing-pbm-hash",
 					},
 				},
 			},
@@ -317,11 +318,22 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 		},
 	}
 
+	pbmSecret := &corev1.Secret{
+		Name:      "custom-pbm-tls",
+		Namespace: "test-ns",
+		Data:      map[string][]byte{"tls.crt": []byte("pbm-cert")},
+	}
+
 	tests := []struct {
 		name                 string
 		objects              []client.Object
 		checkAnnotation      func(t *testing.T, ann map[string]string)
 		wantSecretsReadyCond bool
+		backupsEnabled       bool
+		tlsDisabled          bool
+		policy               api.CertManagementPolicy
+		wantTLSNotReady      bool
+		wantMissingSecret    string
 	}{
 		{
 			name:    "secrets missing — preserves existing sts annotations",
@@ -329,6 +341,7 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 			checkAnnotation: func(t *testing.T, ann map[string]string) {
 				assert.Equal(t, "existing-hash", ann[naming.AnnotationSSLHash])
 				assert.Equal(t, "existing-internal-hash", ann[naming.AnnotationSSLInternalHash])
+				assert.Equal(t, "existing-pbm-hash", ann[naming.AnnotationPBMTLSHash])
 			},
 			wantSecretsReadyCond: false,
 		},
@@ -341,20 +354,81 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 			},
 			wantSecretsReadyCond: true,
 		},
+		{
+			name:              "missing PBM secret preserves existing annotations",
+			objects:           []client.Object{sts, sslSecret, sslInternalSecret},
+			backupsEnabled:    true,
+			wantMissingSecret: pbmSecret.Name,
+			checkAnnotation: func(t *testing.T, ann map[string]string) {
+				assert.Equal(t, sts.Spec.Template.Annotations, ann)
+			},
+		},
+		{
+			name:                 "existing PBM secret computes fresh hashes",
+			objects:              []client.Object{sslSecret, sslInternalSecret, pbmSecret},
+			backupsEnabled:       true,
+			wantSecretsReadyCond: true,
+			checkAnnotation: func(t *testing.T, ann map[string]string) {
+				assert.NotEmpty(t, ann[naming.AnnotationSSLHash])
+				assert.NotEmpty(t, ann[naming.AnnotationSSLInternalHash])
+				assert.NotEmpty(t, ann[naming.AnnotationPBMTLSHash])
+				assert.NotEqual(t, "existing-pbm-hash", ann[naming.AnnotationPBMTLSHash])
+			},
+		},
+		{
+			name:                 "disabled TLS does not require PBM secret",
+			objects:              []client.Object{sslSecret, sslInternalSecret},
+			backupsEnabled:       true,
+			tlsDisabled:          true,
+			wantSecretsReadyCond: true,
+			checkAnnotation: func(t *testing.T, ann map[string]string) {
+				assert.NotContains(t, ann, naming.AnnotationPBMTLSHash)
+			},
+		},
+		{
+			name:            "auto waits for missing PBM secret",
+			objects:         []client.Object{sslSecret, sslInternalSecret},
+			backupsEnabled:  true,
+			policy:          api.CertManagementAuto,
+			wantTLSNotReady: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cr := newTestCR()
+			cr.Spec.Backup.Enabled = tt.backupsEnabled
+			cr.Spec.Secrets.SSLPBM = pbmSecret.Name
 			cr.Spec.TLS = &api.TLSSpec{
+				Mode:                 api.TLSModeRequire,
 				CertManagementPolicy: api.CertManagementUserProvidedOnly,
+			}
+
+			if tt.policy != "" {
+				cr.Spec.TLS.CertManagementPolicy = tt.policy
+			}
+			if tt.tlsDisabled {
+				cr.Spec.TLS.Mode = api.TLSModeDisabled
+				cr.Spec.Unsafe.TLS = true
 			}
 
 			objs := append([]client.Object{cr}, tt.objects...)
 			r := buildFakeClient(objs...)
 			annotation, err := r.sslAnnotation(t.Context(), cr)
+			if tt.wantTLSNotReady {
+				require.ErrorIs(t, err, errTLSNotReady)
+				return
+			}
 			require.NoError(t, err)
 
+			if tt.wantMissingSecret != "" {
+				require.Len(t, cr.Status.Conditions, 1)
+				condition := cr.Status.Conditions[0]
+				assert.Equal(t, api.ConditionTypeTLSSecretsReady, condition.Type)
+				assert.Equal(t, api.ConditionFalse, condition.Status)
+				assert.Equal(t, "TLSSecretNotFound", condition.Reason)
+				assert.Contains(t, condition.Message, tt.wantMissingSecret)
+			}
 			tt.checkAnnotation(t, annotation)
 			assert.Equal(t, tt.wantSecretsReadyCond, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 		})

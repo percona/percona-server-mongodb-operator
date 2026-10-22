@@ -1774,6 +1774,16 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		name := tls.CertificatePBMClient(cr).SecretName()
 		secret, err := getSecret(name)
 		if k8serrors.IsNotFound(err) {
+			if isUserProvidedOnly {
+				logf.FromContext(ctx).Error(nil, "TLS secret not found, skipping annotation update since certManagementPolicy is userProvidedOnly", "secret", name)
+				cr.Status.AddCondition(api.ClusterCondition{
+					Status:  api.ConditionFalse,
+					Type:    api.ConditionTypeTLSSecretsReady,
+					Reason:  "TLSSecretNotFound",
+					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", name),
+				})
+				return r.currentSSLAnnotation(ctx, cr)
+			}
 			return nil, errTLSNotReady
 		}
 		if err != nil {
