@@ -32,6 +32,8 @@ func TestContainers(t *testing.T) {
 		Schedule: "0 0 * * *",
 	}
 	tests := map[string]struct {
+		crVersion              string
+		tls                    *api.TLSSpec
 		logCollector           *api.LogCollectorSpec
 		logRotate              *api.LogRotateSpec
 		secrets                *corev1.Secret
@@ -54,7 +56,48 @@ func TestContainers(t *testing.T) {
 				ImagePullPolicy: corev1.PullIfNotPresent,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("", nil, nil, nil),
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(true), false),
+		},
+		"logcollector enabled with invalid certificates allowed": {
+			tls: &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(true)},
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(true), true),
+		},
+		"logcollector enabled with invalid certificates disallowed": {
+			tls: &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(false)},
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(true), false),
+		},
+		"logcollector enabled with TLS disabled": {
+			tls: &api.TLSSpec{Mode: api.TLSModeDisabled, AllowInvalidCertificates: new(true)},
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("", nil, nil, nil, new(false), false),
+		},
+		"logcollector enabled on 1.23.0": {
+			crVersion: "1.23.0",
+			tls:       &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(true)},
+			logCollector: &api.LogCollectorSpec{
+				Enabled:         true,
+				Image:           "log-test-image",
+				ImagePullPolicy: corev1.PullIfNotPresent,
+			},
+			expectedContainerNames: []string{"logs", "logrotate"},
+			expectedContainers:     expectedContainers("", nil, nil, nil, nil, false),
 		},
 		"logcollector enabled with configuration": {
 			logCollector: &api.LogCollectorSpec{
@@ -64,7 +107,7 @@ func TestContainers(t *testing.T) {
 				Configuration:   "my-config",
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("my-config", nil, nil, nil),
+			expectedContainers:     expectedContainers("my-config", nil, nil, nil, new(true), false),
 		},
 		"logcollector enabled with env variable": {
 			logCollector: &api.LogCollectorSpec{
@@ -76,7 +119,7 @@ func TestContainers(t *testing.T) {
 				EnvFrom:         testEnvFrom,
 			},
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("my-config", testEnvVar, testEnvFrom, nil),
+			expectedContainers:     expectedContainers("my-config", testEnvVar, testEnvFrom, nil, new(true), false),
 		},
 		"logcollector enabled with logrotate": {
 			logCollector: &api.LogCollectorSpec{
@@ -86,7 +129,7 @@ func TestContainers(t *testing.T) {
 			},
 			logRotate:              testLogRotate,
 			expectedContainerNames: []string{"logs", "logrotate"},
-			expectedContainers:     expectedContainers("", nil, nil, testLogRotate),
+			expectedContainers:     expectedContainers("", nil, nil, testLogRotate, new(true), false),
 		},
 	}
 
@@ -102,10 +145,15 @@ func TestContainers(t *testing.T) {
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion:    version.Version(),
 					LogCollector: logColl,
+					TLS:          tt.tls,
 					Secrets: &api.SecretsSpec{
 						Users: "users-secret",
 					},
 				},
+			}
+
+			if tt.crVersion != "" {
+				cr.Spec.CRVersion = tt.crVersion
 			}
 
 			containers, err := Containers(cr, 27017, config.MongodLogVolume())
@@ -233,6 +281,8 @@ func expectedContainers(
 	envVars []corev1.EnvVar,
 	envFrom []corev1.EnvFromSource,
 	logrotateConfig *api.LogRotateSpec,
+	tlsEnabled *bool,
+	allowInvalidCertificates bool,
 ) []corev1.Container {
 	envs := []corev1.EnvVar{
 		{Name: "LOG_DATA_DIR", Value: config.MongodContainerDataLogsDir},
@@ -311,6 +361,21 @@ func expectedContainers(
 			{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 			{Name: config.BinVolumeName, MountPath: config.BinMountPath},
 		},
+	}
+
+	if tlsEnabled != nil {
+		tlsValue := "false"
+		if *tlsEnabled {
+			tlsValue = "true"
+			logRotateC.VolumeMounts = append(logRotateC.VolumeMounts, corev1.VolumeMount{
+				Name: "ssl", MountPath: config.SSLDir, ReadOnly: true,
+			})
+		}
+		logRotateC.Env = append(logRotateC.Env, corev1.EnvVar{Name: "MONGODB_TLS_ENABLED", Value: tlsValue})
+	}
+
+	if allowInvalidCertificates {
+		logRotateC.Env = append(logRotateC.Env, corev1.EnvVar{Name: "MONGODB_TLS_INSECURE", Value: "true"})
 	}
 
 	if logrotateConfig != nil {

@@ -78,6 +78,3 @@ spec:
     size: 3
   secrets:
     users: some-users
-  logcollector:
-    enabled: true
-    image: docker.io/perconalab/fluentbit:main-logcollector
