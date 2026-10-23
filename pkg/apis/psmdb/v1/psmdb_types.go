@@ -1074,6 +1074,7 @@ type SecretsSpec struct {
 	Users       string `json:"users,omitempty"`
 	SSL         string `json:"ssl,omitempty"`
 	SSLInternal string `json:"sslInternal,omitempty"`
+	SSLPBM      string `json:"sslPBM,omitempty"`
 
 	// Use (*SecretsSpec) GetInternalKey() to get InternalKey
 	InternalKey string `json:"keyFile,omitempty"`

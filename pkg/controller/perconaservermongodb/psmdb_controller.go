@@ -1713,6 +1713,9 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationSSLInternalHash]; ok {
 			annotation[naming.AnnotationSSLInternalHash] = v
 		}
+		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationPBMTLSHash]; ok {
+			annotation[naming.AnnotationPBMTLSHash] = v
+		}
 	}
 
 	return annotation, nil
@@ -1771,6 +1774,27 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
 	annotation[naming.AnnotationSSLHash] = getHash(sslSecret)
+	if cr.CompareVersion("1.24.0") >= 0 && cr.TLSEnabled() && cr.Spec.Backup.Enabled {
+		name := tls.CertificatePBMClient(cr).SecretName()
+		secret, err := getSecret(name)
+		if k8serrors.IsNotFound(err) {
+			if isUserProvidedOnly {
+				logf.FromContext(ctx).Error(nil, "TLS secret not found, skipping annotation update since certManagementPolicy is userProvidedOnly", "secret", name)
+				cr.Status.AddCondition(api.ClusterCondition{
+					Status:  api.ConditionFalse,
+					Type:    api.ConditionTypeTLSSecretsReady,
+					Reason:  "TLSSecretNotFound",
+					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", name),
+				})
+				return r.currentSSLAnnotation(ctx, cr)
+			}
+			return nil, errTLSNotReady
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "get secret/%s", name)
+		}
+		annotation[naming.AnnotationPBMTLSHash] = getHash(secret)
+	}
 
 	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
 	if err != nil {
