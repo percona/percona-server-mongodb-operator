@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,83 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 )
+
+func TestMongoExpression(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		function string
+		argument any
+		expected string
+	}{
+		{
+			name:     "replica set configuration",
+			function: "rs.initiate",
+			argument: map[string]any{
+				"_id": "rs0",
+				"members": []map[string]any{
+					{"_id": 0, "host": "mongo-0:27017", "arbiterOnly": false},
+				},
+				"version": 1,
+			},
+			expected: `rs.initiate({"_id":"rs0","members":[{"_id":0,"arbiterOnly":false,"host":"mongo-0:27017"}],"version":1})`,
+		},
+		{
+			name:     "user credentials with special characters",
+			function: `db.getSiblingDB("admin").createUser`,
+			argument: map[string]any{
+				"user":  "user'Admin",
+				"pwd":   "quote\"back\\slash\n\t$(false);`false`$HOME",
+				"roles": []string{"userAdminAnyDatabase"},
+			},
+			expected: `db.getSiblingDB("admin").createUser({"pwd":"quote\"back\\slash\n\t$(false);` + "`false`" + `$HOME","roles":["userAdminAnyDatabase"],"user":"user'Admin"})`,
+		},
+		{
+			name:     "string argument with special characters",
+			function: "print",
+			argument: `<>&"'\`,
+			expected: `print("\u003c\u003e\u0026\"'\\")`,
+		},
+		{
+			name:     "nil argument",
+			function: "print",
+			expected: "print(null)",
+		},
+		{
+			name:     "empty document",
+			function: "rs.initiate",
+			argument: map[string]any{},
+			expected: "rs.initiate({})",
+		},
+		{
+			name:     "empty array",
+			function: "print",
+			argument: []string{},
+			expected: "print([])",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			expression, err := mongoExpression(tt.function, tt.argument)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, expression)
+		})
+	}
+
+	t.Run("unsupported argument", func(t *testing.T) {
+		t.Parallel()
+
+		expression, err := mongoExpression("rs.initiate", map[string]any{"unsupported": make(chan int)})
+		require.ErrorContains(t, err, "marshal mongo expression argument")
+		assert.Empty(t, expression)
+		var unsupportedTypeErr *json.UnsupportedTypeError
+		assert.ErrorAs(t, err, &unsupportedTypeErr)
+	})
+}
 
 func TestCompareTags(t *testing.T) {
 	t.Parallel()

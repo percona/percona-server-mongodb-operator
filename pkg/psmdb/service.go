@@ -26,11 +26,10 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 	ls := naming.ServiceLabels(cr, replset)
 
 	svc := &corev1.Service{
-		APIVersion:  "v1",
-		Kind:        "Service",
-		Name:        naming.ServiceName(cr, replset),
-		Namespace:   cr.Namespace,
-		Annotations: replset.Expose.ServiceAnnotations,
+		APIVersion: "v1",
+		Kind:       "Service",
+		Name:       naming.ServiceName(cr, replset),
+		Namespace:  cr.Namespace,
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
