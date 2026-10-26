@@ -514,6 +514,7 @@ func TestBuildMeta(t *testing.T) {
 				ClusterSyncEnabled:   true,
 				OCIBackupEnabled:     true,
 				AlibabaBackupEnabled: true,
+				S3BackupEnabled:      false,
 				ArbiterEnabled:       true,
 				NonVotingEnabled:     true,
 				TLSMode:              string(api.TLSModeAllow),
@@ -527,6 +528,139 @@ func TestBuildMeta(t *testing.T) {
 					},
 				},
 			},
+		},
+		"CR with all backup storage types and scheduled tasks": {
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:8.0.4-1",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+					Backup: api.BackupSpec{
+						Enabled: true,
+						Storages: map[string]api.BackupStorageSpec{
+							"s3-stg": {
+								Type: api.BackupStorageS3,
+								Main: true,
+								S3: api.BackupStorageS3Spec{
+									Bucket:      "test",
+									EndpointURL: "https://s3.amazonaws.com",
+								},
+							},
+							"azure-stg": {
+								Type: api.BackupStorageAzure,
+							},
+							"gcs-stg": {
+								Type: api.BackupStorageGCS,
+							},
+							"fs-stg": {
+								Type: api.BackupStorageFilesystem,
+							},
+						},
+						Tasks: []api.BackupTaskSpec{
+							{
+								Name:    "logical-default-type",
+								Enabled: true,
+							},
+							{
+								Name:    "logical",
+								Type:    defs.LogicalBackup,
+								Enabled: true,
+							},
+							{
+								Name:    "incremental",
+								Type:    defs.IncrementalBackup,
+								Enabled: true,
+							},
+							{
+								Name:                "snapshot",
+								Type:                defs.ExternalBackup,
+								VolumeSnapshotClass: ptr.To("csi-snapclass"),
+								Enabled:             true,
+							},
+							{
+								Name:    "disabled-physical",
+								Type:    defs.PhysicalBackup,
+								Enabled: false,
+							},
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			want: Meta{
+				Apply:                      "disabled",
+				Version:                    version.Version(),
+				Platform:                   "kubernetes",
+				ClusterSize:                3,
+				BackupsEnabled:             true,
+				EncryptionEnabled:          true,
+				TLSMode:                    string(api.TLSModePrefer),
+				S3BackupEnabled:            true,
+				AzureBackupEnabled:         true,
+				GCSBackupEnabled:           true,
+				FilesystemBackupEnabled:    true,
+				LogicalBackupScheduled:     true,
+				IncrementalBackupScheduled: true,
+				SnapshotBackupScheduled:    true,
+			},
+			namespace: "test-namespace",
+		},
+		"CR with minio storage and external task without volume snapshot class": {
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:8.0.4-1",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+					Backup: api.BackupSpec{
+						Enabled: true,
+						Storages: map[string]api.BackupStorageSpec{
+							"minio-stg": {
+								Type: api.BackupStorageMinio,
+								Main: true,
+							},
+						},
+						Tasks: []api.BackupTaskSpec{
+							{
+								Name:    "external",
+								Type:    defs.ExternalBackup,
+								Enabled: true,
+							},
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			want: Meta{
+				Apply:             "disabled",
+				Version:           version.Version(),
+				Platform:          "kubernetes",
+				ClusterSize:       3,
+				BackupsEnabled:    true,
+				EncryptionEnabled: true,
+				TLSMode:           string(api.TLSModePrefer),
+				S3BackupEnabled:   true,
+			},
+			namespace: "test-namespace",
 		},
 		"CR with cluster sync targeting another cluster": {
 			cr: api.PerconaServerMongoDB{

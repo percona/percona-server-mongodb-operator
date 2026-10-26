@@ -6,6 +6,7 @@ import (
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -79,10 +80,18 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 			vm.OCIBackupEnabled = true
 		case api.BackupStorageOSS:
 			vm.AlibabaBackupEnabled = true
-		case api.BackupStorageS3:
+		case api.BackupStorageS3, api.BackupStorageMinio:
 			if strings.Contains(stg.S3.EndpointURL, naming.OSSCloudEndpointURL) {
 				vm.AlibabaBackupEnabled = true
+			} else {
+				vm.S3BackupEnabled = true
 			}
+		case api.BackupStorageAzure:
+			vm.AzureBackupEnabled = true
+		case api.BackupStorageGCS:
+			vm.GCSBackupEnabled = true
+		case api.BackupStorageFilesystem:
+			vm.FilesystemBackupEnabled = true
 		}
 	}
 
@@ -106,9 +115,20 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 	}
 
 	for _, task := range cr.Spec.Backup.Tasks {
-		if task.Type == defs.PhysicalBackup && task.Enabled {
+		if !task.Enabled {
+			continue
+		}
+		switch task.Type {
+		case defs.PhysicalBackup:
 			vm.PhysicalBackupScheduled = true
-			break
+		case defs.IncrementalBackup:
+			vm.IncrementalBackupScheduled = true
+		case defs.ExternalBackup:
+			if ptr.Deref(task.VolumeSnapshotClass, "") != "" {
+				vm.SnapshotBackupScheduled = true
+			}
+		case defs.LogicalBackup, "":
+			vm.LogicalBackupScheduled = true
 		}
 	}
 

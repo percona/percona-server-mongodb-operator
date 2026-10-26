@@ -69,6 +69,9 @@ type VersionServiceOperatorParams struct {
 	// ArbiterEnabled.
 	ArbiterEnabled *bool
 
+	// AzureBackupEnabled.
+	AzureBackupEnabled *bool
+
 	// BackupVersion.
 	BackupVersion *string
 
@@ -103,6 +106,12 @@ type VersionServiceOperatorParams struct {
 	// Extensions.
 	Extensions *string
 
+	// FilesystemBackupEnabled.
+	FilesystemBackupEnabled *bool
+
+	// GcsBackupEnabled.
+	GcsBackupEnabled *bool
+
 	// HaproxyVersion.
 	HaproxyVersion *string
 
@@ -115,11 +124,17 @@ type VersionServiceOperatorParams struct {
 	// HelmDeployOperator.
 	HelmDeployOperator *bool
 
+	// IncrementalBackupScheduled.
+	IncrementalBackupScheduled *bool
+
 	// KubeVersion.
 	KubeVersion *string
 
 	// LogCollectorVersion.
 	LogCollectorVersion *string
+
+	// LogicalBackupScheduled.
+	LogicalBackupScheduled *bool
 
 	// McsEnabled.
 	McsEnabled *bool
@@ -170,11 +185,19 @@ type VersionServiceOperatorParams struct {
 	// RoleManagementEnabled.
 	RoleManagementEnabled *bool
 
+	// S3BackupEnabled.
+	S3BackupEnabled *bool
+
 	// ShardingEnabled.
 	ShardingEnabled *bool
 
 	// SidecarsUsed.
 	SidecarsUsed *bool
+
+	// SnapshotBackupScheduled.
+	//
+	// Scheduled volume-snapshot backups: an external backup task with a volumeSnapshotClass set.
+	SnapshotBackupScheduled *bool
 
 	// UserManagementEnabled.
 	UserManagementEnabled *bool
@@ -262,6 +285,17 @@ func (o *VersionServiceOperatorParams) WithArbiterEnabled(arbiterEnabled *bool) 
 // SetArbiterEnabled adds the arbiterEnabled to the version service operator params.
 func (o *VersionServiceOperatorParams) SetArbiterEnabled(arbiterEnabled *bool) {
 	o.ArbiterEnabled = arbiterEnabled
+}
+
+// WithAzureBackupEnabled adds the azureBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithAzureBackupEnabled(azureBackupEnabled *bool) *VersionServiceOperatorParams {
+	o.SetAzureBackupEnabled(azureBackupEnabled)
+	return o
+}
+
+// SetAzureBackupEnabled adds the azureBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetAzureBackupEnabled(azureBackupEnabled *bool) {
+	o.AzureBackupEnabled = azureBackupEnabled
 }
 
 // WithBackupVersion adds the backupVersion to the version service operator params.
@@ -374,6 +408,28 @@ func (o *VersionServiceOperatorParams) SetExtensions(extensions *string) {
 	o.Extensions = extensions
 }
 
+// WithFilesystemBackupEnabled adds the filesystemBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithFilesystemBackupEnabled(filesystemBackupEnabled *bool) *VersionServiceOperatorParams {
+	o.SetFilesystemBackupEnabled(filesystemBackupEnabled)
+	return o
+}
+
+// SetFilesystemBackupEnabled adds the filesystemBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetFilesystemBackupEnabled(filesystemBackupEnabled *bool) {
+	o.FilesystemBackupEnabled = filesystemBackupEnabled
+}
+
+// WithGcsBackupEnabled adds the gcsBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithGcsBackupEnabled(gcsBackupEnabled *bool) *VersionServiceOperatorParams {
+	o.SetGcsBackupEnabled(gcsBackupEnabled)
+	return o
+}
+
+// SetGcsBackupEnabled adds the gcsBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetGcsBackupEnabled(gcsBackupEnabled *bool) {
+	o.GcsBackupEnabled = gcsBackupEnabled
+}
+
 // WithHaproxyVersion adds the haproxyVersion to the version service operator params.
 func (o *VersionServiceOperatorParams) WithHaproxyVersion(haproxyVersion *string) *VersionServiceOperatorParams {
 	o.SetHaproxyVersion(haproxyVersion)
@@ -418,6 +474,17 @@ func (o *VersionServiceOperatorParams) SetHelmDeployOperator(helmDeployOperator 
 	o.HelmDeployOperator = helmDeployOperator
 }
 
+// WithIncrementalBackupScheduled adds the incrementalBackupScheduled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithIncrementalBackupScheduled(incrementalBackupScheduled *bool) *VersionServiceOperatorParams {
+	o.SetIncrementalBackupScheduled(incrementalBackupScheduled)
+	return o
+}
+
+// SetIncrementalBackupScheduled adds the incrementalBackupScheduled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetIncrementalBackupScheduled(incrementalBackupScheduled *bool) {
+	o.IncrementalBackupScheduled = incrementalBackupScheduled
+}
+
 // WithKubeVersion adds the kubeVersion to the version service operator params.
 func (o *VersionServiceOperatorParams) WithKubeVersion(kubeVersion *string) *VersionServiceOperatorParams {
 	o.SetKubeVersion(kubeVersion)
@@ -438,6 +505,17 @@ func (o *VersionServiceOperatorParams) WithLogCollectorVersion(logCollectorVersi
 // SetLogCollectorVersion adds the logCollectorVersion to the version service operator params.
 func (o *VersionServiceOperatorParams) SetLogCollectorVersion(logCollectorVersion *string) {
 	o.LogCollectorVersion = logCollectorVersion
+}
+
+// WithLogicalBackupScheduled adds the logicalBackupScheduled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithLogicalBackupScheduled(logicalBackupScheduled *bool) *VersionServiceOperatorParams {
+	o.SetLogicalBackupScheduled(logicalBackupScheduled)
+	return o
+}
+
+// SetLogicalBackupScheduled adds the logicalBackupScheduled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetLogicalBackupScheduled(logicalBackupScheduled *bool) {
+	o.LogicalBackupScheduled = logicalBackupScheduled
 }
 
 // WithMcsEnabled adds the mcsEnabled to the version service operator params.
@@ -605,6 +683,17 @@ func (o *VersionServiceOperatorParams) SetRoleManagementEnabled(roleManagementEn
 	o.RoleManagementEnabled = roleManagementEnabled
 }
 
+// WithS3BackupEnabled adds the s3BackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithS3BackupEnabled(s3BackupEnabled *bool) *VersionServiceOperatorParams {
+	o.SetS3BackupEnabled(s3BackupEnabled)
+	return o
+}
+
+// SetS3BackupEnabled adds the s3BackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetS3BackupEnabled(s3BackupEnabled *bool) {
+	o.S3BackupEnabled = s3BackupEnabled
+}
+
 // WithShardingEnabled adds the shardingEnabled to the version service operator params.
 func (o *VersionServiceOperatorParams) WithShardingEnabled(shardingEnabled *bool) *VersionServiceOperatorParams {
 	o.SetShardingEnabled(shardingEnabled)
@@ -625,6 +714,17 @@ func (o *VersionServiceOperatorParams) WithSidecarsUsed(sidecarsUsed *bool) *Ver
 // SetSidecarsUsed adds the sidecarsUsed to the version service operator params.
 func (o *VersionServiceOperatorParams) SetSidecarsUsed(sidecarsUsed *bool) {
 	o.SidecarsUsed = sidecarsUsed
+}
+
+// WithSnapshotBackupScheduled adds the snapshotBackupScheduled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithSnapshotBackupScheduled(snapshotBackupScheduled *bool) *VersionServiceOperatorParams {
+	o.SetSnapshotBackupScheduled(snapshotBackupScheduled)
+	return o
+}
+
+// SetSnapshotBackupScheduled adds the snapshotBackupScheduled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetSnapshotBackupScheduled(snapshotBackupScheduled *bool) {
+	o.SnapshotBackupScheduled = snapshotBackupScheduled
 }
 
 // WithUserManagementEnabled adds the userManagementEnabled to the version service operator params.
@@ -696,6 +796,23 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		if qArbiterEnabled != "" {
 
 			if err := r.SetQueryParam("arbiterEnabled", qArbiterEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.AzureBackupEnabled != nil {
+
+		// query param azureBackupEnabled
+		var qrAzureBackupEnabled bool
+
+		if o.AzureBackupEnabled != nil {
+			qrAzureBackupEnabled = *o.AzureBackupEnabled
+		}
+		qAzureBackupEnabled := conv.FormatBool(qrAzureBackupEnabled)
+		if qAzureBackupEnabled != "" {
+
+			if err := r.SetQueryParam("azureBackupEnabled", qAzureBackupEnabled); err != nil {
 				return err
 			}
 		}
@@ -871,6 +988,40 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		}
 	}
 
+	if o.FilesystemBackupEnabled != nil {
+
+		// query param filesystemBackupEnabled
+		var qrFilesystemBackupEnabled bool
+
+		if o.FilesystemBackupEnabled != nil {
+			qrFilesystemBackupEnabled = *o.FilesystemBackupEnabled
+		}
+		qFilesystemBackupEnabled := conv.FormatBool(qrFilesystemBackupEnabled)
+		if qFilesystemBackupEnabled != "" {
+
+			if err := r.SetQueryParam("filesystemBackupEnabled", qFilesystemBackupEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.GcsBackupEnabled != nil {
+
+		// query param gcsBackupEnabled
+		var qrGcsBackupEnabled bool
+
+		if o.GcsBackupEnabled != nil {
+			qrGcsBackupEnabled = *o.GcsBackupEnabled
+		}
+		qGcsBackupEnabled := conv.FormatBool(qrGcsBackupEnabled)
+		if qGcsBackupEnabled != "" {
+
+			if err := r.SetQueryParam("gcsBackupEnabled", qGcsBackupEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
 	if o.HaproxyVersion != nil {
 
 		// query param haproxyVersion
@@ -939,6 +1090,23 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		}
 	}
 
+	if o.IncrementalBackupScheduled != nil {
+
+		// query param incrementalBackupScheduled
+		var qrIncrementalBackupScheduled bool
+
+		if o.IncrementalBackupScheduled != nil {
+			qrIncrementalBackupScheduled = *o.IncrementalBackupScheduled
+		}
+		qIncrementalBackupScheduled := conv.FormatBool(qrIncrementalBackupScheduled)
+		if qIncrementalBackupScheduled != "" {
+
+			if err := r.SetQueryParam("incrementalBackupScheduled", qIncrementalBackupScheduled); err != nil {
+				return err
+			}
+		}
+	}
+
 	if o.KubeVersion != nil {
 
 		// query param kubeVersion
@@ -968,6 +1136,23 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		if qLogCollectorVersion != "" {
 
 			if err := r.SetQueryParam("logCollectorVersion", qLogCollectorVersion); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.LogicalBackupScheduled != nil {
+
+		// query param logicalBackupScheduled
+		var qrLogicalBackupScheduled bool
+
+		if o.LogicalBackupScheduled != nil {
+			qrLogicalBackupScheduled = *o.LogicalBackupScheduled
+		}
+		qLogicalBackupScheduled := conv.FormatBool(qrLogicalBackupScheduled)
+		if qLogicalBackupScheduled != "" {
+
+			if err := r.SetQueryParam("logicalBackupScheduled", qLogicalBackupScheduled); err != nil {
 				return err
 			}
 		}
@@ -1204,6 +1389,23 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		}
 	}
 
+	if o.S3BackupEnabled != nil {
+
+		// query param s3BackupEnabled
+		var qrS3BackupEnabled bool
+
+		if o.S3BackupEnabled != nil {
+			qrS3BackupEnabled = *o.S3BackupEnabled
+		}
+		qS3BackupEnabled := conv.FormatBool(qrS3BackupEnabled)
+		if qS3BackupEnabled != "" {
+
+			if err := r.SetQueryParam("s3BackupEnabled", qS3BackupEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
 	if o.ShardingEnabled != nil {
 
 		// query param shardingEnabled
@@ -1233,6 +1435,23 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		if qSidecarsUsed != "" {
 
 			if err := r.SetQueryParam("sidecarsUsed", qSidecarsUsed); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.SnapshotBackupScheduled != nil {
+
+		// query param snapshotBackupScheduled
+		var qrSnapshotBackupScheduled bool
+
+		if o.SnapshotBackupScheduled != nil {
+			qrSnapshotBackupScheduled = *o.SnapshotBackupScheduled
+		}
+		qSnapshotBackupScheduled := conv.FormatBool(qrSnapshotBackupScheduled)
+		if qSnapshotBackupScheduled != "" {
+
+			if err := r.SetQueryParam("snapshotBackupScheduled", qSnapshotBackupScheduled); err != nil {
 				return err
 			}
 		}
