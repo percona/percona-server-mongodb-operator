@@ -696,3 +696,47 @@ func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
 		})
 	}
 }
+
+func TestSSLAnnotation_RestartsOnlyOnCAChange(t *testing.T) {
+	secrets := func(ca, leaf string) []client.Object {
+		data := func(prefix string) map[string][]byte {
+			return map[string][]byte{
+				"ca.crt":  []byte(ca),
+				"tls.crt": []byte(prefix + leaf),
+				"tls.key": []byte(prefix + leaf + "-key"),
+			}
+		}
+		return []client.Object{
+			&corev1.Secret{Name: "test-cluster-ssl", Namespace: "test-ns", Data: data("")},
+			&corev1.Secret{Name: "test-cluster-ssl-internal", Namespace: "test-ns", Data: data("internal-")},
+		}
+	}
+	annotation := func(t *testing.T, mongoVersion string, objs []client.Object) map[string]string {
+		cr := newTestCR()
+		cr.Status.MongoVersion = mongoVersion
+		r := buildFakeClient(append([]client.Object{cr}, objs...)...)
+		ann, err := r.sslAnnotation(t.Context(), cr)
+		require.NoError(t, err)
+		return ann
+	}
+
+	tests := []struct {
+		name         string
+		mongoVersion string
+		next         []client.Object
+		wantRestart  bool
+	}{
+		{name: "leaf re-issued with new SANs", mongoVersion: "8.0.32-14", next: secrets("ca-1", "leaf-2"), wantRestart: false},
+		{name: "CA changed", mongoVersion: "8.0.32-14", next: secrets("ca-2", "leaf-2"), wantRestart: true},
+		{name: "leaf re-issued, MongoDB without rotateCertificates", mongoVersion: "4.4.29-28", next: secrets("ca-1", "leaf-2"), wantRestart: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			before := annotation(t, tt.mongoVersion, secrets("ca-1", "leaf-1"))
+			after := annotation(t, tt.mongoVersion, tt.next)
+			for _, key := range []string{naming.AnnotationSSLHash, naming.AnnotationSSLInternalHash} {
+				assert.Equal(t, tt.wantRestart, before[key] != after[key], key)
+			}
+		})
+	}
+}

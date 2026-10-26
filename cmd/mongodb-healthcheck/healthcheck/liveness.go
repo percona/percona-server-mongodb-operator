@@ -16,9 +16,11 @@ package healthcheck
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	mongodriver "go.mongodb.org/mongo-driver/v2/mongo"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
@@ -26,6 +28,46 @@ import (
 )
 
 var ErrNoReplsetConfigStr = "(NotYetInitialized) no replset config has been received"
+
+const notYetInitializedCode = 94
+
+// isNotYetInitialized matches the NotYetInitialized error also when it is
+// wrapped, e.g. "replSetGetStatus: (NotYetInitialized) ...".
+func isNotYetInitialized(err error) bool {
+	var cmdErr mongodriver.CommandError
+	if errors.As(err, &cmdErr) && cmdErr.Code == notYetInitializedCode {
+		return true
+	}
+	return strings.Contains(err.Error(), ErrNoReplsetConfigStr)
+}
+
+// awaitingReplsetInit reports whether mongod runs with --replSet but the
+// replset has not been initiated yet. It connects without credentials: such a
+// member has no users, so authenticating as the monitor user always fails and
+// the probe would otherwise kill a healthy member that the operator has not
+// initiated yet. hello does not require authentication.
+func awaitingReplsetInit(ctx context.Context, cnf *db.Config) bool {
+	anonymous := *cnf
+	anonymous.Username = ""
+	anonymous.Password = ""
+	anonymous.Direct = true
+	anonymous.ReplSetName = ""
+
+	client, err := db.Dial(ctx, &anonymous)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = client.Disconnect(ctx) }()
+
+	var hello struct {
+		IsReplicaSet bool   `bson:"isreplicaset"`
+		SetName      string `bson:"setName"`
+	}
+	if err := client.Database("admin").RunCommand(ctx, bson.D{{Key: "hello", Value: 1}}).Decode(&hello); err != nil {
+		return false
+	}
+	return hello.IsReplicaSet && hello.SetName == ""
+}
 
 func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {
 	log := logf.FromContext(ctx).WithName("HealthCheckMongosLiveness")
@@ -58,6 +100,12 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config) (_ *mongo.Me
 	log := logf.FromContext(ctx).WithName("HealthCheckMongodLiveness")
 	ctx = logf.IntoContext(ctx, log)
 
+	if awaitingReplsetInit(ctx, cnf) {
+		state := mongo.MemberStateUnknown
+		log.V(1).Info("Member is waiting for replset initiation", "state", state)
+		return &state, nil
+	}
+
 	client, err := db.Dial(ctx, cnf)
 	if err != nil {
 		return nil, errors.Wrap(err, "connection error")
@@ -75,7 +123,7 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config) (_ *mongo.Me
 
 	rsStatus, err := client.RSStatus(ctx)
 	if err != nil {
-		if err.Error() == ErrNoReplsetConfigStr {
+		if isNotYetInitialized(err) {
 			state := mongo.MemberStateUnknown
 			log.V(1).Info("replSetGetStatus failed", "err", err.Error(), "state", state)
 			return &state, nil
