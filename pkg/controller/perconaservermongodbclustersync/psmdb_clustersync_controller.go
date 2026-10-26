@@ -423,15 +423,13 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) readyReplicas(ctx context.Con
 func (r *ReconcilePerconaServerMongoDBClusterSync) reconcilePDB(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
 	pdb := clustersync.PodDisruptionBudget(cr)
 	if pdb == nil {
-		// Read first: this runs on every requeue, and an unconditional
-		// Delete would be a write call against the API server each time.
-		stale := &policyv1.PodDisruptionBudget{}
-		nn := types.NamespacedName{Name: clustersync.DeploymentName(cr), Namespace: cr.Namespace}
-		if err := r.client.Get(ctx, nn, stale); err != nil {
-			return client.IgnoreNotFound(err)
+		stale := &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      clustersync.DeploymentName(cr),
+				Namespace: cr.Namespace,
+			},
 		}
-		logf.FromContext(ctx).Info("Removing PCSM pod disruption budget", "name", nn.Name)
-		return client.IgnoreNotFound(r.client.Delete(ctx, stale))
+		return k8s.DeleteIfExists(ctx, r.client, stale)
 	}
 
 	if err := controllerutil.SetControllerReference(cr, pdb, r.scheme); err != nil {
