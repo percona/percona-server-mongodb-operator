@@ -10,6 +10,7 @@ spec:
     mongosSize: true
   tls:
     mode: requireTLS
+    allowInvalidCertificates: false
   secrets:
     users: target-users
   backup:
