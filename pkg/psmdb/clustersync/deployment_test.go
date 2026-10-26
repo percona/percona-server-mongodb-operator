@@ -20,25 +20,13 @@ func syncCR(spec api.PerconaServerMongoDBClusterSyncSpec) *api.PerconaServerMong
 	}
 }
 
-// TestDeploymentSpecSizeAndStrategy pins the two properties that make an
-// HA group behave: how many PCSM instances run, and how they are replaced
-// during an update.
-//
-// The strategy is size-dependent on purpose. With a single instance there
-// is no standby to take over, and PCSM must never have two processes
-// writing to the same target, so Recreate (stop the old pod before
-// starting the new one) is the only safe choice. From two instances up,
-// PCSM's own lease on the target arbitrates who writes, so a rolling
-// update is both safe and strictly better — the standby is promoted
-// within the lease TTL instead of the sync pausing for a full pod
-// restart. maxSurge stays 0 so a rollout never pushes group membership
-// above the configured size; every extra member is another connection to
-// the target and another participant in the election.
-//
-// Size 0 is the upgrade case: CRs stored before spec.size existed come
-// back with the zero value, and must behave exactly like size 1 rather
-// than scaling the deployment to zero.
-func TestDeploymentSpecSizeAndStrategy(t *testing.T) {
+func targetCluster(crVersion string) *api.PerconaServerMongoDB {
+	return &api.PerconaServerMongoDB{
+		Spec: api.PerconaServerMongoDBSpec{CRVersion: crVersion},
+	}
+}
+
+func TestDeploymentSpec(t *testing.T) {
 	recreate := appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
 	one, zero := intstr.FromInt32(1), intstr.FromInt32(0)
 	rolling := appsv1.DeploymentStrategy{
@@ -48,6 +36,9 @@ func TestDeploymentSpecSizeAndStrategy(t *testing.T) {
 			MaxSurge:       &zero,
 		},
 	}
+	// Scaling must change replicas only: a pod-template change rolls the
+	// whole group through a new ReplicaSet and forces a PCSM failover.
+	baseTemplate := PodTemplateSpec(syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: 1}), targetCluster("1.24.0"))
 
 	tests := map[string]struct {
 		size         int32
@@ -55,6 +46,7 @@ func TestDeploymentSpecSizeAndStrategy(t *testing.T) {
 		wantStrategy appsv1.DeploymentStrategy
 	}{
 		"unset size behaves as a single instance":      {size: 0, wantReplicas: 1, wantStrategy: recreate},
+		"negative size behaves as a single instance":   {size: -3, wantReplicas: 1, wantStrategy: recreate},
 		"single instance uses Recreate":                {size: 1, wantReplicas: 1, wantStrategy: recreate},
 		"two instances switch to RollingUpdate":        {size: 2, wantReplicas: 2, wantStrategy: rolling},
 		"larger groups keep the same rolling strategy": {size: 5, wantReplicas: 5, wantStrategy: rolling},
@@ -64,31 +56,20 @@ func TestDeploymentSpecSizeAndStrategy(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: tc.size})
 
-			spec := DeploymentSpec(cr, PodTemplateSpec(cr))
+			spec := DeploymentSpec(cr, PodTemplateSpec(cr, targetCluster("1.24.0")))
 
 			require.NotNil(t, spec.Replicas)
 			assert.Equal(t, tc.wantReplicas, *spec.Replicas)
+			assert.Equal(t, tc.wantReplicas, Size(cr))
 			assert.Equal(t, tc.wantStrategy, spec.Strategy)
 			assert.Equal(t, Labels(cr), spec.Selector.MatchLabels,
 				"selector must keep matching the pod labels, otherwise the deployment adopts nothing")
+			assert.Equal(t, baseTemplate, spec.Template,
+				"size must not change the pod template")
 		})
 	}
 }
 
-// TestPodAffinity covers the scheduling defaults for an HA group.
-//
-// Spreading matters here: three PCSM instances on one node fail together
-// and the group loses its standby. The default is *preferred* rather than
-// required anti-affinity, which is a deliberate departure from the data
-// pods in psmdb_defaults.go. A required term that cannot be satisfied
-// leaves the standby Pending forever with no error anywhere in the CR,
-// and since PCSM standbys hold no data the cost of co-scheduling is far
-// lower than the cost of never scheduling. The same default applies at
-// size 1, so the pod template stays identical across a scale change; see
-// TestPodTemplateIsInvariantAcrossSize.
-//
-// User intent always wins: `advanced` is passed through verbatim and
-// `topologyKey: none` disables spreading entirely.
 func TestPodAffinity(t *testing.T) {
 	hostname := "kubernetes.io/hostname"
 	zone := "topology.kubernetes.io/zone"
@@ -106,39 +87,69 @@ func TestPodAffinity(t *testing.T) {
 			},
 		},
 	}
+	preferred := func(topologyKey string) func(t *testing.T, got *corev1.Affinity, labels map[string]string) {
+		return func(t *testing.T, got *corev1.Affinity, labels map[string]string) {
+			require.NotNil(t, got)
+			require.NotNil(t, got.PodAntiAffinity)
+			assert.Empty(t, got.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+				"a required term would leave standbys Pending on small clusters")
+			terms := got.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+			require.Len(t, terms, 1)
+			assert.Equal(t, int32(100), terms[0].Weight)
+			assert.Equal(t, topologyKey, terms[0].PodAffinityTerm.TopologyKey)
+			assert.Equal(t, labels, terms[0].PodAffinityTerm.LabelSelector.MatchLabels)
+		}
+	}
+	isNil := func(t *testing.T, got *corev1.Affinity, _ map[string]string) {
+		assert.Nil(t, got)
+	}
 
 	tests := map[string]struct {
-		size   int32
-		spec   *api.PodAffinity
-		assert func(t *testing.T, got *corev1.Affinity, labels map[string]string)
+		cluster *api.PerconaServerMongoDB
+		size    int32
+		labels  map[string]string
+		spec    *api.PodAffinity
+		assert  func(t *testing.T, got *corev1.Affinity, labels map[string]string)
 	}{
 		"single instance gets the same default as an HA group": {
-			size: 1,
-			assert: func(t *testing.T, got *corev1.Affinity, labels map[string]string) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.PodAntiAffinity)
-				terms := got.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-				require.Len(t, terms, 1)
-				assert.Equal(t, labels, terms[0].PodAffinityTerm.LabelSelector.MatchLabels)
-			},
+			cluster: targetCluster("1.24.0"),
+			size:    1,
+			assert:  preferred(hostname),
 		},
 		"HA group defaults to preferred anti-affinity across hosts": {
-			size: 3,
+			cluster: targetCluster("1.24.0"),
+			size:    3,
+			assert:  preferred(hostname),
+		},
+		"newer crVersion keeps the default": {
+			cluster: targetCluster("1.25.0"),
+			size:    3,
+			assert:  preferred(hostname),
+		},
+		"older crVersion gets no default": {
+			cluster: targetCluster("1.23.0"),
+			size:    3,
+			assert:  isNil,
+		},
+		"nil cluster gets no default": {
+			size:   3,
+			assert: isNil,
+		},
+		"user labels never widen the default selector": {
+			cluster: targetCluster("1.24.0"),
+			size:    3,
+			labels:  map[string]string{"team": "platform"},
 			assert: func(t *testing.T, got *corev1.Affinity, labels map[string]string) {
-				require.NotNil(t, got)
-				require.NotNil(t, got.PodAntiAffinity)
-				assert.Empty(t, got.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
-					"a required term would leave standbys Pending on small clusters")
-				terms := got.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-				require.Len(t, terms, 1)
-				assert.Equal(t, int32(100), terms[0].Weight)
-				assert.Equal(t, hostname, terms[0].PodAffinityTerm.TopologyKey)
-				assert.Equal(t, labels, terms[0].PodAffinityTerm.LabelSelector.MatchLabels)
+				preferred(hostname)(t, got, labels)
+				selector := got.PodAntiAffinity.
+					PreferredDuringSchedulingIgnoredDuringExecution[0].PodAffinityTerm.LabelSelector
+				assert.NotContains(t, selector.MatchLabels, "team")
 			},
 		},
 		"explicit topologyKey produces a required term": {
-			size: 3,
-			spec: &api.PodAffinity{TopologyKey: &zone},
+			cluster: targetCluster("1.24.0"),
+			size:    3,
+			spec:    &api.PodAffinity{TopologyKey: &zone},
 			assert: func(t *testing.T, got *corev1.Affinity, labels map[string]string) {
 				require.NotNil(t, got)
 				terms := got.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
@@ -147,23 +158,31 @@ func TestPodAffinity(t *testing.T) {
 				assert.Equal(t, labels, terms[0].LabelSelector.MatchLabels)
 			},
 		},
-		"topologyKey none disables spreading": {
-			size: 3,
-			spec: &api.PodAffinity{TopologyKey: &off},
+		"explicit topologyKey is not version gated": {
+			cluster: targetCluster("1.23.0"),
+			size:    3,
+			spec:    &api.PodAffinity{TopologyKey: &zone},
 			assert: func(t *testing.T, got *corev1.Affinity, _ map[string]string) {
-				assert.Nil(t, got)
+				require.NotNil(t, got)
+				require.Len(t, got.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution, 1)
 			},
+		},
+		"topologyKey none disables spreading": {
+			cluster: targetCluster("1.24.0"),
+			size:    3,
+			spec:    &api.PodAffinity{TopologyKey: &off},
+			assert:  isNil,
 		},
 		"empty affinity spec disables spreading": {
-			size: 3,
-			spec: &api.PodAffinity{},
-			assert: func(t *testing.T, got *corev1.Affinity, _ map[string]string) {
-				assert.Nil(t, got, "neither advanced nor topologyKey set means no opinion")
-			},
+			cluster: targetCluster("1.24.0"),
+			size:    3,
+			spec:    &api.PodAffinity{},
+			assert:  isNil,
 		},
 		"advanced affinity is passed through untouched": {
-			size: 3,
-			spec: &api.PodAffinity{Advanced: advanced},
+			cluster: targetCluster("1.24.0"),
+			size:    3,
+			spec:    &api.PodAffinity{Advanced: advanced},
 			assert: func(t *testing.T, got *corev1.Affinity, _ map[string]string) {
 				assert.Equal(t, advanced, got)
 			},
@@ -172,58 +191,22 @@ func TestPodAffinity(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: tc.size, Affinity: tc.spec})
+			cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{
+				Size:     tc.size,
+				Affinity: tc.spec,
+				Labels:   tc.labels,
+			})
 
-			tc.assert(t, PodTemplateSpec(cr).Spec.Affinity, Labels(cr))
+			tmpl := PodTemplateSpec(cr, tc.cluster)
+
+			tc.assert(t, tmpl.Spec.Affinity, Labels(cr))
+			for k := range tc.labels {
+				assert.Contains(t, tmpl.Labels, k, "user labels still reach the pod template")
+			}
 		})
 	}
 }
 
-// TestPodAffinityDoesNotAliasLabels guards a subtle sharing bug: the
-// affinity selector is built from the same label map the pod template
-// uses, and the template merges spec.labels into its copy. If the
-// selector aliased that map, a user label would silently widen the
-// anti-affinity selector to pods it was never meant to match.
-func TestPodAffinityDoesNotAliasLabels(t *testing.T) {
-	cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{
-		Size:   3,
-		Labels: map[string]string{"team": "platform"},
-	})
-
-	tmpl := PodTemplateSpec(cr)
-
-	require.NotNil(t, tmpl.Spec.Affinity)
-	selector := tmpl.Spec.Affinity.PodAntiAffinity.
-		PreferredDuringSchedulingIgnoredDuringExecution[0].PodAffinityTerm.LabelSelector
-	assert.Equal(t, Labels(cr), selector.MatchLabels)
-	assert.NotContains(t, selector.MatchLabels, "team")
-	assert.Contains(t, tmpl.Labels, "team", "user labels still reach the pod template")
-}
-
-// TestPodTemplateIsInvariantAcrossSize guards the regression where
-// podAffinity keyed off spec.size: scaling then changed the pod template
-// hash, so the Deployment controller replaced every pod through a new
-// ReplicaSet instead of just adding replicas. That forced a PCSM failover
-// and left Error pods behind on every scale change.
-func TestPodTemplateIsInvariantAcrossSize(t *testing.T) {
-	spec := func(size int32) api.PerconaServerMongoDBClusterSyncSpec {
-		return api.PerconaServerMongoDBClusterSyncSpec{Size: size}
-	}
-
-	base := PodTemplateSpec(syncCR(spec(1)))
-	for _, size := range []int32{0, 2, 3, 5} {
-		assert.Equal(t, base, PodTemplateSpec(syncCR(spec(size))),
-			"size %d must not change the pod template", size)
-	}
-}
-
-// TestPodDisruptionBudget covers the voluntary-disruption guard for an HA
-// group. The budget only exists above one instance: at size 1 a PDB can
-// only block node drains — there is no second instance for it to protect
-// — so the builder returns nil and the controller deletes any leftover.
-// The default of maxUnavailable=1 is what keeps a multi-node drain from
-// evicting the whole group at once; an explicit spec replaces it wholesale
-// so a user can express minAvailable instead.
 func TestPodDisruptionBudget(t *testing.T) {
 	two := intstr.FromInt32(2)
 	oneStr := intstr.FromString("50%")
@@ -277,27 +260,8 @@ func TestPodDisruptionBudget(t *testing.T) {
 			assert.Equal(t, tc.wantMinAvailable, pdb.Spec.MinAvailable)
 
 			require.NotNil(t, pdb.Spec.Selector)
-			assert.Equal(t, DeploymentSpec(cr, PodTemplateSpec(cr)).Selector.MatchLabels, pdb.Spec.Selector.MatchLabels,
+			assert.Equal(t, DeploymentSpec(cr, PodTemplateSpec(cr, targetCluster("1.24.0"))).Selector.MatchLabels, pdb.Spec.Selector.MatchLabels,
 				"a PDB selecting anything other than the deployment's pods protects nothing")
-		})
-	}
-}
-
-// TestSize documents the single place that interprets spec.size, since
-// every other builder reads it through here.
-func TestSize(t *testing.T) {
-	tests := map[string]struct {
-		size int32
-		want int32
-	}{
-		"unset falls back to one": {size: 0, want: 1},
-		"negative falls back to one (CRD minimum guards the API, not old objects)": {size: -3, want: 1},
-		"explicit size is honoured": {size: 4, want: 4},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, Size(syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: tc.size})))
 		})
 	}
 }

@@ -22,22 +22,6 @@ import (
 // rather than "currently the writer" — which is exactly the question
 // Kubernetes is asking. Which instance holds the lease is reported in
 // status.activeInstance instead.
-func TestDefaultProbesTargetMetrics(t *testing.T) {
-	c := Container(&api.PerconaServerMongoDBClusterSync{})
-
-	for name, probe := range map[string]*corev1.Probe{
-		"liveness":  c.LivenessProbe,
-		"readiness": c.ReadinessProbe,
-	} {
-		t.Run(name, func(t *testing.T) {
-			require.NotNil(t, probe.Exec)
-			cmd := strings.Join(probe.Exec.Command, " ")
-			assert.Contains(t, cmd, "http://127.0.0.1:2242/metrics")
-			assert.NotContains(t, cmd, "/status", "a standby answers /status with 409 and would never become Ready")
-		})
-	}
-}
-
 func TestContainerProbes(t *testing.T) {
 	customLiveness := &corev1.Probe{
 		Exec:          &corev1.ExecAction{Command: []string{"sh", "-c", "true"}},
@@ -52,25 +36,33 @@ func TestContainerProbes(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		spec           api.PerconaServerMongoDBClusterSyncSpec
-		wantLiveness   *corev1.Probe
-		wantReadiness  *corev1.Probe
-		mutateOverride func(spec *api.PerconaServerMongoDBClusterSyncSpec)
-		assertNoAlias  bool
+		cluster       *api.PerconaServerMongoDB
+		spec          api.PerconaServerMongoDBClusterSyncSpec
+		wantLiveness  *corev1.Probe
+		wantReadiness *corev1.Probe
 	}{
 		"defaults when probes unset": {
-			spec:          api.PerconaServerMongoDBClusterSyncSpec{},
+			cluster:       targetCluster("1.24.0"),
 			wantLiveness:  livenessProbe(),
 			wantReadiness: readinessProbe(),
 		},
+		"newer crVersion keeps the defaults": {
+			cluster:       targetCluster("1.25.0"),
+			wantLiveness:  livenessProbe(),
+			wantReadiness: readinessProbe(),
+		},
+		"older crVersion gets no probes": {
+			cluster: targetCluster("1.23.0"),
+		},
+		"nil cluster gets no probes": {},
 		"liveness override applies, readiness still default": {
-			spec: api.PerconaServerMongoDBClusterSyncSpec{
-				LivenessProbe: customLiveness,
-			},
+			cluster:       targetCluster("1.24.0"),
+			spec:          api.PerconaServerMongoDBClusterSyncSpec{LivenessProbe: customLiveness},
 			wantLiveness:  customLiveness,
 			wantReadiness: readinessProbe(),
 		},
 		"both overrides apply": {
+			cluster: targetCluster("1.24.0"),
 			spec: api.PerconaServerMongoDBClusterSyncSpec{
 				LivenessProbe:  customLiveness,
 				ReadinessProbe: customReadiness,
@@ -78,53 +70,55 @@ func TestContainerProbes(t *testing.T) {
 			wantLiveness:  customLiveness,
 			wantReadiness: customReadiness,
 		},
-		"override is deep-copied (no shared pointer with spec)": {
+		"overrides are not version gated": {
+			cluster: targetCluster("1.23.0"),
 			spec: api.PerconaServerMongoDBClusterSyncSpec{
-				LivenessProbe: customLiveness,
+				LivenessProbe:  customLiveness,
+				ReadinessProbe: customReadiness,
 			},
 			wantLiveness:  customLiveness,
-			wantReadiness: readinessProbe(),
-			mutateOverride: func(spec *api.PerconaServerMongoDBClusterSyncSpec) {
-				spec.LivenessProbe.PeriodSeconds = 99
-			},
-			assertNoAlias: true,
+			wantReadiness: customReadiness,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &api.PerconaServerMongoDBClusterSync{Spec: tc.spec}
-			c := Container(cr)
+			c := Container(syncCR(tc.spec), tc.cluster)
 
-			require.NotNil(t, c.LivenessProbe)
-			require.NotNil(t, c.ReadinessProbe)
-
-			if tc.assertNoAlias {
-				before := c.LivenessProbe.PeriodSeconds
-				tc.mutateOverride(&cr.Spec)
-				assert.Equal(t, before, c.LivenessProbe.PeriodSeconds,
-					"container probe must not alias spec pointer")
-				return
-			}
-
-			assert.Equal(t, tc.wantLiveness.ProbeHandler, c.LivenessProbe.ProbeHandler)
-			assert.Equal(t, tc.wantLiveness.PeriodSeconds, c.LivenessProbe.PeriodSeconds)
-			assert.Equal(t, tc.wantReadiness.ProbeHandler, c.ReadinessProbe.ProbeHandler)
-			assert.Equal(t, tc.wantReadiness.PeriodSeconds, c.ReadinessProbe.PeriodSeconds)
+			assert.Equal(t, tc.wantLiveness, c.LivenessProbe)
+			assert.Equal(t, tc.wantReadiness, c.ReadinessProbe)
 		})
 	}
+
+	// A STANDBY answers /status with HTTP 409, so probing it would hold
+	// every standby NotReady and leave the group with no eligible
+	// successor. /metrics is served by ACTIVE and STANDBY alike.
+	t.Run("default probes target /metrics, never /status", func(t *testing.T) {
+		c := Container(syncCR(api.PerconaServerMongoDBClusterSyncSpec{}), targetCluster("1.24.0"))
+
+		for name, probe := range map[string]*corev1.Probe{
+			"liveness":  c.LivenessProbe,
+			"readiness": c.ReadinessProbe,
+		} {
+			require.NotNil(t, probe.Exec, name)
+			cmd := strings.Join(probe.Exec.Command, " ")
+			assert.Contains(t, cmd, "http://127.0.0.1:2242/metrics", name)
+			assert.NotContains(t, cmd, "/status", name)
+		}
+	})
+
+	t.Run("override is deep-copied (no shared pointer with spec)", func(t *testing.T) {
+		cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{LivenessProbe: customLiveness.DeepCopy()})
+
+		c := Container(cr, targetCluster("1.24.0"))
+		before := c.LivenessProbe.PeriodSeconds
+		cr.Spec.LivenessProbe.PeriodSeconds = 99
+
+		assert.Equal(t, before, c.LivenessProbe.PeriodSeconds,
+			"container probe must not alias spec pointer")
+	})
 }
 
-// TestContainerEnv checks the env the operator owns and the ordering rule
-// that makes user overrides work.
-//
-// PCSM_GROUP_NAME is what scopes leader election. PCSM defaults it to
-// "default", so two ClusterSync CRs pointed at the same target would join
-// one election and fight over a single lease; deriving it from
-// namespace+CR name makes that impossible. User env is appended last on
-// purpose: kubelet keeps the last value for a repeated variable, so a user
-// can still override any managed variable without the operator having to
-// special-case it.
 func TestContainerEnv(t *testing.T) {
 	const (
 		crName = "mysync"
@@ -204,12 +198,7 @@ func TestContainerEnv(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &api.PerconaServerMongoDBClusterSync{
-				Name:      crName,
-				Namespace: crNS,
-				Spec:      tc.spec,
-			}
-			c := Container(cr)
+			c := Container(syncCR(tc.spec), targetCluster("1.24.0"))
 			assert.Equal(t, tc.want, c.Env)
 		})
 	}
@@ -247,10 +236,7 @@ func TestContainerArgs(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &api.PerconaServerMongoDBClusterSync{
-				Spec: api.PerconaServerMongoDBClusterSyncSpec{PCSMConfig: tc.pcsm},
-			}
-			c := Container(cr)
+			c := Container(syncCR(api.PerconaServerMongoDBClusterSyncSpec{PCSMConfig: tc.pcsm}), targetCluster("1.24.0"))
 			assert.Equal(t, tc.want, c.Args)
 		})
 	}

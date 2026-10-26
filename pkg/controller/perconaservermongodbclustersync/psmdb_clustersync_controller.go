@@ -184,7 +184,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return reconcile.Result{}, errors.Wrap(err, "reconcile uri secret")
 	}
 
-	if err := r.reconcileDeployment(ctx, cr); err != nil {
+	if err := r.reconcileDeployment(ctx, cr, target); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile deployment")
 	}
 
@@ -360,7 +360,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) releaseClusterSyncLease(ctx c
 	return err
 }
 
-func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
+func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, cluster *psmdbv1.PerconaServerMongoDB) error {
 	dep := clustersync.Deployment(cr)
 	if err := r.client.Get(ctx, types.NamespacedName{Name: dep.Name, Namespace: dep.Namespace}, dep); client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get clustersync deployment")
@@ -371,7 +371,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx conte
 	}
 
 	dep.Labels = clustersync.Labels(cr)
-	dep.Spec = clustersync.DeploymentSpec(cr, clustersync.PodTemplateSpec(cr))
+	dep.Spec = clustersync.DeploymentSpec(cr, clustersync.PodTemplateSpec(cr, cluster))
 
 	if _, err := util.Apply(ctx, r.client, dep); err != nil {
 		return errors.Wrap(err, "apply clustersync deployment")
@@ -424,10 +424,8 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcilePDB(ctx context.Cont
 	pdb := clustersync.PodDisruptionBudget(cr)
 	if pdb == nil {
 		stale := &policyv1.PodDisruptionBudget{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      clustersync.DeploymentName(cr),
-				Namespace: cr.Namespace,
-			},
+			Name:      clustersync.DeploymentName(cr),
+			Namespace: cr.Namespace,
 		}
 		return k8s.DeleteIfExists(ctx, r.client, stale)
 	}

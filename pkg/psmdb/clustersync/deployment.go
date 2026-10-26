@@ -96,7 +96,7 @@ func deploymentStrategy(size int32) appsv1.DeploymentStrategy {
 }
 
 // PodTemplateSpec wires the PCSM container into a PodSpec.
-func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplateSpec {
+func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB) corev1.PodTemplateSpec {
 	ls := Labels(cr)
 	for k, v := range cr.Spec.Labels {
 		if _, ok := ls[k]; !ok {
@@ -108,24 +108,28 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync) corev1.PodTemplate
 		Labels:      ls,
 		Annotations: cr.Spec.Annotations,
 		Spec: corev1.PodSpec{
-			Containers:       []corev1.Container{Container(cr)},
+			Containers:       []corev1.Container{Container(cr, cluster)},
 			ImagePullSecrets: cr.Spec.ImagePullSecrets,
 			NodeSelector:     cr.Spec.NodeSelector,
 			Tolerations:      cr.Spec.Tolerations,
-			Affinity:         podAffinity(cr.Spec.Affinity, Labels(cr)),
+			Affinity:         podAffinity(cluster, cr.Spec.Affinity, Labels(cr)),
 			RuntimeClassName: cr.Spec.RuntimeClassName,
 			SecurityContext:  cr.Spec.PodSecurityContext,
 		},
 	}
 }
 
-// podAffinity defaults to preferred anti-affinity. Preferred rather than
-// required: an unschedulable standby would otherwise leave the group
-// permanently short of replicas, and standbys hold no data. It must not
-// depend on spec.size — that would make scaling a pod-template change and
-// force a rollout of the whole group, including the active instance.
-func podAffinity(af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
+// podAffinity defaults to preferred anti-affinity, from cluster crVersion
+// 1.24.0 on. Preferred rather than required: an unschedulable standby
+// would otherwise leave the group permanently short of replicas, and
+// standbys hold no data. It must not depend on spec.size — that would make
+// scaling a pod-template change and force a rollout of the whole group,
+// including the active instance.
+func podAffinity(cluster *api.PerconaServerMongoDB, af *api.PodAffinity, labels map[string]string) *corev1.Affinity {
 	if af == nil {
+		if cluster == nil || cluster.CompareVersion("1.24.0") < 0 {
+			return nil
+		}
 		return &corev1.Affinity{
 			PodAntiAffinity: &corev1.PodAntiAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{{

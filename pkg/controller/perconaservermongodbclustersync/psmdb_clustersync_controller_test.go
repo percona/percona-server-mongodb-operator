@@ -897,6 +897,13 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 	}
 }
 
+func targetCluster(crVersion string) *psmdbv1.PerconaServerMongoDB {
+	return &psmdbv1.PerconaServerMongoDB{
+		Name: "target", Namespace: "ns",
+		Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: crVersion},
+	}
+}
+
 // TestReconcileDeploymentConvergesOnSize is the unit-level counterpart of
 // the HA scale steps in e2e-tests/clustersync/run.
 //
@@ -925,7 +932,7 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 		return dep
 	}
 
-	require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+	require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
 	initial := get(t)
 
 	require.NotNil(t, initial.Spec.Replicas)
@@ -936,14 +943,14 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 	assert.Equal(t, clustersync.Labels(cr), initial.Labels)
 
 	t.Run("reconcile is idempotent", func(t *testing.T) {
-		require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+		require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
 		assert.Equal(t, initial.Spec, get(t).Spec)
 	})
 
 	for _, size := range []int32{3, 5, 1} {
 		t.Run(fmt.Sprintf("scaling to %d changes only replicas", size), func(t *testing.T) {
 			cr.Spec.Size = size
-			require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+			require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
 			dep := get(t)
 
 			require.NotNil(t, dep.Spec.Replicas)
@@ -955,7 +962,7 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 
 	t.Run("HA group rolls one at a time without surging", func(t *testing.T) {
 		cr.Spec.Size = 3
-		require.NoError(t, r.reconcileDeployment(t.Context(), cr))
+		require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
 		strategy := get(t).Spec.Strategy
 
 		require.Equal(t, appsv1.RollingUpdateDeploymentStrategyType, strategy.Type)
@@ -964,6 +971,52 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 		assert.Equal(t, intstr.FromInt32(0), *strategy.RollingUpdate.MaxSurge,
 			"surging past spec.size would add an instance the PCSM group never agreed to")
 	})
+}
+
+// TestReconcileDeploymentVersionGate checks the target cluster's
+// crVersion actually reaches the pod-template builders: a cluster that has
+// not been bumped to 1.24.0 must keep a pod template without the defaults,
+// so upgrading the operator alone never rolls the PCSM pod.
+func TestReconcileDeploymentVersionGate(t *testing.T) {
+	tests := map[string]struct {
+		crVersion   string
+		wantDefault bool
+	}{
+		"older crVersion keeps the bare pod template": {crVersion: "1.23.0"},
+		"current crVersion gets the defaults":         {crVersion: "1.24.0", wantDefault: true},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+				Name: "sync", Namespace: "ns", UID: "u",
+				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{Size: 3, Image: "pcsm:1.0.0"},
+			}
+			scheme := clusterSyncScheme(t)
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
+
+			require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster(tc.crVersion)))
+
+			dep := &appsv1.Deployment{}
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{
+				Name:      clustersync.DeploymentName(cr),
+				Namespace: cr.Namespace,
+			}, dep))
+
+			tmpl := dep.Spec.Template
+			require.Len(t, tmpl.Spec.Containers, 1)
+			if tc.wantDefault {
+				assert.NotNil(t, tmpl.Spec.Affinity)
+				assert.NotNil(t, tmpl.Spec.Containers[0].LivenessProbe)
+				assert.NotNil(t, tmpl.Spec.Containers[0].ReadinessProbe)
+				return
+			}
+			assert.Nil(t, tmpl.Spec.Affinity)
+			assert.Nil(t, tmpl.Spec.Containers[0].LivenessProbe)
+			assert.Nil(t, tmpl.Spec.Containers[0].ReadinessProbe)
+		})
+	}
 }
 
 // TestReconcileDeploymentApplyFailure checks the write error is wrapped
@@ -981,7 +1034,7 @@ func TestReconcileDeploymentApplyFailure(t *testing.T) {
 		}).Build()
 	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
 
-	err := r.reconcileDeployment(t.Context(), cr)
+	err := r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"))
 
 	require.ErrorIs(t, err, boom)
 	assert.Contains(t, err.Error(), "apply clustersync deployment")

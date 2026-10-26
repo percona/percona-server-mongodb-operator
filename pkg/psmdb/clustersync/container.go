@@ -10,7 +10,7 @@ import (
 )
 
 // Container builds the PCSM container.
-func Container(cr *api.PerconaServerMongoDBClusterSync) corev1.Container {
+func Container(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB) corev1.Container {
 	return corev1.Container{
 		Name:            ContainerName,
 		Image:           cr.Spec.Image,
@@ -24,8 +24,8 @@ func Container(cr *api.PerconaServerMongoDBClusterSync) corev1.Container {
 		Env:             pcsmEnv(cr),
 		Resources:       cr.Spec.Resources,
 		SecurityContext: cr.Spec.ContainerSecurityContext,
-		LivenessProbe:   probeOrDefault(cr.Spec.LivenessProbe, livenessProbe),
-		ReadinessProbe:  probeOrDefault(cr.Spec.ReadinessProbe, readinessProbe),
+		LivenessProbe:   probeOrDefault(cluster, cr.Spec.LivenessProbe, livenessProbe),
+		ReadinessProbe:  probeOrDefault(cluster, cr.Spec.ReadinessProbe, readinessProbe),
 	}
 }
 
@@ -36,8 +36,6 @@ func pcsmEnv(cr *api.PerconaServerMongoDBClusterSync) []corev1.EnvVar {
 		{Name: "PCSM_TARGET_URI", ValueFrom: uriEnvSource(secretName, URISecretTargetKey)},
 		{Name: "PCSM_GROUP_NAME", Value: GroupName(cr)},
 	}
-	// User env comes last so a duplicate name wins: kubelet keeps the
-	// last value for a repeated variable.
 	env = append(env, cr.Spec.Env...)
 	return env
 }
@@ -68,22 +66,18 @@ func pcsmArgs(cr *api.PerconaServerMongoDBClusterSync) []string {
 	return args
 }
 
-func probeOrDefault(override *corev1.Probe, def func() *corev1.Probe) *corev1.Probe {
+func probeOrDefault(cluster *api.PerconaServerMongoDB, override *corev1.Probe, def func() *corev1.Probe) *corev1.Probe {
 	if override != nil {
 		return override.DeepCopy()
+	}
+	if cluster == nil || cluster.CompareVersion("1.24.0") < 0 {
+		return nil
 	}
 	return def()
 }
 
-// Probes hit /metrics, not /status: a STANDBY instance answers /status
-// with HTTP 409, which would keep every standby NotReady and break the
-// HA group. /metrics is served by ACTIVE and STANDBY alike.
-//
-// PCSM 0.9.0 binds its HTTP server to 127.0.0.1 only, so TCP/HTTPGet probes
-// against the pod IP get connection-refused. Until PCSM-345 lands upstream
-// (https://perconadev.atlassian.net/browse/PCSM-345) we probe via curl on
-// loopback from inside the container. Revert to TCPSocket/HTTPGet once
-// PCSM binds to 0.0.0.0.
+// loopbackProbe builds an exec probe that curls path on the container's
+// own loopback address.
 func loopbackProbe(path string, timeoutSeconds int32) corev1.ProbeHandler {
 	maxTime := timeoutSeconds
 	if maxTime > 1 {
