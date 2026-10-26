@@ -26,8 +26,56 @@ import (
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+func TestPBMConfigPriority(t *testing.T) {
+	secret := &corev1.Secret{
+		APIVersion: "/v1",
+		Kind:       "Secret",
+		Name:       "test-secret",
+		Namespace:  "test-namespace",
+	}
+
+	t.Run("not configured", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = version.Version()
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+		cr.Spec.Backup.Configuration.BackupOptions.Priority = nil
+
+		cli := buildFakeClient(t, secret)
+
+		cfg, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.NoError(t, err)
+		require.Empty(t, cfg.Backup.Priority)
+	})
+
+	t.Run("legacy cr version", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = "1.23.0"
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+		cr.Spec.Backup.Configuration.BackupOptions.Priority = nil
+
+		cli := buildFakeClient(t, secret)
+
+		// operator tries to calculate priorities, which requires users secret
+		_, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.ErrorContains(t, err, "get priorities")
+	})
+
+	t.Run("user defined", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = version.Version()
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+
+		cli := buildFakeClient(t, secret)
+
+		cfg, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.NoError(t, err)
+		require.Equal(t, config.Priority{"localhost:28019": 2.5}, cfg.Backup.Priority)
+	})
+}
 
 func TestApplyCustomPBMConfig(t *testing.T) {
 	cr := expectedCR(t)
@@ -922,4 +970,72 @@ func expectedCR(t *testing.T) *api.PerconaServerMongoDB {
 	}
 
 	return cr
+}
+
+func TestGetMongoUri(t *testing.T) {
+	tests := map[string]struct {
+		tlsEnabled   bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			expectedURI: "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/",
+		},
+		"tls enabled": {
+			tlsEnabled:   true,
+			allowInvalid: false,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt",
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			allowInvalid: true,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt&tlsInsecure=true",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Name:      "cluster",
+				Namespace: "ns",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Secrets:   &api.SecretsSpec{SSL: "cluster-ssl"},
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+			usersSecret := &corev1.Secret{
+				Name:      api.UserSecretName(cr),
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"MONGODB_BACKUP_USER":     []byte("backup"),
+					"MONGODB_BACKUP_PASSWORD": []byte("backup@pass"),
+				},
+			}
+			sans := tls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+			require.NoError(t, err)
+
+			sslSecret := &corev1.Secret{
+				Name:      "cluster-ssl",
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				},
+			}
+			cl := buildFakeClient(t, usersSecret, sslSecret)
+			t.Cleanup(func() {
+				_ = os.Remove("/tmp/ns-cluster-tls.pem")
+				_ = os.Remove("/tmp/ns-cluster-ca.crt")
+			})
+
+			uri, err := getMongoUri(t.Context(), cl, cr, []string{"cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017"}, tt.tlsEnabled)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedURI, uri)
+		})
+	}
 }

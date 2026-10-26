@@ -32,6 +32,8 @@ func CanUpgradeVersion(fcv, target string) bool {
 		return target == "7.0"
 	case "7.0":
 		return target == "8.0"
+	case "8.0":
+		return target == "8.3"
 	default:
 		return false
 	}

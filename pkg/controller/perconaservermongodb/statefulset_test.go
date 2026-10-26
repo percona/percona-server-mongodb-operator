@@ -20,6 +20,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -40,6 +41,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
+		t.Fatal(err)
+	}
+
+	caCert, tlsCert, tlsKey, err := tls.Issue(tls.GetCertificateSans(defaultCR))
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,9 +184,9 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Name:      crName + "-ssl",
 					Namespace: tt.cr.Namespace,
 					Data: map[string][]byte{
-						"ca.crt":  []byte("fake-ca-cert"),
-						"tls.crt": []byte("fake-tls-cert"),
-						"tls.key": []byte("fake-tls-key"),
+						"ca.crt":  caCert,
+						"tls.crt": tlsCert,
+						"tls.key": tlsKey,
 					},
 				},
 				&corev1.Secret{

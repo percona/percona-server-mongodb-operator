@@ -348,6 +348,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		if rec || err != nil {
 			return rr, err
 		}
+		if len(cr.GetFinalizers()) == 0 {
+			return reconcile.Result{}, nil
+		}
 	}
 
 	err = r.reconcilePause(ctx, cr)
@@ -735,7 +738,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
-		if err == errWaitingTermination {
+		if errors.Is(err, errWaitingTermination) {
 			return nil
 		}
 		return errors.Wrap(err, "delete psmdb pods")
@@ -921,8 +924,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 
 	list, err := mc.ListDBs(ctx)
 	if err != nil {
-		log.Error(err, "failed to list databases", "rs", rsName)
-		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)
+		return errors.Wrapf(err, "list databases for rs %s", rsName)
 	}
 
 	for _, db := range list.DBs {
@@ -1614,6 +1616,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	pmmC := pmm.Container(ctx, cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
+		templateSpec.Spec.Volumes = psmdb.AddPMMTmpVolume(cr, pmmC, templateSpec.Spec.Volumes)
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
 			*pmmC,
