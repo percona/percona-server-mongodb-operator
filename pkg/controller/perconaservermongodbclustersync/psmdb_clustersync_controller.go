@@ -618,10 +618,6 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) requeueWithStatusError(ctx co
 }
 
 func (r *ReconcilePerconaServerMongoDBClusterSync) writeStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, newStatus psmdbv1.PerconaServerMongoDBClusterSyncStatus) error {
-	// The Get stays inside the closure: re-reading is what makes the
-	// retry resolve the conflict rather than resubmit the same stale
-	// resourceVersion. Reconcile requeues every few seconds, so the
-	// equality check keeps a steady-state CR from being written each pass.
 	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		c := &psmdbv1.PerconaServerMongoDBClusterSync{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
