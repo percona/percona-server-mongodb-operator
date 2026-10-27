@@ -19,6 +19,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -60,12 +61,16 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return fmt.Errorf("get pod list: %v", err)
 	}
 
-	if !isSfsChanged(sfs, &list) {
+	if !k8s.HasStatefulSetChanged(sfs, &list) {
 		return nil
 	}
 
 	if cr.CompareVersion("1.4.0") < 0 {
 		return nil
+	}
+
+	if err := r.updateMongosFirstIfTLSOutdated(ctx, cr, sfs); err != nil {
+		return errors.Wrap(err, "update mongos first if TLS is outdated")
 	}
 
 	mongosFirst, err := r.shouldUpdateMongosFirst(ctx, cr)
@@ -86,7 +91,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		if err != nil {
 			return errors.Wrap(err, "get cfg pod list")
 		}
-		if isSfsChanged(&cfgSfs, &cfgList) {
+		if k8s.HasStatefulSetChanged(&cfgSfs, &cfgList) {
 			log.Info("waiting for config RS update")
 			return nil
 		}
@@ -251,12 +256,7 @@ func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Cont
 		return false, nil
 	}
 
-	c := new(api.PerconaServerMongoDB)
-	if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
-		return false, errors.Wrap(err, "failed to get cr")
-	}
-
-	_, ok := c.Annotations[api.AnnotationUpdateMongosFirst]
+	_, ok := cr.Annotations[api.AnnotationUpdateMongosFirst]
 	return ok, nil
 }
 
@@ -264,11 +264,17 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
+	if _, ok := cr.Annotations[api.AnnotationUpdateMongosFirst]; ok {
+		return nil
+	}
 
-	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		c := new(api.PerconaServerMongoDB)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 			return err
+		}
+		if _, ok := c.Annotations[api.AnnotationUpdateMongosFirst]; ok {
+			return nil
 		}
 		if c.Annotations == nil {
 			c.Annotations = make(map[string]string)
@@ -277,13 +283,23 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 
 		return r.client.Update(ctx, c)
 	})
+	if err != nil {
+		return err
+	}
+
+	if cr.Annotations == nil {
+		cr.Annotations = make(map[string]string)
+	}
+	cr.Annotations[api.AnnotationUpdateMongosFirst] = "true"
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
-	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
 		c := new(api.PerconaServerMongoDB)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 			return err
@@ -296,6 +312,13 @@ func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Conte
 
 		return r.client.Update(ctx, c)
 	})
+	if err != nil {
+		return err
+	}
+
+	delete(cr.Annotations, api.AnnotationUpdateMongosFirst)
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, expectedPrimary corev1.Pod) error {
@@ -416,6 +439,10 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	log := logf.FromContext(ctx)
 
 	if cr.Spec.Sharding.Mongos.Size == 0 || cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType {
+		// there is no mongos smart update to wait for
+		if err := r.unsetUpdateMongosFirst(ctx, cr); err != nil {
+			return errors.Wrap(err, "unset update mongos first")
+		}
 		return nil
 	}
 
@@ -424,7 +451,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 		return errors.Wrap(err, "get mongos pods")
 	}
 
-	if !isSfsChanged(sts, &list) {
+	if !k8s.HasStatefulSetChanged(sts, &list) {
 		return nil
 	}
 
@@ -515,7 +542,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 			}); err != nil {
 			return false, errors.Errorf("failed to get statefulset %s pods: %v", s.Name, err)
 		}
-		if s.Status.UpdatedReplicas < s.Status.Replicas || isSfsChanged(&s, podList) {
+		if s.Status.UpdatedReplicas < s.Status.Replicas || k8s.HasStatefulSetChanged(&s, podList) {
 			logf.FromContext(ctx).Info("StatefulSet is not up to date", "sts", s.Name)
 			return false, nil
 		}
@@ -584,20 +611,4 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 	}
 
 	return errors.New("reach pod wait limit")
-}
-
-func isSfsChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {
-	if sfs.Status.UpdateRevision == "" {
-		return false
-	}
-
-	for _, pod := range podList.Items {
-		if pod.Labels[naming.LabelKubernetesComponent] != sfs.Labels[naming.LabelKubernetesComponent] {
-			continue
-		}
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
-			return true
-		}
-	}
-	return false
 }

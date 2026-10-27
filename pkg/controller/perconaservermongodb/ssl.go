@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -116,14 +117,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return errors.Wrap(err, "check cert-manager")
 	}
 	if !ok {
-		if errSecret == nil && errInternalSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, secretObj) {
-				return r.updateSSLManually(ctx, cr)
+		if errSecret != nil || errInternalSecret != nil {
+			if err := r.createSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "create ssl manually")
 			}
-			return nil
 		}
-		if err := r.createSSLManually(ctx, cr); err != nil {
-			return errors.Wrap(err, "create ssl manually")
+		if r.needsManualSSLUpdate(ctx, cr, secretObj) || r.needsManualSSLUpdate(ctx, cr, secretInternalObj) {
+			if err := r.updateSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "update ssl manually")
+			}
 		}
 		return nil
 	}
@@ -181,6 +183,43 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 		}
 	}
 	return true, nil
+}
+
+// updateMongosFirstIfTLSOutdated makes the smart update roll mongos before mongod if mongos pods
+// run an older certificate than the one sfs rolls out. With hostname verification on, the operator
+// can't reach mongos through hostnames missing from that certificate (e.g. per-pod services right after
+// servicePerPod is enabled), while the smart update of the cfg replset needs mongos to stop the balancer.
+// The hashes are taken from sfs rather than the TLS secret, so a stale cached secret can't hide the change.
+func (r *ReconcilePerconaServerMongoDB) updateMongosFirstIfTLSOutdated(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) error {
+	if !mongosNeedsLatestTLS(cr) {
+		return nil
+	}
+
+	pods, err := r.getMongosPods(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get mongos pods")
+	}
+
+	for _, pod := range pods.Items {
+		for _, k := range []string{naming.AnnotationSSLHash, naming.AnnotationSSLInternalHash} {
+			if pod.Annotations[k] == sfs.Spec.Template.Annotations[k] {
+				continue
+			}
+
+			logf.FromContext(ctx).Info("mongos runs an outdated TLS certificate, updating mongos first", "pod", pod.Name, "statefulset", sfs.Name)
+			return r.setUpdateMongosFirst(ctx, cr)
+		}
+	}
+
+	return nil
+}
+
+func mongosNeedsLatestTLS(cr *api.PerconaServerMongoDB) bool {
+	return cr.Spec.Sharding.Enabled &&
+		cr.Spec.Sharding.Mongos.Size > 0 &&
+		cr.TLSEnabled() &&
+		cr.Spec.UpdateStrategy == api.SmartUpdateStatefulSetStrategyType &&
+		!ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates)
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -331,7 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			newSecret.Labels = nil
 		}
 
-		if err := r.client.Create(ctx, newSecret); err != nil {
+		if err := r.client.Create(ctx, newSecret); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create secret")
 		}
 	}
