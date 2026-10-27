@@ -44,6 +44,7 @@ function setup_source_cluster() {
 		rs0
 	run_backup "local-s3" "backup-local-s3-physical" "physical"
 	wait_backup "backup-local-s3-physical"
+	wait_for_pbm_operations "${source_cluster}"
 
 	run_backup "local-s3" "backup-local-s3-logical"
 	wait_backup "backup-local-s3-logical"

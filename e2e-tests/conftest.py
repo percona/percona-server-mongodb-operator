@@ -229,7 +229,8 @@ def setup_env_vars() -> None:
         "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
         "IMAGE_MONGOD_CHAIN": (
             "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
-            "perconalab/percona-server-mongodb-operator:main-mongod8.0"
+            "perconalab/percona-server-mongodb-operator:main-mongod8.0\n"
+            "perconalab/percona-server-mongodb-operator:main-mongod8.3"
         ),
         "IMAGE_SEARCH": "perconalab/percona-server-mongodb-operator:main-mongot",
         "IMAGE_BACKUP": "perconalab/percona-server-mongodb-operator:main-backup",
@@ -607,15 +608,17 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
                     "-p",
                     f'[{{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"{arg}"}}]',
                 )
-            kubectl_bin(
-                "wait",
-                "pod",
-                "-l",
-                "app.kubernetes.io/instance=cert-manager",
-                "--for=condition=ready",
-                "-n",
-                "cert-manager",
-            )
+            # Patching args triggers a rollout. Until the old pod is gone two controllers
+            # can issue the same certificate and break it with mismatched private keys.
+            for deployment in ("cert-manager", "cert-manager-webhook", "cert-manager-cainjector"):
+                kubectl_bin(
+                    "rollout",
+                    "status",
+                    f"deployment/{deployment}",
+                    "-n",
+                    "cert-manager",
+                    "--timeout=300s",
+                )
         except Exception:
             _delete_cert_manager()
             raise

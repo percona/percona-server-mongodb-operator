@@ -10,7 +10,7 @@ import pytest
 from lib.config import apply_cluster, apply_runtime_class, compare_kubectl
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.secrets import apply_s3_storage_secrets, cloud_secret_exists, get_user_data
+from lib.secrets import apply_s3_storage_secrets, cloud_secret_exists, get_user_data, secret_exists
 from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def config(create_infra: Callable[[str], str]) -> InitDeployConfig:
         namespace=create_infra("init-deploy"),
         cluster="some-name-rs0",
         cluster2="another-name-rs0",
-        max_conn=17,
+        max_conn=20,
     )
 
 
@@ -46,7 +46,7 @@ def settled_conn_count(psmdb_client: MongoManager, uri: str, max_conn: int) -> i
         return int(psmdb_client.run_mongosh("db.serverStatus().connections.current", uri).strip())
 
     try:
-        return int(retry(sample, max_attempts=3, delay=3, condition=lambda c: c <= max_conn))
+        return int(retry(sample, max_attempts=3, delay=6, condition=lambda c: c <= max_conn))
     except RuntimeError:
         return sample()
 
@@ -213,6 +213,11 @@ class TestInitDeploy:
         """Check if possible to create second cluster"""
         assert cloud_secret_exists(test_paths["conf_dir"]), "following requires cloud-secret.yml"
         apply_s3_storage_secrets(test_paths["conf_dir"])
+        # the second cluster uses a GCS storage, so cloud-secret.yml is needed
+        # even if SKIP_BACKUPS_TO_AWS_GCP_AZURE is set
+        kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/cloud-secret.yml")
+        assert secret_exists("gcp-cs-sa-key-secret"), "gcp-cs-sa-key-secret not found in cloud-secret.yml"
+
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster2}.yml")
         wait_for_running(config.cluster2, 3)
 

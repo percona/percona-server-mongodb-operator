@@ -1,12 +1,12 @@
 package perconaservermongodb
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"slices"
 	"sort"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -28,22 +29,25 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
-	secretObj := corev1.Secret{}
-	secretInternalObj := corev1.Secret{}
+	secretObj := new(corev1.Secret)
+	secretInternalObj := new(corev1.Secret)
 	errSecret := r.client.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: cr.Namespace,
 			Name:      api.SSLSecretName(cr),
 		},
-		&secretObj,
+		secretObj,
 	)
 	if client.IgnoreNotFound(errSecret) != nil {
 		return errors.Wrap(errSecret, "get SSL secret")
 	}
-	isCustomSecret, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretObj)
+	isCustomSecret, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, secretObj)
 	if serr != nil {
 		return errors.Wrap(serr, "failed to check if secret is created by user")
+	}
+	if errSecret != nil {
+		secretObj = nil
 	}
 	errInternalSecret := r.client.Get(
 		ctx,
@@ -51,14 +55,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 			Namespace: cr.Namespace,
 			Name:      api.SSLInternalSecretName(cr),
 		},
-		&secretInternalObj,
+		secretInternalObj,
 	)
 	if client.IgnoreNotFound(errInternalSecret) != nil {
 		return errors.Wrap(errInternalSecret, "get internal SSL secret")
 	}
-	isCustomSecretInternal, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, &secretInternalObj)
+	isCustomSecretInternal, serr := tls.IsSecretCreatedByUser(ctx, r.client, cr, secretInternalObj)
 	if serr != nil {
 		return errors.Wrap(serr, "failed to check if internal secret is created by user")
+	}
+	if errInternalSecret != nil {
+		secretInternalObj = nil
 	}
 
 	if errSecret == nil && isCustomSecret {
@@ -105,31 +112,34 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return nil
 	}
 
-	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace)
+	ok, err := r.isCertManagerInstalled(ctx, cr.Namespace, secretObj, secretInternalObj)
 	if err != nil {
 		return errors.Wrap(err, "check cert-manager")
 	}
 	if !ok {
-		if errSecret == nil && errInternalSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, &secretObj) {
-				return r.updateSSLManually(ctx, cr)
+		if errSecret != nil || errInternalSecret != nil {
+			if err := r.createSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "create ssl manually")
 			}
-			return nil
 		}
-		err = r.createSSLManually(ctx, cr)
-		if err != nil {
-			return errors.Wrap(err, "create ssl manually")
+		if r.needsManualSSLUpdate(ctx, cr, secretObj) || r.needsManualSSLUpdate(ctx, cr, secretInternalObj) {
+			if err := r.updateSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "update ssl manually")
+			}
 		}
 		return nil
 	}
-	err = r.createSSLByCertManager(ctx, cr)
-	if err != nil {
+	if err := r.createSSLByCertManager(ctx, cr); err != nil {
 		return errors.Wrap(err, "create ssl by cert-manager")
 	}
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) isCertManagerInstalled(ctx context.Context, ns string, secret, internalSecret *corev1.Secret) (bool, error) {
+	if secret != nil && internalSecret != nil {
+		return secret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true" || internalSecret.Labels[cm.PartOfCertManagerControllerLabelKey] == "true", nil
+	}
+
 	c := r.newCertManagerCtrlFunc(r.client, r.scheme, true)
 	err := c.Check(ctx, r.restConfig, ns)
 	if err != nil {
@@ -173,6 +183,43 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 		}
 	}
 	return true, nil
+}
+
+// updateMongosFirstIfTLSOutdated makes the smart update roll mongos before mongod if mongos pods
+// run an older certificate than the one sfs rolls out. With hostname verification on, the operator
+// can't reach mongos through hostnames missing from that certificate (e.g. per-pod services right after
+// servicePerPod is enabled), while the smart update of the cfg replset needs mongos to stop the balancer.
+// The hashes are taken from sfs rather than the TLS secret, so a stale cached secret can't hide the change.
+func (r *ReconcilePerconaServerMongoDB) updateMongosFirstIfTLSOutdated(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) error {
+	if !mongosNeedsLatestTLS(cr) {
+		return nil
+	}
+
+	pods, err := r.getMongosPods(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get mongos pods")
+	}
+
+	for _, pod := range pods.Items {
+		for _, k := range []string{naming.AnnotationSSLHash, naming.AnnotationSSLInternalHash} {
+			if pod.Annotations[k] == sfs.Spec.Template.Annotations[k] {
+				continue
+			}
+
+			logf.FromContext(ctx).Info("mongos runs an outdated TLS certificate, updating mongos first", "pod", pod.Name, "statefulset", sfs.Name)
+			return r.setUpdateMongosFirst(ctx, cr)
+		}
+	}
+
+	return nil
+}
+
+func mongosNeedsLatestTLS(cr *api.PerconaServerMongoDB) bool {
+	return cr.Spec.Sharding.Enabled &&
+		cr.Spec.Sharding.Mongos.Size > 0 &&
+		cr.TLSEnabled() &&
+		cr.Spec.UpdateStrategy == api.SmartUpdateStatefulSetStrategyType &&
+		!ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates)
 }
 
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -246,7 +293,7 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 					return errors.Wrap(err, "get secret")
 				}
 
-				if bytes.Equal(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
+				if tls.EqualPEM(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
 					continue
 				}
 
@@ -323,7 +370,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			newSecret.Labels = nil
 		}
 
-		if err := r.client.Create(ctx, newSecret); err != nil {
+		if err := r.client.Create(ctx, newSecret); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create secret")
 		}
 	}
@@ -389,7 +436,7 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 		}
 
 		// If secret was already updated, we should delete the old one
-		if bytes.Equal(mergedCA, secret.Data["ca.crt"]) {
+		if tls.EqualPEM(mergedCA, secret.Data["ca.crt"]) {
 			if err := r.client.Delete(ctx, oldSecret); err != nil {
 				return err
 			}

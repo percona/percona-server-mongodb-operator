@@ -78,8 +78,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 		return status, errors.Wrap(err, "create db config secret")
 	}
 
-	if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
+	if ready, err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
 		return status, errors.Wrap(err, "prepare statefulsets for physical restore")
+	} else if !ready {
+		log.Info("Waiting for statefulsets to be prepared for restore")
+		return status, nil
 	}
 
 	sfsReady, err := r.checkIfStatefulSetsAreReadyForPhysicalRestore(ctx, cluster)
@@ -380,7 +383,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
 				sfs.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
 
-				return r.client.Patch(ctx, &sfs, client.MergeFrom(orig))
+				if err := r.client.Patch(ctx, &sfs, client.MergeFrom(orig)); err != nil {
+					return err
+				}
+
+				if _, err := r.terminateStatefulSetPods(ctx, client.ObjectKeyFromObject(&sfs), true); err != nil {
+					return err
+				}
+
+				return nil
 			}); err != nil {
 				return false, errors.Wrapf(err, "prepare statefulset %s for snapshot restore", nn.Name)
 			}
