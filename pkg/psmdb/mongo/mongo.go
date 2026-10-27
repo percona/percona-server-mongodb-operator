@@ -1018,7 +1018,7 @@ func (m *ConfigMembers) setMemberVoteAndPriority(i int, votes, priority int) {
 }
 
 // setVotes sets voting parameters for members list
-func (m *ConfigMembers) setVotes(compareWith ConfigMembers, unsafePSA bool) {
+func (m *ConfigMembers) setVotes(compareWith ConfigMembers, unsafePSA bool, primary string) {
 	cm := make(map[string]int, len(compareWith))
 
 	for _, member := range compareWith {
@@ -1030,7 +1030,21 @@ func (m *ConfigMembers) setVotes(compareWith ConfigMembers, unsafePSA bool) {
 	}
 
 	votes := 0
-	lastVoteIdx := -1
+	// Members whose vote can be removed. mongod rejects removing the vote of the primary.
+	var withVote, withoutVote, hiddenWithVote, hiddenWithoutVote []int
+	addRemovable := func(i int, member ConfigMember) {
+		switch {
+		case member.Host == primary:
+		case member.Hidden && member.Votes == 0:
+			hiddenWithoutVote = append(hiddenWithoutVote, i)
+		case member.Hidden:
+			hiddenWithVote = append(hiddenWithVote, i)
+		case member.Votes == 0:
+			withoutVote = append(withoutVote, i)
+		default:
+			withVote = append(withVote, i)
+		}
+	}
 
 	for i, member := range *m {
 		_, isNonVoting := member.Tags["nonVoting"]
@@ -1050,7 +1064,7 @@ func (m *ConfigMembers) setVotes(compareWith ConfigMembers, unsafePSA bool) {
 			// Hidden member is a voting ReplSet member
 			// but it is not listed in hello command.
 			m.setMemberVoteAndPriority(i, DefaultVotes, 0)
-			lastVoteIdx = i
+			addRemovable(i, member)
 			votes++
 		case member.ArbiterOnly:
 			// Arbiter should always have a vote
@@ -1074,42 +1088,26 @@ func (m *ConfigMembers) setVotes(compareWith ConfigMembers, unsafePSA bool) {
 			}
 
 			m.setMemberVoteAndPriority(i, DefaultVotes, priority)
-			lastVoteIdx = i
+			addRemovable(i, member)
 			votes++
 		}
-
-		if votes > MaxVotingMembers {
-			if member.ArbiterOnly {
-				for j := lastVoteIdx; j >= 0; j-- {
-					if []ConfigMember(*m)[j].Votes == 0 {
-						continue
-					}
-
-					m.setMemberVoteAndPriority(j, 0, 0)
-					lastVoteIdx = j - 1
-					votes--
-					break
-				}
-			} else {
-				m.setMemberVoteAndPriority(i, 0, 0)
-				votes--
-			}
-		}
 	}
 
-	if votes == 0 {
-		return
+	// The votes are removed starting from the end: hidden members first since they can't become primary,
+	// then members without a vote to avoid swapping votes.
+	removable := slices.Concat(withVote, withoutVote, hiddenWithVote, hiddenWithoutVote)
+	removeVote := func() {
+		m.setMemberVoteAndPriority(removable[len(removable)-1], 0, 0)
+		removable = removable[:len(removable)-1]
+		votes--
 	}
 
-	if votes%2 == 0 && !unsafePSA {
-		for j := lastVoteIdx; j >= 0; j-- {
-			if []ConfigMember(*m)[j].Votes == 0 {
-				continue
-			}
+	for votes > MaxVotingMembers && len(removable) > 0 {
+		removeVote()
+	}
 
-			m.setMemberVoteAndPriority(j, 0, 0)
-			break
-		}
+	if votes > 0 && votes%2 == 0 && !unsafePSA && len(removable) > 0 {
+		removeVote()
 	}
 }
 
@@ -1179,7 +1177,7 @@ func (m *ConfigMembers) limitVotingChanges(ctx context.Context, prev ConfigMembe
 // It reports whether the members changed and whether some voting changes are deferred to the next reconciles.
 func (m *ConfigMembers) UpdateVotes(ctx context.Context, compareWith ConfigMembers, unsafePSA bool, primary string) (changed, pending bool) {
 	prev := append(ConfigMembers(nil), *m...)
-	m.setVotes(compareWith, unsafePSA)
+	m.setVotes(compareWith, unsafePSA, primary)
 	pending = m.limitVotingChanges(ctx, prev, primary)
 	return !reflect.DeepEqual(prev, *m), pending
 }

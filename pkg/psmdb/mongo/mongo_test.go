@@ -1315,7 +1315,7 @@ func TestVoting(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			compareWith := slices.Clone(*c.mset)
-			c.mset.SetVotes(compareWith, c.unsafePSA)
+			c.mset.SetVotes(compareWith, c.unsafePSA, "")
 			require.Len(t, *c.mset, len(*c.desired))
 
 			votes := 0
@@ -1334,7 +1334,7 @@ func TestVoting(t *testing.T) {
 			}
 
 			again := slices.Clone(*c.mset)
-			again.SetVotes(compareWith, c.unsafePSA)
+			again.SetVotes(compareWith, c.unsafePSA, "")
 			assert.Equal(t, *c.mset, again, "SetVotes is not idempotent")
 		})
 	}
@@ -1372,6 +1372,7 @@ func TestSetVotesTransitions(t *testing.T) {
 		current   mongo.ConfigMembers
 		desired   mongo.ConfigMembers
 		unsafePSA bool
+		primary   string
 		expected  []vp
 		// expected after a second SetVotes, if it differs from expected
 		next []vp
@@ -1413,10 +1414,20 @@ func TestSetVotesTransitions(t *testing.T) {
 			desired:  append(rs(3), external("ext-0", 1, 3), external("ext-1", 1, 3)),
 			expected: []vp{{1, 2}, {1, 2}, {0, 0}, {1, 1}, {0, 0}},
 		},
-		"hidden member before rs0 members keeps its vote": {
+		"hidden member before rs0 members loses its vote": {
 			current:  append(mongo.ConfigMembers{hidden("rs0-hidden-0", 1)}, rs(3)...),
 			desired:  append(rs(3), hidden("rs0-hidden-0", 1)),
-			expected: []vp{{1, 0}, {1, 2}, {1, 2}, {0, 0}},
+			expected: []vp{{0, 0}, {1, 2}, {1, 2}, {1, 2}},
+		},
+		"hidden member loses its vote before a member without a vote": {
+			current:  mongo.ConfigMembers{member("rs0-0", 1, 2), member("rs0-1", 0, 0), member("rs0-2", 1, 2), hidden("rs0-hidden-0", 1)},
+			desired:  append(rs(3), hidden("rs0-hidden-0", 1)),
+			expected: []vp{{1, 2}, {1, 2}, {1, 2}, {0, 0}},
+		},
+		"hidden member without a vote keeps not having it": {
+			current:  append(rs(3), hidden("rs0-hidden-0", 1), hidden("rs0-hidden-1", 0), hidden("rs0-hidden-2", 1)),
+			desired:  append(rs(3), hidden("rs0-hidden-0", 1), hidden("rs0-hidden-1", 1), hidden("rs0-hidden-2", 1)),
+			expected: []vp{{1, 2}, {1, 2}, {1, 2}, {1, 0}, {0, 0}, {1, 0}},
 		},
 		"arbiter before rs0 members over the voting limit": {
 			current:  append(mongo.ConfigMembers{arbiter("rs0-arbiter-0")}, rs(8)...),
@@ -1427,6 +1438,31 @@ func TestSetVotesTransitions(t *testing.T) {
 			current:  mongo.ConfigMembers{nonVoting("rs0-nv-0", 0, 0), external("ext-0", 1, 1), arbiter("rs0-arbiter-0")},
 			desired:  mongo.ConfigMembers{nonVoting("rs0-nv-0", 0, 0), external("ext-0", 1, 1), arbiter("rs0-arbiter-0")},
 			expected: []vp{{0, 0}, {1, 1}, {1, 0}},
+		},
+		"even votes don't remove the vote of the primary": {
+			current:  rs(4),
+			desired:  rs(4),
+			primary:  "rs0-3",
+			expected: []vp{{1, 2}, {1, 2}, {0, 0}, {1, 2}},
+		},
+		"votes over the limit don't remove the vote of the primary": {
+			current:  rs(8),
+			desired:  rs(8),
+			primary:  "rs0-7",
+			expected: []vp{{1, 2}, {1, 2}, {1, 2}, {1, 2}, {1, 2}, {1, 2}, {0, 0}, {1, 2}},
+		},
+		"even votes keep the existing non-voter": {
+			current:  mongo.ConfigMembers{member("rs0-0", 1, 2), member("rs0-1", 0, 0), member("rs0-2", 1, 2), member("rs0-3", 1, 2)},
+			desired:  rs(4),
+			expected: []vp{{1, 2}, {0, 0}, {1, 2}, {1, 2}},
+		},
+		"votes over the limit keep the existing non-voters": {
+			current: mongo.ConfigMembers{
+				member("rs0-0", 0, 0), member("rs0-1", 1, 2), member("rs0-2", 1, 2), member("rs0-3", 0, 0), member("rs0-4", 1, 2),
+				member("rs0-5", 1, 2), member("rs0-6", 1, 2), member("rs0-7", 1, 2), member("rs0-8", 1, 2),
+			},
+			desired:  rs(9),
+			expected: []vp{{0, 0}, {1, 2}, {1, 2}, {0, 0}, {1, 2}, {1, 2}, {1, 2}, {1, 2}, {1, 2}},
 		},
 		"only non-voting members": {
 			current:  mongo.ConfigMembers{nonVoting("rs0-nv-0", 1, 2), nonVoting("rs0-nv-1", 0, 0)},
@@ -1446,16 +1482,16 @@ func TestSetVotesTransitions(t *testing.T) {
 			}
 
 			m := slices.Clone(tt.current)
-			m.SetVotes(tt.desired, tt.unsafePSA)
+			m.SetVotes(tt.desired, tt.unsafePSA, tt.primary)
 			assert.Equal(t, tt.expected, votes(m))
 
 			if tt.next != nil {
-				m.SetVotes(tt.desired, tt.unsafePSA)
+				m.SetVotes(tt.desired, tt.unsafePSA, tt.primary)
 				assert.Equal(t, tt.next, votes(m))
 			}
 
 			again := slices.Clone(m)
-			again.SetVotes(tt.desired, tt.unsafePSA)
+			again.SetVotes(tt.desired, tt.unsafePSA, tt.primary)
 			assert.Equal(t, m, again, "SetVotes is not idempotent")
 		})
 	}
@@ -1565,7 +1601,7 @@ func TestSetVotesDeadlock(t *testing.T) {
 		},
 		"even number of members": {
 			desired:        mongo.ConfigMembers{mongod("rs0-0"), mongod("rs0-1"), mongod("rs0-2"), mongod("rs0-3")},
-			expectedVoters: map[string]struct{}{"rs0-0": {}, "rs0-1": {}, "rs0-2": {}},
+			expectedVoters: map[string]struct{}{"rs0-0": {}, "rs0-2": {}, "rs0-3": {}},
 		},
 	}
 
@@ -1681,6 +1717,9 @@ func TestUpdateVotesConverges(t *testing.T) {
 				t.Fatalf("seed %d: %s: %d voting members changed, topologies: %+v", seed, step, n, history)
 			}
 			if i := slices.IndexFunc(next, func(m mongo.ConfigMember) bool { return m.Host == primary }); primary != "" && (i < 0 || !electable(next[i])) {
+				if step == "update votes" {
+					t.Fatalf("seed %d: %s: primary %s is not electable, topologies: %+v", seed, step, primary, history)
+				}
 				return errors.New("primary is not electable")
 			}
 			current = slices.Clone(next)
@@ -1741,6 +1780,13 @@ func TestUpdateVotesConverges(t *testing.T) {
 			}
 		}
 		require.Truef(t, converged, "seed %d: replset didn't converge, topologies: %+v", seed, history)
+
+		for range 3 {
+			elect()
+			cnf := slices.Clone(current)
+			changed, _ := cnf.UpdateVotes(ctx, desired, tp.unsafePSA, primary)
+			require.Falsef(t, changed, "seed %d: votes changed after failover to %s, topologies: %+v", seed, primary, history)
+		}
 
 		v := len(voters(current))
 		assert.LessOrEqualf(t, v, mongo.MaxVotingMembers, "seed %d: topologies: %+v", seed, history)
