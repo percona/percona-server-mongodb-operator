@@ -866,227 +866,184 @@ func TestVPAResourcesResolution(t *testing.T) {
 	}
 }
 
-func TestCommitVPAResourcesLeavesSpecAlone(t *testing.T) {
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	declared := corev1.ResourceRequirements{
-		Requests: rl("100m", "100M"),
-		Limits:   rl("4", "4Gi"),
+func TestCommitVPAResources(t *testing.T) {
+	tests := []struct {
+		name             string
+		controlledValues api.VPAControlledValues
+		declared         corev1.ResourceRequirements
+		recs             []corev1.ResourceList
+		wantRequests     corev1.ResourceList
+		wantLimits       corev1.ResourceList
+		wantReapplied    bool
+	}{
+		{
+			name:         "the recommendation is committed to status",
+			declared:     corev1.ResourceRequirements{Requests: rl("100m", "100M"), Limits: rl("4", "4Gi")},
+			recs:         []corev1.ResourceList{rl("350m", "350Mi")},
+			wantRequests: rl("350m", "350Mi"),
+			wantLimits:   rl("4", "4Gi"),
+		},
+		{
+			name:             "limits are computed from the declared baseline",
+			controlledValues: api.VPAControlledValuesRequestsAndLimits,
+			declared:         corev1.ResourceRequirements{Requests: rl("1", ""), Limits: rl("2", "")},
+			recs:             []corev1.ResourceList{rl("2", ""), rl("2", "")},
+			wantRequests:     rl("2", ""),
+			wantLimits:       rl("4", ""),
+			wantReapplied:    false,
+		},
+		{
+			name:          "an unchanged recommendation is skipped",
+			declared:      corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")},
+			recs:          []corev1.ResourceList{rl("350m", "350Mi"), rl("350m", "350Mi")},
+			wantRequests:  rl("350m", "350Mi"),
+			wantLimits:    rl("4", "4Gi"),
+			wantReapplied: false,
+		},
+		{
+			name:          "a changed recommendation is applied",
+			declared:      corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")},
+			recs:          []corev1.ResourceList{rl("350m", "350Mi"), rl("500m", "350Mi")},
+			wantRequests:  rl("500m", "350Mi"),
+			wantLimits:    rl("4", "4Gi"),
+			wantReapplied: true,
+		},
+		{
+			name:          "equivalent quantity forms are not a change",
+			declared:      corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")},
+			recs:          []corev1.ResourceList{rl("350m", "1Gi"), rl("350m", "1024Mi")},
+			wantRequests:  rl("350m", "1Gi"),
+			wantLimits:    rl("4", "4Gi"),
+			wantReapplied: false,
+		},
+		{
+			// A 1:1 declared ratio is what makes a pod Guaranteed. Ratio-preserving
+			// limit scaling must keep requests and limits exactly equal, or the pod
+			// silently drops to Burstable and loses CPU pinning and eviction priority.
+			name:             "RequestsAndLimits keeps a Guaranteed pod Guaranteed",
+			controlledValues: api.VPAControlledValuesRequestsAndLimits,
+			declared:         corev1.ResourceRequirements{Requests: rl("1", "1Gi"), Limits: rl("1", "1Gi")},
+			recs:             []corev1.ResourceList{rl("2", "2Gi")},
+			wantRequests:     rl("2", "2Gi"),
+			wantLimits:       rl("2", "2Gi"),
+		},
+		{
+			// RequestsOnly caps requests at the declared limits so Kubernetes never
+			// rejects the update. On a Guaranteed pod requests already sit at the
+			// limits, so there is no headroom and every upward recommendation is a
+			// no-op. RequestsAndLimits is the mode that can actually grow such a pod.
+			name:             "RequestsOnly cannot scale up a Guaranteed pod",
+			controlledValues: api.VPAControlledValuesRequestsOnly,
+			declared:         corev1.ResourceRequirements{Requests: rl("1", "1Gi"), Limits: rl("1", "1Gi")},
+			recs:             []corev1.ResourceList{rl("2", "2Gi")},
+			wantRequests:     rl("1", "1Gi"),
+			wantLimits:       rl("1", "1Gi"),
+		},
 	}
 
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("350m", "350Mi"), vpaBounds{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := vpaReaderWith(t)
+			cr := vpaTestCR(true)
+			cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
+			cr.Spec.VPA.ControlledValues = tt.controlledValues
 
-	// The committed value lands in status...
-	s := cr.Status.VPAStatus["rs0"]
-	require.NotNil(t, s.Applied)
-	assertResourceList(t, rl("350m", "350Mi"), s.Applied.Requests)
-	require.NotNil(t, s.LastAppliedAt)
+			// The copy is what the caller hands over, so tt.declared stays as the
+			// pristine reference to compare against afterwards.
+			declared := tt.declared.DeepCopy()
+			backdated := metav1.NewTime(time.Now().Add(-time.Hour))
 
-	// ...and the caller's declared spec is untouched.
-	assertResourceList(t, rl("100m", "100M"), declared.Requests)
-}
+			for i, rec := range tt.recs {
+				if i > 0 {
+					s := cr.Status.VPAStatus["rs0"]
+					s.LastAppliedAt = &backdated
+					cr.Status.VPAStatus["rs0"] = s
+				}
+				r.commitVPAResources(t.Context(), cr, "rs0", *declared, rec, vpaBounds{})
+			}
 
-func TestCommitVPAResourcesComputesFromDeclaredBaseline(t *testing.T) {
-	// Limit scaling must use the user's declared ratio every time rather than
-	// compounding on the previous commit.
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	cr.Spec.VPA.ControlledValues = api.VPAControlledValuesRequestsAndLimits
+			s := cr.Status.VPAStatus["rs0"]
+			require.NotNil(t, s.Applied)
+			assertResourceList(t, tt.wantRequests, s.Applied.Requests)
+			assertResourceList(t, tt.wantLimits, s.Applied.Limits)
+			require.NotNil(t, s.LastAppliedAt)
 
-	declared := corev1.ResourceRequirements{
-		Requests: rl("1", ""),
-		Limits:   rl("2", ""),
-	}
+			if len(tt.recs) > 1 {
+				if tt.wantReapplied {
+					assert.True(t, s.LastAppliedAt.After(backdated.Time),
+						"a changed recommendation did not advance lastAppliedAt")
+				} else {
+					assert.True(t, s.LastAppliedAt.Equal(&backdated),
+						"an unchanged recommendation advanced lastAppliedAt")
+				}
+			}
 
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", ""), vpaBounds{})
-	first := cr.Status.VPAStatus["rs0"].Applied.Limits.DeepCopy()
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", ""), vpaBounds{})
-	second := cr.Status.VPAStatus["rs0"].Applied.Limits
-
-	assertResourceList(t, rl("4", ""), first)
-	assertResourceList(t, first, second)
-}
-
-func TestCommitVPAResourcesSkipsUnchangedRecommendation(t *testing.T) {
-	// A recommender holds a value steady for long stretches. Re-committing it
-	// every stabilization window would churn status and make lastAppliedAt mean
-	// "last reconciled" rather than "last changed".
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	declared := corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")}
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("350m", "350Mi"), vpaBounds{})
-
-	// Back-date the first apply so any new write would be obvious.
-	applied := metav1.NewTime(time.Now().Add(-time.Hour))
-	s := cr.Status.VPAStatus["rs0"]
-	s.LastAppliedAt = &applied
-	cr.Status.VPAStatus["rs0"] = s
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("350m", "350Mi"), vpaBounds{})
-
-	s = cr.Status.VPAStatus["rs0"]
-	assert.True(t, s.LastAppliedAt.Equal(&applied),
-		"an unchanged recommendation advanced lastAppliedAt")
-	assertResourceList(t, rl("350m", "350Mi"), s.Applied.Requests)
-}
-
-func TestCommitVPAResourcesAppliesChangedRecommendation(t *testing.T) {
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	declared := corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")}
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("350m", "350Mi"), vpaBounds{})
-
-	applied := metav1.NewTime(time.Now().Add(-time.Hour))
-	s := cr.Status.VPAStatus["rs0"]
-	s.LastAppliedAt = &applied
-	cr.Status.VPAStatus["rs0"] = s
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("500m", "350Mi"), vpaBounds{})
-
-	s = cr.Status.VPAStatus["rs0"]
-	assert.True(t, s.LastAppliedAt.After(applied.Time),
-		"a changed recommendation did not advance lastAppliedAt")
-	assertResourceList(t, rl("500m", "350Mi"), s.Applied.Requests)
-}
-
-func TestCommitVPAResourcesIgnoresEquivalentQuantityForms(t *testing.T) {
-	// The recommender may report the same amount in a different unit. Comparing
-	// by value rather than by string keeps that from registering as a change.
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	declared := corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")}
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("350m", "1Gi"), vpaBounds{})
-
-	applied := metav1.NewTime(time.Now().Add(-time.Hour))
-	s := cr.Status.VPAStatus["rs0"]
-	s.LastAppliedAt = &applied
-	cr.Status.VPAStatus["rs0"] = s
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("350m", "1024Mi"), vpaBounds{})
-
-	s = cr.Status.VPAStatus["rs0"]
-	assert.True(t, s.LastAppliedAt.Equal(&applied),
-		"1024Mi was treated as a change from 1Gi")
-}
-
-// A Guaranteed QoS pod declares requests == limits. The two controlledValues
-// modes treat it very differently, and both behaviours are easy to get wrong.
-
-func TestGuaranteedQoSPreservedUnderRequestsAndLimits(t *testing.T) {
-	// A 1:1 declared ratio is what makes a pod Guaranteed. Ratio-preserving
-	// limit scaling must keep requests and limits exactly equal, or the pod
-	// silently drops to Burstable and loses CPU pinning and eviction priority.
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	cr.Spec.VPA.ControlledValues = api.VPAControlledValuesRequestsAndLimits
-
-	declared := corev1.ResourceRequirements{
-		Requests: rl("1", "1Gi"),
-		Limits:   rl("1", "1Gi"),
-	}
-
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", "2Gi"), vpaBounds{})
-
-	got := cr.Status.VPAStatus["rs0"].Applied
-	require.NotNil(t, got)
-	for _, res := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
-		req, lim := got.Requests[res], got.Limits[res]
-		assert.Zerof(t, req.Cmp(lim),
-			"%s: requests %s != limits %s, so the pod is no longer Guaranteed", res, req.String(), lim.String())
+			// The caller's declared spec is never written through.
+			assertResourceList(t, tt.declared.Requests, declared.Requests)
+			assertResourceList(t, tt.declared.Limits, declared.Limits)
+		})
 	}
 }
 
-func TestRequestsOnlyCannotScaleUpGuaranteedPod(t *testing.T) {
-	// RequestsOnly caps requests at the declared limits so Kubernetes never
-	// rejects the update. On a Guaranteed pod requests already sit at the
-	// limits, so there is no headroom and every upward recommendation is a
-	// no-op. RequestsAndLimits is the mode that can actually grow such a pod.
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	cr.Spec.VPA.ControlledValues = api.VPAControlledValuesRequestsOnly
-
-	declared := corev1.ResourceRequirements{
-		Requests: rl("1", "1Gi"),
-		Limits:   rl("1", "1Gi"),
+func TestRecordVPAStatus(t *testing.T) {
+	tests := []struct {
+		name                string
+		observations        []corev1.ResourceList
+		wantCPU, wantMemory string
+		wantRecorded        bool
+	}{
+		{
+			name:         "an unchanged observation is skipped",
+			observations: []corev1.ResourceList{rl("350m", "350Mi"), rl("350m", "350Mi")},
+			wantCPU:      "350m",
+			wantMemory:   "350Mi",
+			wantRecorded: false,
+		},
+		{
+			name:         "a changed observation is recorded",
+			observations: []corev1.ResourceList{rl("350m", "350Mi"), rl("500m", "350Mi")},
+			wantCPU:      "500m",
+			wantMemory:   "350Mi",
+			wantRecorded: true,
+		},
+		{
+			name:         "equivalent units are not a change",
+			observations: []corev1.ResourceList{rl("350m", "1Gi"), rl("350m", "1024Mi")},
+			wantCPU:      "350m",
+			wantMemory:   "1Gi",
+			wantRecorded: false,
+		},
 	}
 
-	r.commitVPAResources(t.Context(), cr, "rs0", declared, rl("2", "2Gi"), vpaBounds{})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := vpaReaderWith(t)
+			cr := vpaTestCR(true)
+			backdated := metav1.NewTime(time.Now().Add(-time.Hour))
 
-	got := cr.Status.VPAStatus["rs0"].Applied
-	require.NotNil(t, got)
-	assertResourceList(t, rl("1", "1Gi"), got.Requests)
-	assertResourceList(t, rl("1", "1Gi"), got.Limits)
-}
+			for i, rec := range tt.observations {
+				if i > 0 {
+					s := cr.Status.VPAStatus["rs0"]
+					s.LastObservedAt = &backdated
+					cr.Status.VPAStatus["rs0"] = s
+				}
+				r.recordVPAStatus(cr, "rs0", rec)
+			}
 
-func TestRecordVPAStatusSkipsUnchangedObservation(t *testing.T) {
-	// A steady recommendation must not rewrite lastObservedAt. Otherwise the
-	// status differs on every reconcile and the cluster's resourceVersion
-	// climbs forever, even with nothing to apply.
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
+			s := cr.Status.VPAStatus["rs0"]
+			require.NotNil(t, s.LastObservedAt)
+			assert.Equal(t, tt.wantCPU, s.Recommended.Cpu().String())
+			assert.Equal(t, tt.wantMemory, s.Recommended.Memory().String())
 
-	r.recordVPAStatus(cr, "rs0", rl("350m", "350Mi"))
-
-	observed := metav1.NewTime(time.Now().Add(-time.Hour))
-	s := cr.Status.VPAStatus["rs0"]
-	s.LastObservedAt = &observed
-	cr.Status.VPAStatus["rs0"] = s
-
-	r.recordVPAStatus(cr, "rs0", rl("350m", "350Mi"))
-
-	s = cr.Status.VPAStatus["rs0"]
-	assert.True(t, s.LastObservedAt.Equal(&observed),
-		"an unchanged observation advanced lastObservedAt")
-	assert.Equal(t, "350m", s.Recommended.Cpu().String())
-}
-
-func TestRecordVPAStatusRecordsChangedObservation(t *testing.T) {
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-
-	r.recordVPAStatus(cr, "rs0", rl("350m", "350Mi"))
-
-	observed := metav1.NewTime(time.Now().Add(-time.Hour))
-	s := cr.Status.VPAStatus["rs0"]
-	s.LastObservedAt = &observed
-	cr.Status.VPAStatus["rs0"] = s
-
-	r.recordVPAStatus(cr, "rs0", rl("500m", "350Mi"))
-
-	s = cr.Status.VPAStatus["rs0"]
-	assert.True(t, s.LastObservedAt.After(observed.Time),
-		"a changed observation did not advance lastObservedAt")
-	assert.Equal(t, "500m", s.Recommended.Cpu().String())
-}
-
-func TestRecordVPAStatusIgnoresEquivalentUnits(t *testing.T) {
-	// Recorded as 1Gi, observed again as 1024Mi: the same amount, so neither
-	// the timestamp nor the recorded string should move.
-	r := vpaReaderWith(t)
-	cr := vpaTestCR(true)
-
-	r.recordVPAStatus(cr, "rs0", rl("350m", "1Gi"))
-
-	observed := metav1.NewTime(time.Now().Add(-time.Hour))
-	s := cr.Status.VPAStatus["rs0"]
-	s.LastObservedAt = &observed
-	cr.Status.VPAStatus["rs0"] = s
-
-	r.recordVPAStatus(cr, "rs0", rl("350m", "1024Mi"))
-
-	s = cr.Status.VPAStatus["rs0"]
-	assert.True(t, s.LastObservedAt.Equal(&observed),
-		"1024Mi was treated as a change from 1Gi")
-	assert.Equal(t, "1Gi", s.Recommended.Memory().String())
+			if len(tt.observations) > 1 {
+				if tt.wantRecorded {
+					assert.True(t, s.LastObservedAt.After(backdated.Time),
+						"a changed observation did not advance lastObservedAt")
+				} else {
+					assert.True(t, s.LastObservedAt.Equal(&backdated),
+						"an unchanged observation advanced lastObservedAt")
+				}
+			}
+		})
+	}
 }
