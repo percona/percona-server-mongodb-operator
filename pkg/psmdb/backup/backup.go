@@ -63,6 +63,10 @@ func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client,
 		}
 	}
 
+	if !cluster.Spec.Backup.Enabled {
+		return false, nil
+	}
+
 	pbm, err := newPBMFunc(ctx, cl, cluster)
 	if err != nil {
 		if IsPBMNotConfiguredError(err) {
