@@ -1112,7 +1112,8 @@ func (m *ConfigMembers) setVotes(compareWith ConfigMembers, unsafePSA bool, prim
 }
 
 // limitVotingChanges ensures reconfig adds or remove exactly 1 voting member by
-// reverting all voting changes of the members in prev except one.
+// reverting all voting changes of the members in prev except one. Returns true
+// if any vote change is deferred.
 func (m *ConfigMembers) limitVotingChanges(ctx context.Context, prev ConfigMembers, primary string) bool {
 	prevMembers := make(map[string]ConfigMember, len(prev))
 	prevVoters := 0
