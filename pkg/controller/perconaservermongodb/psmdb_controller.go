@@ -464,6 +464,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "reconcile backup tasks")
 	}
 
+	err = r.reconcileVPARecommendations(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile VPA recommendations")
+	}
+
 	clusterStatus, err = r.reconcileReplsets(ctx, cr, repls)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile statefulsets")
@@ -472,11 +477,6 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	err = r.reconcileMongos(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
-	}
-
-	err = r.reconcileVPARecommendations(ctx, cr)
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "reconcile VPA recommendations")
 	}
 
 	if err := r.upgradeFCVIfNeeded(ctx, cr, cr.Status.MongoVersion); err != nil {
