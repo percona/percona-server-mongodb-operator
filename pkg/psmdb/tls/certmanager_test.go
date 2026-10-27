@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -519,9 +520,10 @@ func TestWaitForCerts(t *testing.T) {
 				Build()
 
 			controller := &certManagerController{
-				cl:     cl,
-				scheme: s,
-				dryRun: false,
+				cl:           cl,
+				scheme:       s,
+				dryRun:       false,
+				pollInterval: time.Millisecond,
 			}
 
 			err := controller.WaitForCerts(t.Context(), cr, CertificateCA(cr))

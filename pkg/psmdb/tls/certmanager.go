@@ -36,9 +36,10 @@ type CertManagerController interface {
 }
 
 type certManagerController struct {
-	cl     client.Client
-	scheme *runtime.Scheme
-	dryRun bool
+	cl           client.Client
+	scheme       *runtime.Scheme
+	dryRun       bool
+	pollInterval time.Duration
 }
 
 var _ CertManagerController = new(certManagerController)
@@ -322,26 +323,30 @@ func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.Percon
 		return nil
 	}
 
-	ticker := time.NewTicker(certWaitPollInterval)
+	pollInterval := c.pollInterval
+	if pollInterval <= 0 {
+		pollInterval = certWaitPollInterval
+	}
+
+	ticker := time.NewTicker(pollInterval)
 	timeoutTimer := time.NewTimer(certWaitTimeout)
 	defer timeoutTimer.Stop()
 	defer ticker.Stop()
 
 	for {
-		ready, err := c.certsReady(ctx, cr, certificates)
-		if err != nil {
-			return err
-		}
-		if ready {
-			return nil
-		}
-
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-timeoutTimer.C:
 			return errors.Errorf("timeout: can't get tls certificates from certmanager, %v", certificates)
 		case <-ticker.C:
+			ready, err := c.certsReady(ctx, cr, certificates)
+			if err != nil {
+				return err
+			}
+			if ready {
+				return nil
+			}
 		}
 	}
 }
