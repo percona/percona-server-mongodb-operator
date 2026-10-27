@@ -13,6 +13,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -759,6 +760,139 @@ func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 			} else {
 				assert.NotContains(t, c.VolumeMounts, tmpMount)
 			}
+		})
+	}
+}
+
+func TestAddPMMTmpVolume(t *testing.T) {
+	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
+	tmpVolume := corev1.Volume{
+		Name:     tmpVolumeName,
+		EmptyDir: &corev1.EmptyDirVolumeSource{},
+	}
+
+	newCR := func(crVersion string, sc *corev1.SecurityContext) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: crVersion,
+				PMM: api.PMMSpec{
+					Enabled:                  true,
+					ContainerSecurityContext: sc,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name string
+		cr   *api.PerconaServerMongoDB
+		pmmC *corev1.Container
+		want bool
+	}{
+		{
+			name: "readOnlyRootFilesystem true injects tmp",
+			cr:   newCR(version.Version(), rorfsSecurityContext(true)),
+			pmmC: &corev1.Container{Name: "pmm-client"},
+			want: true,
+		},
+		{
+			name: "readOnlyRootFilesystem false does nothing",
+			cr:   newCR(version.Version(), rorfsSecurityContext(false)),
+			pmmC: &corev1.Container{Name: "pmm-client"},
+			want: false,
+		},
+		{
+			name: "no security context does nothing",
+			cr:   newCR(version.Version(), nil),
+			pmmC: &corev1.Container{Name: "pmm-client"},
+			want: false,
+		},
+		{
+			name: "ignored before 1.24.0",
+			cr:   newCR("1.23.0", rorfsSecurityContext(true)),
+			pmmC: &corev1.Container{Name: "pmm-client"},
+			want: false,
+		},
+		{
+			name: "nil pmm container does nothing",
+			cr:   newCR(version.Version(), rorfsSecurityContext(true)),
+			pmmC: nil,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			volumes := AddPMMTmpVolume(tt.cr, tt.pmmC, nil)
+			if tt.want {
+				require.NotNil(t, tt.pmmC)
+				assert.Contains(t, tt.pmmC.VolumeMounts, tmpMount)
+				assert.Contains(t, volumes, tmpVolume)
+			} else {
+				if tt.pmmC != nil {
+					assert.NotContains(t, tt.pmmC.VolumeMounts, tmpMount)
+				}
+				assert.NotContains(t, volumes, tmpVolume)
+			}
+		})
+	}
+
+	t.Run("does not duplicate an existing tmp volume", func(t *testing.T) {
+		cr := newCR(version.Version(), rorfsSecurityContext(true))
+		pmmC := &corev1.Container{Name: "pmm-client"}
+		volumes := AddPMMTmpVolume(cr, pmmC, []corev1.Volume{tmpVolume})
+		assert.Equal(t, 1, len(volumes))
+	})
+}
+
+func TestBuildMongoDBURI(t *testing.T) {
+	const baseURI = "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
+	const tlsOpts = "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+
+	tests := map[string]struct {
+		tlsEnabled   bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			expectedURI: baseURI,
+		},
+		"tls enabled": {
+			tlsEnabled:   true,
+			allowInvalid: false,
+			expectedURI:  baseURI + tlsOpts,
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			allowInvalid: true,
+			expectedURI:  baseURI + tlsOpts + "&tlsInsecure=true",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Name:      "cluster",
+				Namespace: "ns",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+
+			sslSecret := new(corev1.Secret)
+			sans := tls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+			require.NoError(t, err)
+			sslSecret.Data = map[string][]byte{
+				"ca.crt":  caCert,
+				"tls.crt": tlsCert,
+				"tls.key": tlsKey,
+			}
+
+			assert.Equal(t, tt.expectedURI, BuildMongoDBURI(t.Context(), cr, tt.tlsEnabled, sslSecret))
 		})
 	}
 }
