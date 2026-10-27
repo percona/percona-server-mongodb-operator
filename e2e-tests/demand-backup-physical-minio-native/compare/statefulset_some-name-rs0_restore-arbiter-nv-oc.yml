@@ -31,7 +31,8 @@ spec:
   serviceName: some-name-rs0
   template:
     metadata:
-      annotations: {}
+      annotations:
+        percona.com/restore-in-progress: "true"
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: some-name

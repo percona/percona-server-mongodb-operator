@@ -417,7 +417,8 @@ const (
 
 	ConditionTypePBMReady AppState = "PBMReady"
 
-	ConditionTypeTLSSecretsReady AppState = "TLSSecretsReady"
+	ConditionTypeTLSSecretsReady        AppState = "TLSSecretsReady"
+	ConditionTypeImageUpgradeInProgress AppState = "ImageUpgradeInProgress"
 
 	// ConditionTypeVPAReady reports whether the operator is able to read VerticalPodAutoscaler
 	// recommendations. It is False when spec.vpa.enabled is set but the VerticalPodAutoscaler
