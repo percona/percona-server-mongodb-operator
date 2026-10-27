@@ -1,8 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  annotations:
-    test: one-pod
+  annotations: {}
   labels:
     app.kubernetes.io/instance: one-pod
     app.kubernetes.io/managed-by: percona-server-mongodb-operator
