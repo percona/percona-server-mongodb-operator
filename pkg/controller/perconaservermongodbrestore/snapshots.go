@@ -343,6 +343,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					status.PBMname,
 					"-c", "/etc/pbm/pbm_config.yaml",
 					"--rs", "$(MONGODB_REPLSET)",
+
+					// The result of GetAddr contains the literal "$(POD_NAME)" which will resolve to the actual pod name by the shell at runtime.
+					// It works because we already set a POD_NAME env variable in the pod spec during updateStatefulSetForPhysicalRestore.
 					"--node", psmdb.GetAddr(cluster, "$(POD_NAME)", rs.Name, rs.GetPort()),
 				}
 				if isEncrypted {
