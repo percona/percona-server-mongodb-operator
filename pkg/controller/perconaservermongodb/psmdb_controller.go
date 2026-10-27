@@ -472,6 +472,10 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongos")
 	}
 
+	if err := r.rotateTLSInPlace(ctx, cr); err != nil {
+		log.Error(err, "failed to rotate TLS certificates in place")
+	}
+
 	if err := r.upgradeFCVIfNeeded(ctx, cr, cr.Status.MongoVersion); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "failed to set FCV")
 	}
@@ -1728,7 +1732,13 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		if secret == nil {
 			return ""
 		}
-		secretString := fmt.Sprintln(secret.Data)
+		data := secret.Data
+		// With online rotation, only a CA change needs a restart: leaf
+		// certificates (renewals, added SANs) are reloaded in place.
+		if onlineTLSRotationSupported(cr) {
+			data = map[string][]byte{"ca.crt": secret.Data["ca.crt"]}
+		}
+		secretString := fmt.Sprintln(data)
 		return fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
 	}
 
