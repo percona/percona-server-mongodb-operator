@@ -261,7 +261,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 
 const (
 	maxStepDownLag          = 10 * time.Second
-	secondaryCatchUpTimeout = 5 * time.Minute
+	secondaryCatchUpTimeout = 2 * time.Minute
 )
 
 func (r *ReconcilePerconaServerMongoDB) checkReplsetHasPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod) error {
