@@ -67,8 +67,6 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
-            - name: LOGCOLLECTOR_ENABLED
-              value: "true"
           envFrom:
             - secretRef:
                 name: internal-another-name-users
