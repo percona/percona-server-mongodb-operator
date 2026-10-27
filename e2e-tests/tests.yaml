@@ -653,7 +653,3 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [core, sharding]
 
-  vpa-validation:
-    suites: [pr, release]
-    operatorModes: [cluster-wide]
-    groups: [core]

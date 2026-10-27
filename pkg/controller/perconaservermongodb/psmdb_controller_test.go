@@ -434,4 +434,106 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	Context("VPA resource bounds validation", func() {
+		crWithVPA := func(name string, vpa *psmdbv1.VPASpec, replsetVPA *psmdbv1.ComponentVPASpec) *psmdbv1.PerconaServerMongoDB {
+			cr, err := readDefaultCR(name, ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.VPA = vpa
+			cr.Spec.Replsets[0].VPA = replsetVPA
+
+			return cr
+		}
+
+		It("should allow a cr without a vpa section", func() {
+			err := k8sClient.Create(ctx, crWithVPA("psmdb-vpa-absent", nil, nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow vpa enabled without bounds", func() {
+			cr := crWithVPA("psmdb-vpa-no-bounds", &psmdbv1.VPASpec{Enabled: true}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow minAllowed without maxAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-min-only", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("4", "4Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow maxAllowed without minAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-max-only", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MaxAllowed: rl("2", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow ordered cpu and memory bounds", func() {
+			cr := crWithVPA("psmdb-vpa-ordered-bounds", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow bounds that are exactly equal", func() {
+			cr := crWithVPA("psmdb-vpa-equal-bounds", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("2", "2Gi"),
+				MaxAllowed: rl("2", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reject cpu minAllowed above cpu maxAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-cpu-inverted", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("4", ""),
+				MaxAllowed: rl("2", ""),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minAllowed must not exceed maxAllowed"))
+		})
+
+		It("should reject memory minAllowed above memory maxAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-memory-inverted", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("", "16Gi"),
+				MaxAllowed: rl("", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minAllowed must not exceed maxAllowed"))
+		})
+
+		It("should reject inverted memory bounds when cpu bounds are ordered", func() {
+			cr := crWithVPA("psmdb-vpa-memory-inverted-only", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("100m", "16Gi"),
+				MaxAllowed: rl("8", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minAllowed must not exceed maxAllowed"))
+		})
+	})
 })
