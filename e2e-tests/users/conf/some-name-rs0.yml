@@ -6,17 +6,6 @@ spec:
   #platform: openshift
   image:
   imagePullPolicy: Always
-  users:
-  - name: user-one
-    db: admin
-    passwordSecretRef: 
-      name: user-one
-      key: userOnePassKey
-    roles:
-      - name: clusterAdmin
-        db: admin
-      - name: userAdminAnyDatabase
-        db: admin
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
@@ -37,6 +26,10 @@ spec:
       storageName: local-s3
   replsets:
   - name: rs0
+    replsetOverrides:
+      some-name-rs0-0:
+        tags:
+          special: "h8V\"k3N'$(r7B)\nx2M"
     affinity:
       antiAffinityTopologyKey: none
     configuration: |

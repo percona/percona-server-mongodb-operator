@@ -20,6 +20,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -259,7 +260,7 @@ func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerM
 	}
 
 	return tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates),
 		RootCAs:            pool,
 		Certificates:       []tls.Certificate{cert},
 	}, nil
@@ -358,7 +359,7 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 			"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 		}...)
 
-		if cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0 {
+		if cr.CompareVersion("1.24.0") >= 0 || (cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0) {
 			horizonSans := make(map[string]struct{})
 			for _, podMap := range replset.GetHorizons(false) {
 				for _, domain := range podMap {
