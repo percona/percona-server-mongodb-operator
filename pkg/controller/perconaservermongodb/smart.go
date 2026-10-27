@@ -579,7 +579,7 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr
 }
 
 func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, updateRevision string, pod *corev1.Pod, waitLimit int) error {
-	if pod.ObjectMeta.Labels["controller-revision-hash"] != updateRevision {
+	if pod.Labels["controller-revision-hash"] != updateRevision {
 		resized, err := r.tryInPlaceResize(ctx, cr, replset, updateRevision, pod)
 		if err != nil {
 			return errors.Wrap(err, "in-place resize")
