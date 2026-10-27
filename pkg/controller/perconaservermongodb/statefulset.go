@@ -94,17 +94,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	return sfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) waitForMongodCustomConfig(
-	ctx context.Context,
-	cr *api.PerconaServerMongoDB,
-	rs *api.ReplsetSpec,
-	customConfig psmdbconfig.CustomConfig,
-	configMapName, configuration string,
-) error {
-
-	return nil
-}
-
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
 	sfsName := cr.Name + "-" + rs.Name
 	mongodCustomConfigName := naming.MongodCustomConfigName(cr, rs)
