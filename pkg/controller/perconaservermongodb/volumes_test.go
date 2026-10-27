@@ -1020,3 +1020,108 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestShrinkStepdownRetry(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+
+	labels := naming.MongodLabels(cr, rs)
+	labels[naming.LabelKubernetesReplset] = rs.Name
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("5Gi"))
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	pvcSpec := api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("5Gi"),
+				},
+			},
+		},
+	}
+
+	sc := shrinkContext{
+		cr:            cr,
+		sts:           sts,
+		ls:            labels,
+		claimName:     config.MongodDataVolClaimName,
+		pvcSpec:       pvcSpec,
+		component:     naming.ComponentMongod,
+		replset:       rs,
+		isRSComponent: true,
+		needsStepdown: true,
+	}
+
+	t.Run("isPodPrimary failure causes soft retry", func(t *testing.T) {
+		primaryPod := newPod(cr.Namespace, stsName+"-0", labels)
+
+		r := &ReconcilePerconaServerMongoDB{
+			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build(),
+			scheme: s,
+		}
+
+		state := api.PVCShrinkState{
+			Phase:      "stepdown",
+			PrimaryPod: primaryPod.Name,
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		err := r.shrinkStepdown(t.Context(), sc, state)
+		require.NoError(t, err, "isPodPrimary error should return nil for soft retry")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase, "phase should remain stepdown so next reconcile retries")
+	})
+
+	t.Run("pod not found advances to primary phase", func(t *testing.T) {
+		r := &ReconcilePerconaServerMongoDB{
+			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr).Build(),
+			scheme: s,
+		}
+
+		state := api.PVCShrinkState{
+			Phase:      "stepdown",
+			PrimaryPod: stsName + "-0",
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		err := r.shrinkStepdown(t.Context(), sc, state)
+		require.NoError(t, err)
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "primary", got.Phase, "missing pod should advance to primary phase")
+	})
+
+	t.Run("needsStepdown false skips to primary phase", func(t *testing.T) {
+		noStepdownSC := sc
+		noStepdownSC.needsStepdown = false
+
+		r := &ReconcilePerconaServerMongoDB{
+			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr).Build(),
+			scheme: s,
+		}
+
+		state := api.PVCShrinkState{
+			Phase:      "stepdown",
+			PrimaryPod: stsName + "-0",
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		err := r.shrinkStepdown(t.Context(), noStepdownSC, state)
+		require.NoError(t, err)
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "primary", got.Phase, "non-stepdown component should skip to primary phase")
+	})
+}

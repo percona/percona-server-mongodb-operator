@@ -599,7 +599,6 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		return errors.Errorf("PVC shrink rejected for %s: single-member replica set has no sync source", sc.sts.Name)
 	}
 
-	// Disk usage validation: verify each pod has 20% headroom after shrink
 	podList := corev1.PodList{}
 	if err := r.client.List(ctx, &podList, client.InNamespace(sc.cr.Namespace), client.MatchingLabels(sc.ls)); err != nil {
 		return errors.Wrap(err, "list pods for disk check")
