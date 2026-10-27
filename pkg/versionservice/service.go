@@ -69,6 +69,7 @@ func (c Client) GetExactVersion(cr *api.PerconaServerMongoDB, endpoint string, v
 		MongoTLSMode:               &vm.TLSMode,
 		MongosSize:                 &vm.MongosSize,
 		S3BackupEnabled:            &vm.S3BackupEnabled,
+		S3CompatibleBackupEnabled:  &vm.S3CompatibleBackupEnabled,
 		AzureBackupEnabled:         &vm.AzureBackupEnabled,
 		GcsBackupEnabled:           &vm.GCSBackupEnabled,
 		FilesystemBackupEnabled:    &vm.FilesystemBackupEnabled,
@@ -191,6 +192,7 @@ type Meta struct {
 	TLSMode                    string
 	MongosSize                 int32
 	S3BackupEnabled            bool
+	S3CompatibleBackupEnabled  bool
 	AzureBackupEnabled         bool
 	GCSBackupEnabled           bool
 	FilesystemBackupEnabled    bool

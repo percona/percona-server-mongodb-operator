@@ -80,11 +80,16 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 			vm.OCIBackupEnabled = true
 		case api.BackupStorageOSS:
 			vm.AlibabaBackupEnabled = true
-		case api.BackupStorageS3, api.BackupStorageMinio:
-			if strings.Contains(stg.S3.EndpointURL, naming.OSSCloudEndpointURL) {
+		case api.BackupStorageMinio:
+			vm.S3CompatibleBackupEnabled = true
+		case api.BackupStorageS3:
+			switch {
+			case strings.Contains(stg.S3.EndpointURL, naming.OSSCloudEndpointURL):
 				vm.AlibabaBackupEnabled = true
-			} else {
+			case stg.S3.EndpointURL == "" || strings.Contains(stg.S3.EndpointURL, naming.AWSS3EndpointURL):
 				vm.S3BackupEnabled = true
+			default:
+				vm.S3CompatibleBackupEnabled = true
 			}
 		case api.BackupStorageAzure:
 			vm.AzureBackupEnabled = true

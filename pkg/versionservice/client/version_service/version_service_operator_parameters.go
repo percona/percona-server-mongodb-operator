@@ -188,6 +188,9 @@ type VersionServiceOperatorParams struct {
 	// S3BackupEnabled.
 	S3BackupEnabled *bool
 
+	// S3CompatibleBackupEnabled.
+	S3CompatibleBackupEnabled *bool
+
 	// ShardingEnabled.
 	ShardingEnabled *bool
 
@@ -692,6 +695,17 @@ func (o *VersionServiceOperatorParams) WithS3BackupEnabled(s3BackupEnabled *bool
 // SetS3BackupEnabled adds the s3BackupEnabled to the version service operator params.
 func (o *VersionServiceOperatorParams) SetS3BackupEnabled(s3BackupEnabled *bool) {
 	o.S3BackupEnabled = s3BackupEnabled
+}
+
+// WithS3CompatibleBackupEnabled adds the s3CompatibleBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) WithS3CompatibleBackupEnabled(s3CompatibleBackupEnabled *bool) *VersionServiceOperatorParams {
+	o.SetS3CompatibleBackupEnabled(s3CompatibleBackupEnabled)
+	return o
+}
+
+// SetS3CompatibleBackupEnabled adds the s3CompatibleBackupEnabled to the version service operator params.
+func (o *VersionServiceOperatorParams) SetS3CompatibleBackupEnabled(s3CompatibleBackupEnabled *bool) {
+	o.S3CompatibleBackupEnabled = s3CompatibleBackupEnabled
 }
 
 // WithShardingEnabled adds the shardingEnabled to the version service operator params.
@@ -1401,6 +1415,23 @@ func (o *VersionServiceOperatorParams) WriteToRequest(r runtime.ClientRequest, r
 		if qS3BackupEnabled != "" {
 
 			if err := r.SetQueryParam("s3BackupEnabled", qS3BackupEnabled); err != nil {
+				return err
+			}
+		}
+	}
+
+	if o.S3CompatibleBackupEnabled != nil {
+
+		// query param s3CompatibleBackupEnabled
+		var qrS3CompatibleBackupEnabled bool
+
+		if o.S3CompatibleBackupEnabled != nil {
+			qrS3CompatibleBackupEnabled = *o.S3CompatibleBackupEnabled
+		}
+		qS3CompatibleBackupEnabled := conv.FormatBool(qrS3CompatibleBackupEnabled)
+		if qS3CompatibleBackupEnabled != "" {
+
+			if err := r.SetQueryParam("s3CompatibleBackupEnabled", qS3CompatibleBackupEnabled); err != nil {
 				return err
 			}
 		}

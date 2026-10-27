@@ -554,6 +554,13 @@ func TestBuildMeta(t *testing.T) {
 									EndpointURL: "https://s3.amazonaws.com",
 								},
 							},
+							"s3-compatible-stg": {
+								Type: api.BackupStorageS3,
+								S3: api.BackupStorageS3Spec{
+									Bucket:      "test",
+									EndpointURL: "https://storage.example.com",
+								},
+							},
 							"azure-stg": {
 								Type: api.BackupStorageAzure,
 							},
@@ -582,7 +589,7 @@ func TestBuildMeta(t *testing.T) {
 							{
 								Name:                "snapshot",
 								Type:                defs.ExternalBackup,
-								VolumeSnapshotClass: ptr.To("csi-snapclass"),
+								VolumeSnapshotClass: new("csi-snapclass"),
 								Enabled:             true,
 							},
 							{
@@ -606,6 +613,7 @@ func TestBuildMeta(t *testing.T) {
 				EncryptionEnabled:          true,
 				TLSMode:                    string(api.TLSModePrefer),
 				S3BackupEnabled:            true,
+				S3CompatibleBackupEnabled:  true,
 				AzureBackupEnabled:         true,
 				GCSBackupEnabled:           true,
 				FilesystemBackupEnabled:    true,
@@ -651,14 +659,14 @@ func TestBuildMeta(t *testing.T) {
 				},
 			},
 			want: Meta{
-				Apply:             "disabled",
-				Version:           version.Version(),
-				Platform:          "kubernetes",
-				ClusterSize:       3,
-				BackupsEnabled:    true,
-				EncryptionEnabled: true,
-				TLSMode:           string(api.TLSModePrefer),
-				S3BackupEnabled:   true,
+				Apply:                     "disabled",
+				Version:                   version.Version(),
+				Platform:                  "kubernetes",
+				ClusterSize:               3,
+				BackupsEnabled:            true,
+				EncryptionEnabled:         true,
+				TLSMode:                   string(api.TLSModePrefer),
+				S3CompatibleBackupEnabled: true,
 			},
 			namespace: "test-namespace",
 		},
