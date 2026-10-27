@@ -227,22 +227,22 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		} else {
 			forceStepDown := replset.Size == 1
 			log.Info("doing step down...", "force", forceStepDown)
-			client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+			cl, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 			if err != nil {
 				return fmt.Errorf("failed to get mongo client: %v", err)
 			}
 
 			defer func() {
-				err := client.Disconnect(ctx)
+				err := cl.Disconnect(ctx)
 				if err != nil {
 					log.Error(err, "failed to close connection")
 				}
 			}()
 
-			err = client.StepDown(ctx, 60, forceStepDown)
+			err = cl.StepDown(ctx, 60, forceStepDown)
 			if err != nil {
 				if strings.Contains(err.Error(), "No electable secondaries caught up") {
-					err = client.StepDown(ctx, 60, true)
+					err = cl.StepDown(ctx, 60, true)
 					if err != nil {
 						return errors.Wrap(err, "failed to do forced step down")
 					}
