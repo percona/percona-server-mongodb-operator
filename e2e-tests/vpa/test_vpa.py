@@ -258,7 +258,8 @@ class TestVPA:
 
             cr = render_cluster_config(f"{test_paths['test_dir']}/conf/{CLUSTER}.yml")
             kubectl_bin("apply", "-n", ns2, "-f", "-", input_data=cr)
-            wait_for_running(f"{CLUSTER}-rs0", 3)
+            _assert_cluster_ready(CLUSTER, namespace=ns2)
+
 
             _set_update_mode(CLUSTER, "Auto", namespace=ns2)
 

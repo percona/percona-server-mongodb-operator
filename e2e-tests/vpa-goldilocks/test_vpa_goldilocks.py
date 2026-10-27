@@ -211,7 +211,7 @@ class TestVPAGoldilocks:
         """Off mode: the real recommendation reaches status but not the CR."""
         retry(
             lambda: kubectl_bin(
-                "get", "psmdb", CLUSTER, "-o", "jsonpath={.status.vpaStatus.rs0.cpu}"
+                "get", "psmdb", CLUSTER, "-o", "jsonpath={.status.vpaStatus.rs0.recommended.cpu}"
             ).strip(),
             max_attempts=60,
             delay=5,

@@ -422,7 +422,7 @@ def pod_resources(
         "pod",
         pod,
         "-o",
-        f'jsonpath={{.spec.containers[?(@.name=="{container}")].resources.{kind}.{resource}}}',
+        f'jsonpath={{.status.containerStatuses[?(@.name=="{container}")].resources.{kind}.{resource}}}',
     ).strip()
 
 
