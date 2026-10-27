@@ -232,7 +232,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				if rerr := r.resyncStorage(ctx, cluster, cr); rerr != nil {
 					if errors.Is(rerr, backup.ErrResyncNotStarted) &&
 						bcp.PBMBackupType() == defs.LogicalBackup &&
-						pbmNotConfiguredYet(cluster) {
+						!isPBMConfigured(cluster) {
 						err = nil
 						log.Info("resync is not started and PBM is not configured for the cluster yet, will retry", "cluster", cluster.Name)
 						return rr, nil
@@ -618,13 +618,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 	return nil
 }
 
-// pbmNotConfiguredYet returns true if the cluster controller has not configured PBM for the cluster yet.
+// isPBMConfigured returns false if the cluster controller has not configured PBM for the cluster yet.
 // It sets status.backupConfigHash only when no restore is pending,
 // so the hash stays empty on a cluster created together with a restore.
-func pbmNotConfiguredYet(cluster *psmdbv1.PerconaServerMongoDB) bool {
+// Clusters before 1.20.0 and clusters without backup storages are reported as configured.
+func isPBMConfigured(cluster *psmdbv1.PerconaServerMongoDB) bool {
 	if cluster.CompareVersion("1.20.0") < 0 || len(cluster.Spec.Backup.Storages) == 0 {
-		return false
+		return true
 	}
 
-	return cluster.Status.BackupConfigHash == ""
+	return cluster.Status.BackupConfigHash != ""
 }

@@ -92,11 +92,9 @@ func k8sVersionClient(t *testing.T) *fakeClientcmd.Client {
 	t.Cleanup(srv.Close)
 
 	rc, err := rest.RESTClientFor(&rest.Config{
-		Host: srv.URL,
-		ContentConfig: rest.ContentConfig{
-			GroupVersion:         &metav1.SchemeGroupVersion,
-			NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
-		},
+		Host:                 srv.URL,
+		GroupVersion:         &metav1.SchemeGroupVersion,
+		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
 	})
 	require.NoError(t, err)
 
@@ -392,17 +390,17 @@ func TestValidateBackupVersion(t *testing.T) {
 	})
 }
 
-func TestPBMNotConfiguredYet(t *testing.T) {
+func TestIsPBMConfigured(t *testing.T) {
 	tests := map[string]struct {
 		crVersion  string
 		noStorages bool
 		configHash string
 		want       bool
 	}{
-		"new cluster":             {crVersion: "1.24.0", want: true},
-		"configured cluster":      {crVersion: "1.24.0", configHash: "some-hash"},
-		"no backup storages":      {crVersion: "1.24.0", noStorages: true},
-		"crVersion before 1.20.0": {crVersion: "1.19.1"},
+		"new cluster":             {crVersion: "1.24.0"},
+		"configured cluster":      {crVersion: "1.24.0", configHash: "some-hash", want: true},
+		"no backup storages":      {crVersion: "1.24.0", noStorages: true, want: true},
+		"crVersion before 1.20.0": {crVersion: "1.19.1", want: true},
 	}
 
 	for name, tt := range tests {
@@ -414,7 +412,7 @@ func TestPBMNotConfiguredYet(t *testing.T) {
 				cluster.Spec.Backup.Storages = nil
 			}
 
-			assert.Equal(t, tt.want, pbmNotConfiguredYet(cluster))
+			assert.Equal(t, tt.want, isPBMConfigured(cluster))
 		})
 	}
 }
