@@ -47,6 +47,16 @@ func TestIsBackupRunning(t *testing.T) {
 			want:    false,
 		},
 		{
+			name:    "canceled backup does not block",
+			backups: []client.Object{backup("canceled", crName, api.BackupStateCanceled)},
+			want:    false,
+		},
+		{
+			name:    "canceling backup blocks",
+			backups: []client.Object{backup("canceling", crName, api.BackupStateCanceling)},
+			want:    true,
+		},
+		{
 			name:    "failed backup",
 			backups: []client.Object{backup("error", crName, api.BackupStateError)},
 			want:    false,

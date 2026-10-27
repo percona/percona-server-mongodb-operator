@@ -405,6 +405,23 @@ func TestSnapshotBackups_Status(t *testing.T) {
 		wantErrMsg      string
 		check           func(t *testing.T, status api.PerconaServerMongoDBBackupStatus)
 	}{
+		"backup canceled": {
+			setupMock: func(m *MockPBM) {
+				m.EXPECT().GetBackupMeta(gomock.Any(), pbmName).Return(&pbmBackup.BackupMeta{
+					Name: pbmName, Status: defs.StatusCancelled, LastTransitionTS: 1234567900,
+				}, nil)
+			},
+			cr:        newCR(),
+			cluster:   &api.PerconaServerMongoDB{},
+			wantState: api.BackupStateCanceled,
+			check: func(t *testing.T, status api.PerconaServerMongoDBBackupStatus) {
+				assert.Empty(t, status.Error)
+				assert.Empty(t, status.Snapshots)
+				require.NotNil(t, status.CompletedAt)
+				assert.Equal(t, int64(1234567900), status.CompletedAt.Unix())
+				assert.Equal(t, status.CompletedAt, status.LastTransition)
+			},
+		},
 		"metadata not found leaves status unchanged": {
 			setupMock: func(m *MockPBM) {
 				m.EXPECT().GetBackupMeta(gomock.Any(), pbmName).Return(nil, pbmErrors.ErrNotFound)

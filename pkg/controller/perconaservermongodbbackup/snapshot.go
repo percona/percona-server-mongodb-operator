@@ -3,18 +3,20 @@ package perconaservermongodbbackup
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
-	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
-	"github.com/percona/percona-backup-mongodb/pbm/defs"
-	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -41,6 +43,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) newSnapshotBackups(ctx context.Con
 
 func (b *snapshotBackups) PBM() backup.PBM {
 	return b.pbm
+}
+
+func (b *snapshotBackups) Close(ctx context.Context) error {
+	if b.pbm == nil {
+		return nil
+	}
+	return b.pbm.Close(ctx)
 }
 
 func (b *snapshotBackups) Start(ctx context.Context, k8sclient client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
@@ -161,19 +170,28 @@ func (b *snapshotBackups) reconcileSnapshots(
 			SnapshotName: snapshot.GetName(),
 		})
 	}
+	slices.SortFunc(snapshots, func(a, b api.SnapshotInfo) int {
+		return strings.Compare(a.ReplsetName, b.ReplsetName)
+	})
 	return done, snapshots, nil
 }
 
 func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {
+	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
+	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
+		return cr.Status, errors.Wrap(err, "get pbm backup meta")
+	}
+	if errors.Is(err, pbmErrors.ErrNotFound) {
+		meta = nil
+	}
+	return b.statusFromMeta(ctx, cl, cluster, cr, meta)
+}
+
+func (b *snapshotBackups) statusFromMeta(ctx context.Context, cl client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup, meta *backup.BackupMeta) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 	log := logf.FromContext(ctx).WithName("backupStatus").WithValues("backup", cr.Name, "pbmName", status.PBMname)
 
-	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
-	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
-		return status, errors.Wrap(err, "get pbm backup meta")
-	}
-
-	if meta == nil || meta.Name == "" || errors.Is(err, pbmErrors.ErrNotFound) {
+	if meta == nil || meta.Name == "" {
 		logf.FromContext(ctx).Info("Waiting for backup metadata", "pbmName", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
@@ -187,6 +205,22 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 	}
 
 	switch meta.Status {
+	case defs.StatusCancelled:
+		if status.State != api.BackupStateCanceling {
+			status.LastTransition = &metav1.Time{Time: time.Now().UTC()}
+		}
+		status.State = api.BackupStateCanceling
+		status.Error = ""
+		done, err := cleanupCanceledSnapshots(ctx, cl, cr)
+		if err != nil {
+			return status, err
+		}
+		if done {
+			status.State = api.BackupStateCanceled
+			status.Snapshots = nil
+			status.CompletedAt = &metav1.Time{Time: time.Unix(meta.LastTransitionTS, 0)}
+		}
+
 	case defs.StatusError:
 		status.State = api.BackupStateError
 		status.Error = fmt.Sprintf("%v", meta.Error())
@@ -198,8 +232,20 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 			timeoutSeconds = *s
 		}
 		if passed >= time.Duration(timeoutSeconds)*time.Second {
+			if cr.Status.State == api.BackupStateCanceling {
+				hasLock, err := b.pbm.HasBackupLock(ctx, meta.OPID)
+				if err != nil {
+					return status, errors.Wrap(err, "check starting backup locks")
+				}
+				if hasLock {
+					break
+				}
+			}
 			status.State = api.BackupStateError
 			status.Error = pbmStartingDeadlineErrMsg
+			break
+		}
+		if cr.Status.State == api.BackupStateCanceling {
 			break
 		}
 
@@ -215,6 +261,9 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 		}
 
 	case defs.StatusCopyReady:
+		if cr.Status.State == api.BackupStateCanceling {
+			break
+		}
 		status.State = api.BackupStateRunning
 		snapshotsReady, snapshots, err := b.reconcileSnapshots(ctx, cl, cr, meta)
 		if err != nil {
@@ -228,8 +277,8 @@ func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster 
 		}
 	}
 
-	status.LastTransition = &metav1.Time{
-		Time: time.Unix(meta.LastTransitionTS, 0),
+	if status.State != api.BackupStateCanceling {
+		status.LastTransition = &metav1.Time{Time: time.Unix(meta.LastTransitionTS, 0)}
 	}
 	status.Type = cr.Spec.Type
 	return status, nil

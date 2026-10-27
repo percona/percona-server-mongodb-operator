@@ -184,8 +184,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 	}
 
 	switch bcp.Status.State {
-	case psmdbv1.BackupStateError:
-		err = errors.New("backup is in error state")
+	case psmdbv1.BackupStateError, psmdbv1.BackupStateCanceled:
+		err = errors.Errorf("backup is in %s state", bcp.Status.State)
 		return rr, nil
 	case psmdbv1.BackupStateReady:
 	default:
