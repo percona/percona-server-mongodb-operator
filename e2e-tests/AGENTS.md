@@ -40,6 +40,15 @@ Read the root [`AGENTS.md`](../AGENTS.md) first. These rules cover
 A test is useful only if it fails when the operator is broken. Review every
 check against that.
 
+- **Do not assert in e2e what a unit test can check.** Pure logic and
+  rendering (how a CR field becomes a StatefulSet, Service or container spec,
+  defaults, validation, version parsing) belong in Go unit tests
+  (`pkg/**/*_test.go`, envtest for reconcile logic), which run in seconds. A
+  full e2e run takes about 30 hours of test time on 15 GKE clusters. Keep e2e
+  for what needs a real cluster: MongoDB behavior, data, backups and restores,
+  upgrades, failover, networking, and integration with Kubernetes and external
+  systems. When an e2e test adds a golden-file check for a new field, add or
+  point to the unit test that covers the rendering.
 - **Every wait has a ceiling** and fails with what it expected and the last
   value it saw. No unbounded `until` loops.
 - **Fail fast on terminal states.** When the watched object reports `Failed`
