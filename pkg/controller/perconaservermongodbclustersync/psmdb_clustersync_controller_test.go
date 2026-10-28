@@ -20,6 +20,8 @@ import (
 )
 
 func TestApplyObservedStatus(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		initial                psmdbv1.PerconaServerMongoDBClusterSyncStatus
 		observed               client.Status
@@ -155,6 +157,8 @@ func (f *fakePCSM) Finalize(_ context.Context) error {
 }
 
 func TestInvokeAction(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		action  modeAction
 		cr      *psmdbv1.PerconaServerMongoDBClusterSync
@@ -238,6 +242,8 @@ func TestInvokeAction(t *testing.T) {
 }
 
 func TestReconcileModeInheritedFinalized(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		spec        psmdbv1.PerconaServerMongoDBClusterSyncSpec
 		status      psmdbv1.PerconaServerMongoDBClusterSyncStatus
@@ -336,6 +342,8 @@ func (m *recordingMongoClient) UpdateUserRoles(_ context.Context, _, _ string, r
 }
 
 func TestEnsureTargetMongoUser(t *testing.T) {
+	t.Parallel()
+
 	const (
 		username = "clustersync-cr"
 		password = "new-password"

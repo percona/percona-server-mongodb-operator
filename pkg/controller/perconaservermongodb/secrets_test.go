@@ -16,6 +16,8 @@ import (
 )
 
 func TestEnsureConnectionStringSecret(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		setup           func(*api.PerconaServerMongoDB) []client.Object
 		includeReplsets bool
@@ -220,6 +222,8 @@ func TestEnsureConnectionStringSecret(t *testing.T) {
 }
 
 func TestReconcileUsersCreatesConnectionStringSecretWhenCredentialsUnchanged(t *testing.T) {
+	t.Parallel()
+
 	cr := connectionStringTestCluster()
 	cr.Status.State = api.AppStateReady
 	cr.Spec.Secrets = &api.SecretsSpec{Users: "cluster-users"}
@@ -262,6 +266,8 @@ func TestReconcileUsersCreatesConnectionStringSecretWhenCredentialsUnchanged(t *
 }
 
 func TestEnsureCustomUsersConnectionStringSecretsIncludesMultipleDefaultUsers(t *testing.T) {
+	t.Parallel()
+
 	cr := connectionStringTestCluster()
 	users := []api.User{
 		{Name: "app-user", DB: "application", Roles: []api.UserRole{{Name: "readWrite", DB: "application"}}},

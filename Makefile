@@ -29,11 +29,11 @@ $(DEPLOYDIR)/crd.yaml: kustomize generate
 
 .PHONY: $(DEPLOYDIR)/operator.yaml
 $(DEPLOYDIR)/operator.yaml:
-	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE_TAG_BASE):$(VERSION)#}" deploy/operator.yaml
+	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE)#}" deploy/operator.yaml
 
 .PHONY: $(DEPLOYDIR)/cw-operator.yaml
 $(DEPLOYDIR)/cw-operator.yaml:
-	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE_TAG_BASE):$(VERSION)#}" deploy/cw-operator.yaml
+	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE)#}" deploy/cw-operator.yaml
 
 $(DEPLOYDIR)/bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml  ## Generate deploy/bundle.yaml
 	cat $(DEPLOYDIR)/crd.yaml > $(DEPLOYDIR)/bundle.yaml; echo "---" >> $(DEPLOYDIR)/bundle.yaml; cat $(DEPLOYDIR)/rbac.yaml >> $(DEPLOYDIR)/bundle.yaml; echo "---" >> $(DEPLOYDIR)/bundle.yaml; cat $(DEPLOYDIR)/operator.yaml >> $(DEPLOYDIR)/bundle.yaml
@@ -89,7 +89,7 @@ undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
 test: envtest generate ## Run tests.
-	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -shuffle=on -coverprofile cover.out
 
 py-deps: uv ## Install e2e-tests Python dependencies
 	$(UV) sync --locked
@@ -161,7 +161,7 @@ include e2e-tests/release_versions
 $(foreach v,$(_e2e_image_vars),$(eval e2e-test: $(v) := $$(_saved_$(v))))
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
-	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/functions
+	$(SED) -i "s/\"CERT_MANAGER_VER\": \".*\"/\"CERT_MANAGER_VER\": \"$(CERT_MANAGER_VER)\"/" e2e-tests/conftest.py
 	echo "$(VERSION)" > pkg/version/version.txt
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
@@ -170,17 +170,10 @@ release: manifests
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD80)#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP)#}" \
-		-e "s#initImage: .*#initImage: percona/percona-server-mongodb-operator:$(VERSION)#g" \
+		-e "s#initImage: .*#initImage: $(IMAGE)#g" \
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: $(IMAGE_LOGCOLLECTOR)#}" \
 		-e "/^#  search:/,/^    image:/{s#image: .*#image: $(IMAGE_SEARCH)#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
-	$(SED) -i \
-		-e "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" \
-		-e "s|perconalab/percona-server-mongodb-operator:main-backup|$(IMAGE_BACKUP)|g" \
-		-e "s|perconalab/percona-server-mongodb-operator:main|$(IMAGE_OPERATOR)|g" \
-		-e "s|perconalab/fluentbit:main-logcollector|$(IMAGE_LOGCOLLECTOR)|g" \
-		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
-	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"${IMAGE_OPERATOR}\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" pkg/psmdb/mongos_test.go
 	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: $(IMAGE_CLUSTERSYNC)|g" deploy/clustersync.yaml
 
@@ -200,13 +193,6 @@ after-release: update-version after-release-versions manifests update-upgrade-co
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: perconalab/fluentbit:main-logcollector#}" \
 		-e "/^#  search:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongot#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" deploy/cr.yaml
-	$(SED) -i \
-		-e "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" \
-		-e "s|$(IMAGE_BACKUP)|perconalab/percona-server-mongodb-operator:main-backup|g" \
-		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mongodb-operator:main|g" \
-		-e "s|$(IMAGE_LOGCOLLECTOR)|perconalab/fluentbit:main-logcollector|g" \
-		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
-	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"perconalab/percona-server-mongodb-operator:main\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" pkg/psmdb/mongos_test.go
 	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: perconalab/percona-clustersync-mongodb:latest|g" deploy/clustersync.yaml
 
