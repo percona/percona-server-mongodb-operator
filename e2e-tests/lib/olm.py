@@ -186,13 +186,16 @@ def approve_until_installed(
     allowed_csvs: Callable[[list[str]], bool],
     timeout: int = 900,
     on_poll: Callable[[], None] | None = None,
+    delete_rejected: bool = False,
 ) -> list[str]:
     """Approve the Subscription's pending InstallPlans until target_csv is Succeeded.
 
     allowed_csvs(csv_names) decides whether a pending plan may be approved, so an
-    install never jumps past the starting CSV. on_poll runs on every iteration
-    (e.g. to sample DB health while the operator is replaced). Fails fast when an
-    approved InstallPlan or the installed CSV reports Failed.
+    install never jumps past the starting CSV. With delete_rejected, a pending plan
+    it rejects is deleted so OLM resolves again instead of waiting on it. on_poll
+    runs on every iteration (e.g. to sample DB health while the operator is
+    replaced). Fails fast when an approved InstallPlan or the installed CSV reports
+    Failed.
 
     Returns the approved InstallPlan names, in order.
     """
@@ -216,20 +219,24 @@ def approve_until_installed(
                 raise RuntimeError(f"CSV {installed} failed: {csv_status.get('message')}")
 
         for plan in approved:
-            plan_status = get_json(INSTALLPLAN, plan, "-n", namespace).get("status", {})
+            plan_status = _installplan(namespace, plan).get("status", {})
             if plan_status.get("phase") == "Failed":
                 raise RuntimeError(
                     f"InstallPlan {plan} failed: {plan_status.get('conditions', [])}"
                 )
 
+        # The reference can name a plan that was just deleted, until OLM resolves again.
         plan = status.get("installPlanRef", {}).get("name")
-        if plan and plan not in approved:
-            spec = get_json(INSTALLPLAN, plan, "-n", namespace)["spec"]
+        spec = _installplan(namespace, plan).get("spec") if plan and plan not in approved else None
+        if spec and not spec.get("approved"):
             csvs = spec.get("clusterServiceVersionNames", [])
-            if not spec.get("approved") and not allowed_csvs(csvs) and plan not in skipped:
-                logger.warning(f"Not approving InstallPlan {plan}: {csvs}")
-                skipped[plan] = csvs
-            if not spec.get("approved") and allowed_csvs(csvs):
+            if not allowed_csvs(csvs):
+                if plan not in skipped:
+                    logger.warning(f"Not approving InstallPlan {plan}: {csvs}")
+                    skipped[plan] = csvs
+                if delete_rejected:
+                    delete_pending_plans(namespace, keep=allowed_csvs)
+            else:
                 logger.info(f"Approving InstallPlan {plan}: {csvs}")
                 kubectl_bin(
                     "patch",
@@ -251,6 +258,12 @@ def approve_until_installed(
         f"conditions={status.get('conditions', [])} "
         f"not approved InstallPlans={skipped}"
     )
+
+
+def _installplan(namespace: str, name: str) -> dict[str, Any]:
+    """The InstallPlan, or {} when it no longer exists."""
+    raw = kubectl_bin("get", INSTALLPLAN, name, "-n", namespace, "-o", "json", check=False)
+    return dict(json.loads(raw)) if raw.strip() else {}
 
 
 def delete_pending_plans(namespace: str, keep: Callable[[list[str]], bool]) -> list[str]:

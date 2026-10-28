@@ -66,7 +66,7 @@ Useful optional variables:
 | `BUNDLE_PACKAGE_CHANNEL` | Package channel used for the generated current bundle. | `stable` |
 | `CONFIRM_PUSH` | Ask for confirmation before pushing bundle and catalog images. Set to `0` for non-interactive runs. | `1` |
 | `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. Ignored when `CATALOG_PREVIOUS_MINORS` is set. | `2` |
-| `CATALOG_PREVIOUS_MINORS` | Include every previous OperatorHub version of the newest N minor lines, all patches included, instead of a fixed number of versions. Versions newer than the current one are ignored. Empty by default. | `2` |
+| `CATALOG_PREVIOUS_MINORS` | Include every previous OperatorHub version of the N newest minor lines older than the current one, all patches included, plus older patches of the current minor line, instead of a fixed number of versions. Versions newer than the current one are ignored. Empty by default. | `2` |
 | `CATALOG_PLATFORM` | Platform used when building previous OperatorHub bundle images and catalog images. | `linux/amd64` |
 | `CATALOG_BUILD_PUSH` | Build and push catalog images during deploy targets when enabled. | `1` |
 | `BUNDLE_SKIP_DIGEST_FAILURE` | Continue certified bundle generation when a non-required digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
@@ -334,7 +334,7 @@ make tests/community
 make tests/certified
 ```
 
-The test runs once for every bundle outside the catalog's default channel. Each
+The test runs once for every bundle in the catalog except the newest one. Each
 run installs that bundle with a Manual-approval Subscription, deploys a replica
 set from the bundle's example CR and writes data. It then switches the
 Subscription to the default channel. It deletes any pending InstallPlan left
@@ -351,6 +351,10 @@ For a dev catalog, the test checks that the head of the default channel is
 `OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
 the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
 check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
+
+`make tests` fails when the catalog holds fewer than two previous minor
+versions, not counting the target's own minor line. Set `OLM_MIN_MINORS` to
+change that number.
 
 Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
 starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`.

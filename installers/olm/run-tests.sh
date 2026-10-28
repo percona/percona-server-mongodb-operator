@@ -16,8 +16,9 @@ Usage:
   $0 <community|certified>
 
 Runs the e2e-tests/${OLM_TEST} test once per starting CSV: every bundle of the
-deployed ${CATALOG_ENV} catalog outside its default channel is upgraded to the
-default channel head. Deploy the catalog first (make deploy/<type>).
+deployed ${CATALOG_ENV} catalog except the default channel head is upgraded to
+that head. It fails when fewer than OLM_MIN_MINORS (2) previous minor versions
+are covered. Deploy the catalog first (make deploy/<type>).
 
 Set OLM_FROM_CSVS to a space-separated list of CSV names to pick the
 starting points instead. Each run cleans up after itself (SKIP_DELETE=0) because
@@ -59,11 +60,23 @@ list_starting_csvs() {
 			.items[]
 			| select(.metadata.name == $package)
 			| .status as $status
-			| $status.channels[]
-			| select(.name != $status.defaultChannel)
-			| .entries[].name
+			| ($status.channels[] | select(.name == $status.defaultChannel) | .currentCSV) as $target
+			| $status.channels[].entries[].name
+			| select(. != $target)
 		' |
 		awk '!seen[$0]++'
+}
+
+# Minor line of the default channel head, the version every run upgrades to.
+get_target_minor() {
+	kubectl get packagemanifests -n "$CATALOG_NAMESPACE" -l "catalog=${SOURCE}" -o json |
+		jq -r --arg package "$PACKAGE" '
+			.items[]
+			| select(.metadata.name == $package)
+			| .status as $status
+			| $status.channels[] | select(.name == $status.defaultChannel) | .currentCSV
+		' |
+		sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p'
 }
 
 if [[ -n "${OLM_FROM_CSVS:-}" ]]; then
@@ -79,10 +92,17 @@ fi
 	die "no starting CSVs for ${PACKAGE} in CatalogSource ${CATALOG_NAMESPACE}/${SOURCE}"
 
 echo "[olm] Starting CSVs: ${FROM_CSVS[*]}"
+# Patches of the newest minor line (e.g. 1.24.0 for 1.24.1) are tested but not counted.
+NEWEST_MINOR="$(printf '%s\n' "${FROM_CSVS[@]}" | sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p' | sort -V | tail -n 1)"
 MINORS="$(printf '%s\n' "${FROM_CSVS[@]}" | sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p' | sort -uV | xargs)"
 echo "[olm] Minor versions covered: ${MINORS}"
-[[ -n "${OLM_FROM_CSVS:-}" || "$(wc -w <<<"$MINORS")" -ge 2 ]] ||
-	echo "[olm] WARNING: fewer than 2 previous minor versions in the catalog (build it with CATALOG_PREVIOUS_MINORS=2)"
+if [[ -z "${OLM_FROM_CSVS:-}" ]]; then
+	MIN_MINORS="${OLM_MIN_MINORS:-2}"
+	PREVIOUS_MINORS=$(($(wc -w <<<"$MINORS")))
+	[[ "$(get_target_minor)" == "$NEWEST_MINOR" ]] && PREVIOUS_MINORS=$((PREVIOUS_MINORS - 1))
+	[[ "$PREVIOUS_MINORS" -ge "$MIN_MINORS" ]] ||
+		die "the catalog covers ${PREVIOUS_MINORS} previous minor versions, ${MIN_MINORS} required: build it with CATALOG_PREVIOUS_MINORS=${MIN_MINORS} (or set OLM_MIN_MINORS / OLM_FROM_CSVS)"
+fi
 
 FAILED=()
 for csv in "${FROM_CSVS[@]}"; do

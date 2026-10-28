@@ -190,7 +190,8 @@ find_previous_versions() {
 }
 
 # Reads versions sorted ascending. With CATALOG_PREVIOUS_MINORS=N keeps every
-# version of the N newest minor lines (all their patches), otherwise the newest
+# version of the N newest minor lines older than the current one (all their
+# patches), plus older patches of the current minor line; otherwise the newest
 # CATALOG_BUNDLE_LIMIT versions.
 select_previous_versions() {
 	if [[ -z "$CATALOG_PREVIOUS_MINORS" ]]; then
@@ -200,11 +201,15 @@ select_previous_versions() {
 
 	# Versions newer than the one being built are not upgrade sources.
 	awk -F. -v current="$BUNDLE_IMAGE_VERSION" -v minors="$CATALOG_PREVIOUS_MINORS" '
-		BEGIN { split(current, c, ".") }
+		BEGIN { split(current, c, "."); current_line = c[1] "." c[2] }
 		$1 > c[1] + 0 || ($1 == c[1] + 0 && ($2 > c[2] + 0 || ($2 == c[2] + 0 && $3 > c[3] + 0))) { next }
 		{ versions[++n] = $0; lines[n] = $1 "." $2 }
 		END {
 			for (i = n; i >= 1; i--) {
+				if (lines[i] == current_line) {
+					keep[i] = 1
+					continue
+				}
 				if (lines[i] != last) {
 					count++
 					last = lines[i]
@@ -217,8 +222,9 @@ select_previous_versions() {
 	'
 }
 
-count_minor_lines() {
-	printf '%s\n' "$@" | cut -d. -f1,2 | sort -u | grep -c .
+# Minor lines among the given versions, not counting the current version's line.
+count_previous_minor_lines() {
+	printf '%s\n' "$@" | cut -d. -f1,2 | grep -vxF "${BUNDLE_IMAGE_VERSION%.*}" | sort -u | grep -c .
 }
 
 confirm_build() {
@@ -373,11 +379,11 @@ run_build() {
 	done < <(find_previous_versions)
 
 	# Checked first: an empty array is "unbound" under set -u in bash 3.2 (macOS).
-	[[ "${#OLD_VERSIONS[@]}" -gt 0 ]] ||
+	[[ "${#OLD_VERSIONS[@]}" -gt 0 || ( -z "$CATALOG_PREVIOUS_MINORS" && "$CATALOG_BUNDLE_LIMIT" -eq 0 ) ]] ||
 		die "no previous versions found in ${GITHUB_REPO}/${OPERATOR_PATH}"
 
 	if [[ -n "$CATALOG_PREVIOUS_MINORS" ]]; then
-		[[ "$(count_minor_lines "${OLD_VERSIONS[@]}")" -eq "$CATALOG_PREVIOUS_MINORS" ]] ||
+		[[ "$(count_previous_minor_lines "${OLD_VERSIONS[@]}")" -eq "$CATALOG_PREVIOUS_MINORS" ]] ||
 			die "expected ${CATALOG_PREVIOUS_MINORS} previous minor lines, found: ${OLD_VERSIONS[*]}"
 	else
 		[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||

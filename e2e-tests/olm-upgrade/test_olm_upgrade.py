@@ -56,6 +56,9 @@ DEPRECATION_WARNING = re.compile(r"\S+ PerconaServerMongoDB is deprecated and wi
 # A brief "initializing" while the new operator takes over is tolerated; pods must not change.
 ALLOWED_STATES = {"ready", "initializing"}
 SOAK_SECONDS = 180
+# Only read by the version-service cron, which upgradeOptions.apply=disabled and
+# DISABLE_TELEMETRY leave idle: changing it bumps the CR generation without touching pods.
+RECONCILE_PROBE = '{"spec":{"upgradeOptions":{"schedule":"0 3 * * *"}}}'
 
 
 @dataclass(frozen=True)
@@ -267,6 +270,49 @@ def _operator_pod(config: OlmUpgradeConfig, csv: dict[str, Any]) -> dict[str, An
     return dict(pods[0])
 
 
+def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> None:
+    """The target operator never restarted; its log and the namespace events show no errors."""
+    target = get_csv(config.namespace, config.target_csv)
+    deployment = target["spec"]["install"]["spec"]["deployments"][0]["name"]
+    pod = _operator_pod(config, target)
+    name = pod["metadata"]["name"]
+
+    restarts = sum(c.get("restartCount", 0) for c in pod["status"]["containerStatuses"])
+    if restarts:
+        previous = kubectl_bin("logs", name, "-n", config.namespace, "--previous", check=False)
+        pytest.fail(f"Operator restarted {restarts} times. Previous logs:\n{previous}")
+
+    errors = [
+        line
+        for line in kubectl_bin("logs", name, "-n", config.namespace).splitlines()
+        if OPERATOR_ERROR.search(line)
+        and not any(allowed.search(line) for allowed in ALLOWED_OPERATOR_ERRORS)
+    ]
+    assert not errors, "Operator logged errors after upgrade:\n" + "\n".join(errors)
+
+    def allowed(ev: dict[str, Any]) -> bool:
+        obj = ev["involvedObject"]
+        if obj["kind"] == "ClusterServiceVersion":
+            return ev.get("reason") in ALLOWED_CSV_WARNINGS
+        if obj["kind"] == "InstallPlan" and ev.get("reason") == "AppliedWithWarnings":
+            warnings = ev.get("message", "").split("):", 1)[-1].split(", psmdb.")
+            return all(DEPRECATION_WARNING.search(w) for w in warnings)
+        # Readiness probe noise of the operator pods being replaced.
+        return (
+            obj["kind"] == "Pod"
+            and obj["name"].startswith(f"{deployment}-")
+            and ev.get("reason") == "Unhealthy"
+        )
+
+    new_warnings = [
+        f"{ev['involvedObject']['kind']}/{ev['involvedObject']['name']}: "
+        f"{ev.get('reason')}: {ev.get('message')}"
+        for uid, ev in _warning_events(config.namespace).items()
+        if _event_count(ev) > state.events.get(uid, 0) and not allowed(ev)
+    ]
+    assert not new_warnings, "Warning events during upgrade:\n" + "\n".join(new_warnings)
+
+
 class TestOlmUpgrade:
     """Install the previous release from the catalog, upgrade it through OLM, check the DB."""
 
@@ -375,18 +421,21 @@ class TestOlmUpgrade:
         # plan for a newer patch of the old channel, created before the channel switch;
         # delete it so OLM resolves the target. Bundles skip every older version
         # (olm.skipRange / spec.skips), so one hop is enough.
-        delete_pending_plans(config.namespace, keep=lambda csvs: csvs == [config.target_csv])
+        def to_target(csvs: list[str]) -> bool:
+            return csvs == [config.target_csv]
+
+        delete_pending_plans(config.namespace, keep=to_target)
         plans = approve_until_installed(
             config.namespace,
             config.package,
             config.target_csv,
-            allowed_csvs=lambda csvs: csvs == [config.target_csv],
+            allowed_csvs=to_target,
             on_poll=sample_state,
+            delete_rejected=True,
         )
         assert len(plans) == 1, f"Expected one InstallPlan to {config.target_csv}, got {plans}"
-        for plan in plans:
-            phase = installplan_phase(config.namespace, plan)
-            assert phase == "Complete", f"InstallPlan {plan} phase is {phase}"
+        phase = installplan_phase(config.namespace, plans[0])
+        assert phase == "Complete", f"InstallPlan {plans[0]} phase is {phase}"
 
         wait_until(
             f"only {config.target_csv} to be left",
@@ -414,54 +463,50 @@ class TestOlmUpgrade:
             config.namespace,
             "--timeout=300s",
         )
-        pod = _operator_pod(config, target)
-        name = pod["metadata"]["name"]
-        image = pod["spec"]["containers"][0]["image"]
+        image = _operator_pod(config, target)["spec"]["containers"][0]["image"]
         assert image == csv_operator_image(target), f"Operator runs {image} after upgrade"
-
-        restarts = sum(c.get("restartCount", 0) for c in pod["status"]["containerStatuses"])
-        if restarts:
-            previous = kubectl_bin("logs", name, "-n", config.namespace, "--previous", check=False)
-            pytest.fail(f"Operator restarted {restarts} times. Previous logs:\n{previous}")
-
-        errors = [
-            line
-            for line in kubectl_bin("logs", name, "-n", config.namespace).splitlines()
-            if OPERATOR_ERROR.search(line)
-            and not any(allowed.search(line) for allowed in ALLOWED_OPERATOR_ERRORS)
-        ]
-        assert not errors, "Operator logged errors after upgrade:\n" + "\n".join(errors)
-
-        def allowed(ev: dict[str, Any]) -> bool:
-            obj = ev["involvedObject"]
-            if obj["kind"] == "ClusterServiceVersion":
-                return ev.get("reason") in ALLOWED_CSV_WARNINGS
-            if obj["kind"] == "InstallPlan" and ev.get("reason") == "AppliedWithWarnings":
-                warnings = ev.get("message", "").split("):", 1)[-1].split(", psmdb.")
-                return all(DEPRECATION_WARNING.search(w) for w in warnings)
-            # Readiness probe noise of the operator pods being replaced.
-            return (
-                obj["kind"] == "Pod"
-                and obj["name"].startswith(f"{deployment}-")
-                and ev.get("reason") == "Unhealthy"
-            )
-
-        new_warnings = [
-            f"{ev['involvedObject']['kind']}/{ev['involvedObject']['name']}: "
-            f"{ev.get('reason')}: {ev.get('message')}"
-            for uid, ev in _warning_events(config.namespace).items()
-            if _event_count(ev) > state.events.get(uid, 0) and not allowed(ev)
-        ]
-        assert not new_warnings, "Warning events during upgrade:\n" + "\n".join(new_warnings)
+        _assert_operator_clean(config, state)
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_operator_ready"])
     def test_cluster_not_restarted(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
-        """The DB stayed healthy and no DB pod was recreated or restarted"""
+        """The new operator reconciles the cluster without recreating or restarting DB pods"""
+        # Prove the new operator acts on the CR: an idle state would also look unchanged.
+        generation = int(
+            kubectl_bin(
+                "patch",
+                "psmdb",
+                config.cluster,
+                "-n",
+                config.namespace,
+                "--type=merge",
+                "-p",
+                RECONCILE_PROBE,
+                "-o",
+                "jsonpath={.metadata.generation}",
+            )
+        )
+        wait_until(
+            f"the operator to reconcile generation {generation}",
+            lambda: kubectl_bin(
+                "get",
+                "psmdb",
+                config.cluster,
+                "-n",
+                config.namespace,
+                "-o",
+                "jsonpath={.status.observedGeneration}",
+                check=False,
+            ).strip(),
+            lambda observed: observed == str(generation),
+            timeout=300,
+        )
+
         # The new operator may only change the StatefulSets on a later reconcile,
         # so keep watching for a while before comparing.
         deadline = time.monotonic() + SOAK_SECONDS
         while time.monotonic() < deadline:
-            state.states.append(_psmdb_state(config))
+            if current := _psmdb_state(config):
+                state.states.append(current)
             time.sleep(10)
 
         logger.info(f"Cluster states seen during upgrade: {sorted(set(state.states))}")
@@ -475,6 +520,8 @@ class TestOlmUpgrade:
         assert revisions == state.sts_revisions, (
             f"StatefulSets changed. Before: {state.sts_revisions}, after: {revisions}"
         )
+        # Errors or restarts of the operator while it reconciled during the soak.
+        _assert_operator_clean(config, state)
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_cluster_not_restarted"])
     def test_data_after_upgrade(
