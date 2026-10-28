@@ -287,7 +287,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			rsStatus.AddedAsShard = new(true)
 			cr.Status.Replsets[replset.Name] = rsStatus
 		} else {
-			return api.AppStateInit, nil, nil
+			// Keep the members recorded on init. Smart update waits for them,
+			// and mongos isn't created until smart update finishes.
+			return api.AppStateInit, rsStatus.Members, nil
 		}
 	}
 

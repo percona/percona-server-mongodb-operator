@@ -588,3 +588,27 @@ func TestReconcileCustomUsersSkipsDuringRestore(t *testing.T) {
 		})
 	}
 }
+
+// A shard isn't added to the cluster until mongos is ready, and mongos isn't
+// created until smart update rolls the shard pods. Smart update needs members,
+// so they must not be dropped while waiting for mongos.
+func TestReconcileClusterKeepsMembersBeforeAddedAsShard(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	ctx := context.Background()
+
+	r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, &replsetInitExecRecorder{})
+	cr.Spec.Sharding.Enabled = true
+	cr.Spec.Sharding.Mongos = &api.MongosSpec{Size: 1}
+	rs.ClusterRole = api.ClusterRoleShardSvr
+
+	podName := cr.Name + "-" + rs.Name + "-0"
+	members := map[string]api.ReplsetMemberStatus{
+		podName: {Name: podName, State: mongo.MemberStatePrimary},
+	}
+	cr.Status.Replsets[rs.Name] = api.ReplsetStatus{Initialized: true, Members: members}
+
+	state, got, err := r.reconcileCluster(ctx, cr, rs, nil)
+	require.NoError(t, err)
+	assert.Equal(t, api.AppStateInit, state)
+	assert.Equal(t, members, got)
+}
