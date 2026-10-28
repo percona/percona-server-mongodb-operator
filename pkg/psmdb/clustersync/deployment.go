@@ -81,6 +81,11 @@ func DeploymentSpec(cr *api.PerconaServerMongoDBClusterSync, template corev1.Pod
 // processes never overlap. Above 1, PCSM's own lease arbitrates, so a
 // rolling update is safe; maxSurge stays 0 to keep group membership at
 // exactly size.
+//
+// A Deployment picks the replacement order, so one rollout can fail the
+// group over more than once: whichever pod holds the lease when its turn
+// comes hands it off. Rolling the standbys first and triggering a single
+// planned failover needs an operator-driven rollout.
 func deploymentStrategy(size int32) appsv1.DeploymentStrategy {
 	if size < 2 {
 		return appsv1.DeploymentStrategy{Type: appsv1.RecreateDeploymentStrategyType}
