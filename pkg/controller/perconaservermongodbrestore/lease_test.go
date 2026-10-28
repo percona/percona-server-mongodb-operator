@@ -117,11 +117,9 @@ func TestCheckRestoreLocksBackupLease(t *testing.T) {
 	)
 	holder := "backup-uid"
 	lease := &coordv1.Lease{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      naming.BackupLeaseName(clusterName),
-			Namespace: ns,
-		},
-		Spec: coordv1.LeaseSpec{HolderIdentity: &holder},
+		Name:      naming.BackupLeaseName(clusterName),
+		Namespace: ns,
+		Spec:      coordv1.LeaseSpec{HolderIdentity: &holder},
 	}
 	cl := fake.NewClientBuilder().WithScheme(restoreScheme(t)).WithRuntimeObjects(lease).Build()
 	r := &ReconcilePerconaServerMongoDBRestore{client: cl}
