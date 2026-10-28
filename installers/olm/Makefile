@@ -310,6 +310,23 @@ validate-%-image:
 	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
 
 # ==============================================================================
+# Test Rules
+# ==============================================================================
+
+## Run the OLM upgrade e2e test against the deployed development catalogs
+.PHONY: tests $(BUNDLE_TYPES:%=tests/%)
+tests: ## Run OLM upgrade e2e tests against deployed catalogs (run deploy/<type> first)
+tests: $(BUNDLE_TYPES:%=tests/%)
+
+tests/community:
+tests/certified:
+
+$(BUNDLE_TYPES:%=tests/%): tests/%: tools
+	CATALOG_NAMESPACE='$(CATALOG_NAMESPACE)' \
+	NAME='$(NAME)' \
+	bash ./run-tests.sh '$*'
+
+# ==============================================================================
 # Utility Rules
 # ==============================================================================
 

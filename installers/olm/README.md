@@ -310,6 +310,40 @@ Validation uses:
 
 ---
 
+# Upgrade tests
+
+`make tests` runs the `e2e-tests/olm-upgrade` pytest test against the deployed
+development catalogs. Deploy them first with `make deploy/<type>`, and point
+`kubectl` at the OpenShift cluster.
+
+```bash
+make tests
+make tests/community
+make tests/certified
+```
+
+The test runs once for every bundle outside the catalog's default channel. Each
+run installs that bundle with a Manual-approval Subscription, deploys a replica
+set from the bundle's example CR and writes data. It then switches the
+Subscription to the default channel and approves the InstallPlan straight to
+the newest version, so each starting version is upgraded directly. After the
+upgrade it checks that:
+
+- only the target CSV is left and the operator runs its image;
+- the operator logs and the namespace's Warning events have no new errors;
+- the cluster stayed `ready`, and no DB pod was recreated or restarted;
+- the data written before the upgrade is readable, and new writes succeed.
+
+Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
+starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`.
+
+Before and after each run, the test deletes the operator CRDs, together with
+every `psmdb` resource in the cluster. OLM leaves CRDs behind, and a newer CRD
+blocks installing an older bundle. Use a dedicated cluster. Set `SKIP_DELETE=1`
+to keep the last run's resources for debugging.
+
+---
+
 # Certified Metadata
 
 Certified bundles resolve image metadata and related image digests through
