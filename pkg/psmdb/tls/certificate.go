@@ -73,7 +73,7 @@ func (c *caCert) Object() *cm.Certificate {
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 	}
-	return &cm.Certificate{
+	cert := &cm.Certificate{
 		Name:      c.Name(),
 		Namespace: c.Namespace(),
 		Labels:    labels,
@@ -90,6 +90,16 @@ func (c *caCert) Object() *cm.Certificate {
 			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 		},
 	}
+	if cr.CompareVersion("1.24.0") >= 0 {
+		cert.Spec.PrivateKey = &cm.CertificatePrivateKey{
+			// The default was changed from Never to Always in cert-manager >= 1.18.0
+			// We pin this to preserve the same functionality but this also means that
+			// we do not have a safe way to rotate the private key.
+			// TODO: make this configurable and provide a way to rotate the CA Certificate private key.
+			RotationPolicy: cm.RotationPolicyNever,
+		}
+	}
+	return cert
 }
 
 type tlsCert struct {

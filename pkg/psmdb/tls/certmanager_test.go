@@ -540,3 +540,51 @@ func buildFakeClient(objs ...client.Object) CertManagerController {
 		scheme: s,
 	}
 }
+
+func TestApplyCertificateSansVersionGate(t *testing.T) {
+	newCR := func(crVersion string) *api.PerconaServerMongoDB {
+		return &api.PerconaServerMongoDB{
+			Name: "psmdb-mock", Namespace: "psmdb",
+			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: crVersion,
+				Secrets:   &api.SecretsSpec{SSL: "ssl"},
+				Replsets:  []*api.ReplsetSpec{{Name: "rs0", Size: 3}},
+				TLS:       new(api.TLSSpec),
+			},
+		}
+	}
+
+	tests := map[string]struct {
+		crVersion string
+		keepsSan  bool
+	}{
+		"1.23.0 drops sans not desired anymore": {crVersion: "1.23.0"},
+		"1.24.0 keeps sans already issued":      {crVersion: "1.24.0", keepsSan: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+			cr := newCR(tt.crVersion)
+			tlsCert := CertificateTLS(cr, false)
+
+			existing := tlsCert.Object()
+			existing.Spec.DNSNames = append(GetCertificateSans(cr), "stale.example.com")
+
+			r := buildFakeClient(cr, existing)
+
+			_, err := r.ApplyCertificate(ctx, cr, tlsCert)
+			require.NoError(t, err)
+
+			cert := new(cm.Certificate)
+			require.NoError(t, r.GetClient().Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: tlsCert.Name()}, cert))
+
+			if tt.keepsSan {
+				assert.Contains(t, cert.Spec.DNSNames, "stale.example.com")
+			} else {
+				assert.NotContains(t, cert.Spec.DNSNames, "stale.example.com")
+			}
+			assert.Subset(t, cert.Spec.DNSNames, GetCertificateSans(cr))
+		})
+	}
+}

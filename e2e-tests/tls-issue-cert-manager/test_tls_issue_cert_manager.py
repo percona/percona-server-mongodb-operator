@@ -5,6 +5,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -82,9 +83,13 @@ class TestUserManagedCertManager:
         kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client_with_tls.yml")
 
         test_dir = test_paths["test_dir"]
-        for resource in ("some-name-psmdb-ca-issuer", "some-name-psmdb-issuer", "some-name-ca-cert"):
+        for resource in (
+            "some-name-psmdb-ca-issuer",
+            "some-name-psmdb-issuer",
+            "some-name-ca-cert",
+        ):
             retry(
-                lambda r=resource: kubectl_bin("apply", "-f", f"{test_dir}/conf/{r}.yml"),
+                partial(kubectl_bin, "apply", "-f", f"{test_dir}/conf/{resource}.yml"),
                 max_attempts=10,
                 delay=10,
             )
@@ -113,7 +118,9 @@ class TestUserManagedCertManager:
 
         _check_tls_secret(f"{cluster}-ssl")
 
-    @pytest.mark.dependency(depends=["TestUserManagedCertManager::test_user_issuer_not_overwritten"])
+    @pytest.mark.dependency(
+        depends=["TestUserManagedCertManager::test_user_issuer_not_overwritten"]
+    )
     def test_user_certificates_preserved(
         self, config: TLSCertManagerConfig, test_paths: Paths
     ) -> None:
@@ -126,7 +133,10 @@ class TestUserManagedCertManager:
         wait_for_delete(f"psmdb/{cluster}", 180)
         kubectl_bin("delete", "pvc", "--all")
         kubectl_bin(
-            "delete", "secret", f"{cluster}-ssl", f"{cluster}-ssl-internal",
+            "delete",
+            "secret",
+            f"{cluster}-ssl",
+            f"{cluster}-ssl-internal",
             "--ignore-not-found",
         )
 

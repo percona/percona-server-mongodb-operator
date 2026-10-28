@@ -11,6 +11,13 @@ from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
 logger = logging.getLogger(__name__)
 
+# keep in sync with KUBECTL_TRANSIENT_ERRORS in e2e-tests/functions
+TRANSIENT_ERRORS = re.compile(
+    r"ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout"
+    r"|etcdserver: request timed out|the server is currently unable to handle the request"
+    r"|Unable to connect to the server|connection reset by peer"
+)
+
 
 def _read_manifest(source: str) -> str | None:
     """Return manifest text for a local file or http(s) URL, else None."""
@@ -78,7 +85,15 @@ def kubectl_bin(
     arg_list, input_data = _apply_arch_scheduling(list(args), input_data)
     cmd = ["kubectl"] + arg_list
     logger.debug(" ".join(map(str, cmd)))
-    result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
+    for attempt in range(10):
+        result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
+        if result.returncode == 0 or attempt == 9 or not TRANSIENT_ERRORS.search(result.stderr):
+            break
+        delay = min(5 * (attempt + 1), 30)
+        logger.warning(
+            "kubectl transient error, retrying in %ds: %s", delay, result.stderr.strip()
+        )
+        time.sleep(delay)
 
     if result.stderr:
         log = logger.warning if check else logger.debug
@@ -242,7 +257,7 @@ def get_k8s_versions() -> tuple[str, str]:
 
 
 def detect_platform() -> str:
-    """Detect the Kubernetes platform, mirroring bash detect_k8s_env().
+    """Detect the Kubernetes platform.
 
     Returns one of: openshift, eks, gke, aks, kind, minikube, rancher, unknown.
     """
@@ -272,7 +287,7 @@ def detect_platform() -> str:
 
 
 def detect_arch() -> str:
-    """Detect target arch for scheduling: 'arm64' on arm64-only clusters, else '' (mirrors vars)."""
+    """Detect target arch for scheduling: 'arm64' on arm64-only clusters, else ''."""
     arches = kubectl_bin(
         "get",
         "nodes",

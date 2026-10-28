@@ -17,7 +17,7 @@ deploy_openldap() {
 	yq 'select(.metadata.name == "ldap-ca").spec.dnsNames[0]="openldap.'$namespace'.svc.cluster.local"' "$test_dir/conf/openldap.yaml" \
 		| kubectl_bin apply -f -
 
-	kubectl rollout status deployment/openldap --timeout=220s
+	kubectl rollout status deployment/openldap --timeout=600s
 }
 
 test_mongod_openldap() {

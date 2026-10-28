@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -195,11 +196,10 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 		return "", errors.Wrapf(err, "error checking and writing CA certificate to file %s", tlsPemFile)
 	}
 
-	murl += fmt.Sprintf(
-		"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true&tlsInsecure=true",
-		tlsPemFile,
-		caCertFile,
-	)
+	murl += fmt.Sprintf("?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s", tlsPemFile, caCertFile)
+	if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
+		murl += "&tlsInsecure=true"
+	}
 
 	return murl, nil
 }
@@ -251,7 +251,13 @@ func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServer
 }
 
 // GetPriorities returns priorities to be used in PBM config.
+//
+// Deprecated: For >=1.24.0 this is no-op, operator doesn't configure any priorities any more.
 func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB) (map[string]float64, error) {
+	if cluster.CompareVersion("1.24.0") >= 0 {
+		return nil, nil
+	}
+
 	log := logf.FromContext(ctx)
 	priorities := make(map[string]float64)
 
@@ -1536,7 +1542,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 
 	for _, chnk := range chunks {
 		err = stg.Delete(chnk.FName)
-		if err != nil && err != storage.ErrNotExist {
+		if err != nil && !errors.Is(err, storage.ErrNotExist) {
 			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
 		}
 

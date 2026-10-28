@@ -161,7 +161,7 @@ include e2e-tests/release_versions
 $(foreach v,$(_e2e_image_vars),$(eval e2e-test: $(v) := $$(_saved_$(v))))
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
-	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/functions
+	$(SED) -i "s/\"CERT_MANAGER_VER\": \".*\"/\"CERT_MANAGER_VER\": \"$(CERT_MANAGER_VER)\"/" e2e-tests/conftest.py
 	echo "$(VERSION)" > pkg/version/version.txt
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
@@ -214,6 +214,7 @@ after-release: update-version after-release-versions manifests update-upgrade-co
 after-release-versions:
 	$(SED) -i \
 		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main#" \
+		-e "s#^IMAGE_MONGOD83=.*#IMAGE_MONGOD83=perconalab/percona-server-mongodb-operator:main-mongod8.3#" \
 		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0#" \
 		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
 		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \

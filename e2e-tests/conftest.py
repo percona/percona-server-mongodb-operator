@@ -206,6 +206,11 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
 @pytest.fixture(scope="session", autouse=True)
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
+    init_env()
+
+
+def init_env() -> list[str]:
+    """Fill os.environ with e2e defaults and return the managed variable names."""
     git_branch = get_git_branch()
     platform = detect_platform()
 
@@ -229,7 +234,8 @@ def setup_env_vars() -> None:
         "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
         "IMAGE_MONGOD_CHAIN": (
             "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
-            "perconalab/percona-server-mongodb-operator:main-mongod8.0"
+            "perconalab/percona-server-mongodb-operator:main-mongod8.0\n"
+            "perconalab/percona-server-mongodb-operator:main-mongod8.3"
         ),
         "IMAGE_SEARCH": "perconalab/percona-server-mongodb-operator:main-mongot",
         "IMAGE_BACKUP": "perconalab/percona-server-mongodb-operator:main-backup",
@@ -261,9 +267,12 @@ def setup_env_vars() -> None:
         if images:
             os.environ[var] = "\n".join(qualify_image(i, registry) for i in images if i)
 
+    os.environ["E2E_ENV_INITIALIZED"] = "1"
+
     logger.info(
         "Environment variables:\n" + "\n".join(f"{key}={os.environ.get(key)}" for key in defaults)
     )
+    return [*defaults, "IMAGE_OPERATOR", "E2E_ENV_INITIALIZED"]
 
 
 @pytest.fixture(scope="class")
@@ -607,15 +616,17 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
                     "-p",
                     f'[{{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"{arg}"}}]',
                 )
-            kubectl_bin(
-                "wait",
-                "pod",
-                "-l",
-                "app.kubernetes.io/instance=cert-manager",
-                "--for=condition=ready",
-                "-n",
-                "cert-manager",
-            )
+            # Patching args triggers a rollout. Until the old pod is gone two controllers
+            # can issue the same certificate and break it with mismatched private keys.
+            for deployment in ("cert-manager", "cert-manager-webhook", "cert-manager-cainjector"):
+                kubectl_bin(
+                    "rollout",
+                    "status",
+                    f"deployment/{deployment}",
+                    "-n",
+                    "cert-manager",
+                    "--timeout=300s",
+                )
         except Exception:
             _delete_cert_manager()
             raise
@@ -761,3 +772,11 @@ def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
         _delete_cert_manager()
     finally:
         _cleanup_infra(test_paths, namespaces)
+
+
+if __name__ == "__main__":
+    import shlex
+
+    _console.stderr = True
+    for key in init_env():
+        print(f"export {key}={shlex.quote(os.environ.get(key, ''))}")

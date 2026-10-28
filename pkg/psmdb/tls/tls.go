@@ -20,6 +20,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -259,7 +260,7 @@ func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerM
 	}
 
 	return tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates),
 		RootCAs:            pool,
 		Certificates:       []tls.Certificate{cert},
 	}, nil
@@ -299,6 +300,48 @@ func getShardingSans(cr *api.PerconaServerMongoDB) []string {
 		cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 		"*." + cr.Name + "-" + api.ConfigReplSetName + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 	}
+
+	sans = append(sans, mongosPerPodSans(cr)...)
+
+	return sans
+}
+
+// SansToIssue returns the SANs a certificate should be signed with and whether it has to be
+// re-issued. A certificate already covering every required SAN is left untouched, so dropping
+// SANs (on scale-down, for example) doesn't re-issue the cert and roll every pod.
+func SansToIssue(current, desired []string) (sans []string, reissue bool) {
+	for _, san := range desired {
+		if !slices.Contains(current, san) {
+			return desired, true
+		}
+	}
+
+	return current, false
+}
+
+// mongosPerPodSans returns the SAN entries for the per-pod mongos services. These services are
+// siblings of the headless mongos service, so the wildcard SANs don't cover their hostnames.
+func mongosPerPodSans(cr *api.PerconaServerMongoDB) []string {
+	mongos := cr.Spec.Sharding.Mongos
+	if cr.CompareVersion("1.24.0") < 0 || mongos == nil || !mongos.Expose.ServicePerPod {
+		return nil
+	}
+
+	if mongos.Size <= 0 {
+		return nil
+	}
+
+	sans := make([]string, 0, int(mongos.Size)*4)
+	for i := 0; i < int(mongos.Size); i++ {
+		name := naming.MongosPerPodServiceName(cr, i)
+		sans = append(sans,
+			name,
+			name+"."+cr.Namespace,
+			name+"."+cr.Namespace+"."+cr.Spec.ClusterServiceDNSSuffix,
+			name+"."+cr.Namespace+"."+cr.Spec.MultiCluster.DNSSuffix,
+		)
+	}
+
 	return sans
 }
 
@@ -316,7 +359,7 @@ func GetCertificateSans(cr *api.PerconaServerMongoDB) []string {
 			"*." + cr.Name + "-" + replset.Name + "." + cr.Namespace + "." + cr.Spec.MultiCluster.DNSSuffix,
 		}...)
 
-		if cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0 {
+		if cr.CompareVersion("1.24.0") >= 0 || (cr.CompareVersion("1.22.0") >= 0 && len(replset.Horizons) > 0) {
 			horizonSans := make(map[string]struct{})
 			for _, podMap := range replset.GetHorizons(false) {
 				for _, domain := range podMap {
