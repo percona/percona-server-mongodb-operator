@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -885,4 +887,62 @@ func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
 			assert.Equal(t, tt.wantMongosFirst, ok, "annotation must be stored in the API server")
 		})
 	}
+}
+
+// mergeNewCA deletes the "-old" secret once the merged CA is already in the
+// live one. The client cache can be behind the API server there, so a secret
+// that is already gone is the state the cleanup wants, not a failure.
+func TestMergeNewCADeletesAnAlreadyDeletedOldSecret(t *testing.T) {
+	pemBlock := func(body string) []byte {
+		return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte(body)})
+	}
+	oldCA := pemBlock("old-ca")
+	newCA := pemBlock("new-ca")
+	mergedCA := append(append([]byte{}, oldCA...), newCA...)
+
+	secretsFor := func(cr *api.PerconaServerMongoDB) []client.Object {
+		objs := []client.Object{cr}
+		for _, name := range []string{api.SSLInternalSecretName(cr), api.SSLSecretName(cr)} {
+			objs = append(objs,
+				&corev1.Secret{
+					Name: name, Namespace: cr.Namespace,
+					Data: map[string][]byte{"ca.crt": mergedCA},
+				},
+				&corev1.Secret{
+					Name: name + "-old", Namespace: cr.Namespace,
+					Data: map[string][]byte{"ca.crt": oldCA},
+				},
+			)
+		}
+		return objs
+	}
+
+	t.Run("delete returns NotFound", func(t *testing.T) {
+		cr := newTestCR()
+		r := buildFakeClient(secretsFor(cr)...)
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
+			return k8serrors.NewNotFound(corev1.Resource("secrets"), obj.GetName())
+		})
+
+		require.NoError(t, r.mergeNewCA(t.Context(), cr))
+	})
+
+	t.Run("delete fails for another reason", func(t *testing.T) {
+		cr := newTestCR()
+		r := buildFakeClient(secretsFor(cr)...)
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
+			return errors.New("boom")
+		})
+
+		require.Error(t, r.mergeNewCA(t.Context(), cr))
+	})
+}
+
+func interceptorClient(t *testing.T, c client.Client, del func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error) client.Client {
+	t.Helper()
+
+	watcher, ok := c.(client.WithWatch)
+	require.True(t, ok, "interceptor.NewClient needs a client.WithWatch, got %T", c)
+
+	return interceptor.NewClient(watcher, interceptor.Funcs{Delete: del})
 }
