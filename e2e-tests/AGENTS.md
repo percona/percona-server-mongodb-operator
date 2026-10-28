@@ -42,6 +42,10 @@ check against that.
 
 - **Every wait has a ceiling** and fails with what it expected and the last
   value it saw. No unbounded `until` loops.
+- **Fail fast on terminal states.** When the watched object reports `Failed`
+  or `Error`, stop with its message instead of waiting out the timeout.
+- **Treat an empty read as unknown.** A `kubectl_bin(..., check=False)` that
+  returns `""` is not a state; retry it or skip that sample.
 - **No sleeps for readiness.** Poll the condition. Sleeps that encode real
   time (a soak, a PITR window, a known upstream bug workaround) stay, with a
   comment saying why.
@@ -50,12 +54,26 @@ check against that.
 - **Check data, not only status.** After a restore, failover or upgrade,
   read the data back (`compare_mongo_cmd`, `simple_data_check`), do not stop
   at pods being `Running`.
+- **Per-member reads need a direct connection.** `MongoManager.run_mongosh`
+  always connects with `replicaSet=rs0` (or `cfg`), so "read from every
+  member" through it reads the primary each time.
+- **Test the version you mean to test.** Before testing an upgrade or a
+  built artifact, assert it is the version under test (for example against
+  `crVersion` in `deploy/cr.yaml`); a stale image or catalog passes otherwise.
 - **"Nothing changed" needs a before/after snapshot.** To prove no restart,
   compare pod UIDs, container `restartCount` and StatefulSet
   `currentRevision`/`updateRevision`, not just the current state.
 - **Prove the controller acted.** An unchanged cluster also looks healthy
   when the operator never reconciled. Bump the CR generation with a field that
   does not touch the pod template and wait for `status.observedGeneration`.
+- **Check again at the end of a soak.** Problems often show up on a later
+  reconcile: repeat the restart, error-log and Warning-event checks after the
+  observation window, not only at its start.
+- **A coverage gate fails, it does not warn.** When a run covers less than it
+  must (versions, platforms), exit non-zero; offer an explicit variable to
+  lower the bar. Warnings pass CI unseen.
+- **Test version-selection logic with patch releases** (`1.24.1`), not only
+  `.0` releases, and with fewer versions available than requested.
 - **Keep allowlists narrow.** Allowed log lines or event reasons get one
   entry each, matched as specifically as possible, with a comment on why they
   are expected.
