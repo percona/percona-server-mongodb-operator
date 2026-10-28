@@ -14,7 +14,10 @@ import pytest
 import yaml
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.olm import (
+from lib.operator import check_crd_for_deletion, delete_crd_rbac
+from lib.secrets import get_user_data
+from lib.utils import Paths, env_bool, retry
+from olm import (
     SUBSCRIPTION,
     approve_until_installed,
     channel_of_csv,
@@ -34,9 +37,6 @@ from lib.olm import (
     wait_catalog_ready,
     wait_until,
 )
-from lib.operator import check_crd_for_deletion, delete_crd_rbac
-from lib.secrets import get_user_data
-from lib.utils import Paths, env_bool, retry
 
 logger = logging.getLogger(__name__)
 

@@ -321,9 +321,9 @@ Validation uses:
 
 # Upgrade tests
 
-`make tests` runs the `e2e-tests/olm-upgrade` pytest test against the deployed
-development catalogs. Deploy them first with `make deploy/<type>`, and point
-`kubectl` at the OpenShift cluster. Build the catalog with
+`make tests` runs the `e2e-tests/olm-upgrade` pytest test (in this directory)
+against the deployed development catalogs. Deploy them first with
+`make deploy/<type>`, and point `kubectl` at the OpenShift cluster. Build the catalog with
 `CATALOG_PREVIOUS_MINORS=2` to test upgrades from the two previous minor
 versions and all their patch releases.
 
@@ -357,7 +357,21 @@ versions, not counting the target's own minor line. Set `OLM_MIN_MINORS` to
 change that number.
 
 Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
-starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`.
+starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`
+in the repository root.
+
+OLM tests live in `installers/olm/e2e-tests/` and are not part of the regular
+e2e suite: they need an OpenShift cluster with the catalogs deployed, and
+changes here do not trigger the PR e2e run (`installers/olm/**` is in
+`.e2eignore`). They reuse the shared pytest harness from the repository's
+`e2e-tests/` (`conftest.py` and `lib/`), loaded with `-p conftest`;
+`olm.py` holds the OLM helpers. To run one test by hand from the repository
+root:
+
+```bash
+PYTHONPATH=e2e-tests:installers/olm/e2e-tests \
+  uv run pytest -p conftest installers/olm/e2e-tests/olm-upgrade/
+```
 
 Before and after each run, the test deletes the operator CRDs, together with
 every `psmdb` resource in the cluster. OLM leaves CRDs behind, and a newer CRD

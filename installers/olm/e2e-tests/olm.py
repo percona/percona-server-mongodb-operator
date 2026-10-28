@@ -6,8 +6,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from .kubectl import kubectl_bin
-from .utils import retry
+from lib.kubectl import kubectl_bin
+from lib.utils import retry
 
 logger = logging.getLogger(__name__)
 

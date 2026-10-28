@@ -201,3 +201,4 @@ config/rbac/namespace/service_account.yaml
 # Test Reports
 e2e-tests/reports/
 e2e-tests/**/__pycache__/
+installers/olm/e2e-tests/**/__pycache__/

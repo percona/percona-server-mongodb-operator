@@ -15,10 +15,10 @@ usage() {
 Usage:
   $0 <community|certified>
 
-Runs the e2e-tests/${OLM_TEST} test once per starting CSV: every bundle of the
-deployed ${CATALOG_ENV} catalog except the default channel head is upgraded to
-that head. It fails when fewer than OLM_MIN_MINORS (2) previous minor versions
-are covered. Deploy the catalog first (make deploy/<type>).
+Runs the installers/olm/e2e-tests/${OLM_TEST} test once per starting CSV:
+every bundle of the deployed ${CATALOG_ENV} catalog except the default channel
+head is upgraded to that head. It fails when fewer than OLM_MIN_MINORS (2)
+previous minor versions are covered. Deploy the catalog first (make deploy/<type>).
 
 Set OLM_FROM_CSVS to a space-separated list of CSV names to pick the
 starting points instead. Each run cleans up after itself (SKIP_DELETE=0) because
@@ -104,18 +104,21 @@ if [[ -z "${OLM_FROM_CSVS:-}" ]]; then
 		die "the catalog covers ${PREVIOUS_MINORS} previous minor versions, ${MIN_MINORS} required: build it with CATALOG_PREVIOUS_MINORS=${MIN_MINORS} (or set OLM_MIN_MINORS / OLM_FROM_CSVS)"
 fi
 
+mkdir -p "${SRC_DIR}/e2e-tests/reports" "${SRC_DIR}/e2e-tests/logs"
 FAILED=()
 for csv in "${FROM_CSVS[@]}"; do
 	echo "[olm] Testing upgrade ${csv} -> ${SOURCE} default channel"
-	report="e2e-tests/reports/${OLM_TEST}-${csv}"
-	if ! OLM_BUNDLE_TYPE="$BUNDLE_TYPE" \
-		OLM_PACKAGE="$PACKAGE" \
-		OLM_CATALOG_SOURCE="$SOURCE" \
-		OLM_CATALOG_NAMESPACE="$CATALOG_NAMESPACE" \
-		OLM_FROM_CSV="$csv" \
-		make -C "$SRC_DIR" e2e-test \
-			TEST="$OLM_TEST" \
-			REPORT_OPTS="--html=${report}.html --junitxml=${report}.xml"; then
+	report="${SRC_DIR}/e2e-tests/reports/${OLM_TEST}-${csv}"
+	# The shared pytest harness (conftest.py, lib/) lives in e2e-tests; load it as a plugin.
+	if ! (cd "$SRC_DIR" &&
+		OLM_BUNDLE_TYPE="$BUNDLE_TYPE" \
+			OLM_PACKAGE="$PACKAGE" \
+			OLM_CATALOG_SOURCE="$SOURCE" \
+			OLM_CATALOG_NAMESPACE="$CATALOG_NAMESPACE" \
+			OLM_FROM_CSV="$csv" \
+			PYTHONPATH="e2e-tests:installers/olm/e2e-tests" \
+			uv run pytest -p conftest "installers/olm/e2e-tests/${OLM_TEST}/" \
+			--html="${report}.html" --junitxml="${report}.xml"); then
 		FAILED+=("$csv")
 	fi
 done
