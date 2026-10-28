@@ -118,6 +118,8 @@ func closingListener(t *testing.T) string {
 // immediately closes connections, the shape of the failure a service mesh
 // produces while it still rejects traffic to a new pod.
 func TestDialRetriesTransientErrors(t *testing.T) {
+	t.Parallel()
+
 	conf := &Config{
 		Hosts:   []string{closingListener(t)},
 		Direct:  true,
@@ -141,6 +143,8 @@ func TestDialRetriesTransientErrors(t *testing.T) {
 }
 
 func TestDialDoesNotRetryWhenContextIsDone(t *testing.T) {
+	t.Parallel()
+
 	conf := &Config{
 		Hosts:   []string{closingListener(t)},
 		Direct:  true,

@@ -14,6 +14,8 @@ import (
 )
 
 func TestContainers(t *testing.T) {
+	t.Parallel()
+
 	testEnvVar := []corev1.EnvVar{
 		{Name: "TEST_ENV1", Value: "test-value1"},
 	}
@@ -129,6 +131,8 @@ func TestContainers(t *testing.T) {
 }
 
 func TestContainersProbes(t *testing.T) {
+	t.Parallel()
+
 	logsLiveness := &corev1.Probe{
 		InitialDelaySeconds: 15,
 		Exec:                &corev1.ExecAction{Command: []string{"/bin/true"}},

@@ -26,6 +26,8 @@ import (
 )
 
 func TestReconcilePersistentVolumes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		requested         string
@@ -184,6 +186,8 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 }
 
 func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
+	t.Parallel()
+
 	const (
 		namespace      = "test-ns"
 		clusterName    = "test-cluster"
@@ -338,8 +342,7 @@ func newPVC(namespace, name string, labels map[string]string, requested, capacit
 }
 
 func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
-	err := apis.AddToScheme(clientgoscheme.Scheme)
-	require.NoError(t, err)
+	t.Parallel()
 
 	const (
 		ns      = "test-ns"
@@ -451,7 +454,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			}
 
 			fakeClient := fake.NewClientBuilder().
-				WithScheme(clientgoscheme.Scheme).
+				WithScheme(testScheme()).
 				WithObjects(cr, sts, pvc, pod).
 				WithStatusSubresource(pvc).
 				Build()
@@ -466,7 +469,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 
 			r := &ReconcilePerconaServerMongoDB{
 				client: fakeClient,
-				scheme: clientgoscheme.Scheme,
+				scheme: testScheme(),
 			}
 
 			volumeSpec := &api.VolumeSpec{
@@ -509,7 +512,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 }
 
 func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
-	require.NoError(t, apis.AddToScheme(clientgoscheme.Scheme))
+	t.Parallel()
 
 	const (
 		ns      = "test-ns"
@@ -623,7 +626,7 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 			}
 
 			cl := fake.NewClientBuilder().
-				WithScheme(clientgoscheme.Scheme).
+				WithScheme(testScheme()).
 				WithObjects(cr, sts, pvc, pod, event).
 				WithStatusSubresource(pvc).
 				WithIndex(&eventsv1.Event{}, "regarding.name", func(o client.Object) []string {
@@ -633,7 +636,7 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 
 			r := &ReconcilePerconaServerMongoDB{
 				client: cl,
-				scheme: clientgoscheme.Scheme,
+				scheme: testScheme(),
 			}
 
 			err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim)
