@@ -148,7 +148,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	if !backupStateTerminal(cr.Status.State) && cancellationRequested(cr) {
 		return r.reconcileCancellation(ctx, cr)
 	}
-	if backupStateTerminal(cr.Status.State) && cr.ObjectMeta.DeletionTimestamp == nil {
+	if backupStateTerminal(cr.Status.State) && cr.DeletionTimestamp == nil {
 		if err := r.runReleaseLockFinalizer(ctx, cr); err != nil {
 			return rr, err
 		}
