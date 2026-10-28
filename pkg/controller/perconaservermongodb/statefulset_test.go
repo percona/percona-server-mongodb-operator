@@ -27,6 +27,8 @@ import (
 )
 
 func TestReconcileStatefulSet(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	const (

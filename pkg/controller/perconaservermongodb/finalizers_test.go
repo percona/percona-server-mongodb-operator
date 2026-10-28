@@ -23,6 +23,8 @@ import (
 )
 
 func TestCheckFinalizers(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	crName := "check-finalizers"
 	ns := crName + "-ns"
@@ -124,6 +126,8 @@ func TestCheckFinalizers(t *testing.T) {
 }
 
 func TestReconcileStopsAfterFinalizersRemoved(t *testing.T) {
+	t.Parallel()
+
 	crName := "deleted-cluster"
 	ns := crName + "-ns"
 

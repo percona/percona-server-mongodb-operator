@@ -25,6 +25,8 @@ import (
 )
 
 func TestEnsureSecurityKeys(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                    string
 		crVersion               string

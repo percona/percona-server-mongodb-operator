@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -222,6 +223,9 @@ type ReconcilePerconaServerMongoDB struct {
 	initImage string
 
 	lockers lockStore
+
+	pvcUsageBackoff wait.Backoff
+	podRestartPoll  time.Duration
 }
 
 type lockStore struct {

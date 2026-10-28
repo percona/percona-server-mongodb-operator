@@ -89,7 +89,7 @@ undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
 test: envtest generate ## Run tests.
-	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -shuffle=on -coverprofile cover.out
 
 py-deps: uv ## Install e2e-tests Python dependencies
 	$(UV) sync --locked

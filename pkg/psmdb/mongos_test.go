@@ -19,6 +19,8 @@ import (
 )
 
 func TestMongosService(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		expose       api.Expose
 		podName      string
@@ -147,6 +149,8 @@ func TestMongosService(t *testing.T) {
 }
 
 func TestMongosContainer(t *testing.T) {
+	t.Parallel()
+
 	cr, err := readDefaultCR("test-cr", "test-ns")
 	assert.NoError(t, err)
 
@@ -266,6 +270,8 @@ func readDefaultCR(name, namespace string) (*api.PerconaServerMongoDB, error) {
 }
 
 func TestMongosServiceAnnotations(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		expose              api.MongosExpose
 		svcName             string
@@ -342,6 +348,8 @@ func TestMongosServiceAnnotations(t *testing.T) {
 }
 
 func TestMongosLogCollector(t *testing.T) {
+	t.Parallel()
+
 	cr, err := readDefaultCR("test-cr", "test-ns")
 	require.NoError(t, err)
 
@@ -413,6 +421,8 @@ func TestMongosLogCollector(t *testing.T) {
 }
 
 func TestMongosLogPVC(t *testing.T) {
+	t.Parallel()
+
 	mongosLabels := map[string]string{
 		"app.kubernetes.io/component":  "mongos",
 		"app.kubernetes.io/instance":   "test-cr",
