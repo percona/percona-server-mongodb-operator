@@ -1371,7 +1371,7 @@ func deleteConfigMapIfExists(ctx context.Context, cl client.Client, cr *api.Perc
 		return nil
 	}
 
-	return cl.Delete(ctx, configMap)
+	return client.IgnoreNotFound(cl.Delete(ctx, configMap))
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Context, cr *api.PerconaServerMongoDB, configMap *corev1.ConfigMap) error {

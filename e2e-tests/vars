@@ -8,7 +8,7 @@ with_registry() {
 			printf '%s' "$ref"
 			;;
 		percona/*|perconalab/*)
-			printf '%s%s' "$REGISTRY_NAME_FULL" "$ref"
+			printf '%s/%s' "${REGISTRY_NAME%/}" "$ref"
 			;;
 		*)
 			printf '%s' "$ref"
@@ -37,27 +37,6 @@ qualify_image_var() {
 	printf -v "$var" '%s' "$val"
 }
 
-detect_k8s_env() {
-	local provider="unknown"
-	if kubectl api-resources | grep -q 'openshift.io' 2>/dev/null; then
-		provider="openshift"
-	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'eksctl.io'; then
-		provider="eks"
-	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'cloud.google.com/gke'; then
-		provider="gke"
-	elif kubectl get nodes -o jsonpath='{.items[0].metadata.labels}' 2>/dev/null | grep -q 'kubernetes.azure.com'; then
-		provider="aks"
-	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'kind://'; then
-		provider="kind"
-	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'minikube'; then
-		provider="minikube"
-	elif kubectl get nodes -o jsonpath='{.items[0].spec.providerID}' 2>/dev/null | grep -qi 'rke2'; then
-		provider="rancher"
-	fi
-
-	echo "$provider"
-}
-
 setup_logging() {
 	if [[ ${ENABLE_LOGGING} == true ]]; then
 		echo "Debug logging enabled. Logs will be saved to $logs_dir/$test_name.log"
@@ -68,6 +47,13 @@ setup_logging() {
 		echo "Debug logging disabled."
 	fi
 }
+
+# Shared env (images, platform, versions, flags) is set by init_env in conftest.py
+if [[ ${E2E_ENV_INITIALIZED} != 1 ]]; then
+	echo "ERROR: e2e env is not initialized. Running test scripts directly is no longer supported." >&2
+	echo "Run the test via pytest instead: make e2e-test TEST=$(basename "$test_dir")" >&2
+	exit 1
+fi
 
 # Test variables
 export tmp_dir=$(mktemp -d)
@@ -80,63 +66,6 @@ export replica_namespace="${test_name}-replica-${RANDOM}"
 export conf_dir=$(realpath "$test_dir/../conf" || :)
 export src_dir=$(realpath "$test_dir/../..")
 export logs_dir="$test_dir/../logs"
-
-# Git information
-export GIT_COMMIT=$(git rev-parse HEAD)
-export GIT_BRANCH=${VERSION:-$(git rev-parse --abbrev-ref HEAD | sed -e 's^/^-^g; s^[.]^-^g;' | sed -e 's/_/-/g' | tr '[:upper:]' '[:lower:]')}
-export API="psmdb.percona.com/v1"
-export OPERATOR_VERSION="$(grep 'crVersion' $(realpath $(dirname ${BASH_SOURCE[0]})/../deploy/cr.yaml) | awk '{print $2}')"
-
-# Images and registry definitions
-export REGISTRY_NAME=${REGISTRY_NAME:-docker.io}
-export REGISTRY_NAME_FULL="${REGISTRY_NAME%/}/"
-export IMAGE=${IMAGE:-"perconalab/percona-server-mongodb-operator:${GIT_BRANCH}"}
-export IMAGE_MONGOD=${IMAGE_MONGOD:-"perconalab/percona-server-mongodb-operator:main-mongod8.0"}
-export IMAGE_MONGOD_CHAIN=${IMAGE_MONGOD_CHAIN:-$'
-perconalab/percona-server-mongodb-operator:main-mongod7.0
-perconalab/percona-server-mongodb-operator:main-mongod8.0
-perconalab/percona-server-mongodb-operator:main-mongod8.3'}
-export IMAGE_SEARCH=${IMAGE_SEARCH:-"perconalab/percona-server-mongodb-operator:main-mongot"}
-export IMAGE_BACKUP=${IMAGE_BACKUP:-"perconalab/percona-server-mongodb-operator:main-backup"}
-export IMAGE_PMM_CLIENT=${IMAGE_PMM_CLIENT:-"perconalab/pmm-client:3-dev-latest"}
-export IMAGE_PMM_SERVER=${IMAGE_PMM_SERVER:-"perconalab/pmm-server:3-dev-latest"}
-export IMAGE_LOGCOLLECTOR=${IMAGE_LOGCOLLECTOR:-"perconalab/fluentbit:main-logcollector"}
-export IMAGE_CLUSTERSYNC=${IMAGE_CLUSTERSYNC:-"percona/percona-clustersync-mongodb:1.0.0"}
-
-
-for image in \
-	IMAGE IMAGE_MONGOD IMAGE_MONGOD_CHAIN IMAGE_SEARCH IMAGE_BACKUP \
-	IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
-	IMAGE_LOGCOLLECTOR IMAGE_CLUSTERSYNC IMAGE_OPERATOR; do
-	qualify_image_var "$image"
-done
-
-# Platform information
-export KUBE_VERSION=$(kubectl version -o json | jq -r '.serverVersion.major + "." + .serverVersion.minor' | $sed -r 's/[^0-9.]+//g')
-export PLATFORM=$(detect_k8s_env)
-# Exports GKE, EKS, AKS, OPENSHIFT, KIND, MINIKUBE, RANCHER variables based on detected platform
-export "$(echo "${PLATFORM}" | tr '[:lower:]' '[:upper:]')=1"
-export ARCH=${ARCH:-}
-if [[ -z ${ARCH} ]]; then
-	node_arches=$(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.labels.kubernetes\.io/arch}{"\n"}{end}' 2>/dev/null | sort -u)
-	if [[ ${node_arches} == "arm64" ]]; then
-		export ARCH=arm64
-	fi
-fi
-
-# Dependencies versions
-export CERT_MANAGER_VER="1.21.0"
-export SEAWEEDFS_VER="4.47.0"
-export CHAOS_MESH_VER="2.7.1"
-export PMM_SERVER_VER=${PMM_SERVER_VER:-"9.9.9"}
-export IMAGE_AWS_CLI=${IMAGE_AWS_CLI:-"docker.io/amazon/aws-cli:2.34.60"}
-export SKIP_BACKUPS_TO_AWS_GCP_AZURE=${SKIP_BACKUPS_TO_AWS_GCP_AZURE:-1}
-export UPDATE_COMPARE_FILES=${UPDATE_COMPARE_FILES:-0}
-export DELETE_CRD_ON_START=${DELETE_CRD_ON_START:-1}
-export SKIP_DELETE=${SKIP_DELETE:-0}
-if [[ -f "$conf_dir/cloud-secret.yml" ]]; then
-	export SKIP_BACKUPS_TO_AWS_GCP_AZURE=''
-fi
 
 # Test logging
 setup_logging
