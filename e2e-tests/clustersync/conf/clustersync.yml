@@ -9,5 +9,5 @@ spec:
   pcsmConfig:
     logLevel: debug
   source:
-    uri: mongodb://source-cluster-mongos.NAME_SPACE.svc.cluster.local:27017/?tls=true&tlsAllowInvalidCertificates=true
+    uri: mongodb://source-cluster-mongos.NAME_SPACE.svc.cluster.local:27017/?tls=true&tlsInsecure=true
     credentialsSecret: clustersync-source-creds

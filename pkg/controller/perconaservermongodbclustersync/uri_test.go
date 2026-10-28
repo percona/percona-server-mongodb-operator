@@ -75,7 +75,7 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem&tlsInsecure=true",
 		},
 		"replicaset target with requireTLS": {
 			target: &psmdbv1.PerconaServerMongoDB{
@@ -87,7 +87,7 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
+			want:     "mongodb://sync:syncpass@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem&tlsInsecure=true",
 		},
 		"replicaset target with certificate verification enabled": {
 			target: &psmdbv1.PerconaServerMongoDB{
@@ -147,7 +147,7 @@ func TestBuildTargetURI(t *testing.T) {
 			},
 			username: "sync",
 			password: "syncpass",
-			want:     "mongodb://sync:syncpass@cluster1-mongos.ns.svc.cluster.local:27019/?tls=true&tlsAllowInvalidCertificates=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem",
+			want:     "mongodb://sync:syncpass@cluster1-mongos.ns.svc.cluster.local:27019/?tls=true&tlsCAFile=%2Fetc%2Fmongodb-ssl%2Fca.crt&tlsCertificateKeyFile=%2Ftmp%2Ftls.pem&tlsInsecure=true",
 		},
 		"target pinned to an older crVersion keeps the 1.23 plain uri": {
 			target: &psmdbv1.PerconaServerMongoDB{

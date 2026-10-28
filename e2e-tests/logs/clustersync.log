@@ -1,0 +1,4904 @@
+Log: /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/../logs/clustersync.log
++ source_cluster=source-cluster
++ target_cluster=target-cluster
++ sync_cr=sync
++ clustersync_source_secret=clustersync-source-creds
++ desc 'create infra'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+create infra
+-----------------------------------------------------------------------------------
+
++ create_infra clustersync-5438
++ local ns=clustersync-5438
++ echo clustersync-5438
++ destroy_cert_manager
++ [[ -n '' ]]
++ kubectl_bin delete mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.waA6mfEsoC
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nk2tnByc1r
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mutatingwebhookconfiguration == \- ]]
++ [[ mutatingwebhookconfiguration =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ cert-manager-webhook == \- ]]
++ [[ cert-manager-webhook =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.waA6mfEsoC
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nk2tnByc1r
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.waA6mfEsoC /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nk2tnByc1r
++ return 0
++ kubectl_bin delete validatingwebhookconfiguration cert-manager-webhook --ignore-not-found
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.t1kMJwgIHG
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.l0JB9I3BO5
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ validatingwebhookconfiguration == \- ]]
++ [[ validatingwebhookconfiguration =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ cert-manager-webhook == \- ]]
++ [[ cert-manager-webhook =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete validatingwebhookconfiguration cert-manager-webhook --ignore-not-found
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.t1kMJwgIHG
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.l0JB9I3BO5
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.t1kMJwgIHG /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.l0JB9I3BO5
++ return 0
++ kubectl_bin delete -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.0/cert-manager.yaml --ignore-not-found --wait=false
++ crds=(certificates.cert-manager.io certificaterequests.cert-manager.io issuers.cert-manager.io clusterissuers.cert-manager.io orders.acme.cert-manager.io challenges.acme.cert-manager.io)
++ local crds
++ kubectl_bin delete crd certificates.cert-manager.io certificaterequests.cert-manager.io issuers.cert-manager.io clusterissuers.cert-manager.io orders.acme.cert-manager.io challenges.acme.cert-manager.io --ignore-not-found --wait=false
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OUgdVMUNwz
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qpwK82RNdq
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ crd == \- ]]
++ [[ crd =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ certificates.cert-manager.io == \- ]]
++ [[ certificates.cert-manager.io =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ certificaterequests.cert-manager.io == \- ]]
++ [[ certificaterequests.cert-manager.io =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ issuers.cert-manager.io == \- ]]
++ [[ issuers.cert-manager.io =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ clusterissuers.cert-manager.io == \- ]]
++ [[ clusterissuers.cert-manager.io =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ orders.acme.cert-manager.io == \- ]]
++ [[ orders.acme.cert-manager.io =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ challenges.acme.cert-manager.io == \- ]]
++ [[ challenges.acme.cert-manager.io =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --wait=false == \- ]]
++ [[ --wait=false =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete crd certificates.cert-manager.io certificaterequests.cert-manager.io issuers.cert-manager.io clusterissuers.cert-manager.io orders.acme.cert-manager.io challenges.acme.cert-manager.io --ignore-not-found --wait=false
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OUgdVMUNwz
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qpwK82RNdq
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OUgdVMUNwz /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qpwK82RNdq
++ return 0
++ kubectl_bin delete namespace cert-manager --ignore-not-found --wait=false
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2PfKrSusw9
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZQrb1gIBOG
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ namespace == \- ]]
++ [[ namespace =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ cert-manager == \- ]]
++ [[ cert-manager =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --wait=false == \- ]]
++ [[ --wait=false =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete namespace cert-manager --ignore-not-found --wait=false
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2PfKrSusw9
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZQrb1gIBOG
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2PfKrSusw9 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZQrb1gIBOG
++ return 0
++ local remaining
++ local attempt
+++ seq 1 60
++ for attempt in '$(seq 1 60)'
+++ kubectl_bin get mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found -o name
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Iur2RjwG0f
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.o5BpPjKnaG
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ mutatingwebhookconfiguration == \- ]]
+++ [[ mutatingwebhookconfiguration =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ cert-manager-webhook == \- ]]
+++ [[ cert-manager-webhook =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ --ignore-not-found == \- ]]
+++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ name == \- ]]
+++ [[ name =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get mutatingwebhookconfiguration cert-manager-webhook --ignore-not-found -o name
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Iur2RjwG0f
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.o5BpPjKnaG
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Iur2RjwG0f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.o5BpPjKnaG
+++ return 0
++ remaining=
+++ kubectl_bin get validatingwebhookconfiguration cert-manager-webhook --ignore-not-found -o name
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.bhLv7q4Gsg
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.K2gq4N4INb
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ validatingwebhookconfiguration == \- ]]
+++ [[ validatingwebhookconfiguration =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ cert-manager-webhook == \- ]]
+++ [[ cert-manager-webhook =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ --ignore-not-found == \- ]]
+++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ name == \- ]]
+++ [[ name =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get validatingwebhookconfiguration cert-manager-webhook --ignore-not-found -o name
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.bhLv7q4Gsg
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.K2gq4N4INb
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.bhLv7q4Gsg /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.K2gq4N4INb
+++ return 0
++ remaining+=
+++ kubectl_bin get crd certificates.cert-manager.io certificaterequests.cert-manager.io issuers.cert-manager.io clusterissuers.cert-manager.io orders.acme.cert-manager.io challenges.acme.cert-manager.io --ignore-not-found -o name
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uyba7VfpNe
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.inE4QHqlOZ
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ crd == \- ]]
+++ [[ crd =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ certificates.cert-manager.io == \- ]]
+++ [[ certificates.cert-manager.io =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ certificaterequests.cert-manager.io == \- ]]
+++ [[ certificaterequests.cert-manager.io =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ issuers.cert-manager.io == \- ]]
+++ [[ issuers.cert-manager.io =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ clusterissuers.cert-manager.io == \- ]]
+++ [[ clusterissuers.cert-manager.io =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ orders.acme.cert-manager.io == \- ]]
+++ [[ orders.acme.cert-manager.io =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ challenges.acme.cert-manager.io == \- ]]
+++ [[ challenges.acme.cert-manager.io =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ --ignore-not-found == \- ]]
+++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ name == \- ]]
+++ [[ name =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get crd certificates.cert-manager.io certificaterequests.cert-manager.io issuers.cert-manager.io clusterissuers.cert-manager.io orders.acme.cert-manager.io challenges.acme.cert-manager.io --ignore-not-found -o name
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uyba7VfpNe
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.inE4QHqlOZ
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uyba7VfpNe /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.inE4QHqlOZ
+++ return 0
++ remaining+=
+++ kubectl_bin get namespace cert-manager --ignore-not-found -o name
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Un2I0pzhmO
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.5TaFDafw76
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ namespace == \- ]]
+++ [[ namespace =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ cert-manager == \- ]]
+++ [[ cert-manager =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ --ignore-not-found == \- ]]
+++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ name == \- ]]
+++ [[ name =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get namespace cert-manager --ignore-not-found -o name
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Un2I0pzhmO
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.5TaFDafw76
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Un2I0pzhmO /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.5TaFDafw76
+++ return 0
++ remaining+=
++ [[ -z '' ]]
++ return 0
++ [[ 1 == 1 ]]
++ delete_crd
++ desc 'get and delete old CRDs and RBAC'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+get and delete old CRDs and RBAC
+-----------------------------------------------------------------------------------
+
++ kubectl_bin delete -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml --ignore-not-found --wait=false
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qf4guLTAhe
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.DSMrxs2Ucs
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml == \- ]]
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --wait=false == \- ]]
++ [[ --wait=false =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml --ignore-not-found --wait=false
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qf4guLTAhe
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.DSMrxs2Ucs
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qf4guLTAhe /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.DSMrxs2Ucs
++ return 0
+++ yq eval .metadata.name /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml
+++ grep -v '\-\-\-'
++ for crd_name in '$(yq eval '\''.metadata.name'\'' "${src_dir}/deploy/crd.yaml" | grep -v '\''\-\-\-'\'')'
++ kubectl get perconaservermongodbbackups.psmdb.percona.com --all-namespaces -o wide
++ grep -v NAMESPACE
++ xargs -L 1 sh -xc 'kubectl patch perconaservermongodbbackups.psmdb.percona.com -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"'
+error: the server doesn't have a resource type "perconaservermongodbbackups"
++ kubectl get crd perconaservermongodbbackups.psmdb.percona.com
++ for crd_name in '$(yq eval '\''.metadata.name'\'' "${src_dir}/deploy/crd.yaml" | grep -v '\''\-\-\-'\'')'
++ kubectl get perconaservermongodbclustersyncs.psmdb.percona.com --all-namespaces -o wide
++ grep -v NAMESPACE
++ xargs -L 1 sh -xc 'kubectl patch perconaservermongodbclustersyncs.psmdb.percona.com -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"'
+error: the server doesn't have a resource type "perconaservermongodbclustersyncs"
++ kubectl get crd perconaservermongodbclustersyncs.psmdb.percona.com
++ for crd_name in '$(yq eval '\''.metadata.name'\'' "${src_dir}/deploy/crd.yaml" | grep -v '\''\-\-\-'\'')'
++ kubectl get perconaservermongodbrestores.psmdb.percona.com --all-namespaces -o wide
++ grep -v NAMESPACE
++ xargs -L 1 sh -xc 'kubectl patch perconaservermongodbrestores.psmdb.percona.com -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"'
+error: the server doesn't have a resource type "perconaservermongodbrestores"
++ kubectl get crd perconaservermongodbrestores.psmdb.percona.com
++ for crd_name in '$(yq eval '\''.metadata.name'\'' "${src_dir}/deploy/crd.yaml" | grep -v '\''\-\-\-'\'')'
++ kubectl get perconaservermongodbs.psmdb.percona.com --all-namespaces -o wide
++ grep -v NAMESPACE
++ xargs -L 1 sh -xc 'kubectl patch perconaservermongodbs.psmdb.percona.com -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"'
+error: the server doesn't have a resource type "perconaservermongodbs"
++ kubectl get crd perconaservermongodbs.psmdb.percona.com
++ local rbac_yaml=rbac.yaml
++ '[' -n psmdb-operator ']'
++ rbac_yaml=cw-rbac.yaml
++ kubectl_bin delete -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/cw-rbac.yaml --ignore-not-found --wait=false
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Cppv2oCmAP
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.lKA6ahFa8O
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/cw-rbac.yaml == \- ]]
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/cw-rbac.yaml =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --wait=false == \- ]]
++ [[ --wait=false =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/cw-rbac.yaml --ignore-not-found --wait=false
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Cppv2oCmAP
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.lKA6ahFa8O
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Cppv2oCmAP /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.lKA6ahFa8O
++ return 0
++ check_crd_for_deletion k8spsmdb-1882
++ local git_tag=k8spsmdb-1882
+++ curl -s https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/k8spsmdb-1882/deploy/crd.yaml
+++ yq eval .metadata.name
+++ /opt/homebrew/bin/gsed s/---//g
+++ /opt/homebrew/bin/gsed ':a;N;$!ba;s/\n/ /g'
++ for crd_name in '$(curl -s https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/${git_tag}/deploy/crd.yaml | yq eval '\''.metadata.name'\'' | $sed '\''s/---//g'\'' | $sed '\'':a;N;$!ba;s/\n/ /g'\'')'
+++ kubectl_bin get crd/null -o 'jsonpath={.status.conditions[-1].type}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vorhuNhmZh
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.A9zEoDI9BA
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ crd/null == \- ]]
+++ [[ crd/null =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.status.conditions[-1].type} == \- ]]
+++ [[ jsonpath={.status.conditions[-1].type} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get crd/null -o 'jsonpath={.status.conditions[-1].type}'
+++ exit_status=1
+++ set -e
+++ [[ 1 == 0 ]]
+++ [[ 0 == 9 ]]
+++ grep -q 'Error from server (NotFound)' /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.A9zEoDI9BA
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vorhuNhmZh
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.A9zEoDI9BA
+Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io "null" not found
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vorhuNhmZh /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.A9zEoDI9BA
+++ return 1
++ [[ '' == \T\e\r\m\i\n\a\t\i\n\g ]]
++ '[' -n psmdb-operator ']'
++ create_namespace psmdb-operator
++ local namespace=psmdb-operator
++ local skip_clean_namespace=
++ [[ 0 == 1 ]]
++ [[ -n '' ]]
++ desc 'cleaned up old namespaces psmdb-operator'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+cleaned up old namespaces psmdb-operator
+-----------------------------------------------------------------------------------
+
++ kubectl_bin delete namespace psmdb-operator --ignore-not-found
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4cJ6qIXEnt
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iccWtaUmjS
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ namespace == \- ]]
++ [[ namespace =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-operator == \- ]]
++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete namespace psmdb-operator --ignore-not-found
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4cJ6qIXEnt
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iccWtaUmjS
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4cJ6qIXEnt /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iccWtaUmjS
++ return 0
++ kubectl_bin wait --for=delete namespace psmdb-operator
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Pxb0A95NGI
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vlHvLLOiRy
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ wait == \- ]]
++ [[ wait =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --for=delete == \- ]]
++ [[ --for=delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ namespace == \- ]]
++ [[ namespace =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-operator == \- ]]
++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl wait --for=delete namespace psmdb-operator
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Pxb0A95NGI
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vlHvLLOiRy
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Pxb0A95NGI /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vlHvLLOiRy
++ return 0
++ desc 'create namespace psmdb-operator'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+create namespace psmdb-operator
+-----------------------------------------------------------------------------------
+
++ kubectl_bin create namespace psmdb-operator
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.v6KvCwHb1p
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ERYy97ZrPV
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ create == \- ]]
++ [[ create =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ namespace == \- ]]
++ [[ namespace =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-operator == \- ]]
++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl create namespace psmdb-operator
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.v6KvCwHb1p
+namespace/psmdb-operator created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ERYy97ZrPV
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.v6KvCwHb1p /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ERYy97ZrPV
++ return 0
++ set_kube_ctx psmdb-operator
++ local namespace=psmdb-operator
+++ kubectl_bin config current-context
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iQWx74X1uS
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pLnYT6tiQQ
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ config == \- ]]
+++ [[ config =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ current-context == \- ]]
+++ [[ current-context =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl config current-context
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iQWx74X1uS
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pLnYT6tiQQ
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iQWx74X1uS /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pLnYT6tiQQ
+++ return 0
++ kubectl_bin config set-context gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 --namespace=psmdb-operator
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.J5tHzVWoOx
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.7qOiN5cBsh
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ config == \- ]]
++ [[ config =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ set-context == \- ]]
++ [[ set-context =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 == \- ]]
++ [[ gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --namespace=psmdb-operator == \- ]]
++ [[ --namespace=psmdb-operator =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl config set-context gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 --namespace=psmdb-operator
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.J5tHzVWoOx
+Context "gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599" modified.
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.7qOiN5cBsh
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.J5tHzVWoOx /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.7qOiN5cBsh
++ return 0
++ deploy_operator
++ desc 'start PSMDB operator: docker.io/perconalab/percona-server-mongodb-operator:PR-2646-1e5d88d7d'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+start PSMDB operator: docker.io/perconalab/percona-server-mongodb-operator:PR-2646-1e5d88d7d
+-----------------------------------------------------------------------------------
+
++ local cr_file
++ '[' -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/crd.yaml ']'
++ cr_file=/Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml
++ kubectl_bin apply --server-side --force-conflicts -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9oURO6t7WT
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.yVVFThT5Fh
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --server-side == \- ]]
++ [[ --server-side =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --force-conflicts == \- ]]
++ [[ --force-conflicts =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml == \- ]]
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply --server-side --force-conflicts -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/crd.yaml
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9oURO6t7WT
+customresourcedefinition.apiextensions.k8s.io/perconaservermongodbbackups.psmdb.percona.com serverside-applied
+customresourcedefinition.apiextensions.k8s.io/perconaservermongodbclustersyncs.psmdb.percona.com serverside-applied
+customresourcedefinition.apiextensions.k8s.io/perconaservermongodbrestores.psmdb.percona.com serverside-applied
+customresourcedefinition.apiextensions.k8s.io/perconaservermongodbs.psmdb.percona.com serverside-applied
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.yVVFThT5Fh
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9oURO6t7WT /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.yVVFThT5Fh
++ return 0
++ '[' -n psmdb-operator ']'
++ apply_rbac cw-rbac
++ local operator_namespace=psmdb-operator
++ local rbac=cw-rbac
++ cat /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/cw-rbac.yaml
++ sed -e 's^namespace: .*^namespace: psmdb-operator^'
++ kubectl_bin apply -n psmdb-operator -f -
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sgMDUJomTl
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.s30tQFlsYR
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -n == \- ]]
++ [[ -n =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-operator == \- ]]
++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 4 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ld3aHYSKYo
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ld3aHYSKYo
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -n psmdb-operator -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ld3aHYSKYo
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sgMDUJomTl
+clusterrole.rbac.authorization.k8s.io/percona-server-mongodb-operator created
+serviceaccount/percona-server-mongodb-operator created
+clusterrolebinding.rbac.authorization.k8s.io/service-account-percona-server-mongodb-operator created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.s30tQFlsYR
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sgMDUJomTl /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.s30tQFlsYR /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ld3aHYSKYo
++ return 0
++ yq eval '
+			(.spec.template.spec.containers[].image = "docker.io/perconalab/percona-server-mongodb-operator:PR-2646-1e5d88d7d") |
+			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/deploy/cw-operator.yaml
++ add_arch_to_podspecs -
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ cat -
++ kubectl_bin apply -n psmdb-operator -f -
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.b1ikAA51r3
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pfXXxmXntL
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ return
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -n == \- ]]
++ [[ -n =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-operator == \- ]]
++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 4 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dVBHVQV34R
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dVBHVQV34R
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -n psmdb-operator -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dVBHVQV34R
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.b1ikAA51r3
+deployment.apps/percona-server-mongodb-operator created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pfXXxmXntL
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.b1ikAA51r3 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pfXXxmXntL /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dVBHVQV34R
++ return 0
++ sleep 20
+++ get_operator_pod
+++ kubectl_bin get pods --selector=name=percona-server-mongodb-operator -o 'jsonpath={.items[].metadata.name}' -n psmdb-operator
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.oMiaLShHTH
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.x6xM0133NE
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ pods == \- ]]
+++ [[ pods =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ --selector=name=percona-server-mongodb-operator == \- ]]
+++ [[ --selector=name=percona-server-mongodb-operator =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.items[].metadata.name} == \- ]]
+++ [[ jsonpath={.items[].metadata.name} =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -n == \- ]]
+++ [[ -n =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb-operator == \- ]]
+++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get pods --selector=name=percona-server-mongodb-operator -o 'jsonpath={.items[].metadata.name}' -n psmdb-operator
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.oMiaLShHTH
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.x6xM0133NE
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.oMiaLShHTH /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.x6xM0133NE
+++ return 0
++ wait_operator_pod percona-server-mongodb-operator-668868f4bf-tcznb
++ local pod=percona-server-mongodb-operator-668868f4bf-tcznb
++ set +o xtrace
+waiting for pod/percona-server-mongodb-operator-668868f4bf-tcznb to be ready.OK
++ echo 'Print operator info from log'
+Print operator info from log
+++ get_operator_pod
+++ kubectl_bin get pods --selector=name=percona-server-mongodb-operator -o 'jsonpath={.items[].metadata.name}' -n psmdb-operator
++ grep 'Manager starting up'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OK5WpfiOV1
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9iN28sjXxA
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ pods == \- ]]
+++ [[ pods =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ --selector=name=percona-server-mongodb-operator == \- ]]
+++ [[ --selector=name=percona-server-mongodb-operator =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.items[].metadata.name} == \- ]]
+++ [[ jsonpath={.items[].metadata.name} =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -n == \- ]]
+++ [[ -n =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb-operator == \- ]]
+++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get pods --selector=name=percona-server-mongodb-operator -o 'jsonpath={.items[].metadata.name}' -n psmdb-operator
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OK5WpfiOV1
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9iN28sjXxA
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OK5WpfiOV1 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9iN28sjXxA
+++ return 0
++ kubectl_bin logs -n psmdb-operator percona-server-mongodb-operator-668868f4bf-tcznb
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ymlb299WmA
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.r3PUQGM3dr
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ logs == \- ]]
++ [[ logs =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -n == \- ]]
++ [[ -n =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-operator == \- ]]
++ [[ psmdb-operator =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ percona-server-mongodb-operator-668868f4bf-tcznb == \- ]]
++ [[ percona-server-mongodb-operator-668868f4bf-tcznb =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl logs -n psmdb-operator percona-server-mongodb-operator-668868f4bf-tcznb
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ymlb299WmA
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.r3PUQGM3dr
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ymlb299WmA /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.r3PUQGM3dr
++ return 0
+2026-10-28T10:15:34.287Z	INFO	setup	Manager starting up	{"gitCommit": "1e5d88d7d4ad9444b3a3c2beb1dfd846abca0ad5", "gitBranch": "PR-2646-1e5d88d7d", "buildTime": "", "goVersion": "go1.27.3", "os": "linux", "arch": "amd64"}
++ create_namespace clustersync-5438
++ local namespace=clustersync-5438
++ local skip_clean_namespace=
++ [[ 0 == 1 ]]
++ [[ -n '' ]]
++ desc 'cleaned up old namespaces clustersync-5438'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+cleaned up old namespaces clustersync-5438
+-----------------------------------------------------------------------------------
+
++ kubectl_bin delete namespace clustersync-5438 --ignore-not-found
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.fWgL7p0DEc
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jmgJiKO5y6
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ namespace == \- ]]
++ [[ namespace =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ clustersync-5438 == \- ]]
++ [[ clustersync-5438 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete namespace clustersync-5438 --ignore-not-found
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.fWgL7p0DEc
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jmgJiKO5y6
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.fWgL7p0DEc /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jmgJiKO5y6
++ return 0
++ kubectl_bin wait --for=delete namespace clustersync-5438
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dAdNbXAY66
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.CCKVrhAYl9
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ wait == \- ]]
++ [[ wait =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --for=delete == \- ]]
++ [[ --for=delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ namespace == \- ]]
++ [[ namespace =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ clustersync-5438 == \- ]]
++ [[ clustersync-5438 =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl wait --for=delete namespace clustersync-5438
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dAdNbXAY66
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.CCKVrhAYl9
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dAdNbXAY66 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.CCKVrhAYl9
++ return 0
++ desc 'create namespace clustersync-5438'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+create namespace clustersync-5438
+-----------------------------------------------------------------------------------
+
++ kubectl_bin create namespace clustersync-5438
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dPpki09rrB
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jfOPFcgpyo
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ create == \- ]]
++ [[ create =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ namespace == \- ]]
++ [[ namespace =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ clustersync-5438 == \- ]]
++ [[ clustersync-5438 =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl create namespace clustersync-5438
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dPpki09rrB
+namespace/clustersync-5438 created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jfOPFcgpyo
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dPpki09rrB /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jfOPFcgpyo
++ return 0
++ set_kube_ctx clustersync-5438
++ local namespace=clustersync-5438
+++ kubectl_bin config current-context
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.aU5eQy5Mq0
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.kNk3VtWxeB
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ config == \- ]]
+++ [[ config =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ current-context == \- ]]
+++ [[ current-context =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl config current-context
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.aU5eQy5Mq0
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.kNk3VtWxeB
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.aU5eQy5Mq0 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.kNk3VtWxeB
+++ return 0
++ kubectl_bin config set-context gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 --namespace=clustersync-5438
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.HWHQilkZQg
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.fbDpDTMWzy
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ config == \- ]]
++ [[ config =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ set-context == \- ]]
++ [[ set-context =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 == \- ]]
++ [[ gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --namespace=clustersync-5438 == \- ]]
++ [[ --namespace=clustersync-5438 =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl config set-context gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599 --namespace=clustersync-5438
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.HWHQilkZQg
+Context "gke_cloud-dev-112233_europe-west2-a_gkech-28102026-16599" modified.
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.fbDpDTMWzy
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.HWHQilkZQg /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.fbDpDTMWzy
++ return 0
++ desc 'deploy local-s3 (storage for target-cluster backups)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+deploy local-s3 (storage for target-cluster backups)
+-----------------------------------------------------------------------------------
+
++ deploy_s3_storage
++ local cert_secret=
++ local fullname=s3-storage
++ desc 'install SeaweedFS: s3-storage'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+install SeaweedFS: s3-storage
+-----------------------------------------------------------------------------------
+
++ helm uninstall s3-storage
++ :
++ helm repo remove seaweedfs
+"seaweedfs" has been removed from your repositories
++ helm repo add seaweedfs https://seaweedfs.github.io/seaweedfs/helm
+"seaweedfs" has been added to your repositories
++ local endpoint=http://s3-storage-all-in-one:8333
++ seaweedfs_args=(--version "$SEAWEEDFS_VER" -f "${conf_dir}/seaweedfs-values.yaml" --set allInOne.data.type=persistentVolumeClaim --set allInOne.data.size=2G --set fullnameOverride="${fullname}" --set-string s3.credentials.admin.accessKey=some-access-key --set-string s3.credentials.admin.secretKey=some-secret-key --set-string global.seaweedfs.serviceAccountName="${fullname}-sa")
++ local seaweedfs_args
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ [[ -n '' ]]
++ retry 10 60 helm install s3-storage --version 4.47.0 -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/seaweedfs-values.yaml --set allInOne.data.type=persistentVolumeClaim --set allInOne.data.size=2G --set fullnameOverride=s3-storage --set-string s3.credentials.admin.accessKey=some-access-key --set-string s3.credentials.admin.secretKey=some-secret-key --set-string global.seaweedfs.serviceAccountName=s3-storage-sa seaweedfs/seaweedfs
++ local max=10
++ local delay=60
++ shift 2
++ local n=1
++ helm install s3-storage --version 4.47.0 -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/seaweedfs-values.yaml --set allInOne.data.type=persistentVolumeClaim --set allInOne.data.size=2G --set fullnameOverride=s3-storage --set-string s3.credentials.admin.accessKey=some-access-key --set-string s3.credentials.admin.secretKey=some-secret-key --set-string global.seaweedfs.serviceAccountName=s3-storage-sa seaweedfs/seaweedfs
+NAME: s3-storage
+LAST DEPLOYED: Wed Oct 28 12:15:54 2026
+NAMESPACE: clustersync-5438
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
++ kubectl_bin rollout status deployment/s3-storage-all-in-one --timeout=300s
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.mys3wdnIDs
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Gj8gPMa6d5
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ rollout == \- ]]
++ [[ rollout =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ status == \- ]]
++ [[ status =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ deployment/s3-storage-all-in-one == \- ]]
++ [[ deployment/s3-storage-all-in-one =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --timeout=300s == \- ]]
++ [[ --timeout=300s =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl rollout status deployment/s3-storage-all-in-one --timeout=300s
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.mys3wdnIDs
+Waiting for deployment "s3-storage-all-in-one" rollout to finish: 0 of 1 updated replicas are available...
+deployment "s3-storage-all-in-one" successfully rolled out
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Gj8gPMa6d5
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.mys3wdnIDs /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Gj8gPMa6d5
++ return 0
++ '[' -n psmdb-operator ']'
++ kubectl_bin create svc -n psmdb-operator externalname s3-storage-all-in-one --external-name=s3-storage-all-in-one.clustersync-5438.svc.cluster.local --tcp=8333 --tcp=8443
+service/s3-storage-all-in-one created
++ create_s3_bucket operator-testing http://s3-storage-all-in-one:8333
++ local bucket=operator-testing
++ local endpoint=http://s3-storage-all-in-one:8333
++ aws_cli_s3 http://s3-storage-all-in-one:8333 s3 mb s3://operator-testing
++ local endpoint=http://s3-storage-all-in-one:8333
++ shift
++ kubectl_bin run -i --rm aws-cli --image=docker.io/amazon/aws-cli:2.34.60 --restart=Never --env=AWS_ACCESS_KEY_ID=some-access-key --env=AWS_SECRET_ACCESS_KEY=some-secret-key --env=AWS_DEFAULT_REGION=us-east-1 -- --no-verify-ssl --endpoint-url http://s3-storage-all-in-one:8333 s3 mb s3://operator-testing
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.MTg7MiKABw
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ruFe9g6DfC
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ run == \- ]]
++ [[ run =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -i == \- ]]
++ [[ -i =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --rm == \- ]]
++ [[ --rm =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ aws-cli == \- ]]
++ [[ aws-cli =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --image=docker.io/amazon/aws-cli:2.34.60 == \- ]]
++ [[ --image=docker.io/amazon/aws-cli:2.34.60 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --restart=Never == \- ]]
++ [[ --restart=Never =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --env=AWS_ACCESS_KEY_ID=some-access-key == \- ]]
++ [[ --env=AWS_ACCESS_KEY_ID=some-access-key =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --env=AWS_SECRET_ACCESS_KEY=some-secret-key == \- ]]
++ [[ --env=AWS_SECRET_ACCESS_KEY=some-secret-key =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --env=AWS_DEFAULT_REGION=us-east-1 == \- ]]
++ [[ --env=AWS_DEFAULT_REGION=us-east-1 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --no-verify-ssl == \- ]]
++ [[ --no-verify-ssl =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --endpoint-url == \- ]]
++ [[ --endpoint-url =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ http://s3-storage-all-in-one:8333 == \- ]]
++ [[ http://s3-storage-all-in-one:8333 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ s3 == \- ]]
++ [[ s3 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mb == \- ]]
++ [[ mb =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ s3://operator-testing == \- ]]
++ [[ s3://operator-testing =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl run -i --rm aws-cli --image=docker.io/amazon/aws-cli:2.34.60 --restart=Never --env=AWS_ACCESS_KEY_ID=some-access-key --env=AWS_SECRET_ACCESS_KEY=some-secret-key --env=AWS_DEFAULT_REGION=us-east-1 -- --no-verify-ssl --endpoint-url http://s3-storage-all-in-one:8333 s3 mb s3://operator-testing
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.MTg7MiKABw
+pod "aws-cli" deleted from clustersync-5438 namespace
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ruFe9g6DfC
+All commands and output from this session will be recorded in container logs, including credentials and sensitive information passed through the command prompt.
+If you don't see a command prompt, try pressing enter.
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.MTg7MiKABw /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ruFe9g6DfC
++ return 0
++ desc 'apply users secrets, local-s3 secret and start client'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+apply users secrets, local-s3 secret and start client
+-----------------------------------------------------------------------------------
+
++ kubectl_bin apply -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/secrets.yml -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/s3-secret.yml -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/client.yml
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.H0ZGlYPfzb
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.rxZO4PqeHG
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/secrets.yml == \- ]]
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/secrets.yml =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/s3-secret.yml == \- ]]
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/s3-secret.yml =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/client.yml == \- ]]
++ [[ /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/client.yml =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/secrets.yml -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/s3-secret.yml -f /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/conf/client.yml
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.H0ZGlYPfzb
+secret/source-users created
+secret/target-users created
+secret/clustersync-source-creds created
+secret/s3-secret created
+deployment.apps/psmdb-client created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.rxZO4PqeHG
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.H0ZGlYPfzb /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.rxZO4PqeHG
++ return 0
++ desc 'deploy source-cluster'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+deploy source-cluster
+-----------------------------------------------------------------------------------
+
++ apply_cluster /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/source-cluster.yml
++ '[' -z '' ']'
++ cat_config /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/source-cluster.yml
++ kubectl_bin apply -f -
++ cat /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/source-cluster.yml
+++ mktemp
++ yq eval '(.spec | select(.image == null)).image = "docker.io/perconalab/percona-server-mongodb-operator:main-mongod8.0"'
++ yq eval '(.spec | select(has("pmm"))).pmm.image = "docker.io/perconalab/pmm-client:3-dev-latest"'
++ yq eval '(.spec | select(has("initImage"))).initImage = "docker.io/perconalab/percona-server-mongodb-operator:PR-2646-1e5d88d7d"'
++ yq eval '(.spec | select(has("backup"))).backup.image = "docker.io/perconalab/percona-server-mongodb-operator:main-backup"'
++ [[ -n docker.io/perconalab/fluentbit:main-logcollector ]]
++ IMAGE_LOGCOLLECTOR=docker.io/perconalab/fluentbit:main-logcollector
++ yq eval '(.spec | select(has("logcollector"))).logcollector.image = strenv(IMAGE_LOGCOLLECTOR)'
++ yq eval '(.spec | select(has("search"))).search.image = "docker.io/perconalab/percona-server-mongodb-operator:main-mongot"'
++ /opt/homebrew/bin/gsed -e s/NAME_SPACE/clustersync-5438/g
++ yq eval '.spec.upgradeOptions.apply="Never"'
++ add_arch_to_psmdb -
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ cat -
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4FuqrXSoN8
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.tbhFPzVdB5
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 2 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nrVoOaGTPt
++ cat
++ return
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nrVoOaGTPt
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nrVoOaGTPt
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4FuqrXSoN8
+perconaservermongodb.psmdb.percona.com/source-cluster created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.tbhFPzVdB5
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4FuqrXSoN8 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.tbhFPzVdB5 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nrVoOaGTPt
++ return 0
++ desc 'deploy target-cluster'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+deploy target-cluster
+-----------------------------------------------------------------------------------
+
++ apply_cluster /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/target-cluster.yml
++ '[' -z '' ']'
++ cat_config /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/target-cluster.yml
++ kubectl_bin apply -f -
++ cat /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/target-cluster.yml
++ yq eval '(.spec | select(.image == null)).image = "docker.io/perconalab/percona-server-mongodb-operator:main-mongod8.0"'
+++ mktemp
++ yq eval '(.spec | select(has("pmm"))).pmm.image = "docker.io/perconalab/pmm-client:3-dev-latest"'
++ yq eval '(.spec | select(has("initImage"))).initImage = "docker.io/perconalab/percona-server-mongodb-operator:PR-2646-1e5d88d7d"'
++ yq eval '(.spec | select(has("backup"))).backup.image = "docker.io/perconalab/percona-server-mongodb-operator:main-backup"'
++ [[ -n docker.io/perconalab/fluentbit:main-logcollector ]]
++ IMAGE_LOGCOLLECTOR=docker.io/perconalab/fluentbit:main-logcollector
++ yq eval '(.spec | select(has("logcollector"))).logcollector.image = strenv(IMAGE_LOGCOLLECTOR)'
++ yq eval '(.spec | select(has("search"))).search.image = "docker.io/perconalab/percona-server-mongodb-operator:main-mongot"'
++ /opt/homebrew/bin/gsed -e s/NAME_SPACE/clustersync-5438/g
++ yq eval '.spec.upgradeOptions.apply="Never"'
++ add_arch_to_psmdb -
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ cat -
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xjV78fjaGG
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.VtbBKtUDA0
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 2 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ return
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nCGh6PbbVI
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nCGh6PbbVI
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nCGh6PbbVI
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xjV78fjaGG
+perconaservermongodb.psmdb.percona.com/target-cluster created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.VtbBKtUDA0
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xjV78fjaGG /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.VtbBKtUDA0 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nCGh6PbbVI
++ return 0
++ desc 'wait for source-cluster ready'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+wait for source-cluster ready
+-----------------------------------------------------------------------------------
+
++ wait_for_running source-cluster-rs0 1
++ local name=source-cluster-rs0
++ let last_pod=0
++ :
++ local check_cluster_readiness=true
++ set_debug
++ [[ 1 == 1 ]]
++ set -o xtrace
++ local rs_name=rs0
++ local cluster_name=source-cluster
+++ seq 0 0
++ for i in '$(seq 0 $last_pod)'
++ [[ 0 -eq 0 ]]
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ztKu4YBBs5
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pn7fBs29gk
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ztKu4YBBs5
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pn7fBs29gk
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ztKu4YBBs5 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.pn7fBs29gk
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ wait_pod source-cluster-rs0-0
++ local pod=source-cluster-rs0-0
++ set +o xtrace
+waiting for pod/source-cluster-rs0-0 to be ready.....................OK
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.x8fpAaml8k
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OkjO5YECti
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.x8fpAaml8k
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OkjO5YECti
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.x8fpAaml8k /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OkjO5YECti
+++ return 0
++ [[ '' == \t\r\u\e ]]
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.06DWW2BSom
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sECnbjmly6
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.06DWW2BSom
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sECnbjmly6
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.06DWW2BSom /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sECnbjmly6
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ sleep 10
++ [[ true == \t\r\u\e ]]
++ set +x
+Waiting for cluster source-cluster to be ready............................................................................................
++ wait_for_running source-cluster-cfg 1 false
++ local name=source-cluster-cfg
++ let last_pod=0
++ :
++ local check_cluster_readiness=false
++ set_debug
++ [[ 1 == 1 ]]
++ set -o xtrace
++ local rs_name=cfg
++ local cluster_name=source-cluster
+++ seq 0 0
++ for i in '$(seq 0 $last_pod)'
++ [[ 0 -eq 0 ]]
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.JnsEAhu3D6
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.R4idPyN0AF
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.JnsEAhu3D6
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.R4idPyN0AF
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.JnsEAhu3D6 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.R4idPyN0AF
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ wait_pod source-cluster-cfg-0
++ local pod=source-cluster-cfg-0
++ set +o xtrace
+waiting for pod/source-cluster-cfg-0 to be ready.OK
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RMacCZZ47N
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iRKAJaMTZx
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RMacCZZ47N
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iRKAJaMTZx
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RMacCZZ47N /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iRKAJaMTZx
+++ return 0
++ [[ '' == \t\r\u\e ]]
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jCD8ogsXmR
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.a2EoxXc9tk
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jCD8ogsXmR
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.a2EoxXc9tk
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.jCD8ogsXmR /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.a2EoxXc9tk
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ sleep 10
++ [[ false == \t\r\u\e ]]
++ wait_for_running source-cluster-mongos 1 false
++ local name=source-cluster-mongos
++ let last_pod=0
++ :
++ local check_cluster_readiness=false
++ set_debug
++ [[ 1 == 1 ]]
++ set -o xtrace
++ local rs_name=mongos
++ local cluster_name=source-cluster
+++ seq 0 0
++ for i in '$(seq 0 $last_pod)'
++ [[ 0 -eq 0 ]]
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iBxACYSC3C
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Bbebop5p2B
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iBxACYSC3C
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Bbebop5p2B
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.iBxACYSC3C /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Bbebop5p2B
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ wait_pod source-cluster-mongos-0
++ local pod=source-cluster-mongos-0
++ set +o xtrace
+waiting for pod/source-cluster-mongos-0 to be ready.OK
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.86VRdAtli1
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.aJsHM9CxgC
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.86VRdAtli1
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.aJsHM9CxgC
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.86VRdAtli1 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.aJsHM9CxgC
+++ return 0
++ [[ '' == \t\r\u\e ]]
+++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0PRgtyAfGB
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PEluBL44sN
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0PRgtyAfGB
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PEluBL44sN
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0PRgtyAfGB /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PEluBL44sN
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ sleep 10
++ [[ false == \t\r\u\e ]]
++ wait_cluster_consistency source-cluster
++ local cluster_name=source-cluster
++ local wait_time=32
++ retry=0
++ sleep 7
++ echo -n 'waiting for cluster source-cluster to be ready'
+waiting for cluster source-cluster to be ready++ kubectl_bin get psmdb source-cluster -o 'jsonpath={.status.state}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.wiMHCmG5yo
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.m3l2mRWCWs
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ source-cluster == \- ]]
+++ [[ source-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.status.state} == \- ]]
+++ [[ jsonpath={.status.state} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb source-cluster -o 'jsonpath={.status.state}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.wiMHCmG5yo
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.m3l2mRWCWs
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.wiMHCmG5yo /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.m3l2mRWCWs
+++ return 0
++ [[ ready == \r\e\a\d\y ]]
++ echo .OK
+.OK
++ desc 'wait for target-cluster ready (which has 2 shards vs source'\''s 1 shard)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+wait for target-cluster ready (which has 2 shards vs source's 1 shard)
+-----------------------------------------------------------------------------------
+
++ wait_for_running target-cluster-rs0 1
++ local name=target-cluster-rs0
++ let last_pod=0
++ :
++ local check_cluster_readiness=true
++ set_debug
++ [[ 1 == 1 ]]
++ set -o xtrace
++ local rs_name=rs0
++ local cluster_name=target-cluster
+++ seq 0 0
++ for i in '$(seq 0 $last_pod)'
++ [[ 0 -eq 0 ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.40SuSCtnUw
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.64Md7iRP3K
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].arbiter.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.40SuSCtnUw
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.64Md7iRP3K
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.40SuSCtnUw /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.64Md7iRP3K
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ wait_pod target-cluster-rs0-0
++ local pod=target-cluster-rs0-0
++ set +o xtrace
+waiting for pod/target-cluster-rs0-0 to be ready.OK
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.C2gdCeTSAE
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dauEQWvkxS
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].nonvoting.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.C2gdCeTSAE
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dauEQWvkxS
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.C2gdCeTSAE /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dauEQWvkxS
+++ return 0
++ [[ '' == \t\r\u\e ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.unC26MLDGw
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.bvLZXZOOLb
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs0")].hidden.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.unC26MLDGw
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.bvLZXZOOLb
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.unC26MLDGw /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.bvLZXZOOLb
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ sleep 10
++ [[ true == \t\r\u\e ]]
++ set +x
+Waiting for cluster target-cluster to be ready
++ wait_for_running target-cluster-rs1 1 false
++ local name=target-cluster-rs1
++ let last_pod=0
++ :
++ local check_cluster_readiness=false
++ set_debug
++ [[ 1 == 1 ]]
++ set -o xtrace
++ local rs_name=rs1
++ local cluster_name=target-cluster
+++ seq 0 0
++ for i in '$(seq 0 $last_pod)'
++ [[ 0 -eq 0 ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs1")].arbiter.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.8XVRQtrW3X
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nf6wVYWoqz
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs1")].arbiter.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs1")].arbiter.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs1")].arbiter.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.8XVRQtrW3X
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nf6wVYWoqz
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.8XVRQtrW3X /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.nf6wVYWoqz
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ wait_pod target-cluster-rs1-0
++ local pod=target-cluster-rs1-0
++ set +o xtrace
+waiting for pod/target-cluster-rs1-0 to be ready.OK
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs1")].nonvoting.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Y50xgIF0sj
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uDWzdCqXSh
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs1")].nonvoting.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs1")].nonvoting.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs1")].nonvoting.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Y50xgIF0sj
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uDWzdCqXSh
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Y50xgIF0sj /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uDWzdCqXSh
+++ return 0
++ [[ '' == \t\r\u\e ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs1")].hidden.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.s1awmwBR5q
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qtExI6owJg
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs1")].hidden.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="rs1")].hidden.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="rs1")].hidden.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.s1awmwBR5q
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qtExI6owJg
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.s1awmwBR5q /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qtExI6owJg
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ sleep 10
++ [[ false == \t\r\u\e ]]
++ wait_for_running target-cluster-cfg 1 false
++ local name=target-cluster-cfg
++ let last_pod=0
++ :
++ local check_cluster_readiness=false
++ set_debug
++ [[ 1 == 1 ]]
++ set -o xtrace
++ local rs_name=cfg
++ local cluster_name=target-cluster
+++ seq 0 0
++ for i in '$(seq 0 $last_pod)'
++ [[ 0 -eq 0 ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.AjOJOtOnX2
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZdwEdlS6xf
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].arbiter.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.AjOJOtOnX2
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZdwEdlS6xf
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.AjOJOtOnX2 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZdwEdlS6xf
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ wait_pod target-cluster-cfg-0
++ local pod=target-cluster-cfg-0
++ set +o xtrace
+waiting for pod/target-cluster-cfg-0 to be ready.OK
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2KHvEkTm1V
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uAaD30b9LS
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].nonvoting.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2KHvEkTm1V
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uAaD30b9LS
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2KHvEkTm1V /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.uAaD30b9LS
+++ return 0
++ [[ '' == \t\r\u\e ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.6GGH4lAK4j
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.q5izkehT22
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="cfg")].hidden.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.6GGH4lAK4j
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.q5izkehT22
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.6GGH4lAK4j /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.q5izkehT22
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ sleep 10
++ [[ false == \t\r\u\e ]]
++ wait_for_running target-cluster-mongos 1 false
++ local name=target-cluster-mongos
++ let last_pod=0
++ :
++ local check_cluster_readiness=false
++ set_debug
++ [[ 1 == 1 ]]
++ set -o xtrace
++ local rs_name=mongos
++ local cluster_name=target-cluster
+++ seq 0 0
++ for i in '$(seq 0 $last_pod)'
++ [[ 0 -eq 0 ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.C4ZjPYyGeH
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sNe86Sg3lM
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].arbiter.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.C4ZjPYyGeH
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sNe86Sg3lM
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.C4ZjPYyGeH /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.sNe86Sg3lM
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ wait_pod target-cluster-mongos-0
++ local pod=target-cluster-mongos-0
++ set +o xtrace
+waiting for pod/target-cluster-mongos-0 to be ready.OK
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Q3Ki2U21ln
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.il0AOWjLBN
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].nonvoting.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Q3Ki2U21ln
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.il0AOWjLBN
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Q3Ki2U21ln /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.il0AOWjLBN
+++ return 0
++ [[ '' == \t\r\u\e ]]
+++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.g2itr93vc4
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.DW9jWUihHV
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled} == \- ]]
+++ [[ jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.spec.replsets[?(@.name=="mongos")].hidden.enabled}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.g2itr93vc4
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.DW9jWUihHV
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.g2itr93vc4 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.DW9jWUihHV
+++ return 0
++ [[ '' == \t\r\u\e ]]
++ sleep 10
++ [[ false == \t\r\u\e ]]
++ wait_cluster_consistency target-cluster
++ local cluster_name=target-cluster
++ local wait_time=32
++ retry=0
++ sleep 7
++ echo -n 'waiting for cluster target-cluster to be ready'
+waiting for cluster target-cluster to be ready++ kubectl_bin get psmdb target-cluster -o 'jsonpath={.status.state}'
++++ mktemp
+++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vge1zC8n0c
++++ mktemp
+++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.XKvQzd2mzI
+++ local exit_status=0
+++ local timeout=4
+++ local i
+++ args=("$@")
+++ local args
+++ transformed_files=()
+++ local transformed_files
+++ local stdin_manifest
+++ for i in '"${!args[@]}"'
+++ [[ get == \- ]]
+++ [[ get =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ psmdb == \- ]]
+++ [[ psmdb =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ target-cluster == \- ]]
+++ [[ target-cluster =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ -o == \- ]]
+++ [[ -o =~ ^(-f|--filename)=-$ ]]
+++ for i in '"${!args[@]}"'
+++ [[ jsonpath={.status.state} == \- ]]
+++ [[ jsonpath={.status.state} =~ ^(-f|--filename)=-$ ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ arch_scheduling_enabled
+++ [[ -n '' ]]
+++ local attempt
+++ local delay
++++ seq 0 9
+++ for attempt in '$(seq 0 9)'
+++ set +e
+++ kubectl get psmdb target-cluster -o 'jsonpath={.status.state}'
+++ exit_status=0
+++ set -e
+++ [[ 0 == 0 ]]
+++ break
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vge1zC8n0c
+++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.XKvQzd2mzI
+++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.vge1zC8n0c /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.XKvQzd2mzI
+++ return 0
++ [[ ready == \r\e\a\d\y ]]
++ echo .OK
+.OK
++ desc 'read PCSM source credentials from secret/clustersync-source-creds'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+read PCSM source credentials from secret/clustersync-source-creds
+-----------------------------------------------------------------------------------
+
+++ getSecretData clustersync-source-creds username
+++ local secretName=clustersync-source-creds
+++ local dataKey=username
++++ kubectl get secrets/clustersync-source-creds '--template={{.data.username}}'
++++ base64 -d
+++ local data=source
+++ echo source
++ source_user=source
+++ getSecretData clustersync-source-creds password
+++ local secretName=clustersync-source-creds
+++ local dataKey=password
++++ kubectl get secrets/clustersync-source-creds '--template={{.data.password}}'
++++ base64 -d
+++ local data=mys3cretpAss
+++ echo mys3cretpAss
++ source_pass=mys3cretpAss
++ desc 'create '\''source'\'' user on source-cluster (for PCSM)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+create 'source' user on source-cluster (for PCSM)
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster userAdmin userAdmin123456 'db.getSiblingDB('\''admin'\'').createUser({user:'\''source'\'',pwd:'\''mys3cretpAss'\'',roles:[{role:'\''backup'\'',db:'\''admin'\''},{role:'\''clusterMonitor'\'',db:'\''admin'\''},{role:'\''readAnyDatabase'\'',db:'\''admin'\''}]})'
++ local cluster=source-cluster
++ local user=userAdmin
++ local pass=userAdmin123456
++ local 'script=db.getSiblingDB('\''admin'\'').createUser({user:'\''source'\'',pwd:'\''mys3cretpAss'\'',roles:[{role:'\''backup'\'',db:'\''admin'\''},{role:'\''clusterMonitor'\'',db:'\''admin'\''},{role:'\''readAnyDatabase'\'',db:'\''admin'\''}]})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB('\''admin'\'').createUser({user:'\''source'\'',pwd:'\''mys3cretpAss'\'',roles:[{role:'\''backup'\'',db:'\''admin'\''},{role:'\''clusterMonitor'\'',db:'\''admin'\''},{role:'\''readAnyDatabase'\'',db:'\''admin'\''}]})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xZIVyRxjXA
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.WXqgRLfOfT
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB('admin').createUser({user:'source',pwd:'mys3cretpAss',roles:[{role:'backup',db:'admin'},{role:'clusterMonitor',db:'admin'},{role:'readAnyDatabase',db:'admin'}]}) == \- ]]
++ [[ db.getSiblingDB('admin').createUser({user:'source',pwd:'mys3cretpAss',roles:[{role:'backup',db:'admin'},{role:'clusterMonitor',db:'admin'},{role:'readAnyDatabase',db:'admin'}]}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB('\''admin'\'').createUser({user:'\''source'\'',pwd:'\''mys3cretpAss'\'',roles:[{role:'\''backup'\'',db:'\''admin'\''},{role:'\''clusterMonitor'\'',db:'\''admin'\''},{role:'\''readAnyDatabase'\'',db:'\''admin'\''}]})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xZIVyRxjXA
+{
+  ok: 1,
+  '$clusterTime': {
+    clusterTime: Timestamp({ t: 1793182951, i: 1 }),
+    signature: {
+      hash: Binary.createFromBase64('aSiBpheMxkDHsBkGFOkJiby9kLg=', 0),
+      keyId: Long('7701661116677488656')
+    }
+  },
+  operationTime: Timestamp({ t: 1793182951, i: 1 })
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.WXqgRLfOfT
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xZIVyRxjXA /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.WXqgRLfOfT
++ return 0
++ desc 'verify '\''source'\'' user authenticates'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+verify 'source' user authenticates
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster source mys3cretpAss 'db.runCommand({connectionStatus: 1}).authInfo'
++ local cluster=source-cluster
++ local user=source
++ local pass=mys3cretpAss
++ local 'script=db.runCommand({connectionStatus: 1}).authInfo'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://source:mys3cretpAss@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.runCommand({connectionStatus: 1}).authInfo'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OokTpe25Su
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.t27L9elBlg
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://source:mys3cretpAss@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://source:mys3cretpAss@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.runCommand({connectionStatus: 1}).authInfo == \- ]]
++ [[ db.runCommand({connectionStatus: 1}).authInfo =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://source:mys3cretpAss@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.runCommand({connectionStatus: 1}).authInfo'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OokTpe25Su
+{
+  authenticatedUsers: [ { user: 'source', db: 'admin' } ],
+  authenticatedUserRoles: [
+    { role: 'backup', db: 'admin' },
+    { role: 'clusterMonitor', db: 'admin' },
+    { role: 'readAnyDatabase', db: 'admin' }
+  ]
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.t27L9elBlg
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.OokTpe25Su /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.t27L9elBlg
++ return 0
++ desc 'create '\''myApp'\'' user on source-cluster (workload writer/reader)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+create 'myApp' user on source-cluster (workload writer/reader)
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster userAdmin userAdmin123456 'db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
++ local cluster=source-cluster
++ local user=userAdmin
++ local pass=userAdmin123456
++ local 'script=db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.NMK8kRB1YC
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.N0hl4It7M0
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]}) == \- ]]
++ [[ db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.NMK8kRB1YC
+{
+  ok: 1,
+  '$clusterTime': {
+    clusterTime: Timestamp({ t: 1793182962, i: 2 }),
+    signature: {
+      hash: Binary.createFromBase64('r7nWI5Zkv11msIpGlTZXq7rKPbw=', 0),
+      keyId: Long('7701661116677488656')
+    }
+  },
+  operationTime: Timestamp({ t: 1793182962, i: 2 })
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.N0hl4It7M0
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.NMK8kRB1YC /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.N0hl4It7M0
++ return 0
++ desc 'create '\''myApp'\'' user on target-cluster (verification reader)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+create 'myApp' user on target-cluster (verification reader)
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos target-cluster userAdmin userAdmin123456 'db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
++ local cluster=target-cluster
++ local user=userAdmin
++ local pass=userAdmin123456
++ local 'script=db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
++ kubectl_bin exec target-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.mGSUSbYoYG
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.QP8iSZjoPU
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ target-cluster-mongos-0 == \- ]]
++ [[ target-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]}) == \- ]]
++ [[ db.getSiblingDB('admin').createUser({user:'myApp',pwd:'myPass',roles:[{db:'myApp',role:'readWrite'}]}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec target-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://userAdmin:userAdmin123456@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB('\''admin'\'').createUser({user:'\''myApp'\'',pwd:'\''myPass'\'',roles:[{db:'\''myApp'\'',role:'\''readWrite'\''}]})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.mGSUSbYoYG
+{
+  ok: 1,
+  '$clusterTime': {
+    clusterTime: Timestamp({ t: 1793182968, i: 3 }),
+    signature: {
+      hash: Binary.createFromBase64('BTx5ZZDdZzA5Bd7NhaCCAfwaAYM=', 0),
+      keyId: Long('7701661370080559116')
+    }
+  },
+  operationTime: Timestamp({ t: 1793182968, i: 3 })
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.QP8iSZjoPU
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.mGSUSbYoYG /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.QP8iSZjoPU
++ return 0
++ desc 'write initial data to source-cluster'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+write initial data to source-cluster
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster myApp myPass 'db.getSiblingDB("myApp").test.insertOne({x: 100500})'
++ local cluster=source-cluster
++ local user=myApp
++ local pass=myPass
++ local 'script=db.getSiblingDB("myApp").test.insertOne({x: 100500})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100500})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2XnMRyQyqO
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ozFUTJdJ9i
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100500}) == \- ]]
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100500}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100500})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2XnMRyQyqO
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae1ccfecc7564bab3dfac9e')
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ozFUTJdJ9i
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.2XnMRyQyqO /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ozFUTJdJ9i
++ return 0
++ desc 'wait for backup-agent on target-cluster'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+wait for backup-agent on target-cluster
+-----------------------------------------------------------------------------------
+
++ wait_backup_agent target-cluster-rs0-0
++ local agent_pod=target-cluster-rs0-0
++ set +o xtrace
+waiting for pbm-agent to be ready in target-cluster-rs0-0...2026-10-28T10:20:48.000+0000 I listening for the commands
+
++ wait_backup_agent target-cluster-rs1-0
++ local agent_pod=target-cluster-rs1-0
++ set +o xtrace
+waiting for pbm-agent to be ready in target-cluster-rs1-0...2026-10-28T10:20:48.000+0000 I listening for the commands
+
++ wait_backup_agent target-cluster-cfg-0
++ local agent_pod=target-cluster-cfg-0
++ set +o xtrace
+waiting for pbm-agent to be ready in target-cluster-cfg-0...2026-10-28T10:19:50.000+0000 I listening for the commands
+
++ desc 'take a backup of target before clustersync starts (used for restore lease tests)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+take a backup of target before clustersync starts (used for restore lease tests)
+-----------------------------------------------------------------------------------
+
++ apply_backup_named initial-backup
++ local name=initial-backup
++ yq eval '.metadata.name = "initial-backup"' /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/backup-local-s3.yml
++ kubectl_bin apply -f -
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4crwi0y6ES
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.j4XUJaBDa5
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 2 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.srx1RZOS1K
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.srx1RZOS1K
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.srx1RZOS1K
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4crwi0y6ES
+perconaservermongodbbackup.psmdb.percona.com/initial-backup created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.j4XUJaBDa5
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.4crwi0y6ES /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.j4XUJaBDa5 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.srx1RZOS1K
++ return 0
++ wait_backup initial-backup ready
++ local backup_name=initial-backup
++ local target_state=ready
++ set +o xtrace
+waiting for initial-backup to reach ready state............OK
++ desc 'apply ClusterSync CR with mode=running'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+apply ClusterSync CR with mode=running
+-----------------------------------------------------------------------------------
+
++ cat /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/clustersync.yml
++ /opt/homebrew/bin/gsed -e 's|CLUSTERSYNC_IMAGE|docker.io/percona/percona-clustersync-mongodb:0.9.0|g' -e 's|NAME_SPACE|clustersync-5438|g'
++ add_arch_to_clustersync -
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ cat -
++ kubectl_bin apply -f -
+++ mktemp
++ return
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RjuHzPHNgt
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Y3nSAZ1vU8
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 2 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ppem0mRHdt
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ppem0mRHdt
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ppem0mRHdt
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RjuHzPHNgt
+perconaservermongodbclustersync.psmdb.percona.com/sync created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Y3nSAZ1vU8
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RjuHzPHNgt /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Y3nSAZ1vU8 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Ppem0mRHdt
++ return 0
++ desc 'wait for PCSM deployment to become available'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+wait for PCSM deployment to become available
+-----------------------------------------------------------------------------------
+
++ kubectl_bin wait --for=condition=Available --timeout=5m deployment/sync-pcsm
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.noA7oLvHpw
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.hm71e1L3f8
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ wait == \- ]]
++ [[ wait =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --for=condition=Available == \- ]]
++ [[ --for=condition=Available =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --timeout=5m == \- ]]
++ [[ --timeout=5m =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ deployment/sync-pcsm == \- ]]
++ [[ deployment/sync-pcsm =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl wait --for=condition=Available --timeout=5m deployment/sync-pcsm
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.noA7oLvHpw
+deployment.apps/sync-pcsm condition met
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.hm71e1L3f8
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.noA7oLvHpw /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.hm71e1L3f8
++ return 0
++ desc 'wait for PCSM state=running after initial sync'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+wait for PCSM state=running after initial sync
+-----------------------------------------------------------------------------------
+
++ wait_pcsm_state running 600
++ local expected=running
++ local timeout=600
++ set +o xtrace
+waiting for pcsm state=running ok (state=running)
++ return 0
++ desc 'verify initial data is replicated to target-cluster'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+verify initial data is replicated to target-cluster
+-----------------------------------------------------------------------------------
+
++ wait_target_doc_count 1 300
++ sleep 10
++ local expected=1
++ local timeout=300
++ set +o xtrace
+waiting for target myApp.test count=1 ok (count=1)
++ return 0
++ desc 'write data to source, verify it replicates'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+write data to source, verify it replicates
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster myApp myPass 'db.getSiblingDB("myApp").test.insertOne({x: 100501})'
++ local cluster=source-cluster
++ local user=myApp
++ local pass=myPass
++ local 'script=db.getSiblingDB("myApp").test.insertOne({x: 100501})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100501})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.e1fQ6ftnsh
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.FdWqvicp29
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100501}) == \- ]]
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100501}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100501})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.e1fQ6ftnsh
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae1ce5af95e290499522671')
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.FdWqvicp29
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.e1fQ6ftnsh /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.FdWqvicp29
++ return 0
++ wait_target_doc_count 2 180
++ sleep 10
++ local expected=2
++ local timeout=180
++ set +o xtrace
+waiting for target myApp.test count=2 ok (count=2)
++ return 0
++ desc 'write more data to source, verify it replicates'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+write more data to source, verify it replicates
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster myApp myPass 'db.getSiblingDB("myApp").test.insertOne({x: 100502})'
++ local cluster=source-cluster
++ local user=myApp
++ local pass=myPass
++ local 'script=db.getSiblingDB("myApp").test.insertOne({x: 100502})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100502})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RHctvfVftL
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0Jqz5iz2df
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100502}) == \- ]]
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100502}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100502})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RHctvfVftL
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae1ce700a00f4c0bb011db6')
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0Jqz5iz2df
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RHctvfVftL /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0Jqz5iz2df
++ return 0
++ wait_target_doc_count 3 180
++ sleep 10
++ local expected=3
++ local timeout=180
++ set +o xtrace
+waiting for target myApp.test count=3 ok (count=3)
++ return 0
++ desc 'transition: running -> paused'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+transition: running -> paused
+-----------------------------------------------------------------------------------
+
++ patch_sync_mode paused
++ local mode=paused
++ desc 'patch sync mode=paused'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+patch sync mode=paused
+-----------------------------------------------------------------------------------
+
++ kubectl_bin patch psmdb-clustersync sync --type=merge -p '{"spec":{"mode":"paused"}}'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.lE02PUXpsn
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.7dT3J0ZNEu
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ patch == \- ]]
++ [[ patch =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-clustersync == \- ]]
++ [[ psmdb-clustersync =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ sync == \- ]]
++ [[ sync =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --type=merge == \- ]]
++ [[ --type=merge =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -p == \- ]]
++ [[ -p =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ {"spec":{"mode":"paused"}} == \- ]]
++ [[ {"spec":{"mode":"paused"}} =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl patch psmdb-clustersync sync --type=merge -p '{"spec":{"mode":"paused"}}'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.lE02PUXpsn
+perconaservermongodbclustersync.psmdb.percona.com/sync patched
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.7dT3J0ZNEu
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.lE02PUXpsn /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.7dT3J0ZNEu
++ return 0
++ wait_pcsm_state paused 180
++ local expected=paused
++ local timeout=180
++ set +o xtrace
+waiting for pcsm state=paused ok (state=paused)
++ return 0
++ wait_cr_status_state paused 120
++ local expected=paused
++ local timeout=120
++ set +o xtrace
+waiting for psmdb-clustersync/sync status.state=paused ok
++ return 0
++ desc 'write data while paused, verify that target still has old data count'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+write data while paused, verify that target still has old data count
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster myApp myPass 'db.getSiblingDB("myApp").test.insertOne({x: 100503})'
++ local cluster=source-cluster
++ local user=myApp
++ local pass=myPass
++ local 'script=db.getSiblingDB("myApp").test.insertOne({x: 100503})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100503})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Syki6uzMhK
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.EF6RuOwORo
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100503}) == \- ]]
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100503}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100503})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Syki6uzMhK
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae1ce8add6c6c089b05404a')
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.EF6RuOwORo
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Syki6uzMhK /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.EF6RuOwORo
++ return 0
++ wait_target_doc_count 3 180
++ sleep 10
++ local expected=3
++ local timeout=180
++ set +o xtrace
+waiting for target myApp.test count=3 ok (count=3)
++ return 0
++ desc 'transition: paused -> running'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+transition: paused -> running
+-----------------------------------------------------------------------------------
+
++ patch_sync_mode running
++ local mode=running
++ desc 'patch sync mode=running'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+patch sync mode=running
+-----------------------------------------------------------------------------------
+
++ kubectl_bin patch psmdb-clustersync sync --type=merge -p '{"spec":{"mode":"running"}}'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZV6fSD3ewy
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PvvuOQcTVi
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ patch == \- ]]
++ [[ patch =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-clustersync == \- ]]
++ [[ psmdb-clustersync =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ sync == \- ]]
++ [[ sync =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --type=merge == \- ]]
++ [[ --type=merge =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -p == \- ]]
++ [[ -p =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ {"spec":{"mode":"running"}} == \- ]]
++ [[ {"spec":{"mode":"running"}} =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl patch psmdb-clustersync sync --type=merge -p '{"spec":{"mode":"running"}}'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZV6fSD3ewy
+perconaservermongodbclustersync.psmdb.percona.com/sync patched
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PvvuOQcTVi
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.ZV6fSD3ewy /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PvvuOQcTVi
++ return 0
++ wait_pcsm_state running 300
++ local expected=running
++ local timeout=300
++ set +o xtrace
+waiting for pcsm state=running ok (state=running)
++ return 0
++ wait_cr_status_state running 120
++ local expected=running
++ local timeout=120
++ set +o xtrace
+waiting for psmdb-clustersync/sync status.state=running ok
++ return 0
++ desc 'write data while running, verify replication and existence of data written when sync was paused'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+write data while running, verify replication and existence of data written when sync was paused
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster myApp myPass 'db.getSiblingDB("myApp").test.insertOne({x: 100504})'
++ local cluster=source-cluster
++ local user=myApp
++ local pass=myPass
++ local 'script=db.getSiblingDB("myApp").test.insertOne({x: 100504})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100504})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9YUbPsWuLE
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xorxDDnrre
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100504}) == \- ]]
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100504}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100504})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9YUbPsWuLE
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae1cea232d6377c753004ef')
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xorxDDnrre
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.9YUbPsWuLE /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.xorxDDnrre
++ return 0
++ wait_target_doc_count 5 180
++ sleep 10
++ local expected=5
++ local timeout=180
++ set +o xtrace
+waiting for target myApp.test count=5 ok (count=5)
++ return 0
++ desc 'lease test: backup CR applied while clustersync is running should stay in waiting'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+lease test: backup CR applied while clustersync is running should stay in waiting
+-----------------------------------------------------------------------------------
+
++ apply_backup_named backup-during-sync
++ local name=backup-during-sync
++ yq eval '.metadata.name = "backup-during-sync"' /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/backup-local-s3.yml
++ kubectl_bin apply -f -
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.H8nckmJbv0
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dZ22tcAVz8
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 2 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qryZ5of1ms
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qryZ5of1ms
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qryZ5of1ms
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.H8nckmJbv0
+perconaservermongodbbackup.psmdb.percona.com/backup-during-sync created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dZ22tcAVz8
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.H8nckmJbv0 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.dZ22tcAVz8 /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qryZ5of1ms
++ return 0
++ wait_kind_state psmdb-backup backup-during-sync waiting 120
++ local kind=psmdb-backup
++ local name=backup-during-sync
++ local expected=waiting
++ local timeout=120
++ set +o xtrace
+waiting for psmdb-backup/backup-during-sync state=waiting ok
++ return 0
++ assert_state_stable psmdb-backup backup-during-sync waiting 30
++ local kind=psmdb-backup
++ local name=backup-during-sync
++ local expected=waiting
++ local duration=30
++ set +o xtrace
+asserting psmdb-backup/backup-during-sync stays in state=waiting for 30s...... ok
++ assert_event_present backup-during-sync ClusterSyncActive
++ local name=backup-during-sync
++ local reason=ClusterSyncActive
++ set +o xtrace
+event reason=ClusterSyncActive present on backup-during-sync (count=1)
++ desc 'delete during-sync CRs so they do not race with post-finalize checks'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+delete during-sync CRs so they do not race with post-finalize checks
+-----------------------------------------------------------------------------------
+
++ kubectl_bin delete psmdb-backup backup-during-sync --ignore-not-found --wait=true
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.cd0pPwzeJa
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.T9qdA3h5Jz
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ delete == \- ]]
++ [[ delete =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-backup == \- ]]
++ [[ psmdb-backup =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ backup-during-sync == \- ]]
++ [[ backup-during-sync =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --ignore-not-found == \- ]]
++ [[ --ignore-not-found =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --wait=true == \- ]]
++ [[ --wait=true =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl delete psmdb-backup backup-during-sync --ignore-not-found --wait=true
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.cd0pPwzeJa
+perconaservermongodbbackup.psmdb.percona.com "backup-during-sync" deleted from clustersync-5438 namespace
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.T9qdA3h5Jz
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.cd0pPwzeJa /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.T9qdA3h5Jz
++ return 0
++ desc 'transition: running -> finalized'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+transition: running -> finalized
+-----------------------------------------------------------------------------------
+
++ patch_sync_mode finalized
++ local mode=finalized
++ desc 'patch sync mode=finalized'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+patch sync mode=finalized
+-----------------------------------------------------------------------------------
+
++ kubectl_bin patch psmdb-clustersync sync --type=merge -p '{"spec":{"mode":"finalized"}}'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0DSebFZ7sZ
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RUSGihmKLZ
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ patch == \- ]]
++ [[ patch =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ psmdb-clustersync == \- ]]
++ [[ psmdb-clustersync =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ sync == \- ]]
++ [[ sync =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --type=merge == \- ]]
++ [[ --type=merge =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -p == \- ]]
++ [[ -p =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ {"spec":{"mode":"finalized"}} == \- ]]
++ [[ {"spec":{"mode":"finalized"}} =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl patch psmdb-clustersync sync --type=merge -p '{"spec":{"mode":"finalized"}}'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0DSebFZ7sZ
+perconaservermongodbclustersync.psmdb.percona.com/sync patched
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RUSGihmKLZ
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.0DSebFZ7sZ /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.RUSGihmKLZ
++ return 0
++ wait_pcsm_state finalized 300
++ local expected=finalized
++ local timeout=300
++ set +o xtrace
+waiting for pcsm state=finalized ok (state=finalized)
++ return 0
++ wait_cr_status_state finalized 120
++ local expected=finalized
++ local timeout=120
++ set +o xtrace
+waiting for psmdb-clustersync/sync status.state=finalized ok
++ return 0
++ desc 'write data after finalize, verify target count does not increase'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+write data after finalize, verify target count does not increase
+-----------------------------------------------------------------------------------
+
++ mongosh_on_mongos source-cluster myApp myPass 'db.getSiblingDB("myApp").test.insertOne({x: 100505})'
++ local cluster=source-cluster
++ local user=myApp
++ local pass=myPass
++ local 'script=db.getSiblingDB("myApp").test.insertOne({x: 100505})'
++ kubectl_bin exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100505})'
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qsgr0ivrwv
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.heBlNBxZL9
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ exec == \- ]]
++ [[ exec =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ source-cluster-mongos-0 == \- ]]
++ [[ source-cluster-mongos-0 =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -c == \- ]]
++ [[ -c =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongos == \- ]]
++ [[ mongos =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -- == \- ]]
++ [[ -- =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ env == \- ]]
++ [[ env =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ HOME=/data/db == \- ]]
++ [[ HOME=/data/db =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongosh == \- ]]
++ [[ mongosh =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin == \- ]]
++ [[ mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --quiet == \- ]]
++ [[ --quiet =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tls == \- ]]
++ [[ --tls =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCertificateKeyFile == \- ]]
++ [[ --tlsCertificateKeyFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /tmp/tls.pem == \- ]]
++ [[ /tmp/tls.pem =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsCAFile == \- ]]
++ [[ --tlsCAFile =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ /etc/mongodb-ssl/ca.crt == \- ]]
++ [[ /etc/mongodb-ssl/ca.crt =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --tlsAllowInvalidCertificates == \- ]]
++ [[ --tlsAllowInvalidCertificates =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ --eval == \- ]]
++ [[ --eval =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100505}) == \- ]]
++ [[ db.getSiblingDB("myApp").test.insertOne({x: 100505}) =~ ^(-f|--filename)=-$ ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl exec source-cluster-mongos-0 -c mongos -- env HOME=/data/db mongosh mongodb://myApp:myPass@%2Ftmp%2Fmongodb-27017.sock/admin --quiet --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsCAFile /etc/mongodb-ssl/ca.crt --tlsAllowInvalidCertificates --eval 'db.getSiblingDB("myApp").test.insertOne({x: 100505})'
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qsgr0ivrwv
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ae1cee4ea6196ed5c810f01')
+}
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.heBlNBxZL9
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.qsgr0ivrwv /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.heBlNBxZL9
++ return 0
++ wait_target_doc_count 5 10
++ sleep 10
++ local expected=5
++ local timeout=10
++ set +o xtrace
+waiting for target myApp.test count=5 ok (count=5)
++ return 0
++ desc 'lease test: backup CR applied after finalize should complete (clustersync lease released)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+lease test: backup CR applied after finalize should complete (clustersync lease released)
+-----------------------------------------------------------------------------------
+
++ apply_backup_named backup-after-finalize
++ local name=backup-after-finalize
++ yq eval '.metadata.name = "backup-after-finalize"' /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/backup-local-s3.yml
++ kubectl_bin apply -f -
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.WeV1ZGKGuD
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.SRRGTZ5uKl
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 2 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.P0WF15SbK3
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.P0WF15SbK3
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.P0WF15SbK3
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.WeV1ZGKGuD
+perconaservermongodbbackup.psmdb.percona.com/backup-after-finalize created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.SRRGTZ5uKl
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.WeV1ZGKGuD /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.SRRGTZ5uKl /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.P0WF15SbK3
++ return 0
++ wait_backup backup-after-finalize ready
++ local backup_name=backup-after-finalize
++ local target_state=ready
++ set +o xtrace
+waiting for backup-after-finalize to reach ready state.............OK
++ desc 'lease test: restore CR applied after finalize should complete (clustersync lease released)'
++ set +o xtrace
+
+
+-----------------------------------------------------------------------------------
+lease test: restore CR applied after finalize should complete (clustersync lease released)
+-----------------------------------------------------------------------------------
+
++ apply_restore_named restore-after-finalize initial-backup
++ local name=restore-after-finalize
++ local backup=initial-backup
++ yq eval '.metadata.name = "restore-after-finalize" | .spec.backupName = "initial-backup"' /Users/gkech/PerconaWorkspace/percona-server-mongodb-operator/e2e-tests/clustersync/conf/restore.yml
++ kubectl_bin apply -f -
+++ mktemp
++ local LAST_OUT=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.LjVhUVAJRD
+++ mktemp
++ local LAST_ERR=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Yeky5TMKzV
++ local exit_status=0
++ local timeout=4
++ local i
++ args=("$@")
++ local args
++ transformed_files=()
++ local transformed_files
++ local stdin_manifest
++ for i in '"${!args[@]}"'
++ [[ apply == \- ]]
++ [[ apply =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ -f == \- ]]
++ [[ -f =~ ^(-f|--filename)=-$ ]]
++ for i in '"${!args[@]}"'
++ [[ - == \- ]]
++ [[ 2 -gt 0 ]]
++ [[ -f =~ ^(-f|--filename)$ ]]
+++ mktemp
++ stdin_manifest=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PzNMuNqEgE
++ cat
++ transformed_files+=("${stdin_manifest}")
++ args[$i]=/var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PzNMuNqEgE
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ arch_scheduling_enabled
++ [[ -n '' ]]
++ local attempt
++ local delay
+++ seq 0 9
++ for attempt in '$(seq 0 9)'
++ set +e
++ kubectl apply -f /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PzNMuNqEgE
++ exit_status=0
++ set -e
++ [[ 0 == 0 ]]
++ break
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.LjVhUVAJRD
+perconaservermongodbrestore.psmdb.percona.com/restore-after-finalize created
++ cat /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Yeky5TMKzV
++ rm /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.LjVhUVAJRD /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.Yeky5TMKzV /var/folders/j3/f6ydc62j55vgrk05fk38cyhw0000gn/T/tmp.PzNMuNqEgE
++ return 0
++ wait_kind_state psmdb-restore restore-after-finalize ready 1800
++ local kind=psmdb-restore
++ local name=restore-after-finalize
++ local expected=ready
++ local timeout=1800
++ set +o xtrace
+waiting for psmdb-restore/restore-after-finalize state=ready................................................................................................

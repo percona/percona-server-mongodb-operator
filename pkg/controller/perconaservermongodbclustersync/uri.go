@@ -89,7 +89,7 @@ func buildTargetURI(target *psmdbv1.PerconaServerMongoDB, username, password str
 		q.Set("tlsCertificateKeyFile", clustersync.TLSPEMFile)
 		q.Set("tlsCAFile", clustersync.TLSCAFile)
 		if allowInvalidCerts(target) {
-			q.Set("tlsAllowInvalidCertificates", "true")
+			q.Set("tlsInsecure", "true")
 		}
 	}
 	u.RawQuery = q.Encode()
