@@ -161,7 +161,7 @@ include e2e-tests/release_versions
 $(foreach v,$(_e2e_image_vars),$(eval e2e-test: $(v) := $$(_saved_$(v))))
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
-	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/functions
+	$(SED) -i "s/\"CERT_MANAGER_VER\": \".*\"/\"CERT_MANAGER_VER\": \"$(CERT_MANAGER_VER)\"/" e2e-tests/conftest.py
 	echo "$(VERSION)" > pkg/version/version.txt
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \

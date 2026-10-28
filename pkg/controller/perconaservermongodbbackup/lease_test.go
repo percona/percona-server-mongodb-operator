@@ -8,11 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	coordv1 "k8s.io/api/coordination/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -206,6 +209,53 @@ func TestTryAcquireLease(t *testing.T) {
 			assert.Equal(t, holder, *got.Spec.HolderIdentity)
 		})
 	}
+}
+
+// A backup that already holds the lease and sent its backup command must not
+// lose the lease because the cache hasn't seen the lease yet. Otherwise the
+// reconcile moves it back to waiting and sends a second backup command to PBM.
+func TestTryAcquireLeaseStaleCache(t *testing.T) {
+	const (
+		ns          = "ns"
+		clusterName = "tgt"
+	)
+
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name: clusterName, Namespace: ns,
+	}
+	cr := &psmdbv1.PerconaServerMongoDBBackup{
+		Name:      "backup-new",
+		Namespace: ns,
+		UID:       types.UID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+		Spec:      psmdbv1.PerconaServerMongoDBBackupSpec{ClusterName: clusterName},
+		Status:    psmdbv1.PerconaServerMongoDBBackupStatus{State: psmdbv1.BackupStateRequested},
+	}
+	lease := &coordv1.Lease{
+		Name:      naming.BackupLeaseName(clusterName),
+		Namespace: ns,
+		Spec: coordv1.LeaseSpec{
+			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
+			HolderIdentity: new(naming.BackupHolderId(cr)),
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(backupScheme(t)).
+		WithRuntimeObjects(cr.DeepCopy(), lease).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*coordv1.Lease); ok {
+					return k8serrors.NewNotFound(coordv1.Resource("leases"), key.Name)
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		}).
+		Build()
+	r := &ReconcilePerconaServerMongoDBBackup{client: cl}
+
+	acquired, err := r.tryAcquireLease(t.Context(), cr, cluster)
+	require.NoError(t, err)
+	assert.True(t, acquired, "backup holding the lease must not be moved back to waiting")
 }
 
 func backupWithState(name, namespace, uid, clusterName string, state psmdbv1.BackupState) *psmdbv1.PerconaServerMongoDBBackup {
