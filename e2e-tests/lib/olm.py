@@ -197,6 +197,7 @@ def approve_until_installed(
     Returns the approved InstallPlan names, in order.
     """
     approved: list[str] = []
+    skipped: dict[str, list[str]] = {}
     deadline = time.monotonic() + timeout
     status: dict[str, Any] = {}
     while time.monotonic() < deadline:
@@ -225,6 +226,9 @@ def approve_until_installed(
         if plan and plan not in approved:
             spec = get_json(INSTALLPLAN, plan, "-n", namespace)["spec"]
             csvs = spec.get("clusterServiceVersionNames", [])
+            if not spec.get("approved") and not allowed_csvs(csvs) and plan not in skipped:
+                logger.warning(f"Not approving InstallPlan {plan}: {csvs}")
+                skipped[plan] = csvs
             if not spec.get("approved") and allowed_csvs(csvs):
                 logger.info(f"Approving InstallPlan {plan}: {csvs}")
                 kubectl_bin(
@@ -244,8 +248,27 @@ def approve_until_installed(
         f"Timeout after {timeout}s waiting for {target_csv} to be installed. "
         f"Subscription status: state={status.get('state')} "
         f"installedCSV={status.get('installedCSV')} currentCSV={status.get('currentCSV')} "
-        f"conditions={status.get('conditions', [])}"
+        f"conditions={status.get('conditions', [])} "
+        f"not approved InstallPlans={skipped}"
     )
+
+
+def delete_pending_plans(namespace: str, keep: Callable[[list[str]], bool]) -> list[str]:
+    """Delete unapproved InstallPlans that keep(csv_names) rejects, so OLM resolves again.
+
+    A Manual Subscription keeps pointing at its pending plan; while that plan exists,
+    OLM does not offer a different upgrade.
+    """
+    deleted = []
+    for plan in get_json(INSTALLPLAN, "-n", namespace)["items"]:
+        csvs = plan["spec"].get("clusterServiceVersionNames", [])
+        if plan["spec"].get("approved") or keep(csvs):
+            continue
+        name = plan["metadata"]["name"]
+        logger.info(f"Deleting pending InstallPlan {name}: {csvs}")
+        kubectl_bin("delete", INSTALLPLAN, name, "-n", namespace, "--ignore-not-found")
+        deleted.append(name)
+    return deleted
 
 
 def delete_olm_install(namespace: str, subscription: str) -> None:

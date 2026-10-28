@@ -44,8 +44,8 @@ Downloaded tools:
 
 ## Variables
 
-Most workflows only require `VERSION`. It defaults to the branch name when that
-carries a version (for example `release-1.25.0`), and otherwise to the operator
+Most workflows only require `VERSION`. It defaults to the branch name on a
+release branch (for example `release-1.25.0`), and otherwise to the operator
 version in `../../pkg/version/version.txt`.
 
 ```bash
@@ -56,7 +56,7 @@ Useful optional variables:
 
 | Variable | Description | Example |
 | --- | --- | --- |
-| `CSV_VERSION` | CSV version. Defaults to the first `x.y.z` parsed from `VERSION`. | `1.23.0` |
+| `CSV_VERSION` | CSV version. Defaults to the `x.y.z` parsed from `VERSION`. | `1.23.0` |
 | `REGISTRY` | Registry used for operator, bundle, and catalog images. | `docker.io` |
 | `PROD_REPOSITORY` | Repository namespace used for production bundle images. | `percona` |
 | `DEV_REPOSITORY` | Repository namespace used for development bundle images and all catalog images. | `perconalab` |
@@ -66,7 +66,7 @@ Useful optional variables:
 | `BUNDLE_PACKAGE_CHANNEL` | Package channel used for the generated current bundle. | `stable` |
 | `CONFIRM_PUSH` | Ask for confirmation before pushing bundle and catalog images. Set to `0` for non-interactive runs. | `1` |
 | `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. Ignored when `CATALOG_PREVIOUS_MINORS` is set. | `2` |
-| `CATALOG_PREVIOUS_MINORS` | Include every previous OperatorHub version of the newest N minor lines, all patches included, instead of a fixed number of versions. Empty by default. | `2` |
+| `CATALOG_PREVIOUS_MINORS` | Include every previous OperatorHub version of the newest N minor lines, all patches included, instead of a fixed number of versions. Versions newer than the current one are ignored. Empty by default. | `2` |
 | `CATALOG_PLATFORM` | Platform used when building previous OperatorHub bundle images and catalog images. | `linux/amd64` |
 | `CATALOG_BUILD_PUSH` | Build and push catalog images during deploy targets when enabled. | `1` |
 | `BUNDLE_SKIP_DIGEST_FAILURE` | Continue certified bundle generation when a non-required digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
@@ -337,18 +337,20 @@ make tests/certified
 The test runs once for every bundle outside the catalog's default channel. Each
 run installs that bundle with a Manual-approval Subscription, deploys a replica
 set from the bundle's example CR and writes data. It then switches the
-Subscription to the default channel and approves the InstallPlan straight to
-the newest version, so each starting version is upgraded directly. After the
-upgrade it checks that:
+Subscription to the default channel. It deletes any pending InstallPlan left
+from the old channel, such as one for a newer patch, and approves only the
+InstallPlan straight to the newest version, so each starting version is
+upgraded directly. After the upgrade it checks that:
 
 - only the target CSV is left and the operator runs its image;
 - the operator logs and the namespace's Warning events have no new errors;
 - the cluster stayed `ready`, and no DB pod was recreated or restarted;
 - the data written before the upgrade is readable, and new writes succeed.
 
-For a dev catalog, the test checks that the newest bundle is `OPERATOR_VERSION`,
-the `crVersion` in `deploy/cr.yaml`, and fails early when the catalog is stale.
-Set `OLM_TARGET_VERSION` to expect another version.
+For a dev catalog, the test checks that the head of the default channel is
+`OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
+the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
+check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
 
 Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
 starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`.

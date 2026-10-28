@@ -198,10 +198,13 @@ select_previous_versions() {
 		return
 	fi
 
-	awk -F. -v minors="$CATALOG_PREVIOUS_MINORS" '
-		{ versions[NR] = $0; lines[NR] = $1 "." $2 }
+	# Versions newer than the one being built are not upgrade sources.
+	awk -F. -v current="$BUNDLE_IMAGE_VERSION" -v minors="$CATALOG_PREVIOUS_MINORS" '
+		BEGIN { split(current, c, ".") }
+		$1 > c[1] + 0 || ($1 == c[1] + 0 && ($2 > c[2] + 0 || ($2 == c[2] + 0 && $3 > c[3] + 0))) { next }
+		{ versions[++n] = $0; lines[n] = $1 "." $2 }
 		END {
-			for (i = NR; i >= 1; i--) {
+			for (i = n; i >= 1; i--) {
 				if (lines[i] != last) {
 					count++
 					last = lines[i]
@@ -209,7 +212,7 @@ select_previous_versions() {
 				if (count > minors) break
 				keep[i] = 1
 			}
-			for (i = 1; i <= NR; i++) if (keep[i]) print versions[i]
+			for (i = 1; i <= n; i++) if (keep[i]) print versions[i]
 		}
 	'
 }
@@ -368,6 +371,10 @@ run_build() {
 	while IFS= read -r version; do
 		[[ -n "$version" ]] && OLD_VERSIONS+=("$version")
 	done < <(find_previous_versions)
+
+	# Checked first: an empty array is "unbound" under set -u in bash 3.2 (macOS).
+	[[ "${#OLD_VERSIONS[@]}" -gt 0 ]] ||
+		die "no previous versions found in ${GITHUB_REPO}/${OPERATOR_PATH}"
 
 	if [[ -n "$CATALOG_PREVIOUS_MINORS" ]]; then
 		[[ "$(count_minor_lines "${OLD_VERSIONS[@]}")" -eq "$CATALOG_PREVIOUS_MINORS" ]] ||

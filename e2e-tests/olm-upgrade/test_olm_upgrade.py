@@ -24,6 +24,7 @@ from lib.olm import (
     csv_names,
     csv_operator_image,
     delete_olm_install,
+    delete_pending_plans,
     get_csv,
     get_json,
     get_package_manifest,
@@ -132,8 +133,12 @@ def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmUpgr
         for channel in manifest["status"]["channels"]
         if channel["name"] == target_channel
     )
+    # Only dev catalogs (installers/olm, CATALOG_ENV=dev) are built from this checkout,
+    # and only their default channel must hold the version under test.
     expected = os.environ.get("OLM_TARGET_VERSION") or (
-        os.environ.get("OPERATOR_VERSION", "") if source.endswith("-dev") else ""
+        os.environ.get("OPERATOR_VERSION", "")
+        if source.endswith("-dev") and not os.environ.get("OLM_TARGET_CHANNEL")
+        else ""
     )
     if expected:
         assert _version(target_csv) == _version(expected), (
@@ -366,9 +371,11 @@ class TestOlmUpgrade:
             if current := _psmdb_state(config):
                 state.states.append(current)
 
-        # Only the plan straight to the target: a Manual subscription may still point at a
-        # plan for a newer patch of the old channel, created before the channel switch.
-        # Bundles skip every older version (olm.skipRange / spec.skips), so one hop is enough.
+        # Only the plan straight to the target. A Manual Subscription may still point at a
+        # plan for a newer patch of the old channel, created before the channel switch;
+        # delete it so OLM resolves the target. Bundles skip every older version
+        # (olm.skipRange / spec.skips), so one hop is enough.
+        delete_pending_plans(config.namespace, keep=lambda csvs: csvs == [config.target_csv])
         plans = approve_until_installed(
             config.namespace,
             config.package,

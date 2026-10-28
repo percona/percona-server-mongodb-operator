@@ -62,7 +62,8 @@ list_starting_csvs() {
 			| $status.channels[]
 			| select(.name != $status.defaultChannel)
 			| .entries[].name
-		'
+		' |
+		awk '!seen[$0]++'
 }
 
 if [[ -n "${OLM_FROM_CSVS:-}" ]]; then
@@ -80,7 +81,7 @@ fi
 echo "[olm] Starting CSVs: ${FROM_CSVS[*]}"
 MINORS="$(printf '%s\n' "${FROM_CSVS[@]}" | sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p' | sort -uV | xargs)"
 echo "[olm] Minor versions covered: ${MINORS}"
-[[ "$(wc -w <<<"$MINORS")" -ge 2 ]] ||
+[[ -n "${OLM_FROM_CSVS:-}" || "$(wc -w <<<"$MINORS")" -ge 2 ]] ||
 	echo "[olm] WARNING: fewer than 2 previous minor versions in the catalog (build it with CATALOG_PREVIOUS_MINORS=2)"
 
 FAILED=()
