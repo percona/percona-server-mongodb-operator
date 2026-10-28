@@ -455,6 +455,10 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	}
 
 	if !k8s.HasStatefulSetChanged(sts, &list) {
+		// Nothing to update first, mongod must not wait for mongos.
+		if err := r.unsetUpdateMongosFirst(ctx, cr); err != nil {
+			return errors.Wrap(err, "unset update mongos first")
+		}
 		return nil
 	}
 

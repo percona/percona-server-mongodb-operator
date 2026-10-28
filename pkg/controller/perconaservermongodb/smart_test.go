@@ -114,6 +114,8 @@ func TestSmartMongosUpdateUnsetsMongosFirst(t *testing.T) {
 		"update strategy is not smart": func(cr *api.PerconaServerMongoDB) {
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		},
+		// e.g. mongos was created after the TLS secrets were recreated
+		"mongos statefulset has no changes": func(cr *api.PerconaServerMongoDB) {},
 	}
 
 	for name, mutate := range tests {
