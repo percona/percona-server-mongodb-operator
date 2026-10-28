@@ -73,7 +73,7 @@ func (c *Client) ActiveInstance() string {
 }
 
 func (c *Client) Status(ctx context.Context) (Status, error) {
-	raw, runErr := c.run(ctx, "status")
+	raw, runErr := c.run(ctx, true, "status")
 	// pcsm status exits non-zero when state=failed but still prints a valid
 	// JSON payload on stdout. Parse first so the reconciler sees the failed
 	// state and can trigger `resume --from-failure`.
@@ -98,12 +98,12 @@ func (c *Client) Start(ctx context.Context, opts StartOptions) error {
 	if len(opts.ExcludeNamespaces) > 0 {
 		args = append(args, "--exclude-namespaces="+strings.Join(opts.ExcludeNamespaces, ","))
 	}
-	_, err := c.run(ctx, args...)
+	_, err := c.run(ctx, false, args...)
 	return err
 }
 
 func (c *Client) Pause(ctx context.Context) error {
-	_, err := c.run(ctx, "pause")
+	_, err := c.run(ctx, false, "pause")
 	return err
 }
 
@@ -112,38 +112,54 @@ func (c *Client) Resume(ctx context.Context, fromFailure bool) error {
 	if fromFailure {
 		args = append(args, "--from-failure")
 	}
-	_, err := c.run(ctx, args...)
+	_, err := c.run(ctx, false, args...)
 	return err
 }
 
 func (c *Client) Finalize(ctx context.Context) error {
-	_, err := c.run(ctx, "finalize")
+	_, err := c.run(ctx, false, "finalize")
 	return err
 }
 
-// run executes a pcsm command against the ACTIVE instance. Only a
-// not_active reply advances to the next pod: any other failure is the
-// active instance's answer and is returned as-is, because retrying a
-// start or finalize elsewhere could run it twice.
-func (c *Client) run(ctx context.Context, args ...string) ([]byte, error) {
+// run executes a pcsm command against the ACTIVE instance. A not_active
+// reply advances to the next pod, as does a transport failure for readOnly
+// commands; any other failure is the active instance's answer and is
+// returned as-is, because retrying a start or finalize could run it twice.
+func (c *Client) run(ctx context.Context, readOnly bool, args ...string) ([]byte, error) {
 	pods, err := c.readyPods(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	cmd := append([]string{pcsmBinary}, args...)
+	var transportErr error
 	for _, pod := range pods {
 		var stdout, stderr bytes.Buffer
 		execErr := c.exec.Exec(ctx, pod, clustersync.ContainerName, cmd, nil, &stdout, &stderr, false)
-		if execErr != nil && notActive(stdout.Bytes(), stderr.Bytes()) {
+		if execErr == nil {
+			c.activePod = pod.Name
+			return stdout.Bytes(), nil
+		}
+		if notActive(stdout.Bytes(), stderr.Bytes()) {
 			continue
 		}
-		c.activePod = pod.Name
-		if execErr != nil {
-			return stdout.Bytes(), errors.Wrapf(execErr, "exec pcsm %s on %s: %s",
-				strings.Join(args, " "), pod.Name, trimOutput(stderr.String()))
+		err := errors.Wrapf(execErr, "exec pcsm %s on %s: %s",
+			strings.Join(args, " "), pod.Name, trimOutput(stderr.String()))
+		// Without a reply the exec may never have reached PCSM.
+		if !answered(stdout.Bytes()) {
+			if transportErr == nil {
+				transportErr = err
+			}
+			if readOnly {
+				continue
+			}
+			return stdout.Bytes(), err
 		}
-		return stdout.Bytes(), nil
+		c.activePod = pod.Name
+		return stdout.Bytes(), err
+	}
+	if transportErr != nil {
+		return nil, transportErr
 	}
 	return nil, ErrNoActivePCSM
 }
@@ -196,10 +212,22 @@ func notActive(stdout, stderr []byte) bool {
 	var body struct {
 		Error string `json:"error"`
 	}
-	if err := json.Unmarshal(stdout, &body); err == nil && body.Error == notActiveCode {
-		return true
+	if err := json.Unmarshal(stdout, &body); err == nil {
+		return body.Error == notActiveCode
 	}
 	return strings.Contains(string(stderr), notActiveCode) || strings.Contains(string(stdout), notActiveCode)
+}
+
+// answered reports whether stdout holds a PCSM reply rather than nothing.
+func answered(stdout []byte) bool {
+	var body struct {
+		State string `json:"state"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(stdout, &body); err != nil {
+		return false
+	}
+	return body.State != "" || body.Error != ""
 }
 
 func trimOutput(s string) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,9 +22,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -418,6 +421,7 @@ func TestReconcilePDB(t *testing.T) {
 	tests := map[string]struct {
 		size        int32
 		existing    bool
+		foreign     bool
 		wantPDB     bool
 		wantDeletes int
 	}{
@@ -425,6 +429,8 @@ func TestReconcilePDB(t *testing.T) {
 		"HA group is idempotent over an existing budget": {size: 3, existing: true, wantPDB: true},
 		"single instance creates no budget":              {size: 1},
 		"scale down to one deletes the existing budget":  {size: 1, existing: true, wantDeletes: 1},
+		"a budget this CR does not own is left alone":    {size: 3, existing: true, foreign: true, wantPDB: true},
+		"scale down does not delete a foreign budget":    {size: 1, existing: true, foreign: true, wantPDB: true},
 	}
 
 	for name, tc := range tests {
@@ -445,7 +451,14 @@ func TestReconcilePDB(t *testing.T) {
 			if tc.existing {
 				haCR := cr.DeepCopy()
 				haCR.Spec.Size = 3
-				b = b.WithObjects(clustersync.PodDisruptionBudget(haCR))
+				existing := clustersync.PodDisruptionBudget(haCR)
+				if tc.foreign {
+					existing.Spec.MaxUnavailable = nil
+					existing.Spec.MinAvailable = ptr.To(intstr.FromInt32(2))
+				} else {
+					require.NoError(t, controllerutil.SetControllerReference(cr, existing, scheme))
+				}
+				b = b.WithObjects(existing)
 			}
 			cl := b.Build()
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
@@ -466,6 +479,12 @@ func TestReconcilePDB(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+			if tc.foreign {
+				assert.Empty(t, pdb.OwnerReferences)
+				assert.Equal(t, ptr.To(intstr.FromInt32(2)), pdb.Spec.MinAvailable,
+					"a budget owned by someone else must keep its own spec")
+				return
+			}
 			require.Len(t, pdb.OwnerReferences, 1, "budget must be garbage-collected with the CR")
 			assert.Equal(t, cr.Name, pdb.OwnerReferences[0].Name)
 			assert.Equal(t, clustersync.Labels(cr), pdb.Spec.Selector.MatchLabels)
@@ -975,14 +994,14 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 
 // TestReconcileDeploymentVersionGate checks the target cluster's
 // crVersion actually reaches the pod-template builders: a cluster that has
-// not been bumped to 1.24.0 must keep a pod template without the defaults,
-// so upgrading the operator alone never rolls the PCSM pod.
+// not been bumped to 1.24.0 must keep the 1.23 pod template, so upgrading
+// the operator alone never rolls the PCSM pod.
 func TestReconcileDeploymentVersionGate(t *testing.T) {
 	tests := map[string]struct {
 		crVersion   string
 		wantDefault bool
 	}{
-		"older crVersion keeps the bare pod template": {crVersion: "1.23.0"},
+		"older crVersion keeps the 1.23 pod template": {crVersion: "1.23.0"},
 		"current crVersion gets the defaults":         {crVersion: "1.24.0", wantDefault: true},
 	}
 
@@ -1006,15 +1025,21 @@ func TestReconcileDeploymentVersionGate(t *testing.T) {
 
 			tmpl := dep.Spec.Template
 			require.Len(t, tmpl.Spec.Containers, 1)
+			wantPath := clustersync.StatusPath
 			if tc.wantDefault {
+				wantPath = clustersync.MetricsPath
 				assert.NotNil(t, tmpl.Spec.Affinity)
-				assert.NotNil(t, tmpl.Spec.Containers[0].LivenessProbe)
-				assert.NotNil(t, tmpl.Spec.Containers[0].ReadinessProbe)
-				return
+			} else {
+				assert.Nil(t, tmpl.Spec.Affinity)
 			}
-			assert.Nil(t, tmpl.Spec.Affinity)
-			assert.Nil(t, tmpl.Spec.Containers[0].LivenessProbe)
-			assert.Nil(t, tmpl.Spec.Containers[0].ReadinessProbe)
+			for name, probe := range map[string]*corev1.Probe{
+				"liveness":  tmpl.Spec.Containers[0].LivenessProbe,
+				"readiness": tmpl.Spec.Containers[0].ReadinessProbe,
+			} {
+				require.NotNil(t, probe, name)
+				require.NotNil(t, probe.Exec, name)
+				assert.Contains(t, strings.Join(probe.Exec.Command, " "), wantPath, name)
+			}
 		})
 	}
 }

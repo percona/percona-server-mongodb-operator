@@ -427,13 +427,33 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcilePDB(ctx context.Cont
 			Name:      clustersync.DeploymentName(cr),
 			Namespace: cr.Namespace,
 		}
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(stale), stale); err != nil {
+			return client.IgnoreNotFound(errors.Wrap(err, "get clustersync pdb"))
+		}
+		if !metav1.IsControlledBy(stale, cr) {
+			return nil
+		}
 		return k8s.DeleteIfExists(ctx, r.client, stale)
 	}
 
 	if err := controllerutil.SetControllerReference(cr, pdb, r.scheme); err != nil {
 		return errors.Wrap(err, "set owner reference on clustersync pdb")
 	}
-	if _, err := util.Apply(ctx, r.client, pdb); err != nil {
+	// A budget this CR does not control is the user's; ApplyIf repeats the
+	// check on the object it reads, so a concurrent create is safe too.
+	existing := &policyv1.PodDisruptionBudget{}
+	switch err := r.client.Get(ctx, client.ObjectKeyFromObject(pdb), existing); {
+	case k8serrors.IsNotFound(err):
+	case err != nil:
+		return errors.Wrap(err, "get clustersync pdb")
+	case !metav1.IsControlledBy(existing, cr):
+		logf.FromContext(ctx).Info("PodDisruptionBudget is not owned by this ClusterSync, leaving it untouched",
+			"pdb", pdb.Name)
+		return nil
+	}
+
+	ours := func(obj client.Object) bool { return metav1.IsControlledBy(obj, cr) }
+	if _, err := util.ApplyIf(ctx, r.client, pdb, ours); err != nil {
 		return errors.Wrap(err, "apply clustersync pdb")
 	}
 	return nil

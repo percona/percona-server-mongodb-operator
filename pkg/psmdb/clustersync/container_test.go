@@ -43,23 +43,28 @@ func TestContainerProbes(t *testing.T) {
 	}{
 		"defaults when probes unset": {
 			cluster:       targetCluster("1.24.0"),
-			wantLiveness:  livenessProbe(),
-			wantReadiness: readinessProbe(),
+			wantLiveness:  livenessProbe(MetricsPath),
+			wantReadiness: readinessProbe(MetricsPath),
 		},
 		"newer crVersion keeps the defaults": {
 			cluster:       targetCluster("1.25.0"),
-			wantLiveness:  livenessProbe(),
-			wantReadiness: readinessProbe(),
+			wantLiveness:  livenessProbe(MetricsPath),
+			wantReadiness: readinessProbe(MetricsPath),
 		},
-		"older crVersion gets no probes": {
-			cluster: targetCluster("1.23.0"),
+		"older crVersion keeps the 1.23 /status probes": {
+			cluster:       targetCluster("1.23.0"),
+			wantLiveness:  livenessProbe(StatusPath),
+			wantReadiness: readinessProbe(StatusPath),
 		},
-		"nil cluster gets no probes": {},
+		"nil cluster keeps the 1.23 /status probes": {
+			wantLiveness:  livenessProbe(StatusPath),
+			wantReadiness: readinessProbe(StatusPath),
+		},
 		"liveness override applies, readiness still default": {
 			cluster:       targetCluster("1.24.0"),
 			spec:          api.PerconaServerMongoDBClusterSyncSpec{LivenessProbe: customLiveness},
 			wantLiveness:  customLiveness,
-			wantReadiness: readinessProbe(),
+			wantReadiness: readinessProbe(MetricsPath),
 		},
 		"both overrides apply": {
 			cluster: targetCluster("1.24.0"),
@@ -134,12 +139,17 @@ func TestContainerEnv(t *testing.T) {
 		spec api.PerconaServerMongoDBClusterSyncSpec
 		want []corev1.EnvVar
 	}{
-		"user override of a managed variable wins by coming last": {
+		"reserved variables cannot be overridden through spec.env": {
 			spec: api.PerconaServerMongoDBClusterSyncSpec{
-				Env: []corev1.EnvVar{{Name: "PCSM_GROUP_NAME", Value: "custom-group"}},
+				Env: []corev1.EnvVar{
+					{Name: "PCSM_GROUP_NAME", Value: "custom-group"},
+					{Name: "PCSM_SOURCE_URI", Value: "mongodb://evil"},
+					{Name: "PCSM_TARGET_URI", Value: "mongodb://evil"},
+					{Name: "PCSM_LOG_LEVEL", Value: "debug"},
+				},
 			},
 			want: append(append([]corev1.EnvVar{}, managed...),
-				corev1.EnvVar{Name: "PCSM_GROUP_NAME", Value: "custom-group"},
+				corev1.EnvVar{Name: "PCSM_LOG_LEVEL", Value: "debug"},
 			),
 		},
 		"defaults: managed URIs and the per-CR group name": {
@@ -200,6 +210,35 @@ func TestContainerEnv(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			c := Container(syncCR(tc.spec), targetCluster("1.24.0"))
 			assert.Equal(t, tc.want, c.Env)
+		})
+	}
+}
+
+func TestContainerGroupNameVersionGate(t *testing.T) {
+	groupName := func(c corev1.Container) string {
+		for _, e := range c.Env {
+			if e.Name == "PCSM_GROUP_NAME" {
+				return e.Value
+			}
+		}
+		return ""
+	}
+
+	tests := map[string]struct {
+		cluster *api.PerconaServerMongoDB
+		size    int32
+		want    string
+	}{
+		"1.24 single instance gets the group name": {cluster: targetCluster("1.24.0"), size: 1, want: "ns-mysync"},
+		"1.23 single instance keeps the 1.23 env":  {cluster: targetCluster("1.23.0"), size: 1},
+		"nil cluster keeps the 1.23 env":           {size: 1},
+		"1.23 HA group still needs a lease":        {cluster: targetCluster("1.23.0"), size: 3, want: "ns-mysync"},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: tc.size})
+			assert.Equal(t, tc.want, groupName(Container(cr, tc.cluster)))
 		})
 	}
 }

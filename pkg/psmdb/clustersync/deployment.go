@@ -19,6 +19,7 @@ const (
 	HTTPPortName       = "pcsm-http"
 	HTTPPort     int32 = 2242
 	MetricsPath        = "/metrics"
+	StatusPath         = "/status"
 
 	URISecretSourceKey = "source-uri"
 	URISecretTargetKey = "target-uri"

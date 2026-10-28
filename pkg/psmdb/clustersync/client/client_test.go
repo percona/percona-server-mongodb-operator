@@ -363,16 +363,49 @@ func TestClient_RoutesToActiveInstance(t *testing.T) {
 			wantPods:   []string{pod2, pod0},
 			wantActive: pod0,
 		},
-		"a real failure on the active instance is never retried elsewhere": {
+		"a transport failure on a write verb is never retried elsewhere": {
 			byPod: map[string]execResult{
 				pod0: {stderr: []byte("connection refused"), err: stderrors.New("exit status 1")},
+				pod1: activeResult(),
+				pod2: activeResult(),
+			},
+			call:     pause,
+			wantPods: []string{pod0},
+			// The exec may never have reached PCSM, so pod0 is no
+			// evidence of who holds the lease.
+			wantActive: "",
+			wantErrMsg: "exec pcsm pause on pcsm-0: connection refused: exit status 1",
+		},
+		"a failure PCSM itself reported caches the instance that answered": {
+			byPod: map[string]execResult{
+				pod0: {stdout: []byte(`{"state":"failed","error":"sync is already running"}`), err: stderrors.New("exit status 1")},
 				pod1: activeResult(),
 				pod2: activeResult(),
 			},
 			call:       pause,
 			wantPods:   []string{pod0},
 			wantActive: pod0,
-			wantErrMsg: "exec pcsm pause on pcsm-0: connection refused: exit status 1",
+			wantErrMsg: "exec pcsm pause on pcsm-0: : exit status 1",
+		},
+		"status skips a transport failure and finds the active instance": {
+			byPod: map[string]execResult{
+				pod0: {stderr: []byte("container not running"), err: stderrors.New("exit status 126")},
+				pod1: activeResult(),
+				pod2: standbyResult(pod1),
+			},
+			call:       status,
+			wantPods:   []string{pod0, pod1},
+			wantActive: pod1,
+		},
+		"status on an unreachable group surfaces the transport error": {
+			byPod: map[string]execResult{
+				pod0: {stderr: []byte("container not running"), err: stderrors.New("exit status 126")},
+				pod1: {stderr: []byte("container not running"), err: stderrors.New("exit status 126")},
+				pod2: {stderr: []byte("container not running"), err: stderrors.New("exit status 126")},
+			},
+			call:       status,
+			wantPods:   []string{pod0, pod1, pod2},
+			wantErrMsg: "exec pcsm status on pcsm-0: container not running: exit status 126",
 		},
 		"status is routed the same way as the write verbs": {
 			byPod:      map[string]execResult{pod0: standbyResult(pod1), pod1: activeResult(), pod2: standbyResult(pod1)},
@@ -460,12 +493,34 @@ func TestNotActive(t *testing.T) {
 		"failed state is a real state, not a routing problem": {
 			stdout: `{"state":"failed","error":"source unreachable"}`,
 		},
+		"a decoded body outranks the substring fallback": {
+			stdout: `{"state":"failed","error":"collection myApp.not_active is missing"}`,
+		},
 		"empty output": {},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tc.want, notActive([]byte(tc.stdout), []byte(tc.stderr)))
+		})
+	}
+}
+
+func TestAnswered(t *testing.T) {
+	tests := map[string]struct {
+		stdout string
+		want   bool
+	}{
+		"status payload":       {stdout: `{"state":"running","role":"ACTIVE"}`, want: true},
+		"error payload":        {stdout: `{"ok":false,"error":"not_active"}`, want: true},
+		"empty output":         {},
+		"plain text":           {stdout: "Error: connection refused"},
+		"json without a reply": {stdout: `{"role":"STANDBY"}`},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, answered([]byte(tc.stdout)))
 		})
 	}
 }

@@ -21,7 +21,7 @@ func Container(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServ
 			ContainerPort: HTTPPort,
 			Protocol:      corev1.ProtocolTCP,
 		}},
-		Env:             pcsmEnv(cr),
+		Env:             pcsmEnv(cr, cluster),
 		Resources:       cr.Spec.Resources,
 		SecurityContext: cr.Spec.ContainerSecurityContext,
 		LivenessProbe:   probeOrDefault(cluster, cr.Spec.LivenessProbe, livenessProbe),
@@ -29,15 +29,39 @@ func Container(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServ
 	}
 }
 
-func pcsmEnv(cr *api.PerconaServerMongoDBClusterSync) []corev1.EnvVar {
+// ReservedEnv holds the operator-managed vars. A spec.env duplicate would
+// win over ours, so entries using these names are dropped.
+var ReservedEnv = map[string]struct{}{
+	"PCSM_SOURCE_URI": {},
+	"PCSM_TARGET_URI": {},
+	"PCSM_GROUP_NAME": {},
+}
+
+func pcsmEnv(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB) []corev1.EnvVar {
 	secretName := URISecretName(cr)
 	env := []corev1.EnvVar{
 		{Name: "PCSM_SOURCE_URI", ValueFrom: uriEnvSource(secretName, URISecretSourceKey)},
 		{Name: "PCSM_TARGET_URI", ValueFrom: uriEnvSource(secretName, URISecretTargetKey)},
-		{Name: "PCSM_GROUP_NAME", Value: GroupName(cr)},
 	}
-	env = append(env, cr.Spec.Env...)
+	if groupNameEnabled(cr, cluster) {
+		env = append(env, corev1.EnvVar{Name: "PCSM_GROUP_NAME", Value: GroupName(cr)})
+	}
+	for _, e := range cr.Spec.Env {
+		if _, ok := ReservedEnv[e.Name]; ok {
+			continue
+		}
+		env = append(env, e)
+	}
 	return env
+}
+
+// groupNameEnabled withholds the group name from pre-1.24 single instances:
+// adding it on an operator upgrade would restart the only replicating one.
+func groupNameEnabled(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB) bool {
+	if Size(cr) > 1 {
+		return true
+	}
+	return cluster != nil && cluster.CompareVersion("1.24.0") >= 0
 }
 
 // GroupName scopes PCSM's leader election to this CR. PCSM defaults to
@@ -66,14 +90,20 @@ func pcsmArgs(cr *api.PerconaServerMongoDBClusterSync) []string {
 	return args
 }
 
-func probeOrDefault(cluster *api.PerconaServerMongoDB, override *corev1.Probe, def func() *corev1.Probe) *corev1.Probe {
+func probeOrDefault(cluster *api.PerconaServerMongoDB, override *corev1.Probe, def func(path string) *corev1.Probe) *corev1.Probe {
 	if override != nil {
 		return override.DeepCopy()
 	}
+	return def(probePath(cluster))
+}
+
+// probePath keeps pre-1.24 deployments on the /status probes they were
+// created with; HA moved to /metrics because a standby refuses /status.
+func probePath(cluster *api.PerconaServerMongoDB) string {
 	if cluster == nil || cluster.CompareVersion("1.24.0") < 0 {
-		return nil
+		return StatusPath
 	}
-	return def()
+	return MetricsPath
 }
 
 // loopbackProbe builds an exec probe that curls path on the container's
@@ -96,10 +126,10 @@ func loopbackProbe(path string, timeoutSeconds int32) corev1.ProbeHandler {
 	}
 }
 
-func livenessProbe() *corev1.Probe {
+func livenessProbe(path string) *corev1.Probe {
 	const timeoutSeconds int32 = 5
 	return &corev1.Probe{
-		ProbeHandler:        loopbackProbe(MetricsPath, timeoutSeconds),
+		ProbeHandler:        loopbackProbe(path, timeoutSeconds),
 		InitialDelaySeconds: 30,
 		PeriodSeconds:       10,
 		TimeoutSeconds:      timeoutSeconds,
@@ -107,10 +137,10 @@ func livenessProbe() *corev1.Probe {
 	}
 }
 
-func readinessProbe() *corev1.Probe {
+func readinessProbe(path string) *corev1.Probe {
 	const timeoutSeconds int32 = 5
 	return &corev1.Probe{
-		ProbeHandler:        loopbackProbe(MetricsPath, timeoutSeconds),
+		ProbeHandler:        loopbackProbe(path, timeoutSeconds),
 		InitialDelaySeconds: 5,
 		PeriodSeconds:       10,
 		TimeoutSeconds:      timeoutSeconds,
