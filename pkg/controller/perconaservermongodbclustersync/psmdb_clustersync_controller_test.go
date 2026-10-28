@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/ptr"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -454,7 +453,7 @@ func TestReconcilePDB(t *testing.T) {
 				existing := clustersync.PodDisruptionBudget(haCR)
 				if tc.foreign {
 					existing.Spec.MaxUnavailable = nil
-					existing.Spec.MinAvailable = ptr.To(intstr.FromInt32(2))
+					existing.Spec.MinAvailable = new(intstr.FromInt32(2))
 				} else {
 					require.NoError(t, controllerutil.SetControllerReference(cr, existing, scheme))
 				}
@@ -481,7 +480,7 @@ func TestReconcilePDB(t *testing.T) {
 			require.NoError(t, err)
 			if tc.foreign {
 				assert.Empty(t, pdb.OwnerReferences)
-				assert.Equal(t, ptr.To(intstr.FromInt32(2)), pdb.Spec.MinAvailable,
+				assert.Equal(t, new(intstr.FromInt32(2)), pdb.Spec.MinAvailable,
 					"a budget owned by someone else must keep its own spec")
 				return
 			}
