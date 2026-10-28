@@ -105,13 +105,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) validateExternalBackup(
 		return nil
 	}
 
-	for _, rs := range cluster.GetAllReplsets() {
-		if bcp.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName()) == nil {
-			return errors.Errorf("no snapshot info found for replset %s", rs.Name)
-		}
-	}
-
 	if len(bcp.Status.Snapshots) > 0 {
+		for _, rs := range cluster.GetAllReplsets() {
+			if bcp.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName()) == nil {
+				return errors.Errorf("no snapshot info found for replset %s", rs.Name)
+			}
+		}
 		if err := r.validateSnapshotExistence(ctx, bcp); err != nil {
 			return errors.Wrap(err, "validate snapshot existence")
 		}
