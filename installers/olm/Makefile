@@ -13,8 +13,11 @@ NAME ?= percona-server-mongodb-operator
 BUNDLE_TYPES := community certified
 
 SED := $(shell which gsed || which sed)
-VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
-CSV_VERSION ?= $(shell printf '%s\n' '$(VERSION)' | $(SED) -nE 's/.*([0-9]+)[.-]([0-9]+)[.-]([0-9]+).*/\1.\2.\3/p')
+parse_semver = $(shell printf '%s\n' '$(1)' | $(SED) -nE 's/.*([0-9]+)[.-]([0-9]+)[.-]([0-9]+).*/\1.\2.\3/p')
+GIT_BRANCH_NAME := $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
+# The branch name when it carries a version (release-1.25.0), otherwise the operator's own version.
+VERSION ?= $(if $(call parse_semver,$(GIT_BRANCH_NAME)),$(GIT_BRANCH_NAME),$(shell cat ../../pkg/version/version.txt))
+CSV_VERSION ?= $(call parse_semver,$(VERSION))
 RELEASE_VERSIONS ?= ../../e2e-tests/release_versions
 
 CONFIRM_PUSH ?= 1

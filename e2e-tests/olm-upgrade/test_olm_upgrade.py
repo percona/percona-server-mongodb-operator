@@ -111,6 +111,8 @@ def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmUpgr
     OLM_BUNDLE_TYPE selects the dev catalog (community|certified, see installers/olm).
     OLM_FROM_CSV / OLM_TARGET_CHANNEL pin the path; by default it is the head of the
     newest previous channel -> the catalog's default channel.
+    The target must be OLM_TARGET_VERSION, which for a dev catalog defaults to
+    OPERATOR_VERSION (crVersion of deploy/cr.yaml), so a stale catalog fails fast.
     """
     if not olm_available():
         pytest.skip("OLM is not available on this cluster")
@@ -130,6 +132,14 @@ def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmUpgr
         for channel in manifest["status"]["channels"]
         if channel["name"] == target_channel
     )
+    expected = os.environ.get("OLM_TARGET_VERSION") or (
+        os.environ.get("OPERATOR_VERSION", "") if source.endswith("-dev") else ""
+    )
+    if expected:
+        assert _version(target_csv) == _version(expected), (
+            f"Catalog {source} upgrades to {target_csv}, but the version under test is "
+            f"{expected}. Rebuild the catalog (make deploy/<type>) or set OLM_TARGET_VERSION."
+        )
     from_csv = os.environ.get("OLM_FROM_CSV") or _default_from_csv(manifest, target_channel)
     from_channel = channel_of_csv(manifest, from_csv)
     assert _version(from_csv) < _version(target_csv), (

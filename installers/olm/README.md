@@ -44,7 +44,9 @@ Downloaded tools:
 
 ## Variables
 
-Most workflows only require `VERSION`.
+Most workflows only require `VERSION`. It defaults to the branch name when that
+carries a version (for example `release-1.25.0`), and otherwise to the operator
+version in `../../pkg/version/version.txt`.
 
 ```bash
 export VERSION=1.23.0
@@ -326,7 +328,7 @@ development catalogs. Deploy them first with `make deploy/<type>`, and point
 versions and all their patch releases.
 
 ```bash
-make deploy/community VERSION=1.24.0 CATALOG_PREVIOUS_MINORS=2
+make deploy/community CATALOG_PREVIOUS_MINORS=2
 make tests
 make tests/community
 make tests/certified
@@ -343,6 +345,10 @@ upgrade it checks that:
 - the operator logs and the namespace's Warning events have no new errors;
 - the cluster stayed `ready`, and no DB pod was recreated or restarted;
 - the data written before the upgrade is readable, and new writes succeed.
+
+For a dev catalog, the test checks that the newest bundle is `OPERATOR_VERSION`,
+the `crVersion` in `deploy/cr.yaml`, and fails early when the catalog is stale.
+Set `OLM_TARGET_VERSION` to expect another version.
 
 Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
 starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`.
