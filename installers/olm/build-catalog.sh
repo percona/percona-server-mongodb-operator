@@ -11,6 +11,7 @@ CONTAINER="${CONTAINER:-docker}"
 CATALOG_PLATFORM="${CATALOG_PLATFORM:-linux/amd64,linux/arm64}"
 CATALOG_RENDER_PLATFORM="${CATALOG_RENDER_PLATFORM:-${CATALOG_PLATFORM%%,*}}"
 CATALOG_BUNDLE_LIMIT="${CATALOG_BUNDLE_LIMIT:-2}"
+CATALOG_PREVIOUS_MINORS="${CATALOG_PREVIOUS_MINORS:-}"
 CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
 CONFIRM_PUSH="${CONFIRM_PUSH:-1}"
 NAME="${NAME:-percona-server-mongodb-operator}"
@@ -185,7 +186,36 @@ find_previous_versions() {
 			$0 != current && !seen[$0]++ { print }
 		' |
 		sort -t. -k1,1n -k2,2n -k3,3n |
+		select_previous_versions
+}
+
+# Reads versions sorted ascending. With CATALOG_PREVIOUS_MINORS=N keeps every
+# version of the N newest minor lines (all their patches), otherwise the newest
+# CATALOG_BUNDLE_LIMIT versions.
+select_previous_versions() {
+	if [[ -z "$CATALOG_PREVIOUS_MINORS" ]]; then
 		tail -n "$CATALOG_BUNDLE_LIMIT"
+		return
+	fi
+
+	awk -F. -v minors="$CATALOG_PREVIOUS_MINORS" '
+		{ versions[NR] = $0; lines[NR] = $1 "." $2 }
+		END {
+			for (i = NR; i >= 1; i--) {
+				if (lines[i] != last) {
+					count++
+					last = lines[i]
+				}
+				if (count > minors) break
+				keep[i] = 1
+			}
+			for (i = 1; i <= NR; i++) if (keep[i]) print versions[i]
+		}
+	'
+}
+
+count_minor_lines() {
+	printf '%s\n' "$@" | cut -d. -f1,2 | sort -u | grep -c .
 }
 
 confirm_build() {
@@ -316,6 +346,8 @@ run_build() {
 	[[ -n "$BUNDLE_IMAGE_VERSION" ]] || die "BUNDLE_IMAGE_VERSION is required"
 	[[ "$CATALOG_BUNDLE_LIMIT" =~ ^[0-9]+$ ]] ||
 		die "CATALOG_BUNDLE_LIMIT must be a non-negative integer"
+	[[ -z "$CATALOG_PREVIOUS_MINORS" || "$CATALOG_PREVIOUS_MINORS" =~ ^[1-9][0-9]*$ ]] ||
+		die "CATALOG_PREVIOUS_MINORS must be a positive integer"
 
 	for command in curl tar jq yq opm "$CONTAINER"; do
 		require "$command"
@@ -337,8 +369,13 @@ run_build() {
 		[[ -n "$version" ]] && OLD_VERSIONS+=("$version")
 	done < <(find_previous_versions)
 
-	[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||
-		die "expected ${CATALOG_BUNDLE_LIMIT} previous versions, found ${#OLD_VERSIONS[@]}"
+	if [[ -n "$CATALOG_PREVIOUS_MINORS" ]]; then
+		[[ "$(count_minor_lines "${OLD_VERSIONS[@]}")" -eq "$CATALOG_PREVIOUS_MINORS" ]] ||
+			die "expected ${CATALOG_PREVIOUS_MINORS} previous minor lines, found: ${OLD_VERSIONS[*]}"
+	else
+		[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||
+			die "expected ${CATALOG_BUNDLE_LIMIT} previous versions, found ${#OLD_VERSIONS[@]}"
+	fi
 
 	confirm_build
 

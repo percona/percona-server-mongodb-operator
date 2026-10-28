@@ -81,7 +81,7 @@ echo "[olm] Starting CSVs: ${FROM_CSVS[*]}"
 MINORS="$(printf '%s\n' "${FROM_CSVS[@]}" | sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p' | sort -uV | xargs)"
 echo "[olm] Minor versions covered: ${MINORS}"
 [[ "$(wc -w <<<"$MINORS")" -ge 2 ]] ||
-	echo "[olm] WARNING: fewer than 2 previous minor versions in the catalog"
+	echo "[olm] WARNING: fewer than 2 previous minor versions in the catalog (build it with CATALOG_PREVIOUS_MINORS=2)"
 
 FAILED=()
 for csv in "${FROM_CSVS[@]}"; do

@@ -63,7 +63,8 @@ Useful optional variables:
 | `BUNDLE_PLATFORM` | Platform used when building current bundle images locally. | `linux/amd64` |
 | `BUNDLE_PACKAGE_CHANNEL` | Package channel used for the generated current bundle. | `stable` |
 | `CONFIRM_PUSH` | Ask for confirmation before pushing bundle and catalog images. Set to `0` for non-interactive runs. | `1` |
-| `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. | `2` |
+| `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. Ignored when `CATALOG_PREVIOUS_MINORS` is set. | `2` |
+| `CATALOG_PREVIOUS_MINORS` | Include every previous OperatorHub version of the newest N minor lines, all patches included, instead of a fixed number of versions. Empty by default. | `2` |
 | `CATALOG_PLATFORM` | Platform used when building previous OperatorHub bundle images and catalog images. | `linux/amd64` |
 | `CATALOG_BUILD_PUSH` | Build and push catalog images during deploy targets when enabled. | `1` |
 | `BUNDLE_SKIP_DIGEST_FAILURE` | Continue certified bundle generation when a non-required digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
@@ -161,6 +162,12 @@ docker.io/perconalab/percona-server-mongodb-operator:1.23.0-community-bundle
 docker.io/perconalab/percona-server-mongodb-operator:1.22.0-community-bundle-dev-catalog
 docker.io/perconalab/percona-server-mongodb-operator:1.21.2-community-bundle-dev-catalog
 ```
+
+To include whole minor lines instead, set `CATALOG_PREVIOUS_MINORS`. With
+`VERSION=1.24.0`, `CATALOG_PREVIOUS_MINORS=2` and previous GitHub versions
+`1.21.2`, `1.22.0`, `1.23.0` and `1.23.1`, the catalog gets `1.22.0`, `1.23.0`
+and `1.23.1`. The build stops when OperatorHub has fewer minor lines than
+requested.
 
 The certified catalog follows the same pattern:
 
@@ -314,9 +321,12 @@ Validation uses:
 
 `make tests` runs the `e2e-tests/olm-upgrade` pytest test against the deployed
 development catalogs. Deploy them first with `make deploy/<type>`, and point
-`kubectl` at the OpenShift cluster.
+`kubectl` at the OpenShift cluster. Build the catalog with
+`CATALOG_PREVIOUS_MINORS=2` to test upgrades from the two previous minor
+versions and all their patch releases.
 
 ```bash
+make deploy/community VERSION=1.24.0 CATALOG_PREVIOUS_MINORS=2
 make tests
 make tests/community
 make tests/certified
