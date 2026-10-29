@@ -1875,6 +1875,11 @@ func (in *PerconaServerMongoDBClusterSyncSpec) DeepCopyInto(out *PerconaServerMo
 		*out = new(corev1.Probe)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.PodDisruptionBudget != nil {
+		in, out := &in.PodDisruptionBudget, &out.PodDisruptionBudget
+		*out = new(PodDisruptionBudgetSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	out.Source = in.Source
 	if in.ExcludeNamespaces != nil {
 		in, out := &in.ExcludeNamespaces, &out.ExcludeNamespaces

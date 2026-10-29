@@ -10,6 +10,12 @@ spec:
   #   paused    - pause an active replication
   #   finalized - stop replication and tear down owned resources
   mode: running
+  # size is the number of PCSM instances. Above 1 they form an
+  # active/standby group: one instance replicates while the others wait on
+  # a lease in the target cluster and take over within seconds if it dies.
+  size: 1
+  # podDisruptionBudget:
+  #   maxUnavailable: 1
   source:
     uri: mongodb://source-cluster-mongos.source-namespace.svc.cluster.local:27017
     credentialsSecret: my-cluster-sync-source
