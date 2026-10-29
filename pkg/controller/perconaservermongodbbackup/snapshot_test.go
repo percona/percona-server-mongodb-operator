@@ -425,9 +425,9 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			check: func(t *testing.T, status api.PerconaServerMongoDBBackupStatus) {
 				assert.Empty(t, status.Error)
 				assert.Empty(t, status.Snapshots)
-				require.NotNil(t, status.CompletedAt)
-				assert.Equal(t, int64(1234567900), status.CompletedAt.Unix())
-				assert.Equal(t, status.CompletedAt, status.LastTransition)
+				assert.Nil(t, status.CompletedAt)
+				require.NotNil(t, status.LastTransition)
+				assert.Equal(t, int64(1234567900), status.LastTransition.Unix())
 			},
 		},
 		"metadata not found leaves status unchanged": {

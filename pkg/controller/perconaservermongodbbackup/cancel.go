@@ -59,8 +59,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileCancellation(ctx context.
 func (r *ReconcilePerconaServerMongoDBBackup) cancelBackup(ctx context.Context, cr *api.PerconaServerMongoDBBackup) error {
 	if cr.Status.PBMname == "" {
 		cr.Status.State = api.BackupStateCanceled
-		cr.Status.CompletedAt = &metav1.Time{Time: time.Now().UTC()}
-		cr.Status.LastTransition = cr.Status.CompletedAt.DeepCopy()
+		cr.Status.LastTransition = &metav1.Time{Time: time.Now().UTC()}
 		return nil
 	}
 
@@ -76,8 +75,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) cancelBackup(ctx context.Context, 
 			}
 			cr.Status.State = api.BackupStateError
 			cr.Status.Error = "cluster not found during backup cancellation"
-			cr.Status.CompletedAt = &metav1.Time{Time: time.Now().UTC()}
-			cr.Status.LastTransition = cr.Status.CompletedAt.DeepCopy()
+			cr.Status.LastTransition = &metav1.Time{Time: time.Now().UTC()}
 			return nil
 		}
 		return errors.Wrap(err, "get cluster for backup cancellation")
@@ -186,8 +184,7 @@ func checkCancellationTimeout(ctx context.Context, cl client.Client, cluster *ap
 	if meta != nil {
 		status.Error = "PBM backup agent stopped responding before cancellation could finish"
 	}
-	status.CompletedAt = &metav1.Time{Time: time.Now().UTC()}
-	status.LastTransition = status.CompletedAt.DeepCopy()
+	status.LastTransition = &metav1.Time{Time: time.Now().UTC()}
 	return nil
 }
 

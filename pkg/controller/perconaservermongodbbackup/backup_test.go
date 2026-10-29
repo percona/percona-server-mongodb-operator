@@ -105,7 +105,6 @@ func TestBackup_Status(t *testing.T) {
 			expectedStatus: api.PerconaServerMongoDBBackupStatus{
 				State:          api.BackupStateCanceled,
 				Type:           defs.LogicalBackup,
-				CompletedAt:    &metav1.Time{Time: time.Unix(1234567900, 0)},
 				LastTransition: &metav1.Time{Time: time.Unix(1234567900, 0)},
 				PBMPods:        map[string]string{"rs0": "node1"},
 			},
@@ -433,6 +432,8 @@ func TestBackup_Status(t *testing.T) {
 			if tt.expectedStatus.CompletedAt != nil {
 				assert.NotNil(t, status.CompletedAt)
 				assert.Equal(t, tt.expectedStatus.CompletedAt.Time, status.CompletedAt.Time)
+			} else {
+				assert.Nil(t, status.CompletedAt)
 			}
 			if tt.expectedStatus.LastWriteAt != nil {
 				assert.NotNil(t, status.LastWriteAt)

@@ -71,9 +71,9 @@ func TestCancelBackupUnstarted(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, api.BackupStateCanceled, cr.Status.State)
-	require.NotNil(t, cr.Status.CompletedAt)
-	assert.False(t, cr.Status.CompletedAt.IsZero())
-	assert.Equal(t, cr.Status.CompletedAt, cr.Status.LastTransition)
+	assert.Nil(t, cr.Status.CompletedAt)
+	require.NotNil(t, cr.Status.LastTransition)
+	assert.False(t, cr.Status.LastTransition.IsZero())
 }
 
 func TestCheckCancellationTimeout(t *testing.T) {
@@ -158,14 +158,13 @@ func TestCheckCancellationTimeout(t *testing.T) {
 				require.NoError(t, err)
 			}
 			assert.Equal(t, tt.wantStatusErr, status.Error)
+			assert.Nil(t, status.CompletedAt)
+			require.NotNil(t, status.LastTransition)
 			if tt.wantStatusErr != "" {
 				assert.Equal(t, api.BackupStateError, status.State)
-				require.NotNil(t, status.CompletedAt)
-				assert.Equal(t, status.CompletedAt, status.LastTransition)
+				assert.False(t, status.LastTransition.IsZero())
 			} else {
 				assert.Equal(t, api.BackupStateCanceling, status.State)
-				assert.Nil(t, status.CompletedAt)
-				require.NotNil(t, status.LastTransition)
 				if tt.lastTransition != nil {
 					assert.Equal(t, tt.lastTransition, status.LastTransition)
 				}

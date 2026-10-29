@@ -218,7 +218,6 @@ func (b *snapshotBackups) statusFromMeta(ctx context.Context, cl client.Client, 
 		if done {
 			status.State = api.BackupStateCanceled
 			status.Snapshots = nil
-			status.CompletedAt = &metav1.Time{Time: time.Unix(meta.LastTransitionTS, 0)}
 		}
 
 	case defs.StatusError:

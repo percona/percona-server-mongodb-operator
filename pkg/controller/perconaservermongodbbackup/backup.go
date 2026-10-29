@@ -266,9 +266,6 @@ func (b *managedBackups) statusFromMeta(ctx context.Context, cluster *api.Percon
 	case defs.StatusCancelled:
 		status.State = api.BackupStateCanceled
 		status.Error = ""
-		status.CompletedAt = &metav1.Time{
-			Time: time.Unix(meta.LastTransitionTS, 0),
-		}
 	case defs.StatusError:
 		status.State = api.BackupStateError
 		status.Error = fmt.Sprintf("%v", meta.Error())
