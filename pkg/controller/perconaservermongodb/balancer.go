@@ -140,10 +140,6 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
-	// The balancer is only reachable through mongos. While a replset is being converted to a
-	// sharded cluster the mongos statefulset already exists but sits at zero replicas, so
-	// dialing it fails and takes the whole reconcile down with it. enableBalancerIfNeeded
-	// makes the same check before connecting.
 	if msSts.Status.ReadyReplicas == 0 {
 		log.V(1).Info("no mongos pods are ready, skipping balancer disable", "statefulset", msSts.Name)
 		return nil
