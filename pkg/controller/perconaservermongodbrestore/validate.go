@@ -28,7 +28,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 	}
 
 	if bcp.Spec.Type == defs.ExternalBackup {
-		if err := r.validateExternalBackup(ctx, bcp); err != nil {
+		if err := r.validateExternalBackup(ctx, cluster, bcp); err != nil {
 			return errors.Wrap(err, "validate external backup")
 		}
 		return nil
@@ -98,6 +98,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 
 func (r *ReconcilePerconaServerMongoDBRestore) validateExternalBackup(
 	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
 	bcp *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
 	if bcp.Spec.Type != defs.ExternalBackup {
@@ -105,6 +106,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) validateExternalBackup(
 	}
 
 	if len(bcp.Status.Snapshots) > 0 {
+		for _, rs := range cluster.GetAllReplsets() {
+			if bcp.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName()) == nil {
+				return errors.Errorf("no snapshot info found for replset %s", rs.Name)
+			}
+		}
 		if err := r.validateSnapshotExistence(ctx, bcp); err != nil {
 			return errors.Wrap(err, "validate snapshot existence")
 		}
