@@ -3,6 +3,8 @@ package naming
 import "testing"
 
 func TestMongodContainerName(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		component string
 		expected  string

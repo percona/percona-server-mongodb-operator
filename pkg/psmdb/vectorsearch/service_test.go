@@ -11,6 +11,8 @@ import (
 )
 
 func TestService(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	rs := newTestRS()
 
@@ -56,6 +58,8 @@ func TestService(t *testing.T) {
 }
 
 func TestService_NameDerivesFromClusterAndReplset(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Name = "my-cluster"
 	cr.Namespace = "my-ns"

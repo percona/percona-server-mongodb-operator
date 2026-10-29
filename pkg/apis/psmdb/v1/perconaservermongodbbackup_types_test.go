@@ -9,6 +9,8 @@ import (
 )
 
 func TestPBMBackupType(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		specType defs.BackupType
 		expected defs.BackupType
