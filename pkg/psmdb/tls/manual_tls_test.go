@@ -13,6 +13,8 @@ import (
 )
 
 func TestIssueCA(t *testing.T) {
+	t.Parallel()
+
 	caCert, caKey, err := IssueCA()
 	require.NoError(t, err)
 	require.NotEmpty(t, caCert)
@@ -39,6 +41,8 @@ func TestIssueCA(t *testing.T) {
 }
 
 func TestIssueWithCA(t *testing.T) {
+	t.Parallel()
+
 	caCert, caKey, err := IssueCA()
 	require.NoError(t, err)
 
@@ -78,6 +82,8 @@ func TestIssueWithCA(t *testing.T) {
 }
 
 func TestIssueWithCA_ReSigningSameCA(t *testing.T) {
+	t.Parallel()
+
 	caCert, caKey, err := IssueCA()
 	require.NoError(t, err)
 
@@ -126,6 +132,8 @@ func TestIssueWithCA_ReSigningSameCA(t *testing.T) {
 }
 
 func TestIssueWithCA_InvalidInputs(t *testing.T) {
+	t.Parallel()
+
 	caCert, caKey, err := IssueCA()
 	require.NoError(t, err)
 
@@ -146,6 +154,8 @@ func TestIssueWithCA_InvalidInputs(t *testing.T) {
 }
 
 func TestGetDNSNamesFromCert(t *testing.T) {
+	t.Parallel()
+
 	hosts := []string{"localhost", "mongo-0.example.com", "*.mongo.ns"}
 
 	caCert, caKey, err := IssueCA()
@@ -163,6 +173,8 @@ func TestGetDNSNamesFromCert(t *testing.T) {
 }
 
 func TestGetDNSNamesFromCert_InvalidInput(t *testing.T) {
+	t.Parallel()
+
 	_, err := GetDNSNamesFromCert([]byte("not-a-cert"))
 	assert.Error(t, err)
 
@@ -171,6 +183,8 @@ func TestGetDNSNamesFromCert_InvalidInput(t *testing.T) {
 }
 
 func TestIssueBackwardCompat(t *testing.T) {
+	t.Parallel()
+
 	hosts := []string{"localhost", "mongo-0.example.com"}
 
 	caCert, tlsCert, tlsKey, err := Issue(hosts)
@@ -204,6 +218,8 @@ func TestIssueBackwardCompat(t *testing.T) {
 }
 
 func TestManualCASecretName(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name: "my-cluster",
 	}

@@ -53,6 +53,8 @@ func leaseFor(cr *psmdbv1.PerconaServerMongoDBClusterSync, holder string) *coord
 }
 
 func TestReleaseClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		cr           *psmdbv1.PerconaServerMongoDBClusterSync
 		seedHolder   string
@@ -111,6 +113,8 @@ func TestReleaseClusterSyncLease(t *testing.T) {
 }
 
 func TestAcquireClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		seedLease   bool
 		seedHolder  string
@@ -173,6 +177,8 @@ func TestAcquireClusterSyncLease(t *testing.T) {
 }
 
 func TestEnsureReleaseLockFinalizer(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		existing []string
 		wantAdd  bool
@@ -205,6 +211,8 @@ func TestEnsureReleaseLockFinalizer(t *testing.T) {
 }
 
 func TestClusterBusyByBackupOrRestore(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "tgt"
@@ -294,6 +302,8 @@ func TestClusterBusyByBackupOrRestore(t *testing.T) {
 }
 
 func TestWriteAction(t *testing.T) {
+	t.Parallel()
+
 	assert.True(t, writeAction(actionStart))
 	assert.True(t, writeAction(actionResume))
 	assert.False(t, writeAction(actionPause))
@@ -302,6 +312,8 @@ func TestWriteAction(t *testing.T) {
 }
 
 func TestHandleDeletion(t *testing.T) {
+	t.Parallel()
+
 	t.Run("release-lock finalizer absent: noop, no lease touched", func(t *testing.T) {
 		// "other.example/keep" is just a stand-in: the API server
 		// refuses a deletionTimestamp without any finalizers, but

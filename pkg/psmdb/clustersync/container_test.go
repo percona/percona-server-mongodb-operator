@@ -23,6 +23,8 @@ import (
 // Kubernetes is asking. Which instance holds the lease is reported in
 // status.activeInstance instead.
 func TestContainerProbes(t *testing.T) {
+	t.Parallel()
+
 	customLiveness := &corev1.Probe{
 		Exec:          &corev1.ExecAction{Command: []string{"sh", "-c", "true"}},
 		PeriodSeconds: 7,
@@ -125,6 +127,8 @@ func TestContainerProbes(t *testing.T) {
 }
 
 func TestContainerEnv(t *testing.T) {
+	t.Parallel()
+
 	const (
 		crName = "mysync"
 		crNS   = "ns"
@@ -244,6 +248,8 @@ func TestContainerGroupNameVersionGate(t *testing.T) {
 }
 
 func TestContainerArgs(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		pcsm api.ClusterSyncPCSMConfig
 		want []string
