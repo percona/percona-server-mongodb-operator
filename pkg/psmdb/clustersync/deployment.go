@@ -35,7 +35,7 @@ const (
 	defaultTopologyKey = "kubernetes.io/hostname"
 )
 
-var secretFileMode int32 = 0o444
+var secretFileMode int32 = 292
 
 type TLS struct {
 	SecretName string

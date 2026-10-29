@@ -35,7 +35,7 @@ func NewStatefulSet(name, namespace string) *appsv1.StatefulSet {
 	}
 }
 
-var secretFileMode int32 = 0o440
+var secretFileMode int32 = 288
 
 // tmpVolumeName and tmpMountPath define the writable /tmp emptyDir that is
 // injected into containers running with readOnlyRootFilesystem enabled. mongod
