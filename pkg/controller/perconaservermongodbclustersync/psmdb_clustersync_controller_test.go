@@ -308,7 +308,7 @@ func TestReconcileModeInheritedFinalized(t *testing.T) {
 
 			f := &fakePCSM{statusResp: tc.observed}
 
-			err := r.reconcileMode(context.Background(), cr, f, 1)
+			err := r.reconcileMode(t.Context(), cr, f, 1)
 			require.NoError(t, err)
 
 			if tc.wantStarted {
@@ -995,7 +995,7 @@ func TestTargetTLS(t *testing.T) {
 			}
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: b.Build(), scheme: s}
 
-			got, err := r.targetTLS(context.Background(), tc.target)
+			got, err := r.targetTLS(t.Context(), tc.target)
 			if tc.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.wantErr)
@@ -1139,62 +1139,58 @@ func TestReconcileDeploymentVersionGate(t *testing.T) {
 	}
 }
 
-func TestTargetTLSHashTracksRotation(t *testing.T) {
-	target := &psmdbv1.PerconaServerMongoDB{
-		Name: "tgt", Namespace: "ns",
-		Spec: psmdbv1.PerconaServerMongoDBSpec{
-			CRVersion: version.Version(),
-			Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+func TestTargetTLSHashChanges(t *testing.T) {
+	tests := map[string]struct {
+		tls    *psmdbv1.TLSSpec
+		mutate func(t *testing.T, cl k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret)
+		reason string
+	}{
+		"rotated certificate": {
+			mutate: func(t *testing.T, cl k8sclient.Client, _ *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret) {
+				secret.Data["tls.crt"] = []byte("ROTATED")
+				require.NoError(t, cl.Update(t.Context(), secret))
+			},
+			reason: "rotated certificate must change the pod template hash",
+		},
+		"certificate verification toggle": {
+			tls: &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire, AllowInvalidCertificates: new(true)},
+			mutate: func(_ *testing.T, _ k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, _ *corev1.Secret) {
+				target.Spec.TLS.AllowInvalidCertificates = new(false)
+			},
+			reason: "certificate verification change must change the pod template hash",
 		},
 	}
-	secret := &corev1.Secret{
-		Name: "tgt-ssl", Namespace: "ns",
-		Data: map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT"), "tls.key": []byte("KEY")},
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			target := &psmdbv1.PerconaServerMongoDB{
+				Name: "tgt", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       tc.tls,
+					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+				},
+			}
+			secret := &corev1.Secret{
+				Name: "tgt-ssl", Namespace: "ns",
+				Data: map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT"), "tls.key": []byte("KEY")},
+			}
+
+			s := clusterSyncScheme(t)
+			require.NoError(t, corev1.AddToScheme(s))
+			cl := fake.NewClientBuilder().WithScheme(s).WithObjects(secret).Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
+
+			before, err := r.targetTLS(t.Context(), target)
+			require.NoError(t, err)
+
+			tc.mutate(t, cl, target, secret)
+
+			after, err := r.targetTLS(t.Context(), target)
+			require.NoError(t, err)
+			assert.NotEqual(t, before.Hash, after.Hash, tc.reason)
+		})
 	}
-
-	s := clusterSyncScheme(t)
-	require.NoError(t, corev1.AddToScheme(s))
-	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(secret).Build()
-	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
-
-	before, err := r.targetTLS(context.Background(), target)
-	require.NoError(t, err)
-
-	secret.Data["tls.crt"] = []byte("ROTATED")
-	require.NoError(t, cl.Update(context.Background(), secret))
-
-	after, err := r.targetTLS(context.Background(), target)
-	require.NoError(t, err)
-	assert.NotEqual(t, before.Hash, after.Hash, "rotated certificate must change the pod template hash")
-}
-
-func TestTargetTLSHashTracksCertificateVerification(t *testing.T) {
-	target := &psmdbv1.PerconaServerMongoDB{
-		Name: "tgt", Namespace: "ns",
-		Spec: psmdbv1.PerconaServerMongoDBSpec{
-			CRVersion: version.Version(),
-			TLS:       &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire, AllowInvalidCertificates: new(true)},
-			Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
-		},
-	}
-	secret := &corev1.Secret{
-		Name: "tgt-ssl", Namespace: "ns",
-		Data: map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT"), "tls.key": []byte("KEY")},
-	}
-
-	s := clusterSyncScheme(t)
-	require.NoError(t, corev1.AddToScheme(s))
-	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(secret).Build()
-	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
-
-	before, err := r.targetTLS(context.Background(), target)
-	require.NoError(t, err)
-
-	target.Spec.TLS.AllowInvalidCertificates = new(false)
-
-	after, err := r.targetTLS(context.Background(), target)
-	require.NoError(t, err)
-	assert.NotEqual(t, before.Hash, after.Hash, "certificate verification change must change the pod template hash")
 }
 
 // TestReconcileDeploymentApplyFailure checks the write error is wrapped
