@@ -738,6 +738,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 		}
 		rs.Arbiter.Enabled = false
 		rs.NonVoting.Enabled = false
+		rs.Hidden.Enabled = false
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
