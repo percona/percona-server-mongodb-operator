@@ -12,6 +12,8 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +63,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		newTargetMongoClient: defaultTargetMongoClient,
 	}
 	r.newPCSMClientFor = func(cr *psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient {
-		return clustersyncclient.New(r.client, r.clientcmd, cr)
+		return clustersyncclient.New(r.client, r.clientcmd, cr).WithActivePod(cr.Status.ActiveInstance)
 	}
 	return r, nil
 }
@@ -72,6 +74,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		For(&psmdbv1.PerconaServerMongoDBClusterSync{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Secret{}).
+		Owns(&policyv1.PodDisruptionBudget{}).
 		Complete(r)
 }
 
@@ -83,6 +86,7 @@ type pcsmClient interface {
 	Pause(ctx context.Context) error
 	Resume(ctx context.Context, fromFailure bool) error
 	Finalize(ctx context.Context) error
+	ActiveInstance() string
 }
 
 type ReconcilePerconaServerMongoDBClusterSync struct {
@@ -187,20 +191,30 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return r.requeueWithStatusError(ctx, cr, errors.Wrap(err, "target tls"))
 	}
 
-	if err := r.reconcileDeployment(ctx, cr, tlsConf); err != nil {
+	if err := r.reconcileDeployment(ctx, cr, target, tlsConf); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile deployment")
 	}
 
-	ready, err := r.deploymentReady(ctx, cr)
+	if err := r.reconcilePDB(ctx, cr); err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile pod disruption budget")
+	}
+
+	ready, err := r.readyReplicas(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "check deployment readiness")
 	}
-	if !ready {
+	if ready == 0 {
 		log.V(1).Info("PCSM deployment not ready yet", "name", clustersync.DeploymentName(cr))
+		newStatus := cr.Status.DeepCopy()
+		newStatus.Size = clustersync.Size(cr)
+		newStatus.ReadyReplicas = 0
+		if err := r.writeStatus(ctx, cr, *newStatus); err != nil {
+			return reconcile.Result{}, err
+		}
 		return reconcile.Result{RequeueAfter: requeueInterval}, nil
 	}
 
-	if err := r.reconcileMode(ctx, cr, r.newPCSMClientFor(cr)); err != nil {
+	if err := r.reconcileMode(ctx, cr, r.newPCSMClientFor(cr), ready); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mode")
 	}
 
@@ -375,7 +389,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) targetTLS(ctx context.Context
 	}, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, tls clustersync.TLS) error {
+func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, cluster *psmdbv1.PerconaServerMongoDB, tls clustersync.TLS) error {
 	dep := clustersync.Deployment(cr)
 	if err := r.client.Get(ctx, types.NamespacedName{Name: dep.Name, Namespace: dep.Namespace}, dep); client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get clustersync deployment")
@@ -386,7 +400,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx conte
 	}
 
 	dep.Labels = clustersync.Labels(cr)
-	dep.Spec = clustersync.DeploymentSpec(cr, clustersync.PodTemplateSpec(cr, tls))
+	dep.Spec = clustersync.DeploymentSpec(cr, clustersync.PodTemplateSpec(cr, cluster, tls))
 
 	if _, err := util.Apply(ctx, r.client, dep); err != nil {
 		return errors.Wrap(err, "apply clustersync deployment")
@@ -414,38 +428,87 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileURISecret(ctx contex
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDBClusterSync) deploymentReady(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (bool, error) {
+// readyReplicas reports how many PCSM instances are ready. A single ready
+// instance is enough to drive PCSM: in an HA group the others are
+// standbys, so waiting for all of them would let one sick standby freeze
+// a healthy sync. The shortfall is reported in status instead.
+func (r *ReconcilePerconaServerMongoDBClusterSync) readyReplicas(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) (int32, error) {
 	dep := &appsv1.Deployment{}
 	nn := types.NamespacedName{Name: clustersync.DeploymentName(cr), Namespace: cr.Namespace}
 	if err := r.client.Get(ctx, nn, dep); err != nil {
 		if k8serrors.IsNotFound(err) {
-			return false, nil
+			return 0, nil
 		}
-		return false, err
+		return 0, err
 	}
-	if dep.Spec.Replicas == nil {
-		return false, nil
+	if dep.Generation != dep.Status.ObservedGeneration {
+		return 0, nil
 	}
-	return dep.Generation == dep.Status.ObservedGeneration &&
-		dep.Status.UpdatedReplicas == *dep.Spec.Replicas &&
-		dep.Status.ReadyReplicas == dep.Status.UpdatedReplicas &&
-		dep.Status.UnavailableReplicas == 0, nil
+	return dep.Status.ReadyReplicas, nil
 }
 
-func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, pcsm pcsmClient) error {
+// reconcilePDB removes the budget when the group shrinks back to a single
+// instance; leaving a stale PDB behind would block node drains forever.
+func (r *ReconcilePerconaServerMongoDBClusterSync) reconcilePDB(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync) error {
+	pdb := clustersync.PodDisruptionBudget(cr)
+	if pdb == nil {
+		stale := &policyv1.PodDisruptionBudget{
+			Name:      clustersync.DeploymentName(cr),
+			Namespace: cr.Namespace,
+		}
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(stale), stale); err != nil {
+			return client.IgnoreNotFound(errors.Wrap(err, "get clustersync pdb"))
+		}
+		if !metav1.IsControlledBy(stale, cr) {
+			return nil
+		}
+		return k8s.DeleteIfExists(ctx, r.client, stale)
+	}
+
+	if err := controllerutil.SetControllerReference(cr, pdb, r.scheme); err != nil {
+		return errors.Wrap(err, "set owner reference on clustersync pdb")
+	}
+	// A budget this CR does not control is the user's; ApplyIf repeats the
+	// check on the object it reads, so a concurrent create is safe too.
+	existing := &policyv1.PodDisruptionBudget{}
+	switch err := r.client.Get(ctx, client.ObjectKeyFromObject(pdb), existing); {
+	case k8serrors.IsNotFound(err):
+	case err != nil:
+		return errors.Wrap(err, "get clustersync pdb")
+	case !metav1.IsControlledBy(existing, cr):
+		logf.FromContext(ctx).Info("PodDisruptionBudget is not owned by this ClusterSync, leaving it untouched",
+			"pdb", pdb.Name)
+		return nil
+	}
+
+	ours := func(obj client.Object) bool { return metav1.IsControlledBy(obj, cr) }
+	if _, err := util.ApplyIf(ctx, r.client, pdb, ours); err != nil {
+		return errors.Wrap(err, "apply clustersync pdb")
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, pcsm pcsmClient, ready int32) error {
 	log := logf.FromContext(ctx)
 	newStatus := cr.Status.DeepCopy()
+	newStatus.Size = clustersync.Size(cr)
+	newStatus.ReadyReplicas = ready
 
 	observed, statusErr := pcsm.Status(ctx)
+	r.recordActiveInstance(cr, newStatus, pcsm.ActiveInstance())
 	if statusErr != nil {
 		newStatus.Error = statusErr.Error()
 		if isPCSMUnreachable(statusErr) {
 			log.V(1).Info("PCSM CLI not reachable", "err", statusErr.Error())
 			return r.writeStatus(ctx, cr, *newStatus)
 		}
-		log.Error(statusErr, "pcsm status failed")
+		if alreadyReported(cr, newStatus.Error) {
+			log.V(1).Info("pcsm status still failing", "err", newStatus.Error)
+		} else {
+			log.Error(statusErr, "pcsm status failed")
+		}
 	} else {
-		applyObservedStatus(newStatus, observed)
+		applyObservedStatus(newStatus, observed, cr.Generation)
 	}
 
 	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil)
@@ -463,23 +526,38 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 					return errors.Wrap(err, "check cluster busy by backup or restore")
 				}
 				if busy {
+					// A backup can hold the cluster for hours and this
+					// path runs every requeue, so report the hold once
+					// per distinct reason and leave the rest to status.
+					if alreadyReported(cr, reason) {
+						log.V(1).Info("Still holding PCSM transition: cluster busy",
+							"action", action, "reason", reason)
+					} else {
+						log.Info("Holding PCSM transition: cluster busy with backup or restore",
+							"action", action, "reason", reason)
+						r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterBusy",
+							"Holding PCSM %q: %s", action, reason)
+					}
 					newStatus.Error = reason
-					log.Info("Holding PCSM transition: cluster busy with backup or restore",
-						"action", action, "reason", reason)
-					r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterBusy",
-						"Holding PCSM %q: %s", action, reason)
 					return r.writeStatus(ctx, cr, *newStatus)
 				}
 			}
 			if err := invokeAction(ctx, pcsm, action, cr, newStatus.State); err != nil {
 				newStatus.Error = err.Error()
-				if isPCSMUnreachable(err) {
+				switch {
+				case isPCSMUnreachable(err):
 					log.V(1).Info("PCSM CLI not reachable during transition", "action", action, "err", err.Error())
-				} else {
+				case alreadyReported(cr, newStatus.Error):
+					// The failure self-heal retries a failed resume every
+					// requeue; a permanently failing one must not log an
+					// error every few seconds.
+					log.V(1).Info("PCSM transition still failing", "action", action, "err", newStatus.Error)
+				default:
 					log.Error(err, "PCSM transition failed", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
 				}
 				return r.writeStatus(ctx, cr, *newStatus)
 			}
+			r.recordActiveInstance(cr, newStatus, pcsm.ActiveInstance())
 			log.Info("PCSM transition applied", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
 		}
 	}
@@ -490,11 +568,39 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 	return r.writeStatus(ctx, cr, *newStatus)
 }
 
-func isPCSMUnreachable(err error) bool {
-	return stderrors.Is(err, clustersyncclient.ErrPCSMNotReady)
+// alreadyReported reports whether this exact message is the one already
+// persisted in status, i.e. it has been logged on an earlier pass.
+func alreadyReported(cr *psmdbv1.PerconaServerMongoDBClusterSync, msg string) bool {
+	return msg != "" && cr.Status.Error == msg
 }
 
-func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, observed clustersyncclient.Status) {
+// recordActiveInstance tracks which pod holds the PCSM lease and reports
+// handovers, the only externally visible sign that a failover happened.
+func (r *ReconcilePerconaServerMongoDBClusterSync) recordActiveInstance(
+	cr *psmdbv1.PerconaServerMongoDBClusterSync,
+	newStatus *psmdbv1.PerconaServerMongoDBClusterSyncStatus,
+	active string,
+) {
+	if active == "" {
+		return
+	}
+	// Compare against newStatus, not cr.Status: this runs more than once
+	// per reconcile and must not report the same handover twice.
+	if prev := newStatus.ActiveInstance; prev != "" && prev != active {
+		r.recorder.Eventf(cr, corev1.EventTypeNormal, "PCSMFailover",
+			"Active PCSM instance changed from %q to %q", prev, active)
+	}
+	newStatus.ActiveInstance = active
+}
+
+// ErrNoActivePCSM means the group is mid-election; like a missing pod it
+// is a transient condition, not a reconcile failure.
+func isPCSMUnreachable(err error) bool {
+	return stderrors.Is(err, clustersyncclient.ErrPCSMNotReady) ||
+		stderrors.Is(err, clustersyncclient.ErrNoActivePCSM)
+}
+
+func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, observed clustersyncclient.Status, generation int64) {
 	s.State = psmdbv1.ClusterSyncState(observed.State)
 	s.LagTimeSeconds = observed.LagTimeSeconds
 	s.Error = observed.Error
@@ -513,18 +619,20 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 		runningMsg = "PCSM is replicating from source to target"
 	}
 	meta.SetStatusCondition(&s.Conditions, metav1.Condition{
-		Type:    psmdbv1.ConditionClusterSyncRunning,
-		Status:  runningStatus,
-		Reason:  runningReason,
-		Message: runningMsg,
+		Type:               psmdbv1.ConditionClusterSyncRunning,
+		Status:             runningStatus,
+		Reason:             runningReason,
+		Message:            runningMsg,
+		ObservedGeneration: generation,
 	})
 
 	if s.State == psmdbv1.ClusterSyncStateFinalized {
 		meta.SetStatusCondition(&s.Conditions, metav1.Condition{
-			Type:    psmdbv1.ConditionClusterSyncFinalized,
-			Status:  metav1.ConditionTrue,
-			Reason:  "PCSMFinalized",
-			Message: "PCSM finalize complete",
+			Type:               psmdbv1.ConditionClusterSyncFinalized,
+			Status:             metav1.ConditionTrue,
+			Reason:             "PCSMFinalized",
+			Message:            "PCSM finalize complete",
+			ObservedGeneration: generation,
 		})
 	}
 }
@@ -563,6 +671,9 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) writeStatus(ctx context.Conte
 		c := &psmdbv1.PerconaServerMongoDBClusterSync{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
 			return err
+		}
+		if equality.Semantic.DeepEqual(c.Status, newStatus) {
+			return nil
 		}
 		c.Status = newStatus
 		return r.client.Status().Update(ctx, c)

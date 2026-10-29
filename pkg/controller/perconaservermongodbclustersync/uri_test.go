@@ -47,6 +47,8 @@ func withLocalCertFiles(t *testing.T, uri string) string {
 }
 
 func TestBuildTargetURI(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		target   *psmdbv1.PerconaServerMongoDB
 		username string
@@ -223,6 +225,8 @@ func TestBuildTargetURI(t *testing.T) {
 }
 
 func TestBuildSourceURI(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		uri     string
 		secret  *corev1.Secret
