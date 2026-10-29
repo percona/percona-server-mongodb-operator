@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
@@ -599,7 +598,7 @@ func TestRemoveMembersWithoutPods(t *testing.T) {
 	const namespace = "psmdb"
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-name", Namespace: namespace},
+		Name: "my-cluster-name", Namespace: namespace,
 		Spec: api.PerconaServerMongoDBSpec{
 			ClusterServiceDNSSuffix: "svc.cluster.local",
 			ClusterServiceDNSMode:   api.DNSModeInternal,
@@ -612,7 +611,7 @@ func TestRemoveMembersWithoutPods(t *testing.T) {
 	host := func(t *testing.T, podName string) string {
 		t.Helper()
 		h, err := psmdb.MongoHost(context.Background(), nil, cr, cr.Spec.ClusterServiceDNSMode, replset, false, corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace},
+			Name: podName, Namespace: namespace,
 		})
 		require.NoError(t, err)
 		return h
@@ -621,7 +620,7 @@ func TestRemoveMembersWithoutPods(t *testing.T) {
 	pods := func(names ...string) []corev1.Pod {
 		out := make([]corev1.Pod, 0, len(names))
 		for _, name := range names {
-			out = append(out, corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}})
+			out = append(out, corev1.Pod{Name: name, Namespace: namespace})
 		}
 		return out
 	}
