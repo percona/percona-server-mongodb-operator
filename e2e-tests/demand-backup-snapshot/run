@@ -11,7 +11,7 @@ run_snapshot_backup() {
 	local snapshot_class=$(get_volume_snapshot_class)
 
 	log "running snapshot backup $backup_name"
-	yq eval '.metadata.name = "'${backup_name}'" | .spec.volumeSnapshotClass = "'${snapshot_class}'"' \
+	yq eval '.metadata.name = "'${backup_name}'" | .spec.clusterName = "'${cluster}'" | .spec.volumeSnapshotClass = "'${snapshot_class}'"' \
 		"${test_dir}/conf/backup.yml" \
 		| kubectl_bin apply -f -
 }
@@ -37,6 +37,73 @@ run_snapshot_recovery_check() {
 	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0-2.${target_cluster}-rs0.${namespace}" "" "" "" "" "" "true"
 
 	log "Data restored: OK"
+}
+
+wait_named_gone() {
+	local what=$1
+	local tries=$2
+	shift 2
+	local retry=0
+	local remaining
+
+	echo -n "waiting for ${what} to be deleted"
+	while true; do
+		if ! remaining=$(kubectl_bin get "$@" -o name); then
+			echo "failed to check whether ${what} were deleted" >&2
+			return 1
+		fi
+		[[ -z ${remaining} ]] && break
+
+		retry=$((retry + 1))
+		if [[ ${retry} -ge ${tries} ]]; then
+			echo
+			echo "timed out waiting for ${what} to be deleted"
+			return 1
+		fi
+		echo -n .
+		sleep 5
+	done
+	echo '.OK'
+}
+
+delete_psmdb() {
+	local name=$1
+
+	kubectl_bin delete psmdb "${name}" --ignore-not-found
+	kubectl_bin wait --for=delete "psmdb/${name}" --timeout=600s
+}
+
+# Longhorn keeps the source volume until the VolumeSnapshot and its
+# VolumeSnapshotContent are gone. Delete those before expecting PVCs to finish.
+release_snapshot_volumes() {
+	local content ns contents
+
+	log "deleting volume snapshots so Longhorn can release the volumes"
+	kubectl_bin delete volumesnapshot --all --ignore-not-found --wait=false
+	wait_named_gone "volume snapshots" 120 volumesnapshot
+
+	if ! contents=$(kubectl_bin get volumesnapshotcontent -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.volumeSnapshotRef.namespace}{"\n"}{end}'); then
+		echo "failed to list volume snapshot contents" >&2
+		return 1
+	fi
+
+	while read -r content ns; do
+		[[ ${ns} == "${namespace}" && -n ${content} ]] || continue
+		kubectl_bin delete volumesnapshotcontent "${content}" --ignore-not-found --wait=false
+	done <<< "${contents}"
+
+	delete_backups
+	wait_named_gone "psmdb-backup" 60 psmdb-backup
+}
+
+delete_cluster_pvcs() {
+	local name=$1
+	local i
+
+	for i in 0 1 2; do
+		kubectl_bin delete "pvc/mongod-data-${name}-rs0-${i}" --ignore-not-found --wait=false
+		wait_for_delete "pvc/mongod-data-${name}-rs0-${i}" 600
+	done
 }
 
 run_snapshot_restore_backupsource() {
@@ -117,21 +184,29 @@ echo 'Restoring snapshot to new cluster using backupSource'
 run_snapshot_restore_backupsource "${backup_name}" "${new_cluster}"
 run_snapshot_recovery_check "backupsource-${backup_name}" "${new_cluster}"
 
-echo 'Cleaning up new cluster'
-kubectl_bin delete psmdb "${new_cluster}"
-kubectl_bin wait --for=delete psmdb/"${new_cluster}" --timeout=600s
+echo 'Cleaning up clusters before the encrypted run'
+# Drop both CRs first. Their finalizers only request PVC deletion; on Longhorn
+# the volumes stay until the snapshots are gone.
+delete_psmdb "${new_cluster}"
+delete_psmdb "${cluster}"
+release_snapshot_volumes
+delete_cluster_pvcs "${new_cluster}"
+delete_cluster_pvcs "${cluster}"
 
 desc 'Testing snapshot backup/restore on encrypted cluster'
 
-kubectl_bin delete psmdb "${cluster}"
-kubectl_bin wait --for=delete psmdb/"${cluster}" --timeout=600s
+# Give the encrypted run its own cluster resources, separate from the first run.
+cluster="some-name-enc"
 
 kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
-apply_cluster "${test_dir}/conf/${cluster}-encrypted.yml"
+cat_config "${test_dir}/conf/some-name-encrypted.yml" \
+	| yq eval '.metadata.name = "'${cluster}'"' \
+	| kubectl_bin apply -f -
 
 echo 'check if all pods started'
 wait_for_running "${cluster}-rs0" 3
 wait_cluster_consistency "${cluster}"
+apply_client_with_tls "${cluster}"
 
 sleep 60 # give time for resync to start
 wait_for_pbm_operations "${cluster}"
@@ -156,7 +231,9 @@ wait_backup "${backup_name_enc}"
 
 echo 'Drop collection and restore from snapshot (encrypted)'
 run_mongo_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
-run_restore "${backup_name_enc}"
+yq eval '.metadata.name = "restore-'${backup_name_enc}'" | .spec.clusterName = "'${cluster}'" | .spec.backupName = "'${backup_name_enc}'"' \
+	"${test_dir}/conf/restore.yml" \
+	| kubectl_bin apply -f -
 run_snapshot_recovery_check "${backup_name_enc}"
 
 destroy "${namespace}"
