@@ -159,6 +159,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
+	if cr.IsPVCShrinkInProgress() {
+		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
+		return nil
+	}
+
 	isBackupRunning, err := r.isBackupRunning(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active backups")

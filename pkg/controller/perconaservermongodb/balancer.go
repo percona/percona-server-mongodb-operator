@@ -27,6 +27,10 @@ func (r *ReconcilePerconaServerMongoDB) enableBalancerIfNeeded(ctx context.Conte
 		return nil
 	}
 
+	if cr.IsPVCShrinkInProgress() {
+		return nil
+	}
+
 	uptodate, err := r.isAllSfsUpToDate(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check if all sfs are up to date")
