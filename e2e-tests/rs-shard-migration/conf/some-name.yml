@@ -35,9 +35,6 @@ spec:
           requests:
             storage: 1Gi
     size: 3
-    # A hidden member is what makes this test interesting: it sorts last in the replset
-    # config, so the conversion used to spend its one member removal on the hidden member
-    # and leave every mongod member voting (K8SPSMDB-1887).
     hidden:
       enabled: true
       size: 1
