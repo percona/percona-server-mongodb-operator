@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -189,6 +190,38 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
+	component := sfs.Labels[naming.LabelKubernetesComponent]
+	canStepDown := component != naming.ComponentNonVoting && component != naming.ComponentHidden
+
+	if podsMissingClaimVolumes(sfs, list.Items) {
+		log.Info("pods are missing a volume claim, updating them bottom-up")
+
+		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
+
+		for _, pod := range list.Items {
+			isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+			if err != nil {
+				return errors.Wrap(err, "is pod primary")
+			}
+
+			if isPrimary && canStepDown {
+				if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+					return err
+				}
+			}
+
+			log.Info("apply changes to pod", "pod", pod.Name)
+
+			if err := updatePod(&pod); err != nil {
+				return err
+			}
+		}
+
+		log.Info("smart update finished for statefulset")
+
+		return nil
+	}
+
 	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
 
 	var primaryPod corev1.Pod
@@ -210,34 +243,10 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	component := sfs.Labels[naming.LabelKubernetesComponent]
-	// Primary can't be one of NonVoting and Hidden members, so we don't need to step down
 	// If the primary is external, we can't match it with a running pod and it'll have an empty name
-	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
-		forceStepDown := replset.Size == 1
-		log.Info("doing step down...", "force", forceStepDown)
-		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
-		if err != nil {
-			return fmt.Errorf("failed to get mongo client: %v", err)
-		}
-
-		defer func() {
-			err := client.Disconnect(ctx)
-			if err != nil {
-				log.Error(err, "failed to close connection")
-			}
-		}()
-
-		err = client.StepDown(ctx, 60, forceStepDown)
-		if err != nil {
-			if strings.Contains(err.Error(), "No electable secondaries caught up") {
-				err = client.StepDown(ctx, 60, true)
-				if err != nil {
-					return errors.Wrap(err, "failed to do forced step down")
-				}
-			} else {
-				return errors.Wrap(err, "failed to do step down")
-			}
+	if canStepDown && len(primaryPod.Name) > 0 {
+		if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+			return err
 		}
 
 		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
@@ -249,6 +258,52 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	log.Info("smart update finished for statefulset")
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) stepDownPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
+	forceStepDown := replset.Size == 1
+	log.Info("doing step down...", "force", forceStepDown)
+
+	client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+	if err != nil {
+		return fmt.Errorf("failed to get mongo client: %v", err)
+	}
+
+	defer func() {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	err = client.StepDown(ctx, 60, forceStepDown)
+	if err != nil {
+		if strings.Contains(err.Error(), "No electable secondaries caught up") {
+			err = client.StepDown(ctx, 60, true)
+			if err != nil {
+				return errors.Wrap(err, "failed to do forced step down")
+			}
+		} else {
+			return errors.Wrap(err, "failed to do step down")
+		}
+	}
+
+	return nil
+}
+
+// podsMissingClaimVolumes reports whether a pod lacks a volume for one of the claim templates.
+func podsMissingClaimVolumes(sfs *appsv1.StatefulSet, pods []corev1.Pod) bool {
+	for _, pod := range pods {
+		for _, vct := range sfs.Spec.VolumeClaimTemplates {
+			if !slices.ContainsFunc(pod.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == vct.Name }) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {

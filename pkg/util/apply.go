@@ -89,7 +89,21 @@ func ApplyIf(ctx context.Context, cl client.Client, obj client.Object, canWrite 
 			object.Finalizers = oldObject.GetFinalizers()
 		}
 
-		return ApplyStatusUpdated, cl.Update(ctx, obj)
+		err := cl.Update(ctx, obj)
+		if !k8serrors.IsNotFound(err) {
+			return ApplyStatusUpdated, err
+		}
+
+		// The object was deleted between the read and the update.
+		obj.SetResourceVersion("")
+		if err := cl.Create(ctx, obj); err != nil {
+			if k8serrors.IsAlreadyExists(err) {
+				return ApplyStatusUnchanged, nil
+			}
+			return "", err
+		}
+
+		return ApplyStatusCreated, nil
 	}
 
 	return ApplyStatusUnchanged, nil

@@ -16,6 +16,7 @@ const (
 
 	// MongodDataVolClaimName is a PVC Claim name
 	MongodDataVolClaimName = "mongod-data"
+	MongodLogVolClaimName  = "mongod-logs"
 	MongosLogVolClaimName  = "mongos-logs"
 	// MongodContainerDataDir is a mongo data path in container
 	MongodContainerDataDir     = "/data/db"
@@ -195,6 +196,13 @@ func MongodLogVolume() LogVolume {
 	return LogVolume{
 		Name:      MongodDataVolClaimName,
 		MountPath: MongodContainerDataDir,
+	}
+}
+
+func MongodPVCLogVolume() LogVolume {
+	return LogVolume{
+		Name:      MongodLogVolClaimName,
+		MountPath: MongodContainerDataLogsDir,
 	}
 }
 

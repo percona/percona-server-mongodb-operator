@@ -8,8 +8,10 @@ import (
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -101,6 +103,63 @@ func TestApplyIfSkipsUnownedObject(t *testing.T) {
 			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: userIssuer.Name}, stored))
 			assert.Equal(t, userIssuer.Spec, stored.Spec)
 			assert.Equal(t, userIssuer.Labels, stored.Labels)
+		})
+	}
+}
+
+func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
+	t.Parallel()
+
+	nn := types.NamespacedName{Name: "some-name-rs0", Namespace: "psmdb"}
+
+	cached := &appsv1.StatefulSet{
+		Name:            nn.Name,
+		Namespace:       nn.Namespace,
+		ResourceVersion: "42",
+		Annotations:     map[string]string{"percona.com/last-config-hash": "stale"},
+	}
+
+	notFound := k8serrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, nn.Name)
+
+	tests := map[string]struct {
+		stored []client.Object
+		want   ApplyStatus
+	}{
+		"recreated when the object is gone": {
+			want: ApplyStatusCreated,
+		},
+		"left alone when the object reappeared": {
+			stored: []client.Object{cached.DeepCopy()},
+			want:   ApplyStatusUnchanged,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cl := fake.NewClientBuilder().
+				WithScheme(scheme.Scheme).
+				WithObjects(tt.stored...).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(_ context.Context, _ client.WithWatch, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
+						cached.DeepCopyInto(obj.(*appsv1.StatefulSet))
+						return nil
+					},
+					Update: func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.UpdateOption) error {
+						return notFound
+					},
+				}).
+				Build()
+
+			desired := &appsv1.StatefulSet{
+				Name: nn.Name, Namespace: nn.Namespace,
+				Spec: appsv1.StatefulSetSpec{ServiceName: nn.Name},
+			}
+
+			status, err := Apply(t.Context(), cl, desired)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, status)
 		})
 	}
 }

@@ -1050,6 +1050,17 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
+    # Store mongod logs on a dedicated PVC mounted at /data/db/logs instead of
+    # the mongod data volume. Applies to every replica set, config server,
+    # hidden and non-voting node. Enabling or disabling it recreates the
+    # statefulsets (pods and data PVCs are kept). Requires crVersion 1.24.0.
+    storage:
+      persistentVolumeClaim:
+#        storageClassName: standard
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 2Gi
 #    # Add a liveness/readiness probe for the logs (fluent-bit) container.
 #    # When not set, the container has no probes.
 #    # NOTE: a tcpSocket/httpGet probe on port 2020 requires the fluent-bit

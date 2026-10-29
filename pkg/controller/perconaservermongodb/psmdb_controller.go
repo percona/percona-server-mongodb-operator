@@ -1023,7 +1023,12 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 				mongodPodsMap[pod.Name] = true
 			}
 			for _, pvc := range mongodPVCs.Items {
-				if after, ok := strings.CutPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-"); ok {
+				for _, claimName := range []string{psmdbconfig.MongodDataVolClaimName, psmdbconfig.MongodLogVolClaimName} {
+					after, ok := strings.CutPrefix(pvc.Name, claimName+"-")
+					if !ok {
+						continue
+					}
+
 					podName := after
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
@@ -1033,6 +1038,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
 						}
 					}
+					break
 				}
 			}
 		}

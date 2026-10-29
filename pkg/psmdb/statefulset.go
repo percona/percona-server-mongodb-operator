@@ -185,6 +185,15 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		volumeSpec = replset.Hidden.VolumeSpec
 	}
 
+	isArbiter := ls[naming.LabelKubernetesComponent] == naming.ComponentArbiter
+
+	logVol := config.MongodLogVolume()
+	var mongodLogVol *config.LogVolume
+	if !isArbiter && cr.LogStorage() != nil {
+		logVol = config.MongodPVCLogVolume()
+		mongodLogVol = &logVol
+	}
+
 	customLabels := make(map[string]string, len(ls))
 	maps.Copy(customLabels, ls)
 
@@ -296,6 +305,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		containerSecurityContext: containerSecurityContext,
 		containerEnv:             containerEnv,
 		containerEnvFrom:         containerEnvFrom,
+		logVolume:                mongodLogVol,
 	}
 	c, err := container(ctx, cr, params)
 	if err != nil {
@@ -421,11 +431,22 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			volumes = AddPMMTmpVolume(cr, pmmC, volumes)
+			if mongodLogVol != nil {
+				pmmC.VolumeMounts = append(pmmC.VolumeMounts, corev1.VolumeMount{
+					Name:      mongodLogVol.Name,
+					MountPath: mongodLogVol.MountPath,
+					ReadOnly:  true,
+				})
+			}
 			containers = append(containers, *pmmC)
 		}
 
+		if cr.LogStorage() != nil {
+			volumeClaimTemplates = append(volumeClaimTemplates, mongodLogPVC(cr, customLabels))
+		}
+
 		if cr.CompareVersion("1.21.0") >= 0 {
-			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), config.MongodLogVolume())
+			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), logVol)
 			if err != nil {
 				log.Error(err, "error preparing logcollector containers")
 			}
@@ -803,6 +824,27 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
+	return pvc
+}
+
+func mongodLogPVC(cr *api.PerconaServerMongoDB, ls map[string]string) corev1.PersistentVolumeClaim {
+	storage := cr.LogStorage()
+
+	labels := map[string]string{}
+	maps.Copy(labels, storage.Labels)
+	maps.Copy(labels, ls)
+
+	pvc := corev1.PersistentVolumeClaim{
+		Name:        config.MongodLogVolClaimName,
+		Namespace:   cr.Namespace,
+		Labels:      labels,
+		Annotations: storage.Annotations,
+	}
+
+	if storage.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *storage.PersistentVolumeClaimSpec
+	}
+
 	return pvc
 }
 

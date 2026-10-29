@@ -383,6 +383,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [monitoring]
 
+  logcollector-pvc:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [monitoring, storage]
+
   mongod-major-upgrade:
     suites: [pr, release, minikube, distro]
     operatorModes: [cluster-wide, namespaced]

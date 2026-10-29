@@ -150,6 +150,8 @@ spec:
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
+        - mountPath: /data/db/logs
+          name: mongod-logs
         - mountPath: /etc/mongodb-ssl
           name: ssl
           readOnly: true
@@ -217,69 +219,73 @@ spec:
           readOnly: true
         - mountPath: /data/db
           name: mongod-data
-      - name: logs
-        image: percona/fluentbit:sometag
-        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
-        args: [ "fluent-bit" ]
+      - args:
+        - fluent-bit
+        command:
+        - /opt/percona/logcollector/entrypoint.sh
         env:
-          - name: LOG_DATA_DIR
-            value: /data/db/logs
-          - name: POD_NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
-          - name: POD_NAME
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
+        - name: LOG_DATA_DIR
+          value: /data/db/logs
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        image: percona/fluentbit:sometag
+        name: logs
         resources:
           requests:
             cpu: 200m
             memory: 100M
         volumeMounts:
-          - mountPath: /data/db
-            name: mongod-data
-          - mountPath: /opt/percona
-            name: bin
-          - mountPath: /opt/percona/logcollector/fluentbit/custom
-            name: log-collector-volume
-      - name: logrotate
-        image: percona/fluentbit:sometag
-        command: [ "/opt/percona/logcollector/entrypoint.sh" ]
-        args: [ "logrotate" ]
+        - mountPath: /data/db/logs
+          name: mongod-logs
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /opt/percona/logcollector/fluentbit/custom
+          name: log-collector-volume
+      - args:
+        - logrotate
+        command:
+        - /opt/percona/logcollector/entrypoint.sh
         env:
-          - name: MONGODB_HOST
-            value: localhost
-          - name: MONGODB_PORT
-            value: "27017"
-          - name: MONGODB_USER
-            valueFrom:
-              secretKeyRef:
-                key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
-                name: internal-reconcile-statefulset-cr-users
-                optional: false
-          - name: MONGODB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
-                name: internal-reconcile-statefulset-cr-users
-                optional: false
-          - name: MONGODB_TLS_ENABLED
-            value: "true"
-          - name: MONGODB_TLS_INSECURE
-            value: "true"
+        - name: MONGODB_HOST
+          value: localhost
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_USER
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_CLUSTER_ADMIN_USER_ESCAPED
+              name: internal-reconcile-statefulset-cr-users
+              optional: false
+        - name: MONGODB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
+              name: internal-reconcile-statefulset-cr-users
+              optional: false
+        - name: MONGODB_TLS_ENABLED
+          value: "true"
+        - name: MONGODB_TLS_INSECURE
+          value: "true"
+        image: percona/fluentbit:sometag
+        name: logrotate
         resources:
           requests:
             cpu: 200m
             memory: 100M
         volumeMounts:
-          - mountPath: /data/db
-            name: mongod-data
-          - mountPath: /opt/percona
-            name: bin
-          - mountPath: /etc/mongodb-ssl
-            name: ssl
-            readOnly: true
+        - mountPath: /data/db/logs
+          name: mongod-logs
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
       initContainers:
       - command:
         - /init-entrypoint.sh
@@ -343,3 +349,23 @@ spec:
         requests:
           storage: 3Gi
     status: {}
+  - metadata:
+      labels:
+        app.kubernetes.io/component: cfg
+        app.kubernetes.io/instance: reconcile-statefulset-cr
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: cfg
+      name: mongod-logs
+      namespace: reconcile-statefulset
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
+    status: {}
+status:
+  availableReplicas: 0
+  replicas: 0
