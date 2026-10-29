@@ -321,7 +321,7 @@ tests:
   demand-backup-snapshot:
     suites: [pr, release, backups]
     operatorModes: [cluster-wide, namespaced]
-    groups: [backup]
+    groups: [backup, sharding]
 
   demand-backup-snapshot-vault:
     suites: [pr, release, backups, distro]

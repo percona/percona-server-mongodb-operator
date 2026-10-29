@@ -2329,3 +2329,10 @@ func (cr *PerconaServerMongoDB) VPAInPlaceResizeEnabled() bool {
 		cr.Spec.VPA.UpdateMode == VPAUpdateModeAuto &&
 		cr.Spec.VPA.InPlaceResize
 }
+
+func (r ReplsetSpec) MongoReplsetName() string {
+	if name, err := r.CustomReplsetName(); err == nil {
+		return name
+	}
+	return r.Name
+}

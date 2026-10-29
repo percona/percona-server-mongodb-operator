@@ -1,6 +1,7 @@
 package naming
 
 import (
+	"crypto/md5"
 	"fmt"
 	"strings"
 
@@ -125,7 +126,8 @@ func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 }
 
 func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
-	return fmt.Sprintf("%s-%s", bcp.Name, rsName)
+	hash := fmt.Sprintf("%x", md5.Sum([]byte(bcp.Spec.ClusterName+bcp.Name+rsName)))
+	return fmt.Sprintf("%s-%s-%s", bcp.Name, strings.ToLower(rsName), hash[:5])
 }
 
 func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) types.NamespacedName {
