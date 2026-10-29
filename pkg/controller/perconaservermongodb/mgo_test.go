@@ -625,55 +625,101 @@ func TestRemoveMembersWithoutPods(t *testing.T) {
 		return out
 	}
 
+	// member describes a replset config entry. An empty pod leaves it untagged, the way the
+	// operator writes arbiters and external nodes; an empty host is derived from the pod.
+	type member struct {
+		pod  string
+		host string
+	}
+
+	resolve := func(t *testing.T, m member) string {
+		t.Helper()
+		if m.host != "" {
+			return m.host
+		}
+		return host(t, m.pod)
+	}
+
 	cases := []struct {
 		name          string
 		pods          []corev1.Pod
 		externalNodes []*api.ExternalNode
-		// memberPods become config members via host(); extraMembers are added verbatim.
-		memberPods   []string
-		extraMembers []string
-		// wantPods and wantExtra are the members expected to survive, in order.
-		wantPods  []string
-		wantExtra []string
+		members       []member
+		// want lists the members expected to survive, in order.
+		want []member
 	}{
 		{
-			name:       "every member has a pod",
-			pods:       pods("rs0-0", "rs0-1", "rs0-2"),
-			memberPods: []string{"rs0-0", "rs0-1", "rs0-2"},
-			wantPods:   []string{"rs0-0", "rs0-1", "rs0-2"},
+			name:    "every member has a pod",
+			pods:    pods("rs0-0", "rs0-1", "rs0-2"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+			want:    []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
 		},
 		{
-			name:       "members whose pods are gone are dropped",
-			pods:       pods("rs0-0"),
-			memberPods: []string{"rs0-0", "rs0-1", "rs0-2"},
-			wantPods:   []string{"rs0-0"},
+			name:    "members whose pods are gone are dropped",
+			pods:    pods("rs0-0"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+			want:    []member{{pod: "rs0-0"}},
 		},
 		{
-			name:       "hidden member is dropped alongside mongod members",
-			pods:       pods("rs0-0"),
-			memberPods: []string{"rs0-0", "rs0-1", "rs0-2", "rs0-hidden-0"},
-			wantPods:   []string{"rs0-0"},
+			name:    "hidden member is dropped alongside mongod members",
+			pods:    pods("rs0-0"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}, {pod: "rs0-hidden-0"}},
+			want:    []member{{pod: "rs0-0"}},
+		},
+		{
+			// MongoHost returns the address a member should have. Mid-transition the config
+			// still holds the old one, and the transition itself steps the primary down, so
+			// recovery can run right then. Matching on the host would drop a live member.
+			name: "member whose host is mid-change is kept",
+			pods: pods("rs0-0", "rs0-1", "rs0-2"),
+			members: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1", host: "rs0-1.old-domain.example.com:27017"},
+				{pod: "rs0-2"},
+			},
+			want: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1", host: "rs0-1.old-domain.example.com:27017"},
+				{pod: "rs0-2"},
+			},
+		},
+		{
+			name: "untagged member is kept while its pod exists",
+			pods: pods("rs0-0", "rs0-arbiter-0"),
+			members: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1"},
+				{host: host(t, "rs0-arbiter-0")},
+			},
+			want: []member{{pod: "rs0-0"}, {host: host(t, "rs0-arbiter-0")}},
+		},
+		{
+			name: "untagged member is dropped once its pod is gone",
+			pods: pods("rs0-0"),
+			members: []member{
+				{pod: "rs0-0"},
+				{host: host(t, "rs0-arbiter-0")},
+			},
+			want: []member{{pod: "rs0-0"}},
 		},
 		{
 			name:          "external nodes are kept, they have no pod by definition",
 			pods:          pods("rs0-0"),
 			externalNodes: []*api.ExternalNode{{Host: "external-1", Port: 27017}},
-			memberPods:    []string{"rs0-0", "rs0-1"},
-			extraMembers:  []string{"external-1:27017"},
-			wantPods:      []string{"rs0-0"},
-			wantExtra:     []string{"external-1:27017"},
+			members:       []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {host: "external-1:27017"}},
+			want:          []member{{pod: "rs0-0"}, {host: "external-1:27017"}},
 		},
 		{
-			name:         "config is left alone when no member has a pod",
-			pods:         pods("rs0-0"),
-			extraMembers: []string{"stale-1:27017", "stale-2:27017"},
-			wantExtra:    []string{"stale-1:27017", "stale-2:27017"},
+			name:    "config is left alone when no member has a pod",
+			pods:    pods("rs0-0"),
+			members: []member{{host: "stale-1:27017"}, {host: "stale-2:27017"}},
+			want:    []member{{host: "stale-1:27017"}, {host: "stale-2:27017"}},
 		},
 		{
-			name:       "no pods at all leaves the config alone",
-			pods:       nil,
-			memberPods: []string{"rs0-0", "rs0-1"},
-			wantPods:   []string{"rs0-0", "rs0-1"},
+			name:    "no pods at all leaves the config alone",
+			pods:    nil,
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}},
+			want:    []member{{pod: "rs0-0"}, {pod: "rs0-1"}},
 		},
 	}
 
@@ -683,29 +729,30 @@ func TestRemoveMembersWithoutPods(t *testing.T) {
 			rs.ExternalNodes = c.externalNodes
 
 			cfg := mongo.RSConfig{}
-			for i, podName := range c.memberPods {
-				cfg.Members = append(cfg.Members, mongo.ConfigMember{
-					ID: i, Host: host(t, podName), Votes: mongo.DefaultVotes, Priority: mongo.DefaultPriority,
-				})
-			}
-			for i, h := range c.extraMembers {
-				cfg.Members = append(cfg.Members, mongo.ConfigMember{
-					ID: len(c.memberPods) + i, Host: h, Votes: mongo.DefaultVotes, Priority: mongo.DefaultPriority,
-				})
+			for i, m := range c.members {
+				cm := mongo.ConfigMember{
+					ID:       i,
+					Host:     resolve(t, m),
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				}
+				if m.pod != "" {
+					cm.Tags = mongo.ReplsetTags{"podName": m.pod}
+				}
+				cfg.Members = append(cfg.Members, cm)
 			}
 
-			want := make([]string, 0, len(c.wantPods)+len(c.wantExtra))
-			for _, podName := range c.wantPods {
-				want = append(want, host(t, podName))
+			want := make([]string, 0, len(c.want))
+			for _, m := range c.want {
+				want = append(want, resolve(t, m))
 			}
-			want = append(want, c.wantExtra...)
 
 			r := &ReconcilePerconaServerMongoDB{}
 			r.removeMembersWithoutPods(context.Background(), cr, rs, c.pods, &cfg)
 
 			got := make([]string, 0, len(cfg.Members))
-			for _, member := range cfg.Members {
-				got = append(got, member.Host)
+			for _, m := range cfg.Members {
+				got = append(got, m.Host)
 			}
 
 			assert.Equal(t, want, got, "members left in config")

@@ -965,15 +965,30 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Co
 	return errNoRunningMongodContainers
 }
 
-// removeMembersWithoutPods drops config members that match neither an existing pod nor a
-// configured external node. It leaves the config untouched when the hosts can't be resolved
-// or when dropping them would empty the member list, so an incomplete pod list can't wipe
-// the replset: recovery is left to a later reconcile instead.
+// memberHasPod reports whether a config member still has a backing pod.
+func memberHasPod(member mongo.ConfigMember, podNames, hosts map[string]struct{}) bool {
+	if podName, ok := member.Tags["podName"]; ok {
+		if _, exists := podNames[podName]; exists {
+			return true
+		}
+	}
+
+	_, exists := hosts[member.Host]
+	return exists
+}
+
+// removeMembersWithoutPods drops config members that have neither a live pod nor a
+// configured external node behind them. It leaves the config untouched when the hosts can't
+// be resolved or when dropping them would empty the member list, so an incomplete pod list
+// can't wipe the replset: recovery is left to a later reconcile instead.
 func (r *ReconcilePerconaServerMongoDB) removeMembersWithoutPods(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod, cfg *mongo.RSConfig) {
 	log := logf.FromContext(ctx)
 
-	known := make(map[string]struct{}, len(pods)+len(replset.ExternalNodes))
+	podNames := make(map[string]struct{}, len(pods))
+	hosts := make(map[string]struct{}, len(pods)+len(replset.ExternalNodes))
 	for _, pod := range pods {
+		podNames[pod.Name] = struct{}{}
+
 		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, pod)
 		if err != nil {
 			// Without every host we can't tell which members are orphaned, so keep them all
@@ -981,16 +996,16 @@ func (r *ReconcilePerconaServerMongoDB) removeMembersWithoutPods(ctx context.Con
 			log.Info("Can't resolve host for pod, keeping every replset member", "pod", pod.Name, "error", err.Error())
 			return
 		}
-		known[host] = struct{}{}
+		hosts[host] = struct{}{}
 	}
 	for _, extNode := range replset.ExternalNodes {
-		known[extNode.HostPort()] = struct{}{}
+		hosts[extNode.HostPort()] = struct{}{}
 	}
 
 	keep := make(mongo.ConfigMembers, 0, len(cfg.Members))
 	drop := make(mongo.ConfigMembers, 0, len(cfg.Members))
 	for _, member := range cfg.Members {
-		if _, ok := known[member.Host]; ok {
+		if memberHasPod(member, podNames, hosts) {
 			keep = append(keep, member)
 			continue
 		}
