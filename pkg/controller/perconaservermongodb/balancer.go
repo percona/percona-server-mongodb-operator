@@ -144,8 +144,8 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
-	if msSts.Status.ReadyReplicas == 0 {
-		log.V(1).Info("no mongos pods are ready, skipping balancer disable", "statefulset", msSts.Name)
+	if msSts.Spec.Replicas != nil && *msSts.Spec.Replicas == 0 {
+		log.V(1).Info("mongos is not scaled up yet, skipping balancer disable", "statefulset", msSts.Name)
 		return nil
 	}
 
