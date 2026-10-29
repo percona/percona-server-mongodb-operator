@@ -15,6 +15,9 @@ spec:
 #  storageScaling:
 #   enableExternalAutoscaling: false
 #   enableVolumeScaling: false
+#   enableVolumeShrink: false
+#   shrinkOpts:
+#     maxDiskUsagePercent: 80
 #   autoscaling:
 #     enabled: false
 #     triggerThresholdPercent: 80
