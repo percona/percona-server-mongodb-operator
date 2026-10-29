@@ -33,6 +33,8 @@ func newSnapshotTestScheme(t *testing.T) *runtime.Scheme {
 }
 
 func TestSnapshotBackups_Start(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := map[string]struct {
@@ -126,6 +128,8 @@ func TestSnapshotBackups_Start(t *testing.T) {
 }
 
 func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	scheme := newSnapshotTestScheme(t)
 
@@ -202,6 +206,8 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 }
 
 func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	scheme := newSnapshotTestScheme(t)
 
@@ -349,6 +355,8 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 }
 
 func TestSnapshotBackups_Status(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	scheme := newSnapshotTestScheme(t)
 

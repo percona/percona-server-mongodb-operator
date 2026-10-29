@@ -452,17 +452,17 @@ func TestFetchVersionFromMongo(t *testing.T) {
 			tc.mutate(cr)
 
 			r := fakeReconciler(t, cr)
-			connections := 0
-			r.mongoClientProvider = &fakeMongoClientProvider{cr: cr, connectionCount: &connections}
+			connections := new(atomic.Int32)
+			r.mongoClientProvider = &fakeMongoClientProvider{cr: cr, connectionCount: connections}
 
 			require.NoError(t, r.fetchVersionFromMongo(ctx, cr, cr.Spec.Replsets[0]))
 
 			if !tc.wantFetched {
-				assert.Zero(t, connections, "no connection should be opened")
+				assert.Zero(t, connections.Load(), "no connection should be opened")
 				assert.Empty(t, cr.Status.MongoVersion)
 				return
 			}
-			assert.Zero(t, connections, "the mongo session must be closed")
+			assert.Zero(t, connections.Load(), "the mongo session must be closed")
 			assert.Equal(t, tc.wantVersion, cr.Status.MongoVersion)
 			assert.Equal(t, tc.wantMongoImg, cr.Status.MongoImage)
 		})
@@ -501,6 +501,8 @@ func (p *buildInfoMongoProvider) Standalone(_ context.Context, _ *api.PerconaSer
 }
 
 func TestFetchVersionFromMongo_RetryOnConflict(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	s := k8sruntime.NewScheme()

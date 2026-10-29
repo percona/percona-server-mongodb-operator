@@ -10,6 +10,8 @@ import (
 )
 
 func Test_majorUpgradeRequested(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		cr         *api.PerconaServerMongoDB
 		fcv        string
@@ -311,6 +313,8 @@ func Test_majorUpgradeRequested(t *testing.T) {
 }
 
 func TestCanUpgradeVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		fcv    string
 		target string

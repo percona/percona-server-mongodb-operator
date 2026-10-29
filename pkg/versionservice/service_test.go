@@ -177,6 +177,8 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 }
 
 func TestVersionService(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	vs := Client{}
 	tests := map[string]struct {
