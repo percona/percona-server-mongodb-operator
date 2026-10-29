@@ -280,8 +280,10 @@ def test_paths(request: pytest.FixtureRequest) -> Paths:
     """Fixture to provide paths relative to the test file."""
     test_file = request.path
     test_dir = test_file.parent
-    conf_dir = test_dir.parent / "conf"
-    src_dir = test_dir.parent.parent
+    # Relative to this file, so tests outside e2e-tests/ (installers/olm/e2e-tests) work too
+    e2e_dir = Path(__file__).resolve().parent
+    conf_dir = e2e_dir / "conf"
+    src_dir = e2e_dir.parent
 
     return {
         "test_file": str(test_file),

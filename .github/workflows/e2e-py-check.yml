@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'e2e-tests/**/*.py'
+      - 'installers/olm/e2e-tests/**/*.py'
       - 'pyproject.toml'
       - 'uv.lock'
 
@@ -30,7 +31,9 @@ jobs:
         run: uv sync --locked
 
       - name: Run ruff check
-        run: uv run ruff check e2e-tests/
+        run: uv run ruff check e2e-tests/ installers/olm/e2e-tests/
 
       - name: Run mypy
-        run: uv run mypy e2e-tests/
+        run: |
+          uv run mypy e2e-tests/
+          MYPYPATH=e2e-tests uv run mypy installers/olm/e2e-tests/

@@ -13,8 +13,12 @@ NAME ?= percona-server-mongodb-operator
 BUNDLE_TYPES := community certified
 
 SED := $(shell which gsed || which sed)
-VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
-CSV_VERSION ?= $(shell printf '%s\n' '$(VERSION)' | $(SED) -nE 's/.*([0-9]+)[.-]([0-9]+)[.-]([0-9]+).*/\1.\2.\3/p')
+parse_semver = $(shell printf '%s\n' '$(1)' | $(SED) -nE 's/.*([0-9]+)[.-]([0-9]+)[.-]([0-9]+).*/\1.\2.\3/p')
+GIT_BRANCH_NAME := $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
+RELEASE_BRANCH_VERSION := $(shell printf '%s\n' '$(GIT_BRANCH_NAME)' | $(SED) -nE 's/^(release-)?v?([0-9]+)-([0-9]+)-([0-9]+)$$/\2.\3.\4/p')
+# The release branch version (release-1.25.0), otherwise the operator's own version.
+VERSION ?= $(if $(RELEASE_BRANCH_VERSION),$(GIT_BRANCH_NAME),$(shell cat ../../pkg/version/version.txt))
+CSV_VERSION ?= $(call parse_semver,$(VERSION))
 RELEASE_VERSIONS ?= ../../e2e-tests/release_versions
 
 CONFIRM_PUSH ?= 1
@@ -28,6 +32,7 @@ BUNDLE_DEV_REPO ?= $(REGISTRY)/$(DEV_REPOSITORY)/$(NAME)
 BUNDLE_PROD_REPO ?= $(REGISTRY)/$(PROD_REPOSITORY)/$(NAME)
 
 CATALOG_BUNDLE_LIMIT ?= 2
+CATALOG_PREVIOUS_MINORS ?=
 CATALOG_PLATFORM ?= linux/amd64
 CATALOG_NAMESPACE ?= openshift-marketplace
 CATALOG_BUILD_PUSH ?= 1
@@ -163,6 +168,7 @@ $(BUNDLE_TYPES:%=catalog-build-push/%): catalog-build-push/%: tools check-versio
 	@if [[ "$(CATALOG_BUILD_PUSH)" == "true" || "$(CATALOG_BUILD_PUSH)" == "1" ]]; then \
 		BUNDLE_IMAGE_VERSION='$(BUNDLE_IMAGE_VERSION)' \
 		CATALOG_BUNDLE_LIMIT='$(CATALOG_BUNDLE_LIMIT)' \
+		CATALOG_PREVIOUS_MINORS='$(CATALOG_PREVIOUS_MINORS)' \
 		CATALOG_PLATFORM='$(CATALOG_PLATFORM)' \
 		CONTAINER='$(CONTAINER)' \
 		CONFIRM_PUSH='$(CONFIRM_PUSH)' \
@@ -221,6 +227,7 @@ $(BUNDLE_TYPES:%=deploy-prod/%): deploy-prod/%: tools check-version check-csv-ve
 	@if [[ "$(CATALOG_BUILD_PUSH)" == "true" || "$(CATALOG_BUILD_PUSH)" == "1" ]]; then \
 		BUNDLE_IMAGE_VERSION='$(BUNDLE_IMAGE_VERSION)' \
 		CATALOG_BUNDLE_LIMIT='$(CATALOG_BUNDLE_LIMIT)' \
+		CATALOG_PREVIOUS_MINORS='$(CATALOG_PREVIOUS_MINORS)' \
 		CATALOG_PLATFORM='$(CATALOG_PLATFORM)' \
 		CONTAINER='$(CONTAINER)' \
 		CONFIRM_PUSH='$(CONFIRM_PUSH)' \
@@ -308,6 +315,23 @@ validate-%-directory:
 
 validate-%-image:
 	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
+
+# ==============================================================================
+# Test Rules
+# ==============================================================================
+
+## Run the OLM upgrade e2e test against the deployed development catalogs
+.PHONY: tests $(BUNDLE_TYPES:%=tests/%)
+tests: ## Run OLM upgrade e2e tests against deployed catalogs (run deploy/<type> first)
+tests: $(BUNDLE_TYPES:%=tests/%)
+
+tests/community:
+tests/certified:
+
+$(BUNDLE_TYPES:%=tests/%): tests/%: tools
+	CATALOG_NAMESPACE='$(CATALOG_NAMESPACE)' \
+	NAME='$(NAME)' \
+	bash ./run-tests.sh '$*'
 
 # ==============================================================================
 # Utility Rules

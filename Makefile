@@ -97,13 +97,16 @@ py-deps: uv ## Install e2e-tests Python dependencies
 py-update-deps: uv ## Update e2e-tests Python dependencies
 	$(UV) lock --upgrade
 
+PY_DIRS = e2e-tests/ installers/olm/e2e-tests/
+
 py-fmt: uv ## Format and organize imports in e2e-tests
-	$(UV) run ruff check --select I --fix e2e-tests/
-	$(UV) run ruff format e2e-tests/
+	$(UV) run ruff check --select I --fix $(PY_DIRS)
+	$(UV) run ruff format $(PY_DIRS)
 
 py-check: uv ## Run ruff and mypy checks on e2e-tests
-	$(UV) run ruff check e2e-tests/
+	$(UV) run ruff check $(PY_DIRS)
 	$(UV) run mypy e2e-tests/
+	MYPYPATH=e2e-tests $(UV) run mypy installers/olm/e2e-tests/
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
