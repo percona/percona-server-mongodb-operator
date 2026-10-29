@@ -55,6 +55,8 @@ var (
 	defaultImagePullPolicy                = corev1.PullAlways
 
 	DefaultMongoPort int32 = 27017
+
+	DefaultAllowInvalidCertificates = true
 )
 
 const (
@@ -113,11 +115,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 	cr.setStorageAutoscalingDefaults()
 
-	t := true
 	if cr.Spec.TLS == nil {
 		cr.Spec.TLS = &TLSSpec{
 			Mode:                     TLSModePrefer,
-			AllowInvalidCertificates: &t,
+			AllowInvalidCertificates: new(DefaultAllowInvalidCertificates),
 			CertValidityDuration:     metav1.Duration{Duration: time.Hour * 24 * 90},
 		}
 	}
@@ -131,7 +132,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 
 	if cr.Spec.TLS.AllowInvalidCertificates == nil {
-		cr.Spec.TLS.AllowInvalidCertificates = &t
+		cr.Spec.TLS.AllowInvalidCertificates = new(DefaultAllowInvalidCertificates)
 	}
 
 	if cr.Spec.TLS.IssuerConf.Kind == "" {
@@ -1186,6 +1187,13 @@ var affinityValidTopologyKeys = map[string]struct{}{
 	"topology.kubernetes.io/region": {},
 }
 
+var affinityValidTopologyKeysPre116 = map[string]struct{}{
+	AffinityOff:                                {},
+	"kubernetes.io/hostname":                   {},
+	"failure-domain.beta.kubernetes.io/zone":   {},
+	"failure-domain.beta.kubernetes.io/region": {},
+}
+
 var defaultAffinityTopologyKey = "kubernetes.io/hostname"
 
 const AffinityOff = "none"
@@ -1196,14 +1204,11 @@ const AffinityOff = "none"
 // - if topology key set to valuse of `AffinityOff` - disable the affinity at all
 // - if `Advanced` affinity is set - leave everything as it is and set topology key to nil (Advanced options has a higher priority)
 func (m *MultiAZ) reconcileAffinityOpts(cr *PerconaServerMongoDB) {
+	validTopologyKeys := affinityValidTopologyKeys
 	if cr.CompareVersion("1.16.0") < 0 {
-		affinityValidTopologyKeys = map[string]struct{}{
-			AffinityOff:                                {},
-			"kubernetes.io/hostname":                   {},
-			"failure-domain.beta.kubernetes.io/zone":   {},
-			"failure-domain.beta.kubernetes.io/region": {},
-		}
+		validTopologyKeys = affinityValidTopologyKeysPre116
 	}
+
 	switch {
 	case m.Affinity == nil:
 		m.Affinity = &PodAffinity{
@@ -1217,7 +1222,7 @@ func (m *MultiAZ) reconcileAffinityOpts(cr *PerconaServerMongoDB) {
 		m.Affinity.TopologyKey = nil
 
 	case m.Affinity != nil && m.Affinity.TopologyKey != nil:
-		if _, ok := affinityValidTopologyKeys[*m.Affinity.TopologyKey]; !ok {
+		if _, ok := validTopologyKeys[*m.Affinity.TopologyKey]; !ok {
 			m.Affinity.TopologyKey = &defaultAffinityTopologyKey
 		}
 	}

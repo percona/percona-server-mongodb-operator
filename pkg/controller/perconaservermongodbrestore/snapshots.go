@@ -78,8 +78,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 		return status, errors.Wrap(err, "create db config secret")
 	}
 
-	if err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
+	if ready, err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
 		return status, errors.Wrap(err, "prepare statefulsets for physical restore")
+	} else if !ready {
+		log.Info("Waiting for statefulsets to be prepared for restore")
+		return status, nil
 	}
 
 	sfsReady, err := r.checkIfStatefulSetsAreReadyForPhysicalRestore(ctx, cluster)
@@ -380,7 +383,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
 				sfs.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
 
-				return r.client.Patch(ctx, &sfs, client.MergeFrom(orig))
+				if err := r.client.Patch(ctx, &sfs, client.MergeFrom(orig)); err != nil {
+					return err
+				}
+
+				if _, err := r.terminateStatefulSetPods(ctx, client.ObjectKeyFromObject(&sfs), true); err != nil {
+					return err
+				}
+
+				return nil
 			}); err != nil {
 				return false, errors.Wrapf(err, "prepare statefulset %s for snapshot restore", nn.Name)
 			}
@@ -420,6 +431,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 		labels              map[string]string
 	}
 
+	type replsetInfo struct {
+		rsName string
+		pvcs   []pvcInfo
+	}
+
 	getVolumeClaimTemplate := func(sfsName string) (corev1.PersistentVolumeClaimSpec, error) {
 		sfs := appsv1.StatefulSet{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: sfsName, Namespace: cluster.Namespace}, &sfs); err != nil {
@@ -437,8 +453,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	}
 
 	// Collect all PVCs that need to be reconciled.
-	pvcs := make([]pvcInfo, 0)
+	allInfos := make([]replsetInfo, 0, len(replsets))
 	for _, rs := range replsets {
+		pvcs := make([]pvcInfo, 0)
 		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.Name)
 		if snapshot == nil {
 			return false, fmt.Errorf("no snapshots found for replset %s", rs.Name)
@@ -490,26 +507,33 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 				})
 			}
 		}
+		allInfos = append(allInfos, replsetInfo{rsName: rs.Name, pvcs: pvcs})
 	}
 
-	// Rollout PVCs one-by-one.
-	for _, info := range pvcs {
-		if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
-			info.volumeClaimTemplate, restore); err != nil {
-			return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
-		} else if !ready {
-			log.Info("Waiting for PVC to be restored", "pvc", info.pvcName)
-			return false, nil
+	// Each replset is restored in parallel, but the PVCs within a replset are restored sequentially.
+	done := true
+	for _, rsPVCs := range allInfos {
+		for _, info := range rsPVCs.pvcs {
+			if ready, err := r.restorePVC(ctx, info.pvcName, info.labels, info.snapshotName,
+				info.volumeClaimTemplate, restore); err != nil {
+				return false, errors.Wrapf(err, "reconcile pvc %s for snapshot restore", info.pvcName)
+			} else if !ready {
+				log.Info("Waiting for PVC to be restored", "pvc", info.pvcName, "replset", rsPVCs.rsName)
+				done = false
+				break
+			}
 		}
 	}
 
-	meta.SetStatusCondition(&status.Conditions, metav1.Condition{
-		Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
-		Status:  metav1.ConditionTrue,
-		Reason:  "AllPVCsRestoredFromSnapshot",
-		Message: "All pvcs have been restored from snapshot",
-	})
-	return true, nil
+	if done {
+		meta.SetStatusCondition(&status.Conditions, metav1.Condition{
+			Type:    psmdbv1.ConditionReplsetPVCsRestoredFromSnapshot,
+			Status:  metav1.ConditionTrue,
+			Reason:  "AllPVCsRestoredFromSnapshot",
+			Message: "All pvcs have been restored from snapshot",
+		})
+	}
+	return done, nil
 }
 
 func generatePVCFromSnapshot(

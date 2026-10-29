@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/sets"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -254,6 +253,21 @@ func (spec *PerconaServerMongoDBSpec) IsVolumeExpansionEnabled() bool {
 	return spec.VolumeExpansionEnabled
 }
 
+// IsVolumeShrinkEnabled returns whether PVC shrink operations are enabled.
+func (spec *PerconaServerMongoDBSpec) IsVolumeShrinkEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableVolumeShrink
+	}
+	return false
+}
+
+func (spec *PerconaServerMongoDBSpec) ShrinkMaxDiskUsagePercent() float64 {
+	if spec.StorageScaling != nil && spec.StorageScaling.ShrinkOpts != nil && spec.StorageScaling.ShrinkOpts.MaxDiskUsagePercent != nil {
+		return float64(*spec.StorageScaling.ShrinkOpts.MaxDiskUsagePercent) / 100.0
+	}
+	return 0.8
+}
+
 // StorageAutoscaling returns the storage autoscaling configuration.
 func (spec *PerconaServerMongoDBSpec) StorageAutoscaling() *AutoscalingSpec {
 	if spec.StorageScaling == nil {
@@ -398,6 +412,7 @@ type PerconaServerMongoDBStatus struct {
 	Size                 int32                               `json:"size"`
 	Ready                int32                               `json:"ready"`
 	StorageAutoscaling   map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	PVCShrink            map[string]PVCShrinkState           `json:"pvcShrink,omitempty"`
 	Search               map[string]SearchStatus             `json:"search,omitempty"`
 	VaultLastRequestedAt *metav1.Time                        `json:"vaultLastRequestedAt,omitempty"`
 }
@@ -416,7 +431,8 @@ const (
 
 	ConditionTypePBMReady AppState = "PBMReady"
 
-	ConditionTypeTLSSecretsReady AppState = "TLSSecretsReady"
+	ConditionTypeTLSSecretsReady        AppState = "TLSSecretsReady"
+	ConditionTypeImageUpgradeInProgress AppState = "ImageUpgradeInProgress"
 )
 
 type ClusterCondition struct {
@@ -505,30 +521,6 @@ type PMMSpec struct {
 	// ReadinessProbe sets a readiness probe for the pmm-client container.
 	// When not set the pmm-client container has no readiness probe.
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
-}
-
-// HasSecret is used for PMM2. PMM2 is reaching its EOL.
-func (pmm *PMMSpec) HasSecret(secret *corev1.Secret) bool {
-	if len(secret.Data) == 0 {
-		return false
-	}
-	s := sets.StringKeySet(secret.Data)
-	if s.HasAll(PMMUserKey, PMMPasswordKey) || s.Has(PMMAPIKey) {
-		return true
-	}
-	return false
-}
-
-// ShouldUseAPIKeyAuth is used for PMM2. PMM2 is reaching its EOL.
-func (spec *PMMSpec) ShouldUseAPIKeyAuth(secret *corev1.Secret) bool {
-	if _, ok := secret.Data[PMMAPIKey]; !ok {
-		_, okl := secret.Data[PMMUserKey]
-		_, okp := secret.Data[PMMPasswordKey]
-		if okl && okp {
-			return false
-		}
-	}
-	return true
 }
 
 type MultiAZ struct {
@@ -1090,8 +1082,25 @@ type StorageScalingSpec struct {
 	// When disabled, PVC sizes will not be modified even if storage changes in the spec
 	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
 
+	// EnableVolumeShrink allows PVC shrink operations by deleting and recreating PVCs
+	// Requires initial sync for data recovery; only enable when replica set is healthy
+	EnableVolumeShrink bool `json:"enableVolumeShrink,omitempty"`
+
+	// ShrinkOpts configures PVC shrink behavior
+	ShrinkOpts *ShrinkOptsSpec `json:"shrinkOpts,omitempty"`
+
 	// Autoscaling configures automatic storage expansion based on disk usage
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
+}
+
+// ShrinkOptsSpec defines options for PVC shrink operations
+type ShrinkOptsSpec struct {
+	// MaxDiskUsagePercent is the maximum allowed disk usage as a percentage
+	// of the target PVC size. Shrink is rejected if any pod exceeds this
+	// threshold. Default is 80 (20% headroom).
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=99
+	MaxDiskUsagePercent *int `json:"maxDiskUsagePercent,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -1723,9 +1732,6 @@ const (
 )
 
 const (
-	PMMUserKey     = "PMM_SERVER_USER"
-	PMMPasswordKey = "PMM_SERVER_PASSWORD"
-	PMMAPIKey      = "PMM_SERVER_API_KEY"
 	PMMServerToken = "PMM_SERVER_TOKEN"
 )
 
@@ -1740,9 +1746,6 @@ const (
 	EnvMongoDBBackupPassword         = "MONGODB_BACKUP_PASSWORD"
 	EnvMongoDBClusterMonitorUser     = "MONGODB_CLUSTER_MONITOR_USER"
 	EnvMongoDBClusterMonitorPassword = "MONGODB_CLUSTER_MONITOR_PASSWORD"
-	EnvPMMServerUser                 = PMMUserKey
-	EnvPMMServerPassword             = PMMPasswordKey
-	EnvPMMServerAPIKey               = PMMAPIKey
 	EnvPMMServerToken                = PMMServerToken
 	EnvMongoDBSearchUser             = "MONGODB_SEARCH_USER"
 	EnvMongoDBSearchPassword         = "MONGODB_SEARCH_PASSWORD"
@@ -1947,6 +1950,37 @@ const (
 
 func AnnotationPreservedRestartedAt(stsName string) string {
 	return annotationPreservedRestartedAtBase + "." + stsName
+}
+
+type PVCShrinkState struct {
+	TargetSize    string   `json:"targetSize"`
+	StartedAt     string   `json:"startedAt"`
+	Phase         string   `json:"phase"`
+	ProcessedPods []string `json:"processedPods"`
+	PrimaryPod    string   `json:"primaryPod"`
+}
+
+func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {
+	return len(cr.Status.PVCShrink) > 0
+}
+
+func (cr *PerconaServerMongoDB) GetPVCShrinkState(stsName string) (PVCShrinkState, bool) {
+	if cr.Status.PVCShrink == nil {
+		return PVCShrinkState{}, false
+	}
+	state, ok := cr.Status.PVCShrink[stsName]
+	return state, ok
+}
+
+func (cr *PerconaServerMongoDB) SetPVCShrinkState(stsName string, state PVCShrinkState) {
+	if cr.Status.PVCShrink == nil {
+		cr.Status.PVCShrink = make(map[string]PVCShrinkState)
+	}
+	cr.Status.PVCShrink[stsName] = state
+}
+
+func (cr *PerconaServerMongoDB) ClearPVCShrinkState(stsName string) {
+	delete(cr.Status.PVCShrink, stsName)
 }
 
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {

@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -72,15 +73,15 @@ func eventRegardingNameIndexer(o client.Object) []string {
 
 // Add creates a new PerconaServerMongoDB Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	r, err := newReconciler(mgr)
+func Add(ctx context.Context, mgr manager.Manager) error {
+	r, err := newReconciler(ctx, mgr)
 	if err != nil {
 		return err
 	}
 
 	// the volume resize logic lists PVC events through the cached client,
 	// which requires the field to be indexed
-	err = mgr.GetFieldIndexer().IndexField(context.TODO(), &eventsv1.Event{}, eventRegardingNameIndex, eventRegardingNameIndexer)
+	err = mgr.GetFieldIndexer().IndexField(ctx, &eventsv1.Event{}, eventRegardingNameIndex, eventRegardingNameIndexer)
 	if err != nil {
 		return errors.Wrapf(err, "index events by %s", eventRegardingNameIndex)
 	}
@@ -89,20 +90,20 @@ func Add(mgr manager.Manager) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
+func newReconciler(ctx context.Context, mgr manager.Manager) (reconcile.Reconciler, error) {
 	cli, err := clientcmd.NewClient(mgr.GetConfig())
 	if err != nil {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
 
-	sv, err := version.Server(cli)
+	sv, err := version.Server(ctx, cli)
 	if err != nil {
 		return nil, errors.Wrap(err, "get server version")
 	}
 
-	mgr.GetLogger().Info("server version", "platform", sv.Platform, "version", sv.Info)
+	mgr.GetLogger().Info("server version", "platform", sv.String(), "version", sv.Info)
 
-	initImage, err := getOperatorPodImage(context.TODO())
+	initImage, err := getOperatorPodImage(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get operator pod image")
 	}
@@ -115,7 +116,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:                 mgr.GetClient(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
-		reconcileIn:            getReconcileInterval(),
+		reconcileIn:            util.ReconcileInterval(logf.Log.WithName("psmdb-controller"), "RECONCILE_INTERVAL"),
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
 		newPBM:                 backup.NewPBM,
@@ -154,32 +155,6 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 	}
 
 	return pod.Spec.Containers[0].Image, nil
-}
-
-// getReconcileInterval returns the reconciliation interval from the RECONCILE_INTERVAL
-// environment variable, or the default of 5 seconds if not set or invalid.
-func getReconcileInterval() time.Duration {
-	defaultInterval := 5 * time.Second
-
-	interval := os.Getenv("RECONCILE_INTERVAL")
-	if interval == "" {
-		return defaultInterval
-	}
-
-	d, err := time.ParseDuration(interval)
-	if err != nil {
-		log := logf.Log.WithName("psmdb-controller")
-		log.Info("Invalid RECONCILE_INTERVAL value, using default (5s)", "value", interval, "error", err, "default", defaultInterval)
-		return defaultInterval
-	}
-
-	if d < defaultInterval {
-		log := logf.Log.WithName("psmdb-controller")
-		log.Info("RECONCILE_INTERVAL must be at least 5s, using 5s", "value", interval, "default", defaultInterval)
-		return defaultInterval
-	}
-
-	return d
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -248,6 +223,9 @@ type ReconcilePerconaServerMongoDB struct {
 	initImage string
 
 	lockers lockStore
+
+	pvcUsageBackoff wait.Backoff
+	podRestartPoll  time.Duration
 }
 
 type lockStore struct {
@@ -372,6 +350,9 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		rec, err := r.checkFinalizers(ctx, cr)
 		if rec || err != nil {
 			return rr, err
+		}
+		if len(cr.GetFinalizers()) == 0 {
+			return reconcile.Result{}, nil
 		}
 	}
 
@@ -760,7 +741,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
-		if err == errWaitingTermination {
+		if errors.Is(err, errWaitingTermination) {
 			return nil
 		}
 		return errors.Wrap(err, "delete psmdb pods")
@@ -946,8 +927,7 @@ func (r *ReconcilePerconaServerMongoDB) checkIfUserDataExistInRS(ctx context.Con
 
 	list, err := mc.ListDBs(ctx)
 	if err != nil {
-		log.Error(err, "failed to list databases", "rs", rsName)
-		return errors.Wrapf(err, "failed to list databases for rs %s", rsName)
+		return errors.Wrapf(err, "list databases for rs %s", rsName)
 	}
 
 	for _, db := range list.DBs {
@@ -1395,7 +1375,7 @@ func deleteConfigMapIfExists(ctx context.Context, cl client.Client, cr *api.Perc
 		return nil
 	}
 
-	return cl.Delete(ctx, configMap)
+	return client.IgnoreNotFound(cl.Delete(ctx, configMap))
 }
 
 func (r *ReconcilePerconaServerMongoDB) createOrUpdateConfigMap(ctx context.Context, cr *api.PerconaServerMongoDB, configMap *corev1.ConfigMap) error {
@@ -1468,12 +1448,6 @@ func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr
 		return nil
 	}
 
-	if uptodate, err := r.isAllSfsUpToDate(ctx, cr); err != nil {
-		return errors.Wrap(err, "failed to check if all sfs are up to date")
-	} else if !uptodate {
-		return nil
-	}
-
 	msSts := psmdb.MongosStatefulset(cr)
 	err := r.client.Get(ctx, types.NamespacedName{Name: msSts.Name, Namespace: msSts.Namespace}, msSts)
 	if k8serrors.IsNotFound(err) {
@@ -1481,11 +1455,30 @@ func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr
 	} else if err != nil {
 		return errors.Wrapf(err, "get statefulset %s", msSts.Name)
 	}
-	if msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
-		return nil
+
+	// When a PVC shrink is in progress the STS was deleted (cascade=orphan) and
+	// recreated with a new revision. Orphaned pods keep the old revision, so
+	// UpdatedReplicas stays at 0 until the shrink state machine deletes each pod.
+	// Skip the staleness gates so the state machine can advance.
+	if _, shrinking := cr.GetPVCShrinkState(msSts.Name); !shrinking {
+		if uptodate, err := r.isAllSfsUpToDate(ctx, cr); err != nil {
+			return errors.Wrap(err, "failed to check if all sfs are up to date")
+		} else if !uptodate {
+			return nil
+		}
+		if msSts.Status.UpdatedReplicas < msSts.Status.Replicas {
+			return nil
+		}
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, msSts, naming.MongosLabels(cr), psmdbconfig.MongosLogVolClaimName, *pvcSpec); err != nil {
+	ls := naming.MongosLabels(cr)
+
+	// autoscaling grows the request in the spec, which the resize below applies
+	if err := r.reconcileStorageAutoscaling(ctx, cr, msSts, psmdbconfig.MongosLogVolClaimName, pvcSpec, ls); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", msSts.Name)
+	}
+
+	if err := r.resizeVolumesIfNeeded(ctx, cr, msSts, ls, psmdbconfig.MongosLogVolClaimName, *pvcSpec); err != nil {
 		return errors.Wrap(err, "resize mongos volumes")
 	}
 	return nil
@@ -1547,6 +1540,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 
 		if _, ok := sts.Annotations[api.AnnotationPVCResizeInProgress]; ok {
 			log.V(1).Info("PVC resize in progress, skipping reconciliation of statefulset", "name", sts.Name)
+			return nil
+		}
+
+		if _, ok := cr.GetPVCShrinkState(sts.Name); ok {
+			log.V(1).Info("PVC shrink in progress, skipping reconciliation of mongos statefulset", "name", sts.Name)
 			return nil
 		}
 	}
@@ -1632,6 +1630,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	pmmC := pmm.Container(ctx, cr, secret, cfgRs.GetPort(), cr.Spec.PMM.MongosParams)
 	if pmmC != nil {
+		templateSpec.Spec.Volumes = psmdb.AddPMMTmpVolume(cr, pmmC, templateSpec.Spec.Volumes)
 		templateSpec.Spec.Containers = append(
 			templateSpec.Spec.Containers,
 			*pmmC,

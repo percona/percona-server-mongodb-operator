@@ -108,7 +108,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 500M
+              memory: 1G
             requests:
               cpu: 100m
               memory: 100M
@@ -260,6 +260,8 @@ spec:
                   key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
                   name: internal-another-name-users
                   optional: false
+            - name: MONGODB_TLS_ENABLED
+              value: "false"
           imagePullPolicy: IfNotPresent
           name: logrotate
           resources: {}
@@ -279,7 +281,7 @@ spec:
           resources:
             limits:
               cpu: 500m
-              memory: 500M
+              memory: 1G
             requests:
               cpu: 100m
               memory: 100M

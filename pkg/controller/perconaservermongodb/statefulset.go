@@ -45,17 +45,34 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return nil, errors.Wrapf(err, "get StatefulSet for replset %s", rs.Name)
 	}
 
-	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
-	if ok {
-		if err := r.smartUpdate(ctx, cr, sfs, rs); err != nil {
-			return nil, errors.Wrap(err, "failed to run smartUpdate")
-		}
-
+	if _, ok := sfs.Annotations[api.AnnotationRestoreInProgress]; ok {
 		log.V(1).Info("Restore in progress, skipping reconciliation of statefulset", "name", sfs.Name)
 		return sfs, nil
 	}
 
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, volumeSpec, ls); err != nil {
+	// During PVC shrink the STS was deleted (cascade=orphan) and must be
+	// recreated with the new VolumeClaimTemplate before pods can be processed.
+	// Ensure the STS exists first, then run the shrink state machine, and skip
+	// smartUpdate/PDB/autoscaling which would conflict with the rolling process.
+	if _, ok := cr.GetPVCShrinkState(sfs.Name); ok {
+		err = r.createOrUpdate(ctx, sfs)
+		if err != nil {
+			return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
+		}
+
+		if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec); err != nil {
+			return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
+		}
+
+		log.V(1).Info("PVC shrink in progress, skipping smartUpdate and PDB reconciliation", "name", sfs.Name)
+		return sfs, nil
+	}
+
+	var pvcSpec *api.PVCSpec
+	if volumeSpec != nil {
+		pvcSpec = &volumeSpec.PersistentVolumeClaim
+	}
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, psmdbconfig.MongodDataVolClaimName, pvcSpec, ls); err != nil {
 		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
 	}
 

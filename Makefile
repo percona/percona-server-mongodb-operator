@@ -1,6 +1,6 @@
 NAME ?= percona-server-mongodb-operator
 IMAGE_TAG_OWNER ?= perconalab
-SED := $(shell which gsed || which sed)
+SED := $(shell command -v gsed || command -v sed)
 IMAGE_TAG_BASE ?= $(IMAGE_TAG_OWNER)/$(NAME)
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
 IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
@@ -14,7 +14,7 @@ all: build
 help: ## Display this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
-generate: controller-gen mockgen go-fix ## Generate CRDs and RBAC files
+generate: controller-gen mockgen go-fix check-deadcode ## Generate CRDs and RBAC files
 	go generate ./...
 	$(CONTROLLER_GEN) crd:maxDescLen=0,allowDangerousTypes=true rbac:roleName=$(NAME) webhook paths="./..." output:crd:artifacts:config=config/crd/bases  ## Generate WebhookConfiguration, Role and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) object paths="./..." ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -29,11 +29,11 @@ $(DEPLOYDIR)/crd.yaml: kustomize generate
 
 .PHONY: $(DEPLOYDIR)/operator.yaml
 $(DEPLOYDIR)/operator.yaml:
-	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE_TAG_BASE):$(VERSION)#}" deploy/operator.yaml
+	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE)#}" deploy/operator.yaml
 
 .PHONY: $(DEPLOYDIR)/cw-operator.yaml
 $(DEPLOYDIR)/cw-operator.yaml:
-	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE_TAG_BASE):$(VERSION)#}" deploy/cw-operator.yaml
+	$(SED) -i "/^      containers:/,/^        image:/{s#image: .*#image: $(IMAGE)#}" deploy/cw-operator.yaml
 
 $(DEPLOYDIR)/bundle.yaml: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/rbac.yaml $(DEPLOYDIR)/operator.yaml  ## Generate deploy/bundle.yaml
 	cat $(DEPLOYDIR)/crd.yaml > $(DEPLOYDIR)/bundle.yaml; echo "---" >> $(DEPLOYDIR)/bundle.yaml; cat $(DEPLOYDIR)/rbac.yaml >> $(DEPLOYDIR)/bundle.yaml; echo "---" >> $(DEPLOYDIR)/bundle.yaml; cat $(DEPLOYDIR)/operator.yaml >> $(DEPLOYDIR)/bundle.yaml
@@ -51,15 +51,15 @@ manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle
 REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml
 
 .PHONY: e2e-test
-e2e-test: ## Run a single e2e test via pytest (TEST=<name>)
+e2e-test: uv ## Run a single e2e test via pytest (TEST=<name>)
 ifndef TEST
 	$(error TEST is required. Usage: make e2e-test TEST=init-deploy)
 endif
 	mkdir -p e2e-tests/reports e2e-tests/logs
 	@if ls e2e-tests/$(TEST)/test_*.py 1>/dev/null 2>&1; then \
-		uv run pytest e2e-tests/$(TEST)/ $(REPORT_OPTS); \
+		$(UV) run pytest e2e-tests/$(TEST)/ $(REPORT_OPTS); \
 	else \
-		uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
+		$(UV) run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
 	fi
 
 ##@ Build
@@ -89,7 +89,7 @@ undeploy: ## Undeploy operator
 	kubectl delete -f $(DEPLOYDIR)/operator.yaml
 
 test: envtest generate ## Run tests.
-	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+	DISABLE_TELEMETRY=true KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -shuffle=on -coverprofile cover.out
 
 py-deps: uv ## Install e2e-tests Python dependencies
 	$(UV) sync --locked
@@ -139,6 +139,9 @@ MOCKGEN = $(shell pwd)/bin/mockgen
 mockgen: ## Download mockgen locally if necessary.
 	$(call go-get-tool,$(MOCKGEN), github.com/golang/mock/mockgen@latest)
 
+check-deadcode: ## Report functions unreachable from main or from tests.
+	go run golang.org/x/tools/cmd/deadcode@latest -test ./...
+
 UV = $(shell pwd)/bin/uv
 uv: ## Download uv locally if necessary.
 	@[ -f $(UV) ] || { \
@@ -150,7 +153,7 @@ update-version:
 
 
 _e2e_image_vars := IMAGE_OPERATOR IMAGE_BACKUP IMAGE_PMM_CLIENT IMAGE_PMM_SERVER \
-	IMAGE_PMM3_CLIENT IMAGE_PMM3_SERVER IMAGE_LOGCOLLECTOR IMAGE_SEARCH IMAGE_CLUSTERSYNC
+	IMAGE_LOGCOLLECTOR IMAGE_SEARCH IMAGE_CLUSTERSYNC
 $(foreach v,$(_e2e_image_vars),$(eval _saved_$(v) := $$($(v))))
 
 # Prepare release
@@ -158,7 +161,7 @@ include e2e-tests/release_versions
 $(foreach v,$(_e2e_image_vars),$(eval e2e-test: $(v) := $$(_saved_$(v))))
 CERT_MANAGER_VER := $(shell grep -Eo "cert-manager v.*" go.mod|grep -Eo "[0-9]+\.[0-9]+\.[0-9]+")
 release: manifests
-	$(SED) -i "/CERT_MANAGER_VER/s/CERT_MANAGER_VER=\".*/CERT_MANAGER_VER=\"$(CERT_MANAGER_VER)\"/" e2e-tests/functions
+	$(SED) -i "s/\"CERT_MANAGER_VER\": \".*\"/\"CERT_MANAGER_VER\": \"$(CERT_MANAGER_VER)\"/" e2e-tests/conftest.py
 	echo "$(VERSION)" > pkg/version/version.txt
 	$(SED) -i \
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
@@ -167,17 +170,10 @@ release: manifests
 		-e "s/crVersion: .*/crVersion: $(VERSION)/" \
 		-e "/^spec:/,/^  image:/{s#image: .*#image: $(IMAGE_MONGOD80)#}" \
 		-e "/^  backup:/,/^    image:/{s#image: .*#image: $(IMAGE_BACKUP)#}" \
-		-e "s#initImage: .*#initImage: percona/percona-server-mongodb-operator:$(VERSION)#g" \
+		-e "s#initImage: .*#initImage: $(IMAGE)#g" \
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: $(IMAGE_LOGCOLLECTOR)#}" \
 		-e "/^#  search:/,/^    image:/{s#image: .*#image: $(IMAGE_SEARCH)#}" \
-		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM3_CLIENT)#}" deploy/cr.yaml
-	$(SED) -i \
-		-e "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" \
-		-e "s|perconalab/percona-server-mongodb-operator:main-backup|$(IMAGE_BACKUP)|g" \
-		-e "s|perconalab/percona-server-mongodb-operator:main|$(IMAGE_OPERATOR)|g" \
-		-e "s|perconalab/fluentbit:main-logcollector|$(IMAGE_LOGCOLLECTOR)|g" \
-		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
-	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"${IMAGE_OPERATOR}\"|g" pkg/controller/perconaservermongodb/suite_test.go
+		-e "/^  pmm:/,/^    image:/{s#image: .*#image: $(IMAGE_PMM_CLIENT)#}" deploy/cr.yaml
 	$(SED) -i "s|perconalab/percona-server-mongodb-operator:main-mongod8.0|$(IMAGE_MONGOD80)|g" pkg/psmdb/mongos_test.go
 	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: $(IMAGE_CLUSTERSYNC)|g" deploy/clustersync.yaml
 
@@ -198,27 +194,18 @@ after-release: update-version after-release-versions manifests update-upgrade-co
 		-e "/^  logcollector:/,/^    image:/{s#image: .*#image: perconalab/fluentbit:main-logcollector#}" \
 		-e "/^#  search:/,/^    image:/{s#image: .*#image: perconalab/percona-server-mongodb-operator:main-mongot#}" \
 		-e "/^  pmm:/,/^    image:/{s#image: .*#image: perconalab/pmm-client:3-dev-latest#}" deploy/cr.yaml
-	$(SED) -i \
-		-e "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" \
-		-e "s|$(IMAGE_BACKUP)|perconalab/percona-server-mongodb-operator:main-backup|g" \
-		-e "s|$(IMAGE_OPERATOR)|perconalab/percona-server-mongodb-operator:main|g" \
-		-e "s|$(IMAGE_LOGCOLLECTOR)|perconalab/fluentbit:main-logcollector|g" \
-		pkg/controller/perconaservermongodb/testdata/reconcile-statefulset/*.yaml
-	$(SED) -i "s|cr.Spec.InitImage = \".*\"|cr.Spec.InitImage = \"perconalab/percona-server-mongodb-operator:main\"|g" pkg/controller/perconaservermongodb/suite_test.go
 	$(SED) -i "s|$(IMAGE_MONGOD80)|perconalab/percona-server-mongodb-operator:main-mongod8.0|g" pkg/psmdb/mongos_test.go
 	$(SED) -i "s|image: .*percona-clustersync-mongodb.*|image: perconalab/percona-clustersync-mongodb:latest|g" deploy/clustersync.yaml
 
 after-release-versions:
 	$(SED) -i \
-		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=$(IMAGE_TAG_BASE):main#" \
-		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=$(IMAGE_TAG_BASE):main-mongod8.0#" \
-		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=$(IMAGE_TAG_BASE):main-mongod7.0#" \
-		-e "s#^IMAGE_MONGOD60=.*#IMAGE_MONGOD60=$(IMAGE_TAG_BASE):main-mongod6.0#" \
-		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=$(IMAGE_TAG_BASE):main-backup#" \
-		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=percona/pmm-client:2.44.1-1#" \
-		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:dev-latest#" \
-		-e "s#^IMAGE_PMM3_CLIENT=.*#IMAGE_PMM3_CLIENT=perconalab/pmm-client:3-dev-latest#" \
-		-e "s#^IMAGE_PMM3_SERVER=.*#IMAGE_PMM3_SERVER=perconalab/pmm-server:3-dev-latest#" \
+		-e "s#^IMAGE_OPERATOR=.*#IMAGE_OPERATOR=perconalab/percona-server-mongodb-operator:main#" \
+		-e "s#^IMAGE_MONGOD83=.*#IMAGE_MONGOD83=perconalab/percona-server-mongodb-operator:main-mongod8.3#" \
+		-e "s#^IMAGE_MONGOD80=.*#IMAGE_MONGOD80=perconalab/percona-server-mongodb-operator:main-mongod8.0#" \
+		-e "s#^IMAGE_MONGOD70=.*#IMAGE_MONGOD70=perconalab/percona-server-mongodb-operator:main-mongod7.0#" \
+		-e "s#^IMAGE_BACKUP=.*#IMAGE_BACKUP=perconalab/percona-server-mongodb-operator:main-backup#" \
+		-e "s#^IMAGE_PMM_CLIENT=.*#IMAGE_PMM_CLIENT=perconalab/pmm-client:3-dev-latest#" \
+		-e "s#^IMAGE_PMM_SERVER=.*#IMAGE_PMM_SERVER=perconalab/pmm-server:3-dev-latest#" \
 		-e "s#^IMAGE_LOGCOLLECTOR=.*#IMAGE_LOGCOLLECTOR=perconalab/fluentbit:main-logcollector#" \
 		-e "s#^IMAGE_SEARCH=.*#IMAGE_SEARCH=$(IMAGE_TAG_BASE):main-mongot#" \
 		-e "s#^IMAGE_CLUSTERSYNC=.*#IMAGE_CLUSTERSYNC=perconalab/percona-clustersync-mongodb:latest#" \

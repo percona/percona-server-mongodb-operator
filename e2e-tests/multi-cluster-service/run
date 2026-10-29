@@ -50,6 +50,30 @@ wait_service_import() {
 	set -o xtrace
 }
 
+wait_mcs_dns() {
+	set +o xtrace
+	retry=0
+	local client_pod
+	client_pod=$(kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}')
+	echo -n 'waiting for MCS DNS records to be resolvable'
+	for rs in rs0 cfg; do
+		for i in 0 1 2; do
+			local host="${cluster}-${rs}-${i}.${namespace}.svc.clusterset.local"
+			until kubectl exec "${client_pod}" -- getent hosts "${host}" >/dev/null 2>&1; do
+				let retry+=1
+				if [ $retry -ge 64 ]; then
+					echo max retry count $retry reached. ${host} is not resolvable, probably a problem with MCS DNS.
+					exit 1
+				fi
+				echo -n .
+				sleep 10
+			done
+		done
+	done
+	echo
+	set -o xtrace
+}
+
 wait_service_export() {
 	set +o xtrace
 	retry=0
@@ -116,8 +140,25 @@ EOF
 kubectl -n default wait --for=condition=Ready pod/curl
 log "pod/curl is ready"
 
-k8s_cluster_name=$(kubectl exec -n default -it curl -- curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-name)
-k8s_cluster_region=$(kubectl exec -n default -it curl -- curl -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/cluster-location)
+get_gke_metadata() {
+	local attr=$1
+	local value
+
+	for _ in $(seq 1 10); do
+		value=$(kubectl exec -n default curl -- curl -sf -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/attributes/${attr}" || true)
+		if [[ -n ${value} ]]; then
+			echo "${value}"
+			return 0
+		fi
+		sleep 5
+	done
+
+	echo "failed to get ${attr} from GKE metadata server" >&2
+	return 1
+}
+
+k8s_cluster_name=$(get_gke_metadata cluster-name)
+k8s_cluster_region=$(get_gke_metadata cluster-location)
 log "gke-cluster=${k8s_cluster_region}/${k8s_cluster_name}"
 
 gcloud container hub memberships register ${k8s_cluster_name} --gke-cluster ${k8s_cluster_region}/${k8s_cluster_name} --enable-workload-identity
@@ -151,7 +192,11 @@ kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"add","path":"/spec/mu
 desc "check if ServiceExport objects are created"
 wait_service_export
 wait_service_import
-wait_cluster_consistency "${cluster}"
+wait_mcs_dns
+# Replset reconfigs fail until clusterset.local hostnames are resolvable and the
+# operator can back off for a long time, so trigger a reconcile explicitly.
+kubectl_bin annotate psmdb ${cluster} percona.com/mcs-dns-ready="$(date +%s)" --overwrite
+wait_cluster_consistency "${cluster}" 60
 
 desc "disable MCS and wait for exported/imported services to be removed"
 kubectl_bin patch psmdb ${cluster} --type json -p='[{"op":"replace","path":"/spec/multiCluster/enabled","value":false}]'

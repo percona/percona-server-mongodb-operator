@@ -16,6 +16,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -41,12 +42,13 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // Add creates a new PerconaServerMongoDBBackup Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
+func Add(ctx context.Context, mgr manager.Manager) error {
 	r, err := newReconciler(mgr)
 	if err != nil {
 		return err
@@ -62,12 +64,13 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 	}
 
 	return &ReconcilePerconaServerMongoDBBackup{
-		client:     mgr.GetClient(),
-		apiReader:  mgr.GetAPIReader(),
-		scheme:     mgr.GetScheme(),
-		newPBMFunc: backup.NewPBM,
-		clientcmd:  cli,
-		recorder:   mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		client:      mgr.GetClient(),
+		apiReader:   mgr.GetAPIReader(),
+		scheme:      mgr.GetScheme(),
+		newPBMFunc:  backup.NewPBM,
+		clientcmd:   cli,
+		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbbackup-controller"), "BACKUP_RECONCILE_INTERVAL"),
 	}, nil
 }
 
@@ -100,7 +103,8 @@ type ReconcilePerconaServerMongoDBBackup struct {
 	clientcmd clientcmd.Client
 	recorder  record.EventRecorder
 
-	newPBMFunc backup.NewPBMFunc
+	newPBMFunc  backup.NewPBMFunc
+	reconcileIn time.Duration
 }
 
 // Reconcile reads that state of the cluster for a PerconaServerMongoDBBackup object and makes changes based on the state read
@@ -115,7 +119,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	defer log.V(1).Info("Reconcile finished")
 
 	rr := reconcile.Result{
-		RequeueAfter: time.Second * 5,
+		RequeueAfter: r.reconcileIn,
 	}
 	// Fetch the PerconaServerMongoDBBackup instance
 	cr := &psmdbv1.PerconaServerMongoDBBackup{}
@@ -143,6 +147,9 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	if (cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError) &&
 		cr.ObjectMeta.DeletionTimestamp == nil {
 		return reconcile.Result{}, nil
+	}
+	if cr.DeletionTimestamp != nil {
+		return r.reconcileDelete(ctx, cr)
 	}
 
 	status := cr.Status
@@ -193,7 +200,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 	if cluster != nil {
 		var svr *version.ServerVersion
-		svr, err = version.Server(r.clientcmd)
+		svr, err = version.Server(ctx, r.clientcmd)
 		if err != nil {
 			return rr, errors.Wrapf(err, "fetch server version")
 		}
@@ -207,37 +214,18 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	var bcp backupExecutor
 	if err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
 		var err error
-		switch {
-		case cr.Spec.Type == defs.ExternalBackup &&
-			cr.Spec.VolumeSnapshotClass != nil && *cr.Spec.VolumeSnapshotClass != "":
-			bcp, err = r.newSnapshotBackups(ctx, cluster)
-			if err != nil {
-				return errors.Wrap(err, "create snapshot backup object")
-			}
-		default:
-			bcp, err = r.newManagedBackups(ctx, cluster)
-			if err != nil {
-				return errors.Wrap(err, "create backup object")
-			}
-		}
-		return nil
+		bcp, err = r.newBackupExecutor(ctx, cluster, cr)
+		return err
 	}); err != nil {
 		return rr, err
 	}
 
-	defer func() {
-		if err := bcp.PBM().Close(ctx); err != nil {
-			log.Error(err, "failed to close pbm")
-		}
-	}()
-
-	err = r.checkFinalizers(ctx, cr, cluster, bcp)
-	if err != nil {
-		return rr, errors.Wrap(err, "failed to run finalizer")
-	}
-
-	if cr.ObjectMeta.DeletionTimestamp != nil {
-		return rr, nil
+	if pbm := bcp.PBM(); pbm != nil {
+		defer func() {
+			if err := pbm.Close(ctx); err != nil {
+				log.Error(err, "failed to close pbm")
+			}
+		}()
 	}
 
 	status, err = r.reconcile(ctx, cluster, cr, bcp)
@@ -246,6 +234,65 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 	}
 
 	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) reconcileDelete(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) (reconcile.Result, error) {
+	log := logf.FromContext(ctx)
+	rr := reconcile.Result{RequeueAfter: time.Second * 5}
+
+	cluster := new(psmdbv1.PerconaServerMongoDB)
+	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Spec.GetClusterName(), Namespace: cr.Namespace}, cluster)
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			return rr, errors.Wrapf(err, "get cluster %s/%s", cr.Namespace, cr.Spec.GetClusterName())
+		}
+		cluster = nil
+	}
+
+	if cluster != nil && r.clientcmd != nil {
+		svr, err := version.Server(ctx, r.clientcmd)
+		if err != nil {
+			log.Error(err, "failed to fetch server version; continuing with finalizers")
+		} else if err := cluster.CheckNSetDefaults(ctx, svr.Platform); err != nil {
+			log.Error(err, "failed to set cluster defaults; continuing with finalizers")
+		}
+	}
+
+	bcp, err := r.newBackupExecutor(ctx, cluster, cr)
+	if err != nil {
+		log.Error(err, "failed to create backup object; continuing with finalizers")
+		bcp = &managedBackups{}
+	} else if pbm := bcp.PBM(); pbm != nil {
+		defer func() {
+			if err := pbm.Close(ctx); err != nil {
+				log.Error(err, "failed to close pbm")
+			}
+		}()
+	}
+
+	if err := r.checkFinalizers(ctx, cr, cluster, bcp); err != nil {
+		return rr, errors.Wrap(err, "failed to run finalizer")
+	}
+
+	return rr, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBBackup) newBackupExecutor(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB, cr *psmdbv1.PerconaServerMongoDBBackup) (backupExecutor, error) {
+	switch {
+	case cr.Spec.Type == defs.ExternalBackup &&
+		cr.Spec.VolumeSnapshotClass != nil && *cr.Spec.VolumeSnapshotClass != "":
+		bcp, err := r.newSnapshotBackups(ctx, cluster)
+		if err != nil {
+			return nil, errors.Wrap(err, "create snapshot backup object")
+		}
+		return bcp, nil
+	default:
+		bcp, err := r.newManagedBackups(ctx, cluster)
+		if err != nil {
+			return nil, errors.Wrap(err, "create backup object")
+		}
+		return bcp, nil
+	}
 }
 
 // reconcile backup. firstly we check if there are concurrent jobs running
@@ -339,6 +386,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) tryAcquireLease(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	// The lease is acquired before the backup command is sent, so a backup past
+	// New/Waiting already holds it. Re-acquiring it against a stale cache could
+	// move the backup back to Waiting and send a second backup command.
+	if cr.Status.State != psmdbv1.BackupStateNew && cr.Status.State != psmdbv1.BackupStateWaiting {
+		return true, nil
+	}
+
 	log := logf.FromContext(ctx)
 	leaseName := naming.BackupLeaseName(cluster.Name)
 	holderID := naming.BackupHolderId(cr)
@@ -854,8 +908,17 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 	return nil
 }
 
+// updateStatusBackoff gives the informer cache time to catch up with our own
+// previous writes, otherwise consecutive status writes keep conflicting.
+var updateStatusBackoff = wait.Backoff{
+	Steps:    6,
+	Duration: 50 * time.Millisecond,
+	Factor:   2.0,
+	Jitter:   0.1,
+}
+
 func (r *ReconcilePerconaServerMongoDBBackup) updateStatus(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err := retry.RetryOnConflict(updateStatusBackoff, func() error {
 		c := &psmdbv1.PerconaServerMongoDBBackup{}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)

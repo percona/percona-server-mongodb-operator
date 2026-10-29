@@ -3,12 +3,14 @@ package backup
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
@@ -26,10 +28,62 @@ import (
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
+func TestPBMConfigPriority(t *testing.T) {
+	t.Parallel()
+
+	secret := &corev1.Secret{
+		APIVersion: "/v1",
+		Kind:       "Secret",
+		Name:       "test-secret",
+		Namespace:  "test-namespace",
+	}
+
+	t.Run("not configured", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = version.Version()
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+		cr.Spec.Backup.Configuration.BackupOptions.Priority = nil
+
+		cli := buildFakeClient(t, secret)
+
+		cfg, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.NoError(t, err)
+		require.Empty(t, cfg.Backup.Priority)
+	})
+
+	t.Run("legacy cr version", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = "1.23.0"
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+		cr.Spec.Backup.Configuration.BackupOptions.Priority = nil
+
+		cli := buildFakeClient(t, secret)
+
+		// operator tries to calculate priorities, which requires users secret
+		_, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.ErrorContains(t, err, "get priorities")
+	})
+
+	t.Run("user defined", func(t *testing.T) {
+		cr := expectedCR(t)
+		cr.Spec.CRVersion = version.Version()
+		cr.Status.BackupVersion = pbmVersion.Current().Version
+
+		cli := buildFakeClient(t, secret)
+
+		cfg, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
+		require.NoError(t, err)
+		require.Equal(t, config.Priority{"localhost:28019": 2.5}, cfg.Backup.Priority)
+	})
+}
+
 func TestApplyCustomPBMConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := expectedCR(t)
 	cr.Status.BackupVersion = pbmVersion.Current().Version
 
@@ -110,6 +164,8 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 }
 
 func TestPBMStorageConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -465,6 +521,37 @@ func TestPBMStorageConfig(t *testing.T) {
 				},
 			},
 		},
+		"azure-connection-string": {
+			[]client.Object{
+				&corev1.Secret{
+					Name:      "test-secret",
+					Namespace: "test-namespace",
+					Data: map[string][]byte{
+						// AZURE_STORAGE_CONNECTION_STRING takes precedence over individual keys
+						"AZURE_STORAGE_CONNECTION_STRING": []byte("DefaultEndpointsProtocol=https;AccountName=some-storage-account;AccountKey=some-storage-key==;EndpointSuffix=core.windows.net"),
+					},
+				},
+			},
+			api.BackupStorageSpec{
+				Type: api.BackupStorageAzure,
+				Azure: api.BackupStorageAzureSpec{
+					Container:         "some-container",
+					Prefix:            "psmdb",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			config.StorageConf{
+				Type: storage.Azure,
+				Azure: &azure.Config{
+					Account:   "some-storage-account",
+					Container: "some-container",
+					Prefix:    "psmdb",
+					Credentials: azure.Credentials{
+						Key: "some-storage-key==",
+					},
+				},
+			},
+		},
 		"oss": {
 			[]client.Object{
 				&corev1.Secret{
@@ -786,6 +873,8 @@ func TestPBMStorageConfig(t *testing.T) {
 }
 
 func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -835,6 +924,8 @@ func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 }
 
 func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -866,15 +957,20 @@ func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
 	require.EqualError(t, err, "oss storage requires PBM 2.12.0 or newer")
 }
 
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	if err := scheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
+
+	return s
+})
+
 func buildFakeClient(t *testing.T, objs ...client.Object) client.WithWatch {
 	t.Helper()
 
-	s := scheme.Scheme
-	if err := scheme.AddToScheme(s); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-
-	return fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
+	return fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(objs...).Build()
 }
 
 func expectedCR(t *testing.T) *api.PerconaServerMongoDB {
@@ -891,4 +987,72 @@ func expectedCR(t *testing.T) *api.PerconaServerMongoDB {
 	}
 
 	return cr
+}
+
+func TestGetMongoUri(t *testing.T) {
+	tests := map[string]struct {
+		tlsEnabled   bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			expectedURI: "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/",
+		},
+		"tls enabled": {
+			tlsEnabled:   true,
+			allowInvalid: false,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt",
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			allowInvalid: true,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt&tlsInsecure=true",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Name:      "cluster",
+				Namespace: "ns",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Secrets:   &api.SecretsSpec{SSL: "cluster-ssl"},
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+			usersSecret := &corev1.Secret{
+				Name:      api.UserSecretName(cr),
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"MONGODB_BACKUP_USER":     []byte("backup"),
+					"MONGODB_BACKUP_PASSWORD": []byte("backup@pass"),
+				},
+			}
+			sans := tls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+			require.NoError(t, err)
+
+			sslSecret := &corev1.Secret{
+				Name:      "cluster-ssl",
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				},
+			}
+			cl := buildFakeClient(t, usersSecret, sslSecret)
+			t.Cleanup(func() {
+				_ = os.Remove("/tmp/ns-cluster-tls.pem")
+				_ = os.Remove("/tmp/ns-cluster-ca.crt")
+			})
+
+			uri, err := getMongoUri(t.Context(), cl, cr, []string{"cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017"}, tt.tlsEnabled)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedURI, uri)
+		})
+	}
 }

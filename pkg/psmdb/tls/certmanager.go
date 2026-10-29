@@ -36,9 +36,10 @@ type CertManagerController interface {
 }
 
 type certManagerController struct {
-	cl     client.Client
-	scheme *runtime.Scheme
-	dryRun bool
+	cl           client.Client
+	scheme       *runtime.Scheme
+	dryRun       bool
+	pollInterval time.Duration
 }
 
 var _ CertManagerController = new(certManagerController)
@@ -260,7 +261,19 @@ func (c *certManagerController) ApplyCAIssuer(ctx context.Context, cr *api.Perco
 }
 
 func (c *certManagerController) ApplyCertificate(ctx context.Context, cr *api.PerconaServerMongoDB, cert Certificate) (util.ApplyStatus, error) {
-	return c.createOrUpdate(ctx, cr, cert.Object())
+	obj := cert.Object()
+
+	if cr.CompareVersion("1.24.0") >= 0 && len(obj.Spec.DNSNames) > 0 {
+		current := new(cm.Certificate)
+		err := c.cl.Get(ctx, types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, current)
+		if client.IgnoreNotFound(err) != nil {
+			return "", errors.Wrap(err, "get certificate")
+		}
+
+		obj.Spec.DNSNames, _ = SansToIssue(current.Spec.DNSNames, obj.Spec.DNSNames)
+	}
+
+	return c.createOrUpdate(ctx, cr, obj)
 }
 
 var (
@@ -300,54 +313,77 @@ func translateCheckError(err error) error {
 	return cmapichecker.TranslateToSimpleError(err)
 }
 
+const (
+	certWaitPollInterval = time.Second
+	certWaitTimeout      = 30 * time.Second
+)
+
 func (c *certManagerController) WaitForCerts(ctx context.Context, cr *api.PerconaServerMongoDB, certificates ...Certificate) error {
 	if c.dryRun {
 		return nil
 	}
-	ticker := time.NewTicker(1 * time.Second)
-	timeoutTimer := time.NewTimer(30 * time.Second)
+
+	pollInterval := c.pollInterval
+	if pollInterval <= 0 {
+		pollInterval = certWaitPollInterval
+	}
+
+	ticker := time.NewTicker(pollInterval)
+	timeoutTimer := time.NewTimer(certWaitTimeout)
 	defer timeoutTimer.Stop()
 	defer ticker.Stop()
+
 	for {
 		select {
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-timeoutTimer.C:
 			return errors.Errorf("timeout: can't get tls certificates from certmanager, %v", certificates)
 		case <-ticker.C:
-			successCount := 0
-			for _, cert := range certificates {
-				secret := &corev1.Secret{}
-				err := c.cl.Get(ctx, types.NamespacedName{
-					Name:      cert.SecretName(),
-					Namespace: cert.Namespace(),
-				}, secret)
-				if err != nil && !k8serrors.IsNotFound(err) {
-					return err
-				} else if err == nil {
-					successCount++
-					if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != cert.Name() {
-						continue
-					}
-					certificate := &cm.Certificate{}
-					err := c.cl.Get(ctx, client.ObjectKeyFromObject(cert.Object()), certificate)
-					if err != nil {
-						return err
-					}
-					if metav1.IsControlledBy(secret, certificate) || secret.Namespace != cr.Namespace {
-						continue
-					}
-					if err = controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
-						return errors.Wrap(err, "set controller reference")
-					}
-					if err = c.cl.Update(ctx, secret); err != nil {
-						return errors.Wrap(err, "failed to update secret")
-					}
-				}
+			ready, err := c.certsReady(ctx, cr, certificates)
+			if err != nil {
+				return err
 			}
-			if successCount == len(certificates) {
+			if ready {
 				return nil
 			}
 		}
 	}
+}
+
+func (c *certManagerController) certsReady(ctx context.Context, cr *api.PerconaServerMongoDB, certificates []Certificate) (bool, error) {
+	successCount := 0
+
+	for _, cert := range certificates {
+		secret := &corev1.Secret{}
+		err := c.cl.Get(ctx, types.NamespacedName{
+			Name:      cert.SecretName(),
+			Namespace: cert.Namespace(),
+		}, secret)
+		if err != nil && !k8serrors.IsNotFound(err) {
+			return false, err
+		} else if err == nil {
+			successCount++
+			if v, ok := secret.Annotations[cm.CertificateNameKey]; !ok || v != cert.Name() {
+				continue
+			}
+			certificate := &cm.Certificate{}
+			if err := c.cl.Get(ctx, client.ObjectKeyFromObject(cert.Object()), certificate); err != nil {
+				return false, err
+			}
+			if metav1.IsControlledBy(secret, certificate) || secret.Namespace != cr.Namespace {
+				continue
+			}
+			if err := controllerutil.SetControllerReference(cr, secret, c.scheme); err != nil {
+				return false, errors.Wrap(err, "set controller reference")
+			}
+			if err := c.cl.Update(ctx, secret); err != nil {
+				return false, errors.Wrap(err, "failed to update secret")
+			}
+		}
+	}
+
+	return successCount == len(certificates), nil
 }
 
 // GetMergedCA returns merged CA from provided secrets. Result will not contain PEM duplicates.

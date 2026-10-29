@@ -4,11 +4,18 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 func TestSortPodsByOrdinal(t *testing.T) {
+	t.Parallel()
+
 	ordinalPod := func(i int) corev1.Pod {
 		return corev1.Pod{
 			Name:   "pod-" + strconv.Itoa(i),
@@ -96,5 +103,38 @@ func TestSortPodsByOrdinal(t *testing.T) {
 				t.Errorf("%s: expected pod at index %d to be %s, got %s", tc.desc, i, tc.expectedOrd[i], in[i].Name)
 			}
 		}
+	}
+}
+
+func TestSmartMongosUpdateUnsetsMongosFirst(t *testing.T) {
+	tests := map[string]func(cr *api.PerconaServerMongoDB){
+		"mongos is scaled to zero": func(cr *api.PerconaServerMongoDB) {
+			cr.Spec.Sharding.Mongos.Size = 0
+		},
+		"update strategy is not smart": func(cr *api.PerconaServerMongoDB) {
+			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
+		},
+	}
+
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newTestCR()
+			cr.Annotations = map[string]string{api.AnnotationUpdateMongosFirst: "true"}
+			cr.Spec.UpdateStrategy = api.SmartUpdateStatefulSetStrategyType
+			cr.Spec.Sharding = api.Sharding{
+				Enabled: true,
+				Mongos:  &api.MongosSpec{Size: 2},
+			}
+			mutate(cr)
+
+			r := buildFakeClient(cr)
+
+			require.NoError(t, r.smartMongosUpdate(t.Context(), cr, &appsv1.StatefulSet{}))
+
+			stored := new(api.PerconaServerMongoDB)
+			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+			assert.NotContains(t, stored.Annotations, api.AnnotationUpdateMongosFirst)
+			assert.NotContains(t, cr.Annotations, api.AnnotationUpdateMongosFirst)
+		})
 	}
 }

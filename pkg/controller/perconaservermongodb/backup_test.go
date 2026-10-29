@@ -12,6 +12,8 @@ import (
 )
 
 func TestIsBackupRunning(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	const (

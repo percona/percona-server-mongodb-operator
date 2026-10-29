@@ -17,6 +17,8 @@ import (
 )
 
 func TestAcquireLease(t *testing.T) {
+	t.Parallel()
+
 	t.Run("creates a lease", func(t *testing.T) {
 		cl := fake.NewClientBuilder().Build()
 		ctx := context.Background()
@@ -76,6 +78,8 @@ func TestAcquireLease(t *testing.T) {
 }
 
 func TestReleaseLease(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	name := "backup-lock"

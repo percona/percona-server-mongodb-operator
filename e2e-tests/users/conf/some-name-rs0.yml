@@ -26,6 +26,10 @@ spec:
       storageName: local-s3
   replsets:
   - name: rs0
+    replsetOverrides:
+      some-name-rs0-0:
+        tags:
+          special: "h8V\"k3N'$(r7B)\nx2M"
     affinity:
       antiAffinityTopologyKey: none
     configuration: |

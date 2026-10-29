@@ -13,26 +13,68 @@ apply_cluster "$test_dir/conf/$cluster.yml"
 desc 'check if all 3 Pods started'
 wait_for_running "$cluster-rs0" 3
 
+check_headless_svc_has_no_expose_annotations() {
+	local headless_svc=$1
+	shift
+	local keys=("$@")
+
+	if [[ -z $headless_svc ]]; then
+		return
+	fi
+
+	local key
+	local actual
+	for key in "${keys[@]}"; do
+		actual=$(kubectl_bin get "service/$headless_svc" -o json) || return 1
+		actual=$(jq -r ".metadata.annotations[\"$key\"] // \"\"" <<<"$actual") || return 1
+		if [[ -n $actual ]]; then
+			desc "FAIL: headless service $headless_svc must never get expose.annotations key \"$key\" applied, but got \"$actual\""
+			exit 1
+		fi
+	done
+}
+
+# operator restores service metadata on its next reconcile, which may be
+# delayed (e.g. by an update conflict), so retry instead of relying on sleep
+wait_compare_kubectl() {
+	local resource=$1
+	local postfix=$2
+	local retries=${3:-12}
+
+	for _ in $(seq 1 "$retries"); do
+		if (compare_kubectl "$resource" "$postfix" >/dev/null 2>&1); then
+			break
+		fi
+		sleep 5
+	done
+	compare_kubectl "$resource" "$postfix"
+}
+
 check_service() {
 	replset_name=$1
 
 	local expose_path
 	local svc_name
+	local headless_svc_name=""
 	case $replset_name in
 
 		"rs0")
 			expose_path="/spec/replsets/0/expose"
 			svc_name="$cluster-rs0-0"
+			headless_svc_name="$cluster-rs0"
 			;;
 
 		"cfg")
 			expose_path="/spec/sharding/configsvrReplSet/expose"
 			svc_name="$cluster-cfg-0"
+			headless_svc_name="$cluster-cfg"
 			;;
 
 		"mongos")
 			expose_path="/spec/sharding/mongos/expose"
 			svc_name="$cluster-mongos-0"
+			# mongos has no headless counterpart, nothing to check
+			headless_svc_name=""
 			;;
 
 		*)
@@ -45,25 +87,29 @@ check_service() {
 	# `notIgnoredLabel` and `notIgnoredAnnotation` should be deleted
 	kubectl_bin patch "service/$svc_name" --type=json --patch '[
         {
-            "op": "add", 
-            "path": "/metadata/labels", 
-            "value": {
-                "notIgnoredLabel": "true",
-                "ignoredLabel": "true"
-            }
+            "op": "add",
+            "path": "/metadata/labels/notIgnoredLabel",
+            "value": "true"
         },
         {
-            "op": "add", 
-            "path": "/metadata/annotations", 
-            "value": {
-                "notIgnoredAnnotation": "true",
-                "ignoredAnnotation": "true"
-            }
+            "op": "add",
+            "path": "/metadata/labels/ignoredLabel",
+            "value": "true"
+        },
+        {
+            "op": "add",
+            "path": "/metadata/annotations/notIgnoredAnnotation",
+            "value": "true"
+        },
+        {
+            "op": "add",
+            "path": "/metadata/annotations/ignoredAnnotation",
+            "value": "true"
         }]'
 
 	sleep 7 # waiting for reconcile
 	desc "check if annotations/labels are not deleted from service $svc_name"
-	compare_kubectl "service/$svc_name" "-manual"
+	wait_compare_kubectl "service/$svc_name" "-manual"
 
 	desc "adding ignoreAnnotations and ignoreLabels"
 	kubectl_bin patch psmdb "$cluster" --type=json --patch '[
@@ -80,7 +126,7 @@ check_service() {
     ]'
 	sleep 7
 	desc "check if annotations/labels are not deleted from service $svc_name"
-	compare_kubectl "service/$svc_name" "-manual"
+	wait_compare_kubectl "service/$svc_name" "-manual"
 
 	desc "adding labels and annotations to $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
@@ -100,7 +146,10 @@ check_service() {
         }]'
 	sleep 5
 	desc "check if not ignored labels and annotations are deleted from service $svc_name"
-	compare_kubectl "service/$svc_name" "-crmeta"
+	wait_compare_kubectl "service/$svc_name" "-crmeta"
+
+	desc "check that expose.annotations are never applied to the headless service $headless_svc_name"
+	check_headless_svc_has_no_expose_annotations "$headless_svc_name" "crAnnotation"
 
 	desc "removing labels and annotations from $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
@@ -114,7 +163,7 @@ check_service() {
         }]'
 	sleep 5
 	desc "check if labels and annotations are not deleted from service $svc_name"
-	compare_kubectl "service/$svc_name" "-crmeta"
+	wait_compare_kubectl "service/$svc_name" "-crmeta"
 
 	desc "adding other labels and annotations to $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
@@ -136,7 +185,10 @@ check_service() {
 		}]'
 	sleep 5
 	desc "check if not previous service labels and annotations is deleted from $svc_name"
-	compare_kubectl "service/$svc_name" "-two-service-labels-annotations"
+	wait_compare_kubectl "service/$svc_name" "-two-service-labels-annotations"
+
+	desc "check that expose.annotations are still never applied to the headless service $headless_svc_name"
+	check_headless_svc_has_no_expose_annotations "$headless_svc_name" "otherCrAnnotation" "secondCrAnnotation"
 
 	desc "adding removing one labels from $expose_path"
 	kubectl_bin patch psmdb ${cluster} --type=json --patch '[
@@ -156,7 +208,7 @@ check_service() {
         }]'
 	sleep 5
 	desc "check if removed service label is deleted from $svc_name"
-	compare_kubectl "service/$svc_name" "-one-service-label-annotation"
+	wait_compare_kubectl "service/$svc_name" "-one-service-label-annotation"
 
 	desc "removing ignoreLabels and ignoreAnnotations"
 	# When `labels` and `annotations` are not set, old metadata should stay
@@ -172,7 +224,7 @@ check_service() {
 
 	sleep 5 # waiting for reconcile
 	desc "check if ignored labels and annotations are deleted from $svc_name"
-	compare_kubectl "service/$svc_name" "-no-ignored-meta"
+	wait_compare_kubectl "service/$svc_name" "-no-ignored-meta"
 }
 
 check_service "rs0"

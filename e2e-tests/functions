@@ -2,13 +2,33 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/vars"
 
+# keep in sync with TRANSIENT_ERRORS in lib/kubectl.py
+KUBECTL_TRANSIENT_ERRORS='ENHANCE_YOUR_CALM|ResourceExhausted|TooManyRequests|TLS handshake timeout|etcdserver: request timed out|the server is currently unable to handle the request|Unable to connect to the server|connection reset by peer'
+
 kubectl_bin() {
 	local LAST_OUT="$(mktemp)"
 	local LAST_ERR="$(mktemp)"
 	local exit_status=0
 	local timeout=4
+	local i
 	local args=("$@")
 	local transformed_files=()
+	local stdin_manifest
+
+	# stdin can be read only once, save it to a file so retries can send it again
+	for i in "${!args[@]}"; do
+		if [[ ${args[$i]} == "-" && $i -gt 0 && ${args[$((i - 1))]} =~ ^(-f|--filename)$ ]]; then
+			stdin_manifest="$(mktemp)"
+			cat >"${stdin_manifest}"
+			transformed_files+=("${stdin_manifest}")
+			args[$i]="${stdin_manifest}"
+		elif [[ ${args[$i]} =~ ^(-f|--filename)=-$ ]]; then
+			stdin_manifest="$(mktemp)"
+			cat >"${stdin_manifest}"
+			transformed_files+=("${stdin_manifest}")
+			args[$i]="${args[$i]%%=*}=${stdin_manifest}"
+		fi
+	done
 
 	if arch_scheduling_enabled && [[ ${args[0]} == "run" ]]; then
 		local has_overrides=0
@@ -85,18 +105,29 @@ kubectl_bin() {
 		args=("${apply_args[@]}")
 	fi
 
-	for i in $(seq 0 2); do
+	local attempt
+	local delay
+	for attempt in $(seq 0 9); do
 		set +e
 		kubectl "${args[@]}" 1>"$LAST_OUT" 2>"$LAST_ERR"
 		exit_status=$?
 		set -e
-		if [ ${exit_status} != 0 -a -n "${DEBUG_TESTS}" ]; then
-			cat "$LAST_OUT"
-			cat "$LAST_ERR" >&2
-			sleep "$((timeout * i))"
+		if [[ ${exit_status} == 0 || ${attempt} == 9 ]] || grep -q 'Error from server (NotFound)' "$LAST_ERR"; then
+			break
+		fi
+
+		# API server overload can last for minutes, keep retrying it longer than other errors
+		if grep -qE "${KUBECTL_TRANSIENT_ERRORS}" "$LAST_ERR"; then
+			delay=$((5 * (attempt + 1) > 30 ? 30 : 5 * (attempt + 1)))
+		elif [[ -n ${DEBUG_TESTS} && ${attempt} -lt 2 ]]; then
+			delay=$((timeout * attempt))
 		else
 			break
 		fi
+
+		# output of a failed attempt must not end up in the caller's captured stdout
+		cat "$LAST_OUT" "$LAST_ERR" >&2
+		sleep "${delay}"
 	done
 
 	cat "$LAST_OUT"
@@ -467,13 +498,23 @@ wait_backup() {
 
 wait_for_pbm_operations() {
 	local cluster=$1
+	local max_retries=${2:-540}
 
 	set +o xtrace
 	echo -n "waiting for PBM operation to finish"
-	retry=0
-	until [[ $(kubectl_bin exec ${cluster}-rs0-0 -c backup-agent -- pbm status -o json -s running | jq -r .running.opID) == null ]]; do
-		if [ $retry -ge 540 ]; then
-			echo max retry count $retry reached. something went wrong with PBM operations
+	local retry=0
+	local pbm_out
+	while true; do
+		if pbm_out=$(kubectl_bin exec "${cluster}-rs0-0" -c backup-agent -- pbm status -o json -s running 2>/dev/null); then
+			if [[ $(echo "$pbm_out" | jq -r '.running.opID' 2>/dev/null) == "null" ]]; then
+				break
+			fi
+		fi
+
+		retry=$((retry + 1))
+		if [[ $retry -ge $max_retries ]]; then
+			echo
+			echo "max retry count $retry reached. something went wrong with PBM operations"
 			exit 1
 		fi
 		echo -n .
@@ -1191,7 +1232,46 @@ run_recovery_check() {
 	fi
 	echo
 
-	wait_cluster_consistency ${cluster}
+	# After physical restore the operator recreates StatefulSets, which may
+	# cause pods to land on different nodes. Volume reattachment and crash
+	# recovery (especially on sharded clusters) can keep the cluster in
+	# "error" state for several minutes on resource-constrained GKE nodes.
+	local max_wait=120
+	local error_grace=600
+	local error_time=0
+	local retry=0
+
+	sleep 7
+	echo -n "waiting for cluster ${cluster} to be ready after physical restore"
+	while true; do
+		local state
+		state=$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.state}')
+		if [[ "${state}" == "ready" ]]; then
+			break
+		fi
+
+		if [[ "${state}" == "error" ]]; then
+			error_time=$((error_time + 10))
+			if [[ ${error_time} -ge ${error_grace} ]]; then
+				echo
+				echo "cluster ${cluster} has been in error state for ${error_time}s after physical restore"
+				exit 1
+			fi
+		else
+			error_time=0
+		fi
+
+		retry=$((retry + 1))
+		if [[ ${retry} -ge ${max_wait} ]]; then
+			echo
+			echo "max retry count ${retry} reached (state: ${state})"
+			exit 1
+		fi
+		echo -n .
+		sleep 10
+	done
+	echo '.OK'
+
 	wait_for_pbm_operations ${cluster}
 
 	log "Operator triggered PBM resync: OK"
@@ -1409,7 +1489,7 @@ get_service_ip() {
 		kubectl_bin get service/$service -o 'jsonpath={.spec.clusterIP}'
 		return
 	fi
-	until kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[]}' 2>&1 | grep -E -q "hostname|ip"; do
+	until [[ -n "$(kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}{.status.loadBalancer.ingress[].hostname}')" ]]; do
 		sleep 1
 	done
 	kubectl_bin get service/$service -o 'jsonpath={.status.loadBalancer.ingress[].ip}'
@@ -1602,14 +1682,14 @@ compare_mongo_user() {
 	if [[ $IMAGE_MONGOD =~ 5\.0 ]] && [ -f ${test_dir}/compare/$user-50.json ]; then
 		expected_result=${test_dir}/compare/$user-50.json
 	fi
-	if [[ $IMAGE_MONGOD =~ 6\.0 ]] && [ -f ${test_dir}/compare/$user-60.json ]; then
-		expected_result=${test_dir}/compare/$user-60.json
-	fi
 	if [[ $IMAGE_MONGOD =~ 7\.0 ]] && [ -f ${test_dir}/compare/$user-70.json ]; then
 		expected_result=${test_dir}/compare/$user-70.json
 	fi
 	if [[ $IMAGE_MONGOD =~ 8\.0 ]] && [ -f ${test_dir}/compare/$user-80.json ]; then
 		expected_result=${test_dir}/compare/$user-80.json
+	fi
+	if [[ $IMAGE_MONGOD =~ 8\.3 ]] && [ -f ${test_dir}/compare/$user-83.json ]; then
+		expected_result=${test_dir}/compare/$user-83.json
 	fi
 
 	run_mongo 'db.runCommand({connectionStatus:1,showPrivileges:true})' "$uri" \
@@ -1674,7 +1754,9 @@ delete_crd() {
 			| grep -v 'NAMESPACE' \
 			| xargs -L 1 sh -xc 'kubectl patch '${crd_name}' -n $0 $1 --type=merge -p "{\"metadata\":{\"finalizers\":[]}}"' \
 			|| :
-		kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' --ignore-not-found || :
+		if kubectl get crd "${crd_name}" >/dev/null 2>&1; then
+			kubectl_bin patch crd "${crd_name}" --type=merge -p '{"metadata":{"finalizers":[]}}' || :
+		fi
 	done
 
 	local rbac_yaml='rbac.yaml'
@@ -2624,40 +2706,6 @@ insert_data_mongos() {
 		"$flags" "$port"
 }
 
-deploy_pmm_server() {
-	helm uninstall monitoring || :
-	helm repo remove stable || :
-	helm repo add stable https://charts.helm.sh/stable
-	if [[ -n "$OPENSHIFT" ]]; then
-		oc create sa pmm-server
-		oc adm policy add-scc-to-user privileged -z pmm-server
-		if [[ $OPERATOR_NS ]]; then
-			timeout 30 oc delete clusterrolebinding $(kubectl get clusterrolebinding | grep 'pmm-psmdb-operator-' | awk '{print $1}') || :
-			oc create clusterrolebinding pmm-psmdb-operator-cluster-wide --clusterrole=percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
-			oc patch clusterrole/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]' -n $OPERATOR_NS
-		else
-			oc create rolebinding pmm-psmdb-operator-namespace-only --role percona-server-mongodb-operator --serviceaccount=$namespace:pmm-server
-			oc patch role/percona-server-mongodb-operator --type json -p='[{"op":"add","path": "/rules/-","value":{"apiGroups":["security.openshift.io"],"resources":["securitycontextconstraints"],"verbs":["use"],"resourceNames":["privileged"]}}]'
-		fi
-		local additional_params="--set platform=openshift --set sa=pmm-server --set supresshttp2=false"
-	fi
-
-	local pmm_args=(
-		--set imageTag=${IMAGE_PMM_SERVER#*:}
-		--set imageRepo=${IMAGE_PMM_SERVER%:*}
-	)
-	if arch_scheduling_enabled; then
-		pmm_args+=(
-			--set "nodeSelector.kubernetes\.io/arch=${ARCH}"
-			--set "tolerations[0].key=kubernetes.io/arch"
-			--set "tolerations[0].operator=Equal"
-			--set "tolerations[0].value=${ARCH}"
-			--set "tolerations[0].effect=NoSchedule"
-		)
-	fi
-	retry 10 60 helm install monitoring "${pmm_args[@]}" $additional_params https://percona-charts.storage.googleapis.com/pmm-server-$PMM_SERVER_VER.tgz
-}
-
 wait_certificate() {
 	certificate="$1"
 
@@ -2665,6 +2713,35 @@ wait_certificate() {
 		kubectl wait --for=condition=Ready "certificate/$certificate" --timeout=60s
 		sleep 1
 	done
+}
+
+verify_cert_san() {
+	local secret_name=$1
+	local expected_san=$2
+
+	local san_list
+	san_list=$(kubectl_bin get secret "${secret_name}" -o jsonpath='{.data.tls\.crt}' \
+		| base64 -d \
+		| openssl x509 -text -noout 2>/dev/null \
+		| grep "DNS:" \
+		| tr ',' '\n' \
+		| sed 's/.*DNS://g' \
+		| xargs)
+
+	if echo "${san_list}" | grep -q "${expected_san}"; then
+		echo "OK: SAN '${expected_san}' found in secret '${secret_name}'"
+	else
+		echo "FAIL: SAN '${expected_san}' NOT found in secret '${secret_name}'"
+		echo "  SANs found: ${san_list}"
+		return 1
+	fi
+}
+
+wait_for_cert_san() {
+	local secret_name=$1
+	local expected_san=$2
+
+	retry 30 10 verify_cert_san "${secret_name}" "${expected_san}"
 }
 
 renew_certificate() {
@@ -2786,14 +2863,24 @@ compare_latest_restorable_time() {
 	local backup_name=$2
 	local latest_restorable_time
 	local backup_time
+	local retry=0
 
-	latest_restorable_time=$(get_latest_restorable_time "$cluster")
-	backup_time=$(get_latest_restorable_time_from_backup_object "$backup_name")
+	# PITR keeps advancing the timeline and the operator refreshes the backup status
+	# only on reconcile, so re-read both values every five seconds until they converge.
+	while [[ $retry -lt 12 ]]; do
+		((retry += 1))
+		latest_restorable_time=$(get_latest_restorable_time "$cluster")
+		backup_time=$(get_latest_restorable_time_from_backup_object "$backup_name")
+		if [[ -n $latest_restorable_time && $latest_restorable_time == "$backup_time" ]]; then
+			return 0
+		fi
+		if [[ $retry -lt 12 ]]; then
+			sleep 5
+		fi
+	done
 
-	if [[ $latest_restorable_time != "$backup_time" ]]; then
-		echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
-		exit 1
-	fi
+	echo "Error: latestRestorableTime is not equal to the latest timestamp of the backup $backup_name: $latest_restorable_time != $backup_time"
+	exit 1
 }
 
 pause_cluster() {
@@ -3320,4 +3407,90 @@ create_runtime_class() {
 	desc "Create RuntimeClass with handler $handler"
 	yq eval ".handler = \"$handler\"" "$conf_dir/container-rc.yaml" \
 		| kubectl_bin apply -f -
+}
+
+# image_upgrade_message_has_container reports whether the condition message lists container.
+image_upgrade_message_has_container() {
+	local message="$1"
+	local container="$2"
+	local names
+
+	names=$(printf '%s' "${message}" | sed -E 's/^Image upgrade is in progress for container(\(s\)|s)? //')
+	printf ', %s,' "${names}" | grep -q ", ${container},"
+}
+
+wait_for_image_upgrade_condition() {
+	local cluster="$1"
+	shift
+	local timeout=0
+	local status=""
+	local condition_type="ImageUpgradeInProgress"
+
+	set +o xtrace
+	echo -n "Waiting for ${condition_type} on ${cluster}"
+	until [[ ${status} == "True" ]]; do
+		status=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].status}")
+		if [[ ${status} == "True" ]]; then
+			break
+		fi
+		sleep 1
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 180 ]]; then
+			echo
+			echo "${condition_type} was not set on ${cluster}. Exiting..."
+			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
+			echo
+			exit 1
+		fi
+	done
+	echo
+
+	local reason message container
+	reason=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].reason}")
+	message=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${condition_type}\")].message}")
+	if [[ ${reason} != "ImageUpgrade" ]]; then
+		echo "unexpected ${condition_type} reason: ${reason}"
+		exit 1
+	fi
+	if [[ ${message} != "Image upgrade is in progress for container"* ]]; then
+		echo "unexpected ${condition_type} message: ${message}"
+		exit 1
+	fi
+	for container in "$@"; do
+		if ! image_upgrade_message_has_container "${message}" "${container}"; then
+			echo "${condition_type} message '${message}' does not mention container ${container}"
+			exit 1
+		fi
+	done
+	echo "${condition_type}: ${message}"
+	set_debug
+}
+
+wait_for_no_image_upgrade_condition() {
+	local cluster="$1"
+	local timeout=0
+	local condition_type="placeholder"
+	local expected_type="ImageUpgradeInProgress"
+
+	set +o xtrace
+	echo -n "Waiting for ${expected_type} to clear on ${cluster}"
+	until [[ -z ${condition_type} ]]; do
+		condition_type=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.conditions[?(@.type==\"${expected_type}\")].type}")
+		if [[ -z ${condition_type} ]]; then
+			break
+		fi
+		sleep 2
+		timeout=$((timeout + 1))
+		echo -n '.'
+		if [[ ${timeout} -gt 300 ]]; then
+			echo
+			echo "${expected_type} is still set on ${cluster}. Exiting..."
+			kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.conditions}'
+			echo
+			exit 1
+		fi
+	done
+	echo
+	set_debug
 }

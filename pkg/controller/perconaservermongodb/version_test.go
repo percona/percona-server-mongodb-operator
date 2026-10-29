@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"sync/atomic"
 	"testing"
 
 	pbVersion "github.com/Percona-Lab/percona-version-service/versionpb"
@@ -17,29 +18,39 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func Test_majorUpgradeRequested(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		cr  *api.PerconaServerMongoDB
 		fcv string
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    UpgradeRequest
-		wantErr bool
+		name       string
+		args       args
+		want       UpgradeRequest
+		wantErrMsg string
 	}{
 		{
 			name: "TestWithEmptyMongoVersionInStatus",
@@ -137,7 +148,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "3.6",
 			},
-			wantErr: true,
+			wantErrMsg: "can't upgrade to 4.2 with FCV set to 3.6",
 		},
 
 		{
@@ -155,7 +166,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "4.0",
 			},
-			wantErr: true,
+			wantErrMsg: "faied to make semver: malformed version: 4.0.-4.0-recommended",
 		},
 
 		{
@@ -251,7 +262,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "4.0",
 			},
-			wantErr: true,
+			wantErrMsg: "can't upgrade to 3.6 with FCV set to 4.0",
 		},
 
 		{
@@ -269,7 +280,7 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				},
 				fcv: "4.0",
 			},
-			wantErr: true,
+			wantErrMsg: "can't upgrade to 3.6 with FCV set to 4.0",
 		},
 
 		{
@@ -314,17 +325,101 @@ func Test_majorUpgradeRequested(t *testing.T) {
 				Apply:      "latest",
 			},
 		},
+		{
+			name: "TestUpgradeFrom80To83WithPostfixVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "8.3-recommended",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "8.0.19-7",
+					},
+				},
+				fcv: "8.0",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "8.3",
+				Apply:      "recommended",
+			},
+		},
+		{
+			name: "TestUpgradeFrom80To83WithExactVersionInApplyField",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "8.3.11-3",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "8.0.19-7",
+					},
+				},
+				fcv: "8.0",
+			},
+			want: UpgradeRequest{
+				Ok:         true,
+				NewVersion: "8.3.11-3",
+			},
+		},
+		{
+			name: "TestUpgradeFrom70To83IsNotAllowed",
+			args: args{
+				cr: &api.PerconaServerMongoDB{
+					Spec: api.PerconaServerMongoDBSpec{
+						UpgradeOptions: api.UpgradeOptions{
+							Apply: "8.3-recommended",
+						},
+					},
+					Status: api.PerconaServerMongoDBStatus{
+						MongoVersion: "7.0.30-16",
+					},
+				},
+				fcv: "7.0",
+			},
+			wantErrMsg: "can't upgrade to 8.3 with FCV set to 7.0",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := majorUpgradeRequested(tt.args.cr, tt.args.fcv)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("majorUpgradeRequested() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErrMsg != "" {
+				require.EqualError(t, err, tt.wantErrMsg)
+				assert.Equal(t, UpgradeRequest{}, got)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("majorUpgradeRequested() = %v, want %v", got, tt.want)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_canUpgradeVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		fcv  string
+		new  string
+		want bool
+	}{
+		{fcv: "6.0", new: "7.0", want: true},
+		{fcv: "7.0", new: "8.0", want: true},
+		{fcv: "8.0", new: "8.3", want: true},
+		{fcv: "7.0", new: "8.3", want: false},
+		{fcv: "8.0", new: "8.0", want: false},
+		{fcv: "8.3", new: "8.0", want: false},
+		{fcv: "8.3", new: "8.3", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fcv+"->"+tt.new, func(t *testing.T) {
+			if got := canUpgradeVersion(tt.fcv, tt.new); got != tt.want {
+				t.Errorf("canUpgradeVersion(%q, %q) = %v, want %v", tt.fcv, tt.new, got, tt.want)
 			}
 		})
 	}
@@ -335,6 +430,7 @@ func TestVersionMeta(t *testing.T) {
 	tests := []struct {
 		name            string
 		cr              api.PerconaServerMongoDB
+		serverVersion   *version.ServerVersion
 		want            VersionMeta
 		clusterWide     bool
 		helmDeploy      bool
@@ -364,6 +460,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:       "disabled",
 				Version:     version.Version(),
+				Platform:    "kubernetes",
 				ClusterSize: 3,
 			},
 			namespace: "test-namespace",
@@ -429,6 +526,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:                   "disabled",
 				Version:                 "1.13.0",
+				Platform:                "kubernetes",
 				HashicorpVaultEnabled:   true,
 				ShardingEnabled:         true,
 				PMMEnabled:              true,
@@ -473,6 +571,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:          "disabled",
 				Version:        version.Version(),
+				Platform:       "kubernetes",
 				ClusterSize:    3,
 				BackupsEnabled: false,
 			},
@@ -501,6 +600,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:              "disabled",
 				Version:            version.Version(),
+				Platform:           "kubernetes",
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -533,6 +633,7 @@ func TestVersionMeta(t *testing.T) {
 			want: VersionMeta{
 				Apply:              "disabled",
 				Version:            version.Version(),
+				Platform:           "kubernetes",
 				HelmDeployOperator: true,
 				ClusterWideEnabled: true,
 				ClusterSize:        4,
@@ -541,6 +642,71 @@ func TestVersionMeta(t *testing.T) {
 			helmDeploy:      true,
 			namespace:       "test-namespace",
 			watchNamespaces: "",
+		},
+		{
+			name: "Detected cloud provider",
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image: "percona/percona-server-mongodb:5.0.11-10",
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			serverVersion: &version.ServerVersion{
+				Platform:      version.PlatformKubernetes,
+				CloudProvider: version.CloudProviderGKE,
+			},
+			want: VersionMeta{
+				Apply:       "disabled",
+				Version:     version.Version(),
+				Platform:    "kubernetes-gke",
+				ClusterSize: 3,
+			},
+			namespace: "test-namespace",
+		},
+		{
+			name: "Platform from CR overrides detected platform",
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image:    "percona/percona-server-mongodb:5.0.11-10",
+					Platform: ptr.To(version.PlatformOpenshift),
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name:       "rs0",
+							Size:       3,
+							VolumeSpec: fakeVolumeSpec(t),
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 3,
+				},
+			},
+			serverVersion: &version.ServerVersion{
+				Platform:      version.PlatformKubernetes,
+				CloudProvider: version.CloudProviderEKS,
+			},
+			want: VersionMeta{
+				Apply:       "disabled",
+				Version:     version.Version(),
+				Platform:    "openshift-eks",
+				ClusterSize: 3,
+			},
+			namespace: "test-namespace",
 		},
 	}
 	size := int32(1)
@@ -595,7 +761,10 @@ func TestVersionMeta(t *testing.T) {
 			}
 
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&tt.cr, &operatorDepl).Build()
-			sv := &version.ServerVersion{Platform: version.PlatformKubernetes}
+			sv := tt.serverVersion
+			if sv == nil {
+				sv = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			}
 			r := &ReconcilePerconaServerMongoDB{
 				client:        cl,
 				scheme:        scheme,
@@ -743,9 +912,6 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 						"3.1": {
 							ImagePath: "pmm3-image",
 						},
-						"2.1": {
-							ImagePath: "pmm2-image",
-						},
 					},
 				},
 			},
@@ -754,6 +920,8 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 }
 
 func TestVersionService(t *testing.T) {
+	t.Parallel()
+
 	vs := VersionServiceClient{}
 	tests := []struct {
 		cr            api.PerconaServerMongoDB
@@ -761,7 +929,6 @@ func TestVersionService(t *testing.T) {
 		vm            VersionMeta
 		want          DepVersion
 		expectedError error
-		isPMM3        bool
 	}{
 		{
 			name: "UpgradeOptions.Apply: disabled",
@@ -801,9 +968,8 @@ func TestVersionService(t *testing.T) {
 			expectedError: errors.New("failed to version service apply"),
 		},
 		{
-			name:   "Request to version service with PMM3",
-			cr:     api.PerconaServerMongoDB{},
-			isPMM3: true,
+			name: "Request to version service",
+			cr:   api.PerconaServerMongoDB{},
 			vm: VersionMeta{
 				Apply:                   "",
 				MongoVersion:            "database-version",
@@ -834,39 +1000,6 @@ func TestVersionService(t *testing.T) {
 				PMMVersion:    "3.1",
 			},
 		},
-		{
-			name: "Request to version service with PMM2",
-			cr:   api.PerconaServerMongoDB{},
-			vm: VersionMeta{
-				Apply:                   "",
-				MongoVersion:            "database-version",
-				KubeVersion:             "kube-version",
-				Platform:                productName,
-				PMMVersion:              "3.1",
-				BackupVersion:           "backup-version",
-				CRUID:                   "custom-resource-uid",
-				Version:                 version.Version(),
-				ClusterWideEnabled:      true,
-				HashicorpVaultEnabled:   true,
-				ShardingEnabled:         true,
-				PMMEnabled:              true,
-				HelmDeployOperator:      true,
-				HelmDeployCR:            true,
-				SidecarsUsed:            true,
-				BackupsEnabled:          true,
-				ClusterSize:             3,
-				PITREnabled:             true,
-				PhysicalBackupScheduled: true,
-			},
-			want: DepVersion{
-				MongoImage:    "mongo-image",
-				MongoVersion:  "mongo-version",
-				BackupImage:   "backup-image",
-				BackupVersion: "backup-version",
-				PMMImage:      "pmm2-image",
-				PMMVersion:    "2.1",
-			},
-		},
 	}
 	addr := "127.0.0.1"
 	port := 10000
@@ -876,10 +1009,7 @@ func TestVersionService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := versionOptions{
-				PMM3Enabled: tt.isPMM3,
-			}
-			dv, err := vs.GetExactVersion(&tt.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tt.vm, opts)
+			dv, err := vs.GetExactVersion(&tt.cr, fmt.Sprintf("http://%s:%d", addr, gwPort), tt.vm)
 			if tt.expectedError != nil {
 				assert.ErrorContains(t, err, tt.expectedError.Error())
 				return
@@ -888,4 +1018,95 @@ func TestVersionService(t *testing.T) {
 			assert.Equal(t, tt.want, dv)
 		})
 	}
+}
+
+type buildInfoMongoClient struct {
+	mongo.Client
+	version string
+}
+
+func (c *buildInfoMongoClient) RSBuildInfo(ctx context.Context) (mongo.BuildInfo, error) {
+	return mongo.BuildInfo{Version: c.version}, nil
+}
+
+func (c *buildInfoMongoClient) Disconnect(ctx context.Context) error {
+	return nil
+}
+
+type buildInfoMongoProvider struct {
+	version string
+}
+
+func (p *buildInfoMongoProvider) Mongo(_ context.Context, _ *api.PerconaServerMongoDB, _ *api.ReplsetSpec, _ api.SystemUserRole, _ ...mongo.ConfigOption) (mongo.Client, error) {
+	return &buildInfoMongoClient{Client: mongoFake.NewClient(), version: p.version}, nil
+}
+
+func (p *buildInfoMongoProvider) Mongos(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, _ ...mongo.ConfigOption) (mongo.Client, error) {
+	return mongoFake.NewClient(), nil
+}
+
+func (p *buildInfoMongoProvider) Standalone(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, _ string, _ bool, _ ...mongo.ConfigOption) (mongo.Client, error) {
+	return mongoFake.NewClient(), nil
+}
+
+func TestFetchVersionFromMongo_RetryOnConflict(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+
+	s := k8sruntime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	cr := &api.PerconaServerMongoDB{
+		Name:       "test-cluster",
+		Namespace:  "default",
+		Generation: 1,
+		Spec: api.PerconaServerMongoDBSpec{
+			Image: "percona/percona-server-mongodb:7.0.5-3",
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			ObservedGeneration: 1,
+			State:              api.AppStateReady,
+			MongoImage:         "percona/percona-server-mongodb:7.0.4-2",
+		},
+	}
+
+	replset := &api.ReplsetSpec{Name: "rs0"}
+
+	var updateCalls atomic.Int32
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(cr.DeepCopy()).
+		WithStatusSubresource(&api.PerconaServerMongoDB{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceUpdate: func(ctx context.Context, cl client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				n := updateCalls.Add(1)
+				if n == 1 {
+					return k8serrors.NewConflict(
+						schema.GroupResource{Group: "psmdb.percona.com", Resource: "perconaservermongodbs"},
+						obj.GetName(),
+						fmt.Errorf("the object has been modified"),
+					)
+				}
+				return cl.Status().Update(ctx, obj)
+			},
+		}).
+		Build()
+
+	r := &ReconcilePerconaServerMongoDB{
+		client:              cl,
+		scheme:              s,
+		mongoClientProvider: &buildInfoMongoProvider{version: "7.0.5"},
+	}
+
+	err := r.fetchVersionFromMongo(ctx, cr, replset)
+	require.NoError(t, err)
+
+	assert.GreaterOrEqual(t, updateCalls.Load(), int32(2), "expected at least 2 status update attempts (1 conflict + 1 success)")
+
+	updated := &api.PerconaServerMongoDB{}
+	require.NoError(t, cl.Get(ctx, types.NamespacedName{Name: "test-cluster", Namespace: "default"}, updated))
+	assert.Equal(t, "7.0.5", updated.Status.MongoVersion)
+	assert.Equal(t, "percona/percona-server-mongodb:7.0.5-3", updated.Status.MongoImage)
 }

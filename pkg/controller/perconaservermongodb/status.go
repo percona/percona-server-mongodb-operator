@@ -3,6 +3,8 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -14,11 +16,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 )
@@ -49,6 +53,10 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 		cr.Status.Message = "Error: " + reconcileErr.Error()
 		cr.Status.State = api.AppStateError
+
+		if err := r.updateImageUpgradeCondition(ctx, cr); err != nil {
+			log.Error(err, "update image upgrade condition")
+		}
 
 		return r.writeStatus(ctx, cr)
 	}
@@ -227,7 +235,8 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 
 	pbmStatus, err := r.pbmStatus(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "get pbm status")
+		log.V(1).Info("failed to get PBM status", "error", err.Error())
+		pbmStatus = api.AppStateError
 	}
 
 	state := api.AppStateInit
@@ -295,6 +304,10 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		})
 	}
 
+	if err := r.updateImageUpgradeCondition(ctx, cr); err != nil {
+		return errors.Wrap(err, "update image upgrade condition")
+	}
+
 	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
 
 	return r.writeStatus(ctx, cr)
@@ -331,7 +344,7 @@ func (r *ReconcilePerconaServerMongoDB) isAwaitingSmartUpdate(ctx context.Contex
 		}); err != nil {
 			return false, errors.Wrap(err, "get pod list")
 		}
-		if isSfsChanged(sts, &pods) {
+		if k8s.HasStatefulSetChanged(sts, &pods) {
 			updated += sts.Status.UpdatedReplicas
 			stsChanged = true
 		}
@@ -349,13 +362,27 @@ func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, c
 	return sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas, nil
 }
 
+// writeStatusBackoff gives the informer cache time to catch up with our own
+// previous writes, otherwise consecutive status writes keep conflicting.
+var writeStatusBackoff = wait.Backoff{
+	Steps:    6,
+	Duration: 50 * time.Millisecond,
+	Factor:   2.0,
+	Jitter:   0.1,
+}
+
 func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err := retry.RetryOnConflict(writeStatusBackoff, func() error {
 		c := &api.PerconaServerMongoDB{}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
 		if err != nil {
 			return err
+		}
+
+		// The CR might be deleted and recreated with the same name while we were reconciling the old one.
+		if c.UID != cr.UID {
+			return nil
 		}
 
 		c.Status = cr.Status
@@ -378,6 +405,10 @@ func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.Pe
 	}
 
 	if sts.Annotations[api.AnnotationPVCResizeInProgress] != "" {
+		return api.ReplsetStatus{Status: api.AppStateInit}, nil
+	}
+
+	if _, ok := cr.GetPVCShrinkState(sts.Name); ok {
 		return api.ReplsetStatus{Status: api.AppStateInit}, nil
 	}
 
@@ -557,6 +588,14 @@ func (r *ReconcilePerconaServerMongoDB) pbmStatus(ctx context.Context, cr *api.P
 
 	log := logf.FromContext(ctx).WithName("PBM")
 
+	isRestoring, err := r.isRestoreRunning(ctx, cr)
+	if err != nil {
+		return api.AppStateError, errors.Wrap(err, "check if restore is running")
+	}
+	if isRestoring {
+		return api.AppStateInit, nil
+	}
+
 	pbm, err := r.newPBM(ctx, r.client, cr)
 	if err != nil {
 		return api.AppStateError, errors.Wrap(err, "new pbm connection")
@@ -638,4 +677,127 @@ func (r *ReconcilePerconaServerMongoDB) connectionEndpoint(ctx context.Context, 
 	}
 
 	return cr.Name + "-" + cr.Spec.Replsets[0].Name + "." + cr.Namespace + "." + cr.Spec.ClusterServiceDNSSuffix, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) updateImageUpgradeCondition(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	containers, err := r.imageUpgradeInProgress(ctx, cr)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case len(containers) > 0:
+		cr.Status.AddCondition(api.ClusterCondition{
+			Type:    api.ConditionTypeImageUpgradeInProgress,
+			Status:  api.ConditionTrue,
+			Reason:  "ImageUpgrade",
+			Message: imageUpgradeMessage(containers),
+		})
+	case cr.Status.IsStatusConditionTrue(api.ConditionTypeImageUpgradeInProgress) && cr.Status.State != api.AppStateReady:
+		// keep the condition until the cluster is ready
+		cr.Status.AddCondition(api.ClusterCondition{
+			Type:    api.ConditionTypeImageUpgradeInProgress,
+			Status:  api.ConditionTrue,
+			Reason:  "ImageUpgrade",
+			Message: "Image upgrade is waiting for the cluster to be ready",
+		})
+	default:
+		cr.Status.RemoveCondition(api.ConditionTypeImageUpgradeInProgress)
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) imageUpgradeInProgress(ctx context.Context, cr *api.PerconaServerMongoDB) ([]string, error) {
+	stsList := &appsv1.StatefulSetList{}
+	if err := r.client.List(ctx, stsList, &client.ListOptions{
+		Namespace: cr.Namespace,
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			naming.LabelKubernetesInstance: cr.Name,
+		}),
+	}); err != nil {
+		return nil, errors.Wrap(err, "list statefulsets")
+	}
+
+	pending := map[string]struct{}{}
+	for i := range stsList.Items {
+		sts := &stsList.Items[i]
+		if sts.Spec.Selector == nil {
+			continue
+		}
+		selector, err := metav1.LabelSelectorAsSelector(sts.Spec.Selector)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse selector for statefulset %s", sts.Name)
+		}
+		if selector.Empty() {
+			continue
+		}
+
+		podList := &corev1.PodList{}
+		if err := r.client.List(ctx, podList, &client.ListOptions{
+			Namespace:     cr.Namespace,
+			LabelSelector: selector,
+		}); err != nil {
+			return nil, errors.Wrapf(err, "list pods for statefulset %s", sts.Name)
+		}
+
+		desired := containerImages(sts.Spec.Template.Spec)
+		for j := range podList.Items {
+			for _, name := range outdatedContainerNames(&podList.Items[j], desired) {
+				pending[name] = struct{}{}
+			}
+		}
+	}
+
+	return slices.Sorted(maps.Keys(pending)), nil
+}
+
+func imageUpgradeMessage(containers []string) string {
+	return "Image upgrade is in progress for container(s) " + strings.Join(containers, ", ")
+}
+
+func outdatedContainerNames(pod *corev1.Pod, desired map[string]string) []string {
+	seen := map[string]struct{}{}
+
+	check := func(containers []corev1.Container) {
+		for _, container := range containers {
+			if container.Image == "" {
+				continue
+			}
+			want, ok := desired[container.Name]
+			if ok && container.Image != want {
+				seen[container.Name] = struct{}{}
+			}
+		}
+	}
+	check(pod.Spec.InitContainers)
+	check(pod.Spec.Containers)
+
+	present := map[string]struct{}{}
+	for _, container := range pod.Spec.InitContainers {
+		present[container.Name] = struct{}{}
+	}
+	for _, container := range pod.Spec.Containers {
+		present[container.Name] = struct{}{}
+	}
+	for name := range desired {
+		if _, ok := present[name]; !ok {
+			seen[name] = struct{}{}
+		}
+	}
+	return slices.Sorted(maps.Keys(seen))
+}
+
+func containerImages(spec corev1.PodSpec) map[string]string {
+	images := make(map[string]string, len(spec.InitContainers)+len(spec.Containers))
+	for _, container := range spec.InitContainers {
+		if container.Image != "" {
+			images[container.Name] = container.Image
+		}
+	}
+	for _, container := range spec.Containers {
+		if container.Image != "" {
+			images[container.Name] = container.Image
+		}
+	}
+	return images
 }
