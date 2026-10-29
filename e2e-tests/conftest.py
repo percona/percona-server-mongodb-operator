@@ -206,6 +206,11 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
 @pytest.fixture(scope="session", autouse=True)
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
+    init_env()
+
+
+def init_env() -> list[str]:
+    """Fill os.environ with e2e defaults and return the managed variable names."""
     git_branch = get_git_branch()
     platform = detect_platform()
 
@@ -237,7 +242,7 @@ def setup_env_vars() -> None:
         "IMAGE_PMM_CLIENT": "perconalab/pmm-client:3-dev-latest",
         "IMAGE_PMM_SERVER": "perconalab/pmm-server:3-dev-latest",
         "IMAGE_LOGCOLLECTOR": "perconalab/fluentbit:main-logcollector",
-        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:0.9.0",
+        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:1.0.0",
         "IMAGE_AWS_CLI": "docker.io/amazon/aws-cli:2.34.60",
         "CERT_MANAGER_VER": "1.21.0",
         "CHAOS_MESH_VER": "2.7.1",
@@ -262,9 +267,12 @@ def setup_env_vars() -> None:
         if images:
             os.environ[var] = "\n".join(qualify_image(i, registry) for i in images if i)
 
+    os.environ["E2E_ENV_INITIALIZED"] = "1"
+
     logger.info(
         "Environment variables:\n" + "\n".join(f"{key}={os.environ.get(key)}" for key in defaults)
     )
+    return [*defaults, "IMAGE_OPERATOR", "E2E_ENV_INITIALIZED"]
 
 
 @pytest.fixture(scope="class")
@@ -764,3 +772,11 @@ def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
         _delete_cert_manager()
     finally:
         _cleanup_infra(test_paths, namespaces)
+
+
+if __name__ == "__main__":
+    import shlex
+
+    _console.stderr = True
+    for key in init_env():
+        print(f"export {key}={shlex.quote(os.environ.get(key, ''))}")
