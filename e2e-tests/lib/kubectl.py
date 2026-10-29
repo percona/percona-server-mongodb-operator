@@ -178,6 +178,82 @@ def wait_for_running(
         _wait_cluster_ready(cluster_name.replace(f"-{rs_name}", ""), timeout)
 
 
+def wait_deployment_ready(name: str, expected_replicas: int, timeout: int = 300) -> None:
+    """Wait for a Deployment to report the expected number of ready replicas."""
+    _wait_for(
+        f"deployment/{name} readyReplicas={expected_replicas}",
+        ["deployment", name],
+        "{.status.readyReplicas}",
+        str(expected_replicas),
+        timeout,
+    )
+
+
+def cr_state(kind: str, name: str) -> str:
+    """Read .status.state of a CR, '' when unavailable."""
+    return kubectl_bin("get", kind, name, "-o", "jsonpath={.status.state}", check=False).strip()
+
+
+def wait_cr_state(
+    kind: str,
+    name: str,
+    expected: str,
+    timeout: int = 600,
+    fail_states: tuple[str, ...] = ("error",),
+) -> None:
+    """Wait for a CR to reach .status.state, failing fast on a terminal state."""
+    logger.info(f"Waiting for {kind}/{name} state={expected}")
+    deadline = time.time() + timeout
+    state = ""
+    while time.time() < deadline:
+        state = cr_state(kind, name)
+        if state == expected:
+            logger.info(f"{kind}/{name} reached state={expected}")
+            return
+        if state in fail_states:
+            error = kubectl_bin(
+                "get", kind, name, "-o", "jsonpath={.status.error}", check=False
+            ).strip()
+            raise AssertionError(f"{kind}/{name} is in state={state}: {error or 'no error set'}")
+        time.sleep(2)
+
+    raise TimeoutError(
+        f"Timeout waiting for {kind}/{name} state={expected}. Last state: {state or 'unknown'}"
+    )
+
+
+def assert_cr_state_stable(kind: str, name: str, expected: str, duration: int = 30) -> None:
+    """Assert a CR stays in .status.state for the whole duration."""
+    logger.info(f"Asserting {kind}/{name} stays in state={expected} for {duration}s")
+    deadline = time.time() + duration
+    while time.time() < deadline:
+        state = cr_state(kind, name)
+        assert state == expected, (
+            f"{kind}/{name} transitioned to state={state or 'unknown'}, expected {expected}"
+        )
+        time.sleep(5)
+
+
+def event_reasons(name: str) -> list[str]:
+    """Reasons of all events recorded for an object."""
+    out = kubectl_bin(
+        "get",
+        "events",
+        "--field-selector",
+        f"involvedObject.name={name}",
+        "-o",
+        "jsonpath={.items[*].reason}",
+        check=False,
+    )
+    return out.split()
+
+
+def resource_exists(kind: str, name: str) -> bool:
+    return bool(
+        kubectl_bin("get", kind, name, "-o", "name", "--ignore-not-found", check=False).strip()
+    )
+
+
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
     """Wait for a specific resource to be deleted"""
     logger.info(f"Waiting for {resource} to be deleted")
