@@ -86,6 +86,25 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogV
 			},
 		},
 	}
+	if cr.CompareVersion("1.24.0") >= 0 {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "MONGODB_TLS_ENABLED",
+			Value: strconv.FormatBool(cr.TLSEnabled()),
+		})
+		if cr.TLSEnabled() {
+			if cr.Spec.TLS != nil && cr.Spec.TLS.AllowInvalidCertificates != nil && *cr.Spec.TLS.AllowInvalidCertificates {
+				container.Env = append(container.Env, corev1.EnvVar{
+					Name:  "MONGODB_TLS_INSECURE",
+					Value: "true",
+				})
+			}
+			container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+				Name:      "ssl",
+				MountPath: config.SSLDir,
+				ReadOnly:  true,
+			})
+		}
+	}
 
 	if cr.Spec.LogCollector.LogRotate != nil {
 		if cr.Spec.LogCollector.LogRotate.Configuration != "" || cr.Spec.LogCollector.LogRotate.ExtraConfig.Name != "" {
