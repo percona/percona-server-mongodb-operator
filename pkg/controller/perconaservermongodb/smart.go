@@ -153,6 +153,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
+	if cr.IsPVCShrinkInProgress() {
+		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
+		return nil
+	}
+
 	isBackupRunning, err := r.isBackupRunning(ctx, cr)
 	if err != nil {
 		return errors.Wrap(err, "failed to check active backups")
@@ -577,9 +582,20 @@ func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.
 	return nil
 }
 
+const defaultPodRestartPoll = time.Second
+
 func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+	poll := r.podRestartPoll
+	if poll <= 0 {
+		poll = defaultPodRestartPoll
+	}
+
 	for range waitLimit {
-		time.Sleep(time.Second * 1)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(poll):
+		}
 
 		err := r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
 		if err != nil && !k8sErrors.IsNotFound(err) {

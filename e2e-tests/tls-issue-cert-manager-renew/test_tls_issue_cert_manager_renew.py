@@ -105,25 +105,39 @@ def _renew_certificate(cert_name: str) -> None:
 def _pause_cluster(cluster_name: str) -> None:
     logger.info(f"Pausing cluster {cluster_name}")
     kubectl_bin(
-        "patch", "psmdb", cluster_name,
-        "--type", "merge", "-p", '{"spec": {"pause": true}}',
+        "patch",
+        "psmdb",
+        cluster_name,
+        "--type",
+        "merge",
+        "-p",
+        '{"spec": {"pause": true}}',
     )
 
 
 def _unpause_cluster(cluster_name: str) -> None:
     logger.info(f"Unpausing cluster {cluster_name}")
     kubectl_bin(
-        "patch", "psmdb", cluster_name,
-        "--type", "merge", "-p", '{"spec": {"pause": false}}',
+        "patch",
+        "psmdb",
+        cluster_name,
+        "--type",
+        "merge",
+        "-p",
+        '{"spec": {"pause": false}}',
     )
 
 
 def _disable_tls(cluster_name: str) -> None:
     logger.info(f"Disabling TLS for cluster {cluster_name}")
     kubectl_bin(
-        "patch", "psmdb", cluster_name,
-        "--type", "merge",
-        "-p", '{"spec": {"unsafeFlags": {"tls": true}, "tls": {"mode": "disabled"}}}',
+        "patch",
+        "psmdb",
+        cluster_name,
+        "--type",
+        "merge",
+        "-p",
+        '{"spec": {"unsafeFlags": {"tls": true}, "tls": {"mode": "disabled"}}}',
     )
 
 
@@ -178,9 +192,7 @@ class TestOperatorManagedCertManager:
     @pytest.mark.dependency(
         depends=["TestOperatorManagedCertManager::test_operator_creates_certificates"]
     )
-    def test_certificate_renewal(
-        self, config: TLSCertManagerConfig, test_paths: Paths
-    ) -> None:
+    def test_certificate_renewal(self, config: TLSCertManagerConfig, test_paths: Paths) -> None:
         """Renew both certificates and validate the cluster recovers."""
         cluster = config.cluster
         test_dir = test_paths["test_dir"]
@@ -199,12 +211,8 @@ class TestOperatorManagedCertManager:
         compare_kubectl(test_dir, f"certificate/{cluster}-ssl", ns)
         compare_kubectl(test_dir, f"certificate/{cluster}-ssl-internal", ns)
 
-    @pytest.mark.dependency(
-        depends=["TestOperatorManagedCertManager::test_certificate_renewal"]
-    )
-    def test_disable_tls(
-        self, config: TLSCertManagerConfig, test_paths: Paths
-    ) -> None:
+    @pytest.mark.dependency(depends=["TestOperatorManagedCertManager::test_certificate_renewal"])
+    def test_disable_tls(self, config: TLSCertManagerConfig, test_paths: Paths) -> None:
         """Pause cluster, disable TLS, unpause, validate statefulsets."""
         cluster = config.cluster
         test_dir = test_paths["test_dir"]

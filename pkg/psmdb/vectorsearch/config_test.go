@@ -57,6 +57,8 @@ server:
 }
 
 func TestConfigMap_Metadata(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{Enabled: true}
 	rs := newTestRS()
@@ -77,6 +79,8 @@ func TestConfigMap_Metadata(t *testing.T) {
 }
 
 func TestConfigMap_DataRendersDefaultConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{Enabled: true}
 	rs := newTestRS()
@@ -90,6 +94,8 @@ func TestConfigMap_DataRendersDefaultConfig(t *testing.T) {
 }
 
 func TestConfigMap_DataAppliesUserConfiguration(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{
 		Enabled: true,
@@ -112,6 +118,8 @@ logging:
 }
 
 func TestConfigMap_InvalidUserConfigurationReturnsError(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{
 		Enabled: true,
@@ -128,6 +136,8 @@ logging:
 }
 
 func TestSearchHost(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	rs := newTestRS()
 
@@ -138,6 +148,8 @@ func TestSearchHost(t *testing.T) {
 }
 
 func TestSearchHost_OtherClusterAndNamespace(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Name = "my-cluster"
 	cr.Namespace = "my-ns"
@@ -152,6 +164,8 @@ func TestSearchHost_OtherClusterAndNamespace(t *testing.T) {
 }
 
 func TestInjectMongodConfig_SearchDisabled_ReturnsUserConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	// cr.Spec.Search left nil → IsSearchEnabled() is false
 	rs := newTestRS()
@@ -163,6 +177,8 @@ func TestInjectMongodConfig_SearchDisabled_ReturnsUserConfigUnchanged(t *testing
 }
 
 func TestInjectMongodConfig_ConfigSvr_ReturnsUserConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = tlsDisabledSearch()
 	rs := newTestRS()
@@ -175,6 +191,8 @@ func TestInjectMongodConfig_ConfigSvr_ReturnsUserConfigUnchanged(t *testing.T) {
 }
 
 func TestInjectMongodConfig_OverlaysOperatorKeys(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{Enabled: true}
 	rs := newTestRS()
@@ -196,6 +214,8 @@ func TestInjectMongodConfig_OverlaysOperatorKeys(t *testing.T) {
 }
 
 func TestInjectMongodConfig_OperatorKeysWinOverUserSetParameter(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = tlsDisabledSearch()
 	rs := newTestRS()
@@ -224,6 +244,8 @@ setParameter:
 }
 
 func TestInjectMongodConfig_PreservesUnrelatedTopLevelKeys(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = tlsDisabledSearch()
 	rs := newTestRS()
@@ -250,6 +272,8 @@ storage:
 }
 
 func TestInjectMongodConfig_InvalidYAMLReturnsError(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = tlsDisabledSearch()
 	rs := newTestRS()
@@ -260,6 +284,8 @@ func TestInjectMongodConfig_InvalidYAMLReturnsError(t *testing.T) {
 }
 
 func TestInjectMongosConfig_SearchDisabled_ReturnsUserConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCRSharded()
 	// cr.Spec.Search left nil
 
@@ -270,6 +296,8 @@ func TestInjectMongosConfig_SearchDisabled_ReturnsUserConfigUnchanged(t *testing
 }
 
 func TestInjectMongosConfig_NotSharded_ReturnsUserConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = tlsDisabledSearch()
 	// cr.Spec.Sharding.Enabled is false
@@ -281,6 +309,8 @@ func TestInjectMongosConfig_NotSharded_ReturnsUserConfigUnchanged(t *testing.T) 
 }
 
 func TestInjectMongosConfig_ShardedSetsHostsPerShard(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCRSharded()
 	cr.Spec.Search = tlsDisabledSearch()
 	cr.Spec.Replsets = []*api.ReplsetSpec{
@@ -305,6 +335,8 @@ func TestInjectMongosConfig_ShardedSetsHostsPerShard(t *testing.T) {
 }
 
 func TestInjectMongosConfig_PreservesUnrelatedSetParameterKeys(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCRSharded()
 	cr.Spec.Search = tlsDisabledSearch()
 	cr.Spec.Replsets = []*api.ReplsetSpec{
@@ -327,6 +359,8 @@ setParameter:
 }
 
 func TestInjectMongosConfig_InvalidYAMLReturnsError(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCRSharded()
 	cr.Spec.Search = tlsDisabledSearch()
 	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
@@ -382,6 +416,8 @@ func newDefaultExpectedConfig() mongot.Config {
 }
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		mutateCR func(*api.PerconaServerMongoDB)
 		mutateRS func(*api.ReplsetSpec)
@@ -478,6 +514,8 @@ net:
 }
 
 func TestUserConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		userConfig     string
 		expectedConfig mongot.Config
@@ -610,6 +648,8 @@ logging:
 }
 
 func TestUserConfig_NilSearchSpec(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	rs := newTestRS()
 	// cr.Spec.Search left nil
@@ -619,6 +659,8 @@ func TestUserConfig_NilSearchSpec(t *testing.T) {
 }
 
 func TestUserConfig_InvalidYAML(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	rs := newTestRS()
 	cr.Spec.Search = &api.SearchSpec{

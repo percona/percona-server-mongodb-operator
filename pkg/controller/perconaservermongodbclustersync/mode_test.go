@@ -9,6 +9,8 @@ import (
 )
 
 func TestNextAction(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		statusMode api.ClusterSyncMode
 		specMode   api.ClusterSyncMode
@@ -140,6 +142,8 @@ func TestNextAction(t *testing.T) {
 }
 
 func TestSkipAction(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		action modeAction
 		state  api.ClusterSyncState

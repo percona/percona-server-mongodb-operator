@@ -32010,6 +32010,15 @@ spec:
                     type: boolean
                   enableVolumeScaling:
                     type: boolean
+                  enableVolumeShrink:
+                    type: boolean
+                  shrinkOpts:
+                    properties:
+                      maxDiskUsagePercent:
+                        maximum: 99
+                        minimum: 1
+                        type: integer
+                    type: object
                 type: object
                 x-kubernetes-validations:
                 - message: autoscaling cannot be enabled when enableVolumeScaling
@@ -32198,6 +32207,29 @@ spec:
                 type: string
               pmmVersion:
                 type: string
+              pvcShrink:
+                additionalProperties:
+                  properties:
+                    phase:
+                      type: string
+                    primaryPod:
+                      type: string
+                    processedPods:
+                      items:
+                        type: string
+                      type: array
+                    startedAt:
+                      type: string
+                    targetSize:
+                      type: string
+                  required:
+                  - phase
+                  - primaryPod
+                  - processedPods
+                  - startedAt
+                  - targetSize
+                  type: object
+                type: object
               ready:
                 format: int32
                 type: integer

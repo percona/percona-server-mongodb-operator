@@ -99,12 +99,17 @@ jobs:
         with:
           go-version-file: go.mod
       - name: check on release branch
-        if: ${{ contains(github.base_ref, 'release-') && ! startsWith(github.head_ref, 'after-release-') }}
+        if: |
+          startsWith(github.base_ref, 'security/') ||
+          (startsWith(github.base_ref, 'release-') && !startsWith(github.head_ref, 'after-release-'))
         run: |
-          make release VERSION="$(cat pkg/version/version.txt)" IMAGE_TAG_BASE="percona/percona-server-mongodb-operator"
+          OPERATOR_IMAGE="$(sed -n 's/^IMAGE_OPERATOR=//p' e2e-tests/release_versions)"
+          make release VERSION="$(cat pkg/version/version.txt)" IMAGE="$OPERATOR_IMAGE"
           git diff --exit-code
       - name: check on non release branches
-        if: ${{ ! contains(github.base_ref, 'release-') || startsWith(github.head_ref, 'after-release-') }}
+        if: |
+          !startsWith(github.base_ref, 'security/') &&
+          (!startsWith(github.base_ref, 'release-') || startsWith(github.head_ref, 'after-release-'))
         run: |
           make generate manifests VERSION=main
           git diff --exit-code

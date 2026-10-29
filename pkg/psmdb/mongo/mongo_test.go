@@ -12,6 +12,8 @@ import (
 )
 
 func TestVoting(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name      string
 		mset      *mongo.ConfigMembers
@@ -1332,6 +1334,8 @@ func TestVoting(t *testing.T) {
 }
 
 func TestConfigAuthSource(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name       string
 		conf       mongo.Config

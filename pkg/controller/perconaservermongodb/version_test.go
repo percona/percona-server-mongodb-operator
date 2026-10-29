@@ -40,6 +40,8 @@ import (
 )
 
 func Test_majorUpgradeRequested(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		cr  *api.PerconaServerMongoDB
 		fcv string
@@ -398,6 +400,8 @@ func Test_majorUpgradeRequested(t *testing.T) {
 }
 
 func Test_canUpgradeVersion(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		fcv  string
 		new  string
@@ -916,6 +920,8 @@ func (b *fakeVS) Apply(_ context.Context, req *pbVersion.ApplyRequest) (*pbVersi
 }
 
 func TestVersionService(t *testing.T) {
+	t.Parallel()
+
 	vs := VersionServiceClient{}
 	tests := []struct {
 		cr            api.PerconaServerMongoDB
@@ -1044,6 +1050,8 @@ func (p *buildInfoMongoProvider) Standalone(_ context.Context, _ *api.PerconaSer
 }
 
 func TestFetchVersionFromMongo_RetryOnConflict(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	s := k8sruntime.NewScheme()

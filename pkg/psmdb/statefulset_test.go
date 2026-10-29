@@ -18,6 +18,8 @@ import (
 )
 
 func TestCollectStorageCABundles(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		cr       *api.PerconaServerMongoDB
@@ -204,6 +206,8 @@ func TestCollectStorageCABundles(t *testing.T) {
 }
 
 func TestGetCAVolumeMounts(t *testing.T) {
+	t.Parallel()
+
 	mounts := GetCAVolumeMounts()
 
 	tests := []struct {
@@ -242,6 +246,8 @@ func TestGetCAVolumeMounts(t *testing.T) {
 }
 
 func TestGetCAVolumes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		cas  []api.SecretKeySelector
@@ -293,6 +299,8 @@ func TestGetCAVolumes(t *testing.T) {
 }
 
 func TestShouldSetAWSSDKChecksumEnvVars(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		cr   *api.PerconaServerMongoDB
@@ -386,6 +394,8 @@ func TestShouldSetAWSSDKChecksumEnvVars(t *testing.T) {
 }
 
 func TestBackupAgentContainerAWSSDKChecksumEnvVars(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		cr   *api.PerconaServerMongoDB
@@ -468,6 +478,8 @@ func backupChecksumTestCR(pbmVersion string, storages ...api.BackupStorageSpec) 
 }
 
 func TestBackupAgentContainerProbes(t *testing.T) {
+	t.Parallel()
+
 	liveness := &corev1.Probe{
 		InitialDelaySeconds: 15,
 		PeriodSeconds:       7,
@@ -543,6 +555,8 @@ func rorfsSecurityContext(enabled bool) *corev1.SecurityContext {
 }
 
 func TestReadOnlyRootFilesystemEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		sc   *corev1.SecurityContext
@@ -562,6 +576,8 @@ func TestReadOnlyRootFilesystemEnabled(t *testing.T) {
 }
 
 func TestNeedsTmpVolume(t *testing.T) {
+	t.Parallel()
+
 	newCR := func(setup func(cr *api.PerconaServerMongoDB)) *api.PerconaServerMongoDB {
 		cr := &api.PerconaServerMongoDB{
 			Spec: api.PerconaServerMongoDBSpec{
@@ -626,6 +642,8 @@ func TestNeedsTmpVolume(t *testing.T) {
 }
 
 func TestContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
+	t.Parallel()
+
 	allowInvalidCerts := true
 	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
 
@@ -681,6 +699,8 @@ func TestContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 }
 
 func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
+	t.Parallel()
+
 	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
 
 	newCR := func() *api.PerconaServerMongoDB {
@@ -747,6 +767,8 @@ func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 }
 
 func TestAddPMMTmpVolume(t *testing.T) {
+	t.Parallel()
+
 	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
 	tmpVolume := corev1.Volume{
 		Name:     tmpVolumeName,

@@ -134,14 +134,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 				return errors.Wrap(errPBMSecret, "get PBM client TLS secret")
 			}
 		}
-		if errSecret == nil && errInternalSecret == nil && errPBMSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, secretObj) {
-				return r.updateSSLManually(ctx, cr)
+		if errSecret != nil || errInternalSecret != nil || errPBMSecret != nil {
+			if err := r.createSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "create ssl manually")
 			}
-			return nil
 		}
-		if err := r.createSSLManually(ctx, cr); err != nil {
-			return errors.Wrap(err, "create ssl manually")
+		if r.needsManualSSLUpdate(ctx, cr, secretObj) || r.needsManualSSLUpdate(ctx, cr, secretInternalObj) {
+			if err := r.updateSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "update ssl manually")
+			}
 		}
 		return nil
 	}
@@ -329,7 +330,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				}
 
 				log.Info("CA is not up to date. Recreating secret", "secret", secret.Name)
-				if err := r.client.Delete(ctx, secret); err != nil {
+				// The cache can be behind the API server, so a secret that is
+				// already gone is the state this path wants.
+				if err := r.client.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
 					return err
 				}
 			}
@@ -420,7 +423,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			newSecret.Labels = nil
 		}
 
-		if err := r.client.Create(ctx, newSecret); err != nil {
+		if err := r.client.Create(ctx, newSecret); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create secret")
 		}
 	}
@@ -488,7 +491,8 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 
 		// If secret was already updated, we should delete the old one
 		if tls.EqualPEM(mergedCA, secret.Data["ca.crt"]) {
-			if err := r.client.Delete(ctx, oldSecret); err != nil {
+			// As above, an old secret that is already gone is not a failure.
+			if err := r.client.Delete(ctx, oldSecret); client.IgnoreNotFound(err) != nil {
 				return err
 			}
 			log.Info("new ca is already in secret, deleting old secret")
