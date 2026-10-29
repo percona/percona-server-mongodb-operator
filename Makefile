@@ -1,6 +1,6 @@
 NAME ?= percona-server-mongodb-operator
 IMAGE_TAG_OWNER ?= perconalab
-SED := $(shell which gsed || which sed)
+SED := $(shell command -v gsed || command -v sed)
 IMAGE_TAG_BASE ?= $(IMAGE_TAG_OWNER)/$(NAME)
 VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
 IMAGE ?= $(IMAGE_TAG_BASE):$(VERSION)
@@ -51,15 +51,15 @@ manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle
 REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml
 
 .PHONY: e2e-test
-e2e-test: ## Run a single e2e test via pytest (TEST=<name>)
+e2e-test: uv ## Run a single e2e test via pytest (TEST=<name>)
 ifndef TEST
 	$(error TEST is required. Usage: make e2e-test TEST=init-deploy)
 endif
 	mkdir -p e2e-tests/reports e2e-tests/logs
 	@if ls e2e-tests/$(TEST)/test_*.py 1>/dev/null 2>&1; then \
-		uv run pytest e2e-tests/$(TEST)/ $(REPORT_OPTS); \
+		$(UV) run pytest e2e-tests/$(TEST)/ $(REPORT_OPTS); \
 	else \
-		uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
+		$(UV) run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
 	fi
 
 ##@ Build

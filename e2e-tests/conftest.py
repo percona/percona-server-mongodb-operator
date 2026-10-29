@@ -242,7 +242,7 @@ def init_env() -> list[str]:
         "IMAGE_PMM_CLIENT": "perconalab/pmm-client:3-dev-latest",
         "IMAGE_PMM_SERVER": "perconalab/pmm-server:3-dev-latest",
         "IMAGE_LOGCOLLECTOR": "perconalab/fluentbit:main-logcollector",
-        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:0.9.0",
+        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:1.0.0",
         "IMAGE_AWS_CLI": "docker.io/amazon/aws-cli:2.34.60",
         "CERT_MANAGER_VER": "1.21.0",
         "CHAOS_MESH_VER": "2.7.1",

@@ -378,6 +378,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
 
+  logcollector:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [monitoring]
+
   mongod-major-upgrade:
     suites: [pr, release, minikube, distro]
     operatorModes: [cluster-wide, namespaced]
@@ -462,6 +467,21 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
+
+  pvc-shrink:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage]
+
+  pvc-shrink-sharded:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage, sharding]
+
+  pvc-shrink-mongos-log:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage, sharding]
 
   recover-no-primary:
     suites: [pr, release, distro]
