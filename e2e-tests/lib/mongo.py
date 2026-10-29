@@ -50,6 +50,41 @@ class MongoManager:
         )
         return result
 
+    def run_mongos(
+        self,
+        command: str,
+        uri: str,
+        suffix: str = ".svc.cluster.local",
+        port: int = 27017,
+        mongo_flag: str = "",
+        timeout: int = 30,
+        check: bool = True,
+    ) -> str:
+        """Execute a mongosh command against mongos.
+
+        mongos is not a replica set member, so the connection string must not carry a
+        replicaSet option the way run_mongosh builds it.
+        """
+        connection_string = f"mongodb://{uri}{suffix}:{port}/admin"
+
+        return kubectl_bin(
+            "exec",
+            self.client,
+            "--",
+            "timeout",
+            str(timeout),
+            "env",
+            "HOME=/tmp",
+            "mongosh",
+            connection_string,
+            *mongo_flag.split(),
+            "--eval",
+            command,
+            "--quiet",
+            check=check,
+            return_stderr=not check,
+        )
+
     def compare_mongo_user(self, uri: str, expected_role: str, test_dir: str) -> None:
         """Compare MongoDB user permissions"""
 
@@ -127,8 +162,9 @@ class MongoManager:
         test_file: str = "",
         retries: int = 3,
         retry_delay: int = 10,
+        sharded: bool = False,
     ) -> None:
-        """Compare MongoDB command output"""
+        """Compare MongoDB command output, through mongos when sharded is set."""
         full_cmd = f"{collection}.{command}"
         if sort:
             full_cmd = f"{collection}.{command}.{sort}"
@@ -141,7 +177,11 @@ class MongoManager:
         mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
 
         def _compare() -> None:
-            result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb"))
+            if sharded:
+                output = self.run_mongos(mongo_expr, uri)
+            else:
+                output = self.run_mongosh(mongo_expr, uri, "mongodb")
+            result = json.loads(output)
             logger.info(f"MongoDB output: {result}")
             diff = DeepDiff(expected, result)
             assert not diff, (
