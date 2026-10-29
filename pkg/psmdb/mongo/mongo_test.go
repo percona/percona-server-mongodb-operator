@@ -1384,3 +1384,129 @@ func TestConfigAuthSource(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoveOld(t *testing.T) {
+	t.Parallel()
+
+	voting := func(id int, host string) mongo.ConfigMember {
+		return mongo.ConfigMember{
+			ID:       id,
+			Host:     host,
+			Votes:    mongo.DefaultVotes,
+			Priority: mongo.DefaultPriority,
+		}
+	}
+	nonVoting := func(id int, host string) mongo.ConfigMember {
+		return mongo.ConfigMember{
+			ID:       id,
+			Host:     host,
+			Votes:    0,
+			Priority: 0,
+		}
+	}
+
+	cases := []struct {
+		name string
+		// mset is the current replset config, compareWith the members the operator wants.
+		mset        *mongo.ConfigMembers
+		compareWith mongo.ConfigMembers
+		// wantHosts is the config expected after a single RemoveOld call, in order.
+		wantHosts   []string
+		wantRemoved bool
+	}{
+		{
+			name:        "empty config",
+			mset:        &mongo.ConfigMembers{},
+			compareWith: mongo.ConfigMembers{},
+			wantHosts:   []string{},
+			wantRemoved: false,
+		},
+		{
+			name:        "nothing to remove",
+			mset:        &mongo.ConfigMembers{voting(0, "rs0-0"), voting(1, "rs0-1"), voting(2, "rs0-2")},
+			compareWith: mongo.ConfigMembers{voting(0, "rs0-0"), voting(1, "rs0-1"), voting(2, "rs0-2")},
+			wantHosts:   []string{"rs0-0", "rs0-1", "rs0-2"},
+			wantRemoved: false,
+		},
+		{
+			name:        "one voting orphan is removed",
+			mset:        &mongo.ConfigMembers{voting(0, "rs0-0"), voting(1, "rs0-1"), voting(2, "rs0-2")},
+			compareWith: mongo.ConfigMembers{voting(0, "rs0-0"), voting(1, "rs0-1")},
+			wantHosts:   []string{"rs0-0", "rs0-1"},
+			wantRemoved: true,
+		},
+		{
+			name:        "two voting orphans: only the last one goes",
+			mset:        &mongo.ConfigMembers{voting(0, "rs0-0"), voting(1, "rs0-1"), voting(2, "rs0-2")},
+			compareWith: mongo.ConfigMembers{voting(0, "rs0-0")},
+			wantHosts:   []string{"rs0-0", "rs0-1"},
+			wantRemoved: true,
+		},
+		{
+			name: "hidden orphan does not consume the voting removal",
+			mset: &mongo.ConfigMembers{
+				voting(0, "rs0-0"), voting(1, "rs0-1"), voting(2, "rs0-2"), nonVoting(3, "rs0-hidden-0"),
+			},
+			compareWith: mongo.ConfigMembers{voting(0, "rs0-0")},
+			wantHosts:   []string{"rs0-0", "rs0-1"},
+			wantRemoved: true,
+		},
+		{
+			name: "all non-voting orphans go at once",
+			mset: &mongo.ConfigMembers{
+				voting(0, "rs0-0"), voting(1, "rs0-1"), nonVoting(2, "nv-0"), nonVoting(3, "nv-1"),
+			},
+			compareWith: mongo.ConfigMembers{voting(0, "rs0-0"), voting(1, "rs0-1")},
+			wantHosts:   []string{"rs0-0", "rs0-1"},
+			wantRemoved: true,
+		},
+		{
+			name: "non-voting orphans removed alongside one voting orphan",
+			mset: &mongo.ConfigMembers{
+				voting(0, "rs0-0"), voting(1, "rs0-1"), voting(2, "rs0-2"),
+				nonVoting(3, "nv-0"), nonVoting(4, "rs0-hidden-0"),
+			},
+			compareWith: mongo.ConfigMembers{voting(0, "rs0-0")},
+			wantHosts:   []string{"rs0-0", "rs0-1"},
+			wantRemoved: true,
+		},
+		{
+			name:        "never empties the config",
+			mset:        &mongo.ConfigMembers{nonVoting(0, "nv-0"), nonVoting(1, "nv-1")},
+			compareWith: mongo.ConfigMembers{},
+			wantHosts:   []string{"nv-0"},
+			wantRemoved: true,
+		},
+		{
+			name:        "single member is kept even when orphaned",
+			mset:        &mongo.ConfigMembers{voting(0, "rs0-0")},
+			compareWith: mongo.ConfigMembers{},
+			wantHosts:   []string{"rs0-0"},
+			wantRemoved: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			votesBefore := 0
+			for _, member := range *c.mset {
+				votesBefore += member.Votes
+			}
+
+			removed := c.mset.RemoveOld(t.Context(), c.compareWith)
+
+			gotHosts := make([]string, 0, len(*c.mset))
+			votesAfter := 0
+			for _, member := range *c.mset {
+				gotHosts = append(gotHosts, member.Host)
+				votesAfter += member.Votes
+			}
+
+			assert.Equal(t, c.wantRemoved, removed, "return value")
+			assert.Equal(t, c.wantHosts, gotHosts, "members left in config")
+
+			assert.LessOrEqualf(t, votesBefore-votesAfter, 1,
+				"removed %d votes in one call, max 1 allowed", votesBefore-votesAfter)
+		})
+	}
+}
