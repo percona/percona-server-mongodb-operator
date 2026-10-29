@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"maps"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -52,6 +54,8 @@ func (c *sslCertManagerController) ApplyCAIssuer(context.Context, *api.PerconaSe
 }
 
 func TestReconcileSSLCertManagerCheck(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name                            string
 		external, internal, certManager bool
@@ -126,6 +130,8 @@ func newTestCR() *api.PerconaServerMongoDB {
 }
 
 func TestCurrentSSLAnnotation(t *testing.T) {
+	t.Parallel()
+
 	sts := &appsv1.StatefulSet{
 		Name:      "test-cluster-rs0",
 		Namespace: "test-ns",
@@ -179,6 +185,8 @@ func TestCurrentSSLAnnotation(t *testing.T) {
 }
 
 func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
+	t.Parallel()
+
 	sts := &appsv1.StatefulSet{
 		Name:      "test-cluster-rs0",
 		Namespace: "test-ns",
@@ -259,6 +267,8 @@ func TestSSLAnnotation_UserProvidedOnly(t *testing.T) {
 }
 
 func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.TLS = &api.TLSSpec{
 		CertManagementPolicy: api.CertManagementUserProvidedOnly,
@@ -295,6 +305,8 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 }
 
 func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.TLS = &api.TLSSpec{
 		CertManagementPolicy: api.CertManagementUserProvidedOnly,
@@ -309,6 +321,8 @@ func TestReconcileSSL_UserProvidedOnly_SkipsCertCreation(t *testing.T) {
 }
 
 func TestApplyCertManagerCertificatesExternalIssuer(t *testing.T) {
+	t.Parallel()
+
 	newExternalIssuerCR := func() *api.PerconaServerMongoDB {
 		cr := newTestCR()
 		cr.Spec.TLS = &api.TLSSpec{
@@ -359,6 +373,8 @@ func TestApplyCertManagerCertificatesExternalIssuer(t *testing.T) {
 }
 
 func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
+	t.Parallel()
+
 	newClusterIssuerCR := func(crVersion string) *api.PerconaServerMongoDB {
 		cr := newTestCR()
 		cr.Spec.CRVersion = crVersion
@@ -443,6 +459,8 @@ func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
 }
 
 func TestIsExternalIssuer(t *testing.T) {
+	t.Parallel()
+
 	clusterIssuer := func(labels map[string]string) *cm.ClusterIssuer {
 		return &cm.ClusterIssuer{
 			Name:   "user-cluster-issuer",
@@ -547,6 +565,8 @@ func TestIsExternalIssuer(t *testing.T) {
 }
 
 func TestNeedsManualSSLUpdateVersionGate(t *testing.T) {
+	t.Parallel()
+
 	sslSecret := func(t *testing.T, cr *api.PerconaServerMongoDB, sans []string) *corev1.Secret {
 		t.Helper()
 
@@ -885,4 +905,62 @@ func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
 			assert.Equal(t, tt.wantMongosFirst, ok, "annotation must be stored in the API server")
 		})
 	}
+}
+
+// mergeNewCA deletes the "-old" secret once the merged CA is already in the
+// live one. The client cache can be behind the API server there, so a secret
+// that is already gone is the state the cleanup wants, not a failure.
+func TestMergeNewCADeletesAnAlreadyDeletedOldSecret(t *testing.T) {
+	pemBlock := func(body string) []byte {
+		return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte(body)})
+	}
+	oldCA := pemBlock("old-ca")
+	newCA := pemBlock("new-ca")
+	mergedCA := append(append([]byte{}, oldCA...), newCA...)
+
+	secretsFor := func(cr *api.PerconaServerMongoDB) []client.Object {
+		objs := []client.Object{cr}
+		for _, name := range []string{api.SSLInternalSecretName(cr), api.SSLSecretName(cr)} {
+			objs = append(objs,
+				&corev1.Secret{
+					Name: name, Namespace: cr.Namespace,
+					Data: map[string][]byte{"ca.crt": mergedCA},
+				},
+				&corev1.Secret{
+					Name: name + "-old", Namespace: cr.Namespace,
+					Data: map[string][]byte{"ca.crt": oldCA},
+				},
+			)
+		}
+		return objs
+	}
+
+	t.Run("delete returns NotFound", func(t *testing.T) {
+		cr := newTestCR()
+		r := buildFakeClient(secretsFor(cr)...)
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
+			return k8serrors.NewNotFound(corev1.Resource("secrets"), obj.GetName())
+		})
+
+		require.NoError(t, r.mergeNewCA(t.Context(), cr))
+	})
+
+	t.Run("delete fails for another reason", func(t *testing.T) {
+		cr := newTestCR()
+		r := buildFakeClient(secretsFor(cr)...)
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
+			return errors.New("boom")
+		})
+
+		require.Error(t, r.mergeNewCA(t.Context(), cr))
+	})
+}
+
+func interceptorClient(t *testing.T, c client.Client, del func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error) client.Client {
+	t.Helper()
+
+	watcher, ok := c.(client.WithWatch)
+	require.True(t, ok, "interceptor.NewClient needs a client.WithWatch, got %T", c)
+
+	return interceptor.NewClient(watcher, interceptor.Funcs{Delete: del})
 }
