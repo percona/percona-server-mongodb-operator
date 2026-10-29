@@ -25,6 +25,7 @@ func TestCancellationRequested(t *testing.T) {
 	tests := map[string]struct {
 		annotations map[string]string
 		state       api.BackupState
+		deleting    bool
 		want        bool
 	}{
 		"no annotation": {},
@@ -39,6 +40,13 @@ func TestCancellationRequested(t *testing.T) {
 			state: api.BackupStateCanceling,
 			want:  true,
 		},
+		"deletion requests cancellation": {
+			state: api.BackupStateRunning, deleting: true, want: true,
+		},
+		"deletion overrides false annotation": {
+			annotations: map[string]string{naming.AnnotationCancelBackup: "false"},
+			state:       api.BackupStateRunning, deleting: true, want: true,
+		},
 	}
 
 	for name, tt := range tests {
@@ -46,6 +54,9 @@ func TestCancellationRequested(t *testing.T) {
 			cr := &api.PerconaServerMongoDBBackup{
 				Annotations: tt.annotations,
 				Status:      api.PerconaServerMongoDBBackupStatus{State: tt.state},
+			}
+			if tt.deleting {
+				cr.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 			}
 			assert.Equal(t, tt.want, cancellationRequested(cr))
 		})

@@ -22,7 +22,7 @@ import (
 )
 
 func cancellationRequested(cr *api.PerconaServerMongoDBBackup) bool {
-	return cr.Annotations[naming.AnnotationCancelBackup] == "true" || cr.Status.State == api.BackupStateCanceling
+	return cr.DeletionTimestamp != nil || cr.Annotations[naming.AnnotationCancelBackup] == "true" || cr.Status.State == api.BackupStateCanceling
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) reconcileCancellation(ctx context.Context, cr *api.PerconaServerMongoDBBackup) (reconcile.Result, error) {
