@@ -15,6 +15,9 @@ spec:
 #  storageScaling:
 #   enableExternalAutoscaling: false
 #   enableVolumeScaling: false
+#   enableVolumeShrink: false
+#   shrinkOpts:
+#     maxDiskUsagePercent: 80
 #   autoscaling:
 #     enabled: false
 #     triggerThresholdPercent: 80
@@ -1096,10 +1099,27 @@ spec:
 #           nocompress
 #           notifempty
 #           copytruncate
+#           sharedscripts
 #           prerotate
-#               # rotate mongod.log using 'db.adminCommand({ logRotate: 1 })'
-#               mongosh "mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_HOST}:${MONGODB_PORT}/admin" \
-#                 --eval 'db.adminCommand({ logRotate: 1 })'
+#               export HOME=/tmp
+#               uri="mongodb://${MONGODB_USER}:${MONGODB_PASSWORD}@${MONGODB_HOST}:${MONGODB_PORT}/admin?directConnection=true"
+#               tls_pem=
+#               tls_allow_invalid=
+#               if [ "${MONGODB_TLS_ENABLED:-false}" = true ]; then
+#                   tls_dir=/etc/mongodb-ssl
+#                   if [ "${MONGODB_TLS_INSECURE:-false}" = true ]; then
+#                       tls_allow_invalid=--tlsAllowInvalidCertificates
+#                   fi
+#                   tls_pem=/tmp/logrotate-mongosh.pem
+#                   umask 077
+#                   cat "$tls_dir/tls.key" "$tls_dir/tls.crt" >"$tls_pem" || exit 1
+#               fi
+#               if ! mongosh "$uri" \
+#                   ${tls_pem:+--tls $tls_allow_invalid --tlsCAFile "$tls_dir/ca.crt" --tlsCertificateKeyFile "$tls_pem"} \
+#                   --eval 'db.adminCommand({ logRotate: 1 })'; then
+#                   echo 'ERROR: failed to rotate mongod.log with mongosh' >&2
+#                   exit 1
+#               fi
 #               find /data/db/logs/ -type f -name 'mongod.log.*' -mtime +7 -delete
 #           endscript
 #        }

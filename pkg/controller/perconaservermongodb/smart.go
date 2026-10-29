@@ -11,9 +11,9 @@ import (
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -151,6 +151,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 				return nil
 			}
 		}
+	}
+
+	if cr.IsPVCShrinkInProgress() {
+		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
+		return nil
 	}
 
 	isBackupRunning, err := r.isBackupRunning(ctx, cr)
@@ -608,24 +613,29 @@ func (r *ReconcilePerconaServerMongoDB) recreateNWait(ctx context.Context, cr *a
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) waitPodRestart(
-	ctx context.Context,
-	cr *api.PerconaServerMongoDB,
-	updateRevision string,
-	pod *corev1.Pod,
-	timeoutSeconds int,
-) error {
-	pollInterval := time.Second
-	pollTimeout := time.Duration(timeoutSeconds) * time.Second
-	if err := wait.PollUntilContextTimeout(ctx, pollInterval, pollTimeout, false, func(ctx context.Context) (done bool, err error) {
-		err = r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
-		if err != nil {
-			return false, client.IgnoreNotFound(err)
+const defaultPodRestartPoll = time.Second
+
+func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+	poll := r.podRestartPoll
+	if poll <= 0 {
+		poll = defaultPodRestartPoll
+	}
+
+	for range waitLimit {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(poll):
+		}
+
+		err := r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, pod)
+		if err != nil && !k8sErrors.IsNotFound(err) {
+			return errors.Wrap(err, "get pod")
 		}
 
 		// We update status in every loop to not wait until the end of smart update
 		if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
-			return false, errors.Wrap(err, "update status")
+			return errors.Wrap(err, "update status")
 		}
 
 		ready := false
@@ -638,14 +648,9 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(
 
 		if pod.Status.Phase == corev1.PodRunning && pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision && ready {
 			logf.FromContext(ctx).Info("Pod started", "pod", pod.Name)
-			return true, nil
+			return nil
 		}
-		return false, nil
-	}); wait.Interrupted(err) {
-		return errors.New("reach pod wait limit")
-	} else if err != nil {
-		return errors.Wrap(err, "wait pod restart")
 	}
 
-	return nil
+	return errors.New("reach pod wait limit")
 }
