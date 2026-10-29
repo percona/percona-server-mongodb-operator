@@ -939,11 +939,21 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Co
 		if err != nil {
 			return errors.Wrap(err, "get standalone mongo client")
 		}
+		defer func() {
+			if err := cli.Disconnect(ctx); err != nil {
+				log.Error(err, "failed to close connection")
+			}
+		}()
 
 		cfg, err := cli.ReadConfig(ctx)
 		if err != nil {
 			return errors.Wrap(err, "read replset config")
 		}
+
+		// Members whose pods are gone still count towards the voting majority, so they can
+		// hold the surviving members below the quorum needed to elect a primary. Writing the
+		// config back unchanged leaves the replset exactly as it was (even if stuck).
+		r.removeMembersWithoutPods(ctx, cr, replset, pods, &cfg)
 
 		if err := cli.WriteConfig(ctx, cfg, true); err != nil {
 			return errors.Wrap(err, "reconfigure replset")
@@ -953,6 +963,48 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Co
 	}
 
 	return errNoRunningMongodContainers
+}
+
+// removeMembersWithoutPods drops config members that match neither an existing pod nor a
+// configured external node. It leaves the config untouched when the hosts can't be resolved
+// or when dropping them would empty the member list, so an incomplete pod list can't wipe
+// the replset: recovery is left to a later reconcile instead.
+func (r *ReconcilePerconaServerMongoDB) removeMembersWithoutPods(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod, cfg *mongo.RSConfig) {
+	log := logf.FromContext(ctx)
+
+	known := make(map[string]struct{}, len(pods)+len(replset.ExternalNodes))
+	for _, pod := range pods {
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, pod)
+		if err != nil {
+			// Without every host we can't tell which members are orphaned, so keep them all
+			// and fall back to rewriting the config as it is.
+			log.Info("Can't resolve host for pod, keeping every replset member", "pod", pod.Name, "error", err.Error())
+			return
+		}
+		known[host] = struct{}{}
+	}
+	for _, extNode := range replset.ExternalNodes {
+		known[extNode.HostPort()] = struct{}{}
+	}
+
+	keep := make(mongo.ConfigMembers, 0, len(cfg.Members))
+	drop := make(mongo.ConfigMembers, 0, len(cfg.Members))
+	for _, member := range cfg.Members {
+		if _, ok := known[member.Host]; ok {
+			keep = append(keep, member)
+			continue
+		}
+		drop = append(drop, member)
+	}
+
+	if len(drop) == 0 || len(keep) == 0 {
+		return
+	}
+
+	for _, member := range drop {
+		log.Info("Removing member with no pod from replset", "replset", replset.Name, "_id", member.ID, "host", member.Host)
+	}
+	cfg.Members = keep
 }
 
 func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []mongo.Role {

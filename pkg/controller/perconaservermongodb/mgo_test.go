@@ -1,13 +1,17 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -585,6 +589,128 @@ func TestLiveMembers(t *testing.T) {
 			live := countLiveMembers(tt.rsStatus, tt.cnf, tt.rs, rsMembers)
 			assert.Equal(t, tt.expectedLive, live)
 			assert.Equal(t, tt.expectedRSMembers, rsMembers)
+		})
+	}
+}
+
+func TestRemoveMembersWithoutPods(t *testing.T) {
+	t.Parallel()
+
+	const namespace = "psmdb"
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-cluster-name", Namespace: namespace},
+		Spec: api.PerconaServerMongoDBSpec{
+			ClusterServiceDNSSuffix: "svc.cluster.local",
+			ClusterServiceDNSMode:   api.DNSModeInternal,
+		},
+	}
+	replset := &api.ReplsetSpec{Name: "rs0"}
+
+	// host derives a member host the same way the operator writes it into the config, so
+	// the cases exercise the matching rather than a hardcoded DNS format.
+	host := func(t *testing.T, podName string) string {
+		t.Helper()
+		h, err := psmdb.MongoHost(context.Background(), nil, cr, cr.Spec.ClusterServiceDNSMode, replset, false, corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: namespace},
+		})
+		require.NoError(t, err)
+		return h
+	}
+
+	pods := func(names ...string) []corev1.Pod {
+		out := make([]corev1.Pod, 0, len(names))
+		for _, name := range names {
+			out = append(out, corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}})
+		}
+		return out
+	}
+
+	cases := []struct {
+		name          string
+		pods          []corev1.Pod
+		externalNodes []*api.ExternalNode
+		// memberPods become config members via host(); extraMembers are added verbatim.
+		memberPods   []string
+		extraMembers []string
+		// wantPods and wantExtra are the members expected to survive, in order.
+		wantPods  []string
+		wantExtra []string
+	}{
+		{
+			name:       "every member has a pod",
+			pods:       pods("rs0-0", "rs0-1", "rs0-2"),
+			memberPods: []string{"rs0-0", "rs0-1", "rs0-2"},
+			wantPods:   []string{"rs0-0", "rs0-1", "rs0-2"},
+		},
+		{
+			name:       "members whose pods are gone are dropped",
+			pods:       pods("rs0-0"),
+			memberPods: []string{"rs0-0", "rs0-1", "rs0-2"},
+			wantPods:   []string{"rs0-0"},
+		},
+		{
+			name:       "hidden member is dropped alongside mongod members",
+			pods:       pods("rs0-0"),
+			memberPods: []string{"rs0-0", "rs0-1", "rs0-2", "rs0-hidden-0"},
+			wantPods:   []string{"rs0-0"},
+		},
+		{
+			name:          "external nodes are kept, they have no pod by definition",
+			pods:          pods("rs0-0"),
+			externalNodes: []*api.ExternalNode{{Host: "external-1", Port: 27017}},
+			memberPods:    []string{"rs0-0", "rs0-1"},
+			extraMembers:  []string{"external-1:27017"},
+			wantPods:      []string{"rs0-0"},
+			wantExtra:     []string{"external-1:27017"},
+		},
+		{
+			name:         "config is left alone when no member has a pod",
+			pods:         pods("rs0-0"),
+			extraMembers: []string{"stale-1:27017", "stale-2:27017"},
+			wantExtra:    []string{"stale-1:27017", "stale-2:27017"},
+		},
+		{
+			name:       "no pods at all leaves the config alone",
+			pods:       nil,
+			memberPods: []string{"rs0-0", "rs0-1"},
+			wantPods:   []string{"rs0-0", "rs0-1"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rs := replset.DeepCopy()
+			rs.ExternalNodes = c.externalNodes
+
+			cfg := mongo.RSConfig{}
+			for i, podName := range c.memberPods {
+				cfg.Members = append(cfg.Members, mongo.ConfigMember{
+					ID: i, Host: host(t, podName), Votes: mongo.DefaultVotes, Priority: mongo.DefaultPriority,
+				})
+			}
+			for i, h := range c.extraMembers {
+				cfg.Members = append(cfg.Members, mongo.ConfigMember{
+					ID: len(c.memberPods) + i, Host: h, Votes: mongo.DefaultVotes, Priority: mongo.DefaultPriority,
+				})
+			}
+
+			want := make([]string, 0, len(c.wantPods)+len(c.wantExtra))
+			for _, podName := range c.wantPods {
+				want = append(want, host(t, podName))
+			}
+			want = append(want, c.wantExtra...)
+
+			r := &ReconcilePerconaServerMongoDB{}
+			r.removeMembersWithoutPods(context.Background(), cr, rs, c.pods, &cfg)
+
+			got := make([]string, 0, len(cfg.Members))
+			for _, member := range cfg.Members {
+				got = append(got, member.Host)
+			}
+
+			assert.Equal(t, want, got, "members left in config")
+			assert.NotEmptyf(t, cfg.Members, "config must never be left without members")
 		})
 	}
 }
