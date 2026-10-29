@@ -198,8 +198,6 @@ type VersionServiceOperatorParams struct {
 	SidecarsUsed *bool
 
 	// SnapshotBackupScheduled.
-	//
-	// Scheduled volume-snapshot backups: an external backup task with a volumeSnapshotClass set.
 	SnapshotBackupScheduled *bool
 
 	// UserManagementEnabled.
