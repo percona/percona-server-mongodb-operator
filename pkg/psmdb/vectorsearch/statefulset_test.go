@@ -16,6 +16,8 @@ import (
 )
 
 func TestGetSearchSpec_NilClusterSpec_ReturnsDisabled(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	// cr.Spec.Search is nil
 	rs := newTestRS()
@@ -26,6 +28,8 @@ func TestGetSearchSpec_NilClusterSpec_ReturnsDisabled(t *testing.T) {
 }
 
 func TestGetSearchSpec_NilReplset_ReturnsClusterSpec(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{
 		Enabled: true,
@@ -39,6 +43,8 @@ func TestGetSearchSpec_NilReplset_ReturnsClusterSpec(t *testing.T) {
 }
 
 func TestGetSearchSpec_NoReplsetOverride_ReturnsClusterSpec(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{
 		Enabled: true,
@@ -54,6 +60,8 @@ func TestGetSearchSpec_NoReplsetOverride_ReturnsClusterSpec(t *testing.T) {
 }
 
 func TestGetSearchSpec_AppliesEachOverride(t *testing.T) {
+	t.Parallel()
+
 	storage := &api.VolumeSpec{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	}
@@ -167,6 +175,8 @@ func TestGetSearchSpec_AppliesEachOverride(t *testing.T) {
 }
 
 func TestGetSearchSpec_DoesNotMutateClusterSpec(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{
 		Enabled:      true,
@@ -206,6 +216,8 @@ func TestGetSearchSpec_DoesNotMutateClusterSpec(t *testing.T) {
 }
 
 func TestGetSearchSpec_CombinedOverrides(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.Search = &api.SearchSpec{
 		Enabled: true,
@@ -230,6 +242,8 @@ func TestGetSearchSpec_CombinedOverrides(t *testing.T) {
 }
 
 func TestJVMFlags_DefaultsHalfOfMemoryRequest(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		memRequest string
 		want       []string
@@ -269,6 +283,8 @@ func TestJVMFlags_DefaultsHalfOfMemoryRequest(t *testing.T) {
 }
 
 func TestJVMFlags_UserHeapFlagsSuppressDefaults(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		userFlags []string
 		want      []string
@@ -309,6 +325,8 @@ func TestJVMFlags_UserHeapFlagsSuppressDefaults(t *testing.T) {
 }
 
 func TestJVMFlags_NonHeapUserFlagsKeepDefaults(t *testing.T) {
+	t.Parallel()
+
 	spec := &api.SearchSpec{
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -327,6 +345,8 @@ func TestJVMFlags_NonHeapUserFlagsKeepDefaults(t *testing.T) {
 }
 
 func TestJVMFlags_DoesNotMutateSpec(t *testing.T) {
+	t.Parallel()
+
 	userFlags := []string{"-XX:+UseG1GC"}
 	spec := &api.SearchSpec{
 		Resources: corev1.ResourceRequirements{
@@ -345,6 +365,8 @@ func TestJVMFlags_DoesNotMutateSpec(t *testing.T) {
 }
 
 func TestMongotContainer_JVMFlagsArg(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	// TLSEnabled() walks through CompareVersion → semver parse,
 	// which panics on an empty CRVersion.
@@ -441,6 +463,8 @@ func defaultHealthHandler() corev1.ProbeHandler {
 }
 
 func TestMongotContainer_DefaultProbes(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.CRVersion = version.Version()
 
@@ -452,6 +476,8 @@ func TestMongotContainer_DefaultProbes(t *testing.T) {
 }
 
 func TestMongotContainer_ProbeTimingOverridesKeepDefaultHandler(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.CRVersion = version.Version()
 
@@ -481,6 +507,8 @@ func TestMongotContainer_ProbeTimingOverridesKeepDefaultHandler(t *testing.T) {
 }
 
 func TestMongotContainer_ProbeHandlerOverrideWins(t *testing.T) {
+	t.Parallel()
+
 	cr := newTestCR()
 	cr.Spec.CRVersion = version.Version()
 
@@ -500,6 +528,8 @@ func TestMongotContainer_ProbeHandlerOverrideWins(t *testing.T) {
 }
 
 func TestMongotProbe_PreservesEachOverrideHandler(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]corev1.ProbeHandler{
 		"exec": {Exec: &corev1.ExecAction{Command: []string{"/bin/true"}}},
 		"httpGet": {HTTPGet: &corev1.HTTPGetAction{
@@ -522,6 +552,8 @@ func TestMongotProbe_PreservesEachOverrideHandler(t *testing.T) {
 }
 
 func TestMongotProbe_DoesNotMutateOverride(t *testing.T) {
+	t.Parallel()
+
 	override := &corev1.Probe{InitialDelaySeconds: 7}
 
 	got := mongotProbe(override)
@@ -557,6 +589,8 @@ func mountByName(mounts []corev1.VolumeMount, name string) *corev1.VolumeMount {
 }
 
 func TestStatefulSet_Metadata(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{
 		Enabled: true,
 		Image:   "percona/mongot:latest",
@@ -584,6 +618,8 @@ func TestStatefulSet_Metadata(t *testing.T) {
 }
 
 func TestStatefulSet_ReplicasFollowSpecSize(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
 	rs := newTestRS()
 	rs.Search = &api.SearchReplsetOverride{Size: new(int32(5))}
@@ -596,6 +632,8 @@ func TestStatefulSet_ReplicasFollowSpecSize(t *testing.T) {
 }
 
 func TestStatefulSet_PodTemplate(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{
 		Enabled:            true,
 		Image:              "percona/mongot:latest",
@@ -623,6 +661,8 @@ func TestStatefulSet_PodTemplate(t *testing.T) {
 }
 
 func TestStatefulSet_PodLabelsMergeSpecLabels(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{
 		Enabled: true,
 		Size:    1,
@@ -642,6 +682,8 @@ func TestStatefulSet_PodLabelsMergeSpecLabels(t *testing.T) {
 }
 
 func TestStatefulSet_ObjectLabelsWinOverSpecLabels(t *testing.T) {
+	t.Parallel()
+
 	objectLabels := naming.SearchLabels(newTestCR(), newTestRS())
 	require.Contains(t, objectLabels, naming.LabelKubernetesComponent)
 
@@ -661,6 +703,8 @@ func TestStatefulSet_ObjectLabelsWinOverSpecLabels(t *testing.T) {
 }
 
 func TestStatefulSet_ConfigHashAnnotation(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
 	rs := newTestRS()
 
@@ -677,6 +721,8 @@ func TestStatefulSet_ConfigHashAnnotation(t *testing.T) {
 }
 
 func TestStatefulSet_SSLHashAnnotations(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
 	rs := newTestRS()
 
@@ -732,6 +778,8 @@ func TestStatefulSet_SSLHashAnnotations(t *testing.T) {
 }
 
 func TestStatefulSet_Volumes_PVCTemplate(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{
 		Enabled: true,
 		Size:    1,
@@ -762,6 +810,8 @@ func TestStatefulSet_Volumes_PVCTemplate(t *testing.T) {
 }
 
 func TestStatefulSet_TLSEnabled_AddsSSLVolumeAndMount(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
 	require.True(t, cr.TLSEnabled())
 	rs := newTestRS()
@@ -779,6 +829,8 @@ func TestStatefulSet_TLSEnabled_AddsSSLVolumeAndMount(t *testing.T) {
 }
 
 func TestStatefulSet_TLSDisabled_NoSSLVolumeOrMount(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
 	cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
 	require.False(t, cr.TLSEnabled())
@@ -793,6 +845,8 @@ func TestStatefulSet_TLSDisabled_NoSSLVolumeOrMount(t *testing.T) {
 }
 
 func TestStatefulSet_Affinity_TopologyKey(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{
 		Enabled:  true,
 		Size:     1,
@@ -812,6 +866,8 @@ func TestStatefulSet_Affinity_TopologyKey(t *testing.T) {
 }
 
 func TestStatefulSet_Affinity_Off(t *testing.T) {
+	t.Parallel()
+
 	cr := searchCR(&api.SearchSpec{
 		Enabled:  true,
 		Size:     1,
@@ -825,6 +881,8 @@ func TestStatefulSet_Affinity_Off(t *testing.T) {
 }
 
 func TestStatefulSet_RevisionHistoryLimit(t *testing.T) {
+	t.Parallel()
+
 	t.Run("propagated from cluster spec when set", func(t *testing.T) {
 		limit := int32(5)
 		cr := searchCR(&api.SearchSpec{Enabled: true, Size: 1})
