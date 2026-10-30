@@ -358,6 +358,11 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
 
+  journal-pvc:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [storage]
+
   ldap:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]

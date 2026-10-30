@@ -321,6 +321,14 @@ spec:
         resources:
           requests:
             storage: 3Gi
+#    # Dedicated PVC for the WiredTiger journal (/data/db/journal)
+#    journalStorage:
+#      persistentVolumeClaim:
+#        storageClassName: fast-ssd
+#        accessModes: [ "ReadWriteOnce" ]
+#        resources:
+#          requests:
+#            storage: 5Gi
 
     hidden:
       enabled: false
@@ -388,6 +396,14 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      # Dedicated PVC for the WiredTiger journal (/data/db/journal)
+#      journalStorage:
+#        persistentVolumeClaim:
+#          storageClassName: fast-ssd
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 5Gi
 
     nonvoting:
       enabled: false
@@ -455,6 +471,14 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      # Dedicated PVC for the WiredTiger journal (/data/db/journal)
+#      journalStorage:
+#        persistentVolumeClaim:
+#          storageClassName: fast-ssd
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 5Gi
     arbiter:
       enabled: false
       size: 1
@@ -647,6 +671,14 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      # Dedicated PVC for the WiredTiger journal (/data/db/journal)
+#      journalStorage:
+#        persistentVolumeClaim:
+#          storageClassName: fast-ssd
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 5Gi
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
@@ -1051,9 +1083,10 @@ spec:
         memory: 100M
         cpu: 200m
 #    # Store mongod logs on a dedicated PVC instead of the data volume. Off
-#    # unless set, requires crVersion 1.24.0. Enabling it recreates the
-#    # statefulsets; logs already on the data volume are left there, hidden
-#    # behind the new mount, so copy them out first if you need them.
+#    # unless set and `enabled` above is true. Requires crVersion 1.24.0.
+#    # Enabling it recreates the statefulsets; logs already on the data volume
+#    # are left there, hidden behind the new mount, so copy them out first if
+#    # you need them. Disabling it detaches the PVCs without deleting them.
 #    storage:
 #      persistentVolumeClaim:
 #        storageClassName: standard

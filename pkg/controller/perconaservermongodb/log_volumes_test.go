@@ -18,8 +18,8 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
-func logStorage(size string) *api.LogStorageSpec {
-	return &api.LogStorageSpec{
+func logStorage(size string) *api.StorageSpec {
+	return &api.StorageSpec{
 		PersistentVolumeClaim: &api.PVCSpec{
 			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -65,13 +65,25 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 	const ns = "log-storage"
 
 	tests := map[string]struct {
-		crVersion     string
-		storage       *api.LogStorageSpec
-		component     string
-		claims        []string
-		stsMissing    bool
-		wantRecreated bool
+		crVersion      string
+		storage        *api.StorageSpec
+		journalStorage bool
+		component      string
+		claims         []string
+		stsMissing     bool
+		wantRecreated  bool
 	}{
+		"journal storage added": {
+			journalStorage: true,
+			component:      naming.ComponentMongod,
+			claims:         []string{config.MongodDataVolClaimName},
+			wantRecreated:  true,
+		},
+		"journal storage unchanged": {
+			journalStorage: true,
+			component:      naming.ComponentMongod,
+			claims:         []string{config.MongodDataVolClaimName, config.MongodJournalVolClaimName},
+		},
 		"log storage added": {
 			storage:       logStorage("2Gi"),
 			component:     naming.ComponentMongod,
@@ -131,6 +143,9 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 				cr.Spec.CRVersion = tt.crVersion
 			}
 			cr.Spec.LogCollector.Storage = tt.storage
+			if tt.journalStorage {
+				cr.Spec.Replsets[0].JournalStorage = journalSpec("5Gi")
+			}
 
 			sts := logStorageSts("some-cluster-rs0", ns, tt.component, tt.claims...)
 			nn := types.NamespacedName{Name: sts.Name, Namespace: ns}
@@ -146,7 +161,7 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 				require.NoError(t, r.client.Get(t.Context(), nn, before))
 			}
 
-			recreated, err := r.recreateStsForLogStorageIfNeeded(t.Context(), cr, sts)
+			recreated, err := r.recreateStsForStorageIfNeeded(t.Context(), cr, sts)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantRecreated, recreated)
 
@@ -186,7 +201,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 		"rejects a shrink and reverts the request": {
 			requested:    "1Gi",
 			pvcSize:      "3Gi",
-			wantErrMsg:   "shrinking log volumes is not supported",
+			wantErrMsg:   "shrinking mongod-logs volumes is not supported",
 			wantLogSize:  "3Gi",
 			wantSpecSize: "3Gi",
 		},
@@ -216,7 +231,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 
 			r := buildFakeClient(cr, sts, pod, logPVC, dataPVC)
 
-			err = r.reconcileLogPVCs(t.Context(), cr, sts, ls)
+			err = r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, cr.LogStorage())
 			if tt.wantErrMsg != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErrMsg)
@@ -354,7 +369,7 @@ func TestReconcileLogPVCsDuringDataResize(t *testing.T) {
 			stale := sts.DeepCopy()
 			stale.Annotations = nil
 
-			require.NoError(t, r.reconcileLogPVCs(t.Context(), cr, stale, ls))
+			require.NoError(t, r.reconcileAuxiliaryPVCs(t.Context(), cr, stale, ls, config.MongodLogVolClaimName, cr.LogStorage()))
 
 			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
 			if tt.wantStsExists {

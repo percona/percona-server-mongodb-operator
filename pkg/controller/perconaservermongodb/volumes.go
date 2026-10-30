@@ -37,16 +37,49 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 		return errors.Wrap(err, "resize volumes if needed")
 	}
 
-	if err := r.reconcileLogPVCs(ctx, cr, sts, ls); err != nil {
+	if err := r.reconcileAuxiliaryPVCs(ctx, cr, sts, ls, config.MongodLogVolClaimName, cr.LogStorage()); err != nil {
 		return errors.Wrap(err, "reconcile log PVCs")
+	}
+
+	if err := r.reconcileAuxiliaryPVCs(ctx, cr, sts, ls, config.MongodJournalVolClaimName, journalStorage(cr, sts)); err != nil {
+		return errors.Wrap(err, "reconcile journal PVCs")
 	}
 
 	return nil
 }
 
-// reconcileLogPVCs keeps the log PVCs in sync with the CR. Shrinking is not supported.
-func (r *ReconcilePerconaServerMongoDB) reconcileLogPVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string) error {
-	pvcSpec := cr.LogStorage()
+// journalStorage returns the journal PVC spec for the component sts belongs to.
+func journalStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
+	component := sts.Labels[naming.LabelKubernetesComponent]
+
+	var rs *psmdbv1.ReplsetSpec
+	switch component {
+	case naming.ComponentConfigSrv:
+		rs = cr.Spec.Sharding.ConfigsvrReplSet
+	case naming.ComponentMongod, naming.ComponentNonVoting, naming.ComponentHidden:
+		rs = cr.Spec.Replset(sts.Labels[naming.LabelKubernetesReplset])
+	default:
+		return nil
+	}
+
+	if rs == nil {
+		return nil
+	}
+
+	storage := rs.JournalStorage
+	switch component {
+	case naming.ComponentNonVoting:
+		storage = rs.NonVoting.JournalStorage
+	case naming.ComponentHidden:
+		storage = rs.Hidden.JournalStorage
+	}
+
+	return cr.JournalStorage(storage)
+}
+
+// reconcileAuxiliaryPVCs keeps the PVCs of a non-data claim in sync with the CR.
+// Shrinking is not supported.
+func (r *ReconcilePerconaServerMongoDB) reconcileAuxiliaryPVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec *psmdbv1.PVCSpec) error {
 	if pvcSpec == nil || pvcSpec.PersistentVolumeClaimSpec == nil {
 		return nil
 	}
@@ -59,16 +92,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileLogPVCs(ctx context.Context, cr
 		return nil
 	}
 
-	if _, ok := sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress]; ok && resizingClaim(sts) != config.MongodLogVolClaimName {
+	if _, ok := sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress]; ok && resizingClaim(sts) != claimName {
 		return nil
 	}
 
-	if err := r.fixVolumeLabels(ctx, sts, ls, config.MongodLogVolClaimName, *pvcSpec); err != nil {
-		return errors.Wrap(err, "fix log volume labels")
+	if err := r.fixVolumeLabels(ctx, sts, ls, claimName, *pvcSpec); err != nil {
+		return errors.Wrapf(err, "fix %s volume labels", claimName)
 	}
 
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sts, config.MongodLogVolClaimName, pvcSpec, ls); err != nil {
-		logf.FromContext(ctx).Error(err, "failed to reconcile log storage autoscaling", "statefulset", sts.Name)
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sts, claimName, pvcSpec, ls); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", sts.Name, "claim", claimName)
 	}
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
@@ -80,16 +113,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileLogPVCs(ctx context.Context, cr
 	}
 
 	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
-	actual := maxPVCCapacity(pvcList.Items, config.MongodLogVolClaimName, sts)
+	actual := maxPVCCapacity(pvcList.Items, claimName, sts)
 
 	if !actual.IsZero() && requested.Cmp(actual) < 0 {
-		if err := r.revertVolumeTemplate(ctx, cr, sts, config.MongodLogVolClaimName, actual); err != nil {
-			return errors.Wrapf(err, "revert log volume template for sts/%s", sts.Name)
+		if err := r.revertVolumeTemplate(ctx, cr, sts, claimName, actual); err != nil {
+			return errors.Wrapf(err, "revert %s volume template for sts/%s", claimName, sts.Name)
 		}
-		return errors.Errorf("shrinking log volumes is not supported: requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
+		return errors.Errorf("shrinking %s volumes is not supported: requested storage (%s) is less than actual storage (%s)", claimName, requested.String(), actual.String())
 	}
 
-	return r.resizeVolumesIfNeeded(ctx, cr, sts, ls, config.MongodLogVolClaimName, *pvcSpec)
+	return r.resizeVolumesIfNeeded(ctx, cr, sts, ls, claimName, *pvcSpec)
 }
 
 // resizingClaim returns the claim whose resize is tracked on sts. Resizes started
@@ -498,13 +531,17 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 		return errors.New("missing component label")
 	}
 
-	if claimName == config.MongodLogVolClaimName {
+	switch claimName {
+	case config.MongodLogVolClaimName, config.MongodJournalVolClaimName:
 		pvcSpec := cr.LogStorage()
+		if claimName == config.MongodJournalVolClaimName {
+			pvcSpec = journalStorage(cr, sts)
+		}
 		if pvcSpec == nil || pvcSpec.Resources.Requests == nil {
-			return errors.New("missing log storage spec")
+			return errors.Errorf("missing %s storage spec", claimName)
 		}
 
-		log.Info("Reverting log volume template", "component", component, "originalSize", originalSize)
+		log.Info("Reverting volume template", "claim", claimName, "component", component, "originalSize", originalSize)
 		pvcSpec.Resources.Requests[corev1.ResourceStorage] = originalSize
 
 		if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {

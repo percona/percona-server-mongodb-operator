@@ -393,11 +393,7 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		}
 	}
 
-	if s := cr.LogStorage(); s != nil && s.PersistentVolumeClaimSpec != nil {
-		if len(s.AccessModes) == 0 {
-			s.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
-		}
-	}
+	setDefaultAccessModes(cr.LogStorage())
 
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
@@ -415,6 +411,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 
 	for _, replset := range repls {
+		setDefaultAccessModes(cr.JournalStorage(replset.JournalStorage))
+		setDefaultAccessModes(cr.JournalStorage(replset.NonVoting.JournalStorage))
+		setDefaultAccessModes(cr.JournalStorage(replset.Hidden.JournalStorage))
+
 		if len(cr.Name+replset.Name) > clusterNameMaxLen {
 			return errors.Errorf("cluster name (%s) + replset name (%s) is too long, must be no more than %d characters", cr.Name, replset.Name, clusterNameMaxLen)
 		}
@@ -1353,4 +1353,13 @@ func validateOCIStorages(cr *PerconaServerMongoDB) error {
 	}
 
 	return nil
+}
+
+func setDefaultAccessModes(pvc *PVCSpec) {
+	if pvc == nil || pvc.PersistentVolumeClaimSpec == nil {
+		return
+	}
+	if len(pvc.AccessModes) == 0 {
+		pvc.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+	}
 }

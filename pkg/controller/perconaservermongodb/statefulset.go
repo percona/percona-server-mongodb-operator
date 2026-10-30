@@ -71,9 +71,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	recreated, err := r.recreateStsForLogStorageIfNeeded(ctx, cr, sfs)
+	if err := r.validateJournalStorage(ctx, sfs, journalStorage(cr, sfs) != nil); err != nil {
+		return nil, err
+	}
+
+	recreated, err := r.recreateStsForStorageIfNeeded(ctx, cr, sfs)
 	if err != nil {
-		return nil, errors.Wrapf(err, "recreate StatefulSet %s for log storage", sfs.Name)
+		return nil, errors.Wrapf(err, "recreate StatefulSet %s for storage change", sfs.Name)
 	}
 	if recreated {
 		return sfs, nil
@@ -119,7 +123,27 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	return sfs, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) recreateStsForLogStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) validateJournalStorage(ctx context.Context, sfs *appsv1.StatefulSet, wantJournal bool) error {
+	if wantJournal {
+		return nil
+	}
+
+	current := new(appsv1.StatefulSet)
+	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	hasJournal := slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+		return vct.Name == psmdbconfig.MongodJournalVolClaimName
+	})
+	if !hasJournal {
+		return nil
+	}
+
+	return errors.Errorf("journalStorage can't be disabled on running statefulset %s", sfs.Name)
+}
+
+func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
 	if cr.CompareVersion("1.24.0") < 0 {
 		return false, nil
 	}
@@ -133,10 +157,15 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForLogStorageIfNeeded(ctx con
 		return false, client.IgnoreNotFound(err)
 	}
 
-	hasLogVCT := slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-		return vct.Name == psmdbconfig.MongodLogVolClaimName
-	})
-	if hasLogVCT == (cr.LogStorage() != nil) {
+	hasVCT := func(claimName string) bool {
+		return slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+			return vct.Name == claimName
+		})
+	}
+
+	logChanged := hasVCT(psmdbconfig.MongodLogVolClaimName) != (cr.LogStorage() != nil)
+	journalChanged := hasVCT(psmdbconfig.MongodJournalVolClaimName) != (journalStorage(cr, sfs) != nil)
+	if !logChanged && !journalChanged {
 		return false, nil
 	}
 
@@ -151,7 +180,8 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForLogStorageIfNeeded(ctx con
 		return false, errors.Wrapf(err, "delete statefulset/%s", current.Name)
 	}
 
-	logf.FromContext(ctx).Info("Recreating statefulset to change log storage", "statefulset", sfs.Name)
+	logf.FromContext(ctx).Info("Recreating statefulset to change storage", "statefulset", sfs.Name,
+		"logStorage", logChanged, "journalStorage", journalChanged)
 
 	sfs.ResourceVersion = ""
 	sfs.UID = ""

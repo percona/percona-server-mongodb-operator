@@ -797,6 +797,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 		containerName string
 		claimName     string
 		mountPath     string
+		setup         func(cr *api.PerconaServerMongoDB)
 		pvcSpec       func(cr *api.PerconaServerMongoDB) *api.PVCSpec
 	}{
 		"mongod": {
@@ -823,6 +824,30 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			mountPath:     psmdbconfig.MongodContainerDataDir,
 			pvcSpec:       mongodPVC(func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.NonVoting.VolumeSpec }),
 		},
+		"journal": {
+			labels:        naming.MongodLabels,
+			stsName:       crName + "-" + rsName,
+			containerName: naming.ContainerMongod,
+			claimName:     psmdbconfig.MongodJournalVolClaimName,
+			mountPath:     psmdbconfig.MongodContainerJournalDir,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = version.Version()
+				cr.Spec.Replsets[0].JournalStorage = &api.StorageSpec{
+					PersistentVolumeClaim: &api.PVCSpec{
+						PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceStorage: resource.MustParse("10Gi"),
+								},
+							},
+						},
+					},
+				}
+			},
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return cr.JournalStorage(cr.Spec.Replsets[0].JournalStorage)
+			},
+		},
 		"mongos": {
 			labels: func(cr *api.PerconaServerMongoDB, _ *api.ReplsetSpec) map[string]string {
 				return naming.MongosLabels(cr)
@@ -842,6 +867,9 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			ctx := t.Context()
 
 			cr := newCR()
+			if tt.setup != nil {
+				tt.setup(cr)
+			}
 			rs := cr.Spec.Replsets[0]
 			ls := tt.labels(cr, rs)
 

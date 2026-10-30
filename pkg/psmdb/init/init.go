@@ -57,3 +57,47 @@ func Containers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Contain
 
 	return []corev1.Container{init}
 }
+
+const journalMigrationScript = `set -e
+src="$1"
+dst="$2"
+[ -d "$src" ] || exit 0
+[ -n "$(ls -A "$src" 2>/dev/null)" ] || exit 0
+echo "migrating journal from $src to $dst"
+find "$src" -mindepth 1 -maxdepth 1 -exec cp -a {} "$dst"/ \;
+sync
+for f in "$src"/*; do
+	[ -e "$f" ] || continue
+	name=$(basename "$f")
+	if [ "$(stat -c %s "$f")" != "$(stat -c %s "$dst/$name" 2>/dev/null)" ]; then
+		echo "size mismatch for $name, keeping the original journal"
+		exit 1
+	fi
+done
+find "$src" -mindepth 1 -delete
+echo "journal migrated to $dst"
+`
+
+// JournalMigrationContainer copies an existing journal from the data volume to
+// the journal volume before mongod starts. Without it the journal volume would
+// shadow the write-ahead log the data files still reference.
+func JournalMigrationContainer(cr *api.PerconaServerMongoDB, securityContext *corev1.SecurityContext) corev1.Container {
+	return corev1.Container{
+		Name:            "journal-migration",
+		Image:           cr.Spec.Image,
+		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Command:         []string{"/bin/sh", "-c", journalMigrationScript, "journal-migration"},
+		Args:            []string{config.MongodContainerJournalDir, config.JournalMigrationDir},
+		SecurityContext: securityContext,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      config.MongodDataVolClaimName,
+				MountPath: config.MongodContainerDataDir,
+			},
+			{
+				Name:      config.MongodJournalVolClaimName,
+				MountPath: config.JournalMigrationDir,
+			},
+		},
+	}
+}

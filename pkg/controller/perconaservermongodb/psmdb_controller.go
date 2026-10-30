@@ -1023,7 +1023,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 				mongodPodsMap[pod.Name] = true
 			}
 			for _, pvc := range mongodPVCs.Items {
-				for _, claimName := range []string{psmdbconfig.MongodDataVolClaimName, psmdbconfig.MongodLogVolClaimName} {
+				for _, claimName := range []string{psmdbconfig.MongodDataVolClaimName, psmdbconfig.MongodLogVolClaimName, psmdbconfig.MongodJournalVolClaimName} {
 					after, ok := strings.CutPrefix(pvc.Name, claimName+"-")
 					if !ok {
 						continue

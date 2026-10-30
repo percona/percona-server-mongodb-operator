@@ -43,7 +43,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
-	defaultCR.Spec.LogCollector.Storage = &api.LogStorageSpec{
+	defaultCR.Spec.LogCollector.Storage = &api.StorageSpec{
 		PersistentVolumeClaim: &api.PVCSpec{
 			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
 				Resources: corev1.VolumeResourceRequirements{
@@ -163,6 +163,27 @@ func TestReconcileStatefulSet(t *testing.T) {
 			compareFile: "reconcile-statefulset/rs0-no-log-storage.yaml",
 			crUpdate: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.LogCollector.Storage = nil
+			},
+		},
+		{
+			name:        "rs0-journal",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "rs0",
+			component:   naming.ComponentMongod,
+			compareFile: "reconcile-statefulset/rs0-journal.yaml",
+			crUpdate: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].JournalStorage = &api.StorageSpec{
+					PersistentVolumeClaim: &api.PVCSpec{
+						PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceStorage: resource.MustParse("5Gi"),
+								},
+							},
+						},
+					},
+				}
 			},
 		},
 		{

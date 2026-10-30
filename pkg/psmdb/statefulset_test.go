@@ -903,8 +903,8 @@ func TestBuildMongoDBURI(t *testing.T) {
 	}
 }
 
-func logStorageSpec(size string) *api.LogStorageSpec {
-	return &api.LogStorageSpec{
+func logStorageSpec(size string) *api.StorageSpec {
+	return &api.StorageSpec{
 		PersistentVolumeClaim: &api.PVCSpec{
 			Labels:      map[string]string{"custom-label": "custom"},
 			Annotations: map[string]string{"custom-annotation": "custom"},
@@ -925,11 +925,13 @@ func TestLogStorageVersionGate(t *testing.T) {
 
 	tests := map[string]struct {
 		crVersion string
-		storage   *api.LogStorageSpec
+		storage   *api.StorageSpec
+		disabled  bool
 		want      bool
 	}{
 		"not configured":    {crVersion: version.Version(), storage: nil, want: false},
 		"configured":        {crVersion: version.Version(), storage: logStorageSpec("2Gi"), want: true},
+		"collector off":     {crVersion: version.Version(), storage: logStorageSpec("2Gi"), disabled: true, want: false},
 		"ignored on 1.23.1": {crVersion: "1.23.1", storage: logStorageSpec("2Gi"), want: false},
 		"ignored on 1.21.0": {crVersion: "1.21.0", storage: logStorageSpec("2Gi"), want: false},
 	}
@@ -940,7 +942,7 @@ func TestLogStorageVersionGate(t *testing.T) {
 				Spec: api.PerconaServerMongoDBSpec{
 					CRVersion: tt.crVersion,
 					LogCollector: &api.LogCollectorSpec{
-						Enabled: true,
+						Enabled: !tt.disabled,
 						Storage: tt.storage,
 					},
 				},
