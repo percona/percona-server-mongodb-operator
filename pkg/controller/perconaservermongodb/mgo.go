@@ -934,43 +934,61 @@ func isMongoAuthFailure(err error, stdout, stderr string) bool {
 		strings.Contains(msg, "unauthorized")
 }
 
-func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod) error {
-	log := logf.FromContext(ctx).WithName("handleReplicaSetNoPrimary")
+func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	pods []corev1.Pod,
+) error {
 
 	for _, pod := range pods {
 		if !isMongodPod(pod) || !isContainerAndPodRunning(pod, "mongod") || !isPodReady(pod) {
 			continue
 		}
 
-		log.Info("Connecting to pod", "pod", pod.Name, "user", api.RoleClusterAdmin)
-		cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, pod)
-		if err != nil {
-			return errors.Wrap(err, "get standalone mongo client")
-		}
-		defer func() {
-			if err := cli.Disconnect(ctx); err != nil {
-				log.Error(err, "failed to close connection")
-			}
-		}()
-
-		cfg, err := cli.ReadConfig(ctx)
-		if err != nil {
-			return errors.Wrap(err, "read replset config")
-		}
-
-		// Members whose pods are gone still count towards the voting majority, so they can
-		// hold the surviving members below the quorum needed to elect a primary. Writing the
-		// config back unchanged leaves the replset exactly as it was (even if stuck).
-		r.removeMembersWithoutPods(ctx, cr, replset, pods, &cfg)
-
-		if err := cli.WriteConfig(ctx, cfg, true); err != nil {
-			return errors.Wrap(err, "reconfigure replset")
+		if err := r.forceReconfigFromPod(ctx, cr, replset, pods, pod); err != nil {
+			return errors.Wrap(err, "force reconfig member pod")
 		}
 
 		return nil
 	}
 
 	return errNoRunningMongodContainers
+}
+
+func (r *ReconcilePerconaServerMongoDB) forceReconfigFromPod(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	pods []corev1.Pod,
+	targetPod corev1.Pod,
+) error {
+	log := logf.FromContext(ctx).WithName("handleReplicaSetNoPrimary")
+	log.Info("Connecting to pod", "pod", targetPod.Name, "user", api.RoleClusterAdmin)
+	cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, targetPod)
+	if err != nil {
+		return errors.Wrap(err, "get standalone mongo client")
+	}
+	defer func() {
+		if err := cli.Disconnect(ctx); err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	cfg, err := cli.ReadConfig(ctx)
+	if err != nil {
+		return errors.Wrap(err, "read replset config")
+	}
+
+	// Members whose pods are gone still count towards the voting majority, so they can
+	// hold the surviving members below the quorum needed to elect a primary. Writing the
+	// config back unchanged leaves the replset exactly as it was (even if stuck).
+	r.removeUndesiredMembers(ctx, cr, replset, pods, &cfg)
+
+	if err := cli.WriteConfig(ctx, cfg, true); err != nil {
+		return errors.Wrap(err, "reconfigure replset")
+	}
+	return nil
 }
 
 // memberHasPod reports whether a config member still has a backing pod.
@@ -985,11 +1003,17 @@ func memberHasPod(member mongo.ConfigMember, podNames, hosts map[string]struct{}
 	return exists
 }
 
-// removeMembersWithoutPods drops config members that have neither a live pod nor a
+// removeUndesiredMembers drops config members that have neither a live pod nor a
 // configured external node behind them. It leaves the config untouched when the hosts can't
 // be resolved or when dropping them would empty the member list, so an incomplete pod list
 // can't wipe the replset: recovery is left to a later reconcile instead.
-func (r *ReconcilePerconaServerMongoDB) removeMembersWithoutPods(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pods []corev1.Pod, cfg *mongo.RSConfig) {
+func (r *ReconcilePerconaServerMongoDB) removeUndesiredMembers(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	pods []corev1.Pod,
+	cfg *mongo.RSConfig,
+) {
 	log := logf.FromContext(ctx)
 
 	podNames := make(map[string]struct{}, len(pods))
