@@ -30,6 +30,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestApplyObservedStatus(t *testing.T) {
@@ -307,7 +308,7 @@ func TestReconcileModeInheritedFinalized(t *testing.T) {
 
 			f := &fakePCSM{statusResp: tc.observed}
 
-			err := r.reconcileMode(context.Background(), cr, f, 1)
+			err := r.reconcileMode(t.Context(), cr, f, 1)
 			require.NoError(t, err)
 
 			if tc.wantStarted {
@@ -923,6 +924,93 @@ func TestEnsureTargetMongoUser(t *testing.T) {
 	}
 }
 
+func TestTargetTLS(t *testing.T) {
+	targetWithTLS := func() *psmdbv1.PerconaServerMongoDB {
+		return &psmdbv1.PerconaServerMongoDB{
+			Name: "tgt", Namespace: "ns",
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
+				Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+			},
+		}
+	}
+	sslSecret := func(data map[string][]byte) *corev1.Secret {
+		return &corev1.Secret{Name: "tgt-ssl", Namespace: "ns", Data: data}
+	}
+	complete := map[string][]byte{
+		"ca.crt":  []byte("CA"),
+		"tls.crt": []byte("CERT"),
+		"tls.key": []byte("KEY"),
+	}
+
+	tests := map[string]struct {
+		target      *psmdbv1.PerconaServerMongoDB
+		secret      *corev1.Secret
+		wantEnabled bool
+		wantErr     string
+	}{
+		"tls disabled target needs no certificates": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "tgt", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
+					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+				},
+			},
+		},
+		"complete ssl secret resolves": {
+			target:      targetWithTLS(),
+			secret:      sslSecret(complete),
+			wantEnabled: true,
+		},
+		"missing key is reported": {
+			target:  targetWithTLS(),
+			secret:  sslSecret(map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT")}),
+			wantErr: "missing tls.key",
+		},
+		"missing secret is reported": {
+			target:  targetWithTLS(),
+			wantErr: "get target ssl secret",
+		},
+		"target pinned to an older crVersion keeps the 1.23 pod template": {
+			target: &psmdbv1.PerconaServerMongoDB{
+				Name: "tgt", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: "1.23.0",
+					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+				},
+			},
+			secret: sslSecret(complete),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := clusterSyncScheme(t)
+			require.NoError(t, corev1.AddToScheme(s))
+			b := fake.NewClientBuilder().WithScheme(s)
+			if tc.secret != nil {
+				b = b.WithObjects(tc.secret)
+			}
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: b.Build(), scheme: s}
+
+			got, err := r.targetTLS(t.Context(), tc.target)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantEnabled, got.Enabled())
+			if tc.wantEnabled {
+				assert.Equal(t, "tgt-ssl", got.SecretName)
+				assert.NotEmpty(t, got.Hash)
+			}
+		})
+	}
+}
+
 func targetCluster(crVersion string) *psmdbv1.PerconaServerMongoDB {
 	return &psmdbv1.PerconaServerMongoDB{
 		Name: "target", Namespace: "ns",
@@ -958,7 +1046,7 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 		return dep
 	}
 
-	require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
+	require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"), clustersync.TLS{}))
 	initial := get(t)
 
 	require.NotNil(t, initial.Spec.Replicas)
@@ -969,14 +1057,14 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 	assert.Equal(t, clustersync.Labels(cr), initial.Labels)
 
 	t.Run("reconcile is idempotent", func(t *testing.T) {
-		require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
+		require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"), clustersync.TLS{}))
 		assert.Equal(t, initial.Spec, get(t).Spec)
 	})
 
 	for _, size := range []int32{3, 5, 1} {
 		t.Run(fmt.Sprintf("scaling to %d changes only replicas", size), func(t *testing.T) {
 			cr.Spec.Size = size
-			require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
+			require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"), clustersync.TLS{}))
 			dep := get(t)
 
 			require.NotNil(t, dep.Spec.Replicas)
@@ -988,7 +1076,7 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 
 	t.Run("HA group rolls one at a time without surging", func(t *testing.T) {
 		cr.Spec.Size = 3
-		require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0")))
+		require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"), clustersync.TLS{}))
 		strategy := get(t).Spec.Strategy
 
 		require.Equal(t, appsv1.RollingUpdateDeploymentStrategyType, strategy.Type)
@@ -1022,7 +1110,7 @@ func TestReconcileDeploymentVersionGate(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).Build()
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
 
-			require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster(tc.crVersion)))
+			require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster(tc.crVersion), clustersync.TLS{}))
 
 			dep := &appsv1.Deployment{}
 			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{
@@ -1051,6 +1139,60 @@ func TestReconcileDeploymentVersionGate(t *testing.T) {
 	}
 }
 
+func TestTargetTLSHashChanges(t *testing.T) {
+	tests := map[string]struct {
+		tls    *psmdbv1.TLSSpec
+		mutate func(t *testing.T, cl k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret)
+		reason string
+	}{
+		"rotated certificate": {
+			mutate: func(t *testing.T, cl k8sclient.Client, _ *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret) {
+				secret.Data["tls.crt"] = []byte("ROTATED")
+				require.NoError(t, cl.Update(t.Context(), secret))
+			},
+			reason: "rotated certificate must change the pod template hash",
+		},
+		"certificate verification toggle": {
+			tls: &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire, AllowInvalidCertificates: new(true)},
+			mutate: func(_ *testing.T, _ k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, _ *corev1.Secret) {
+				target.Spec.TLS.AllowInvalidCertificates = new(false)
+			},
+			reason: "certificate verification change must change the pod template hash",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			target := &psmdbv1.PerconaServerMongoDB{
+				Name: "tgt", Namespace: "ns",
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					TLS:       tc.tls,
+					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
+				},
+			}
+			secret := &corev1.Secret{
+				Name: "tgt-ssl", Namespace: "ns",
+				Data: map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT"), "tls.key": []byte("KEY")},
+			}
+
+			s := clusterSyncScheme(t)
+			require.NoError(t, corev1.AddToScheme(s))
+			cl := fake.NewClientBuilder().WithScheme(s).WithObjects(secret).Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
+
+			before, err := r.targetTLS(t.Context(), target)
+			require.NoError(t, err)
+
+			tc.mutate(t, cl, target, secret)
+
+			after, err := r.targetTLS(t.Context(), target)
+			require.NoError(t, err)
+			assert.NotEqual(t, before.Hash, after.Hash, tc.reason)
+		})
+	}
+}
+
 // TestReconcileDeploymentApplyFailure checks the write error is wrapped
 // rather than swallowed: a silent failure here leaves the group at the
 // old size while status happily reports the new one.
@@ -1066,7 +1208,7 @@ func TestReconcileDeploymentApplyFailure(t *testing.T) {
 		}).Build()
 	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
 
-	err := r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"))
+	err := r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"), clustersync.TLS{})
 
 	require.ErrorIs(t, err, boom)
 	assert.Contains(t, err.Error(), "apply clustersync deployment")
