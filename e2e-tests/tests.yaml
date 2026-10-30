@@ -321,7 +321,7 @@ tests:
   demand-backup-snapshot:
     suites: [pr, release, backups]
     operatorModes: [cluster-wide, namespaced]
-    groups: [backup]
+    groups: [backup, sharding]
 
   demand-backup-snapshot-vault:
     suites: [pr, release, backups, distro]
@@ -377,6 +377,11 @@ tests:
     suites: [pr, release, minikube]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+
+  logcollector:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [monitoring]
 
   mongod-major-upgrade:
     suites: [pr, release, minikube, distro]
@@ -462,6 +467,21 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
+
+  pvc-shrink:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage]
+
+  pvc-shrink-sharded:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage, sharding]
+
+  pvc-shrink-mongos-log:
+    suites: [pr, release]
+    operatorModes: [namespaced]
+    groups: [storage, sharding]
 
   recover-no-primary:
     suites: [pr, release, distro]
