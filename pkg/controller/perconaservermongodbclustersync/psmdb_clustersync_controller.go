@@ -2,6 +2,7 @@ package perconaservermongodbclustersync
 
 import (
 	"context"
+	"crypto/sha256"
 	stderrors "errors"
 	"fmt"
 	"slices"
@@ -184,7 +185,13 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return reconcile.Result{}, errors.Wrap(err, "reconcile uri secret")
 	}
 
-	if err := r.reconcileDeployment(ctx, cr, target); err != nil {
+	tlsConf, err := r.targetTLS(ctx, target)
+	if err != nil {
+		log.Info("target TLS certificates not usable, surfacing in status", "err", err.Error())
+		return r.requeueWithStatusError(ctx, cr, errors.Wrap(err, "target tls"))
+	}
+
+	if err := r.reconcileDeployment(ctx, cr, target, tlsConf); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile deployment")
 	}
 
@@ -360,7 +367,29 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) releaseClusterSyncLease(ctx c
 	return err
 }
 
-func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, cluster *psmdbv1.PerconaServerMongoDB) error {
+func (r *ReconcilePerconaServerMongoDBClusterSync) targetTLS(ctx context.Context, target *psmdbv1.PerconaServerMongoDB) (clustersync.TLS, error) {
+	if !pcsmTLSEnabled(target) {
+		return clustersync.TLS{}, nil
+	}
+
+	nn := types.NamespacedName{Name: psmdbv1.SSLSecretName(target), Namespace: target.Namespace}
+	secret := &corev1.Secret{}
+	if err := r.client.Get(ctx, nn, secret); err != nil {
+		return clustersync.TLS{}, errors.Wrapf(err, "get target ssl secret %s", nn)
+	}
+	for _, key := range []string{"ca.crt", "tls.crt", "tls.key"} {
+		if len(secret.Data[key]) == 0 {
+			return clustersync.TLS{}, errors.Errorf("target ssl secret %s is missing %s", nn, key)
+		}
+	}
+
+	return clustersync.TLS{
+		SecretName: nn.Name,
+		Hash:       fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintln(secret.Data, allowInvalidCerts(target))))),
+	}, nil
+}
+
+func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBClusterSync, cluster *psmdbv1.PerconaServerMongoDB, tls clustersync.TLS) error {
 	dep := clustersync.Deployment(cr)
 	if err := r.client.Get(ctx, types.NamespacedName{Name: dep.Name, Namespace: dep.Namespace}, dep); client.IgnoreNotFound(err) != nil {
 		return errors.Wrap(err, "get clustersync deployment")
@@ -371,7 +400,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileDeployment(ctx conte
 	}
 
 	dep.Labels = clustersync.Labels(cr)
-	dep.Spec = clustersync.DeploymentSpec(cr, clustersync.PodTemplateSpec(cr, cluster))
+	dep.Spec = clustersync.DeploymentSpec(cr, clustersync.PodTemplateSpec(cr, cluster, tls))
 
 	if _, err := util.Apply(ctx, r.client, dep); err != nil {
 		return errors.Wrap(err, "apply clustersync deployment")
