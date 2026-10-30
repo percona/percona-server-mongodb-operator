@@ -1,0 +1,1049 @@
+package perconaservermongodb
+
+import (
+	"os"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	vpav1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/yaml"
+
+	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+)
+
+// rl builds a ResourceList from cpu/memory quantity strings.
+// An empty string omits that resource.
+func rl(cpu, mem string) corev1.ResourceList {
+	out := corev1.ResourceList{}
+	if cpu != "" {
+		out[corev1.ResourceCPU] = resource.MustParse(cpu)
+	}
+	if mem != "" {
+		out[corev1.ResourceMemory] = resource.MustParse(mem)
+	}
+	return out
+}
+
+// assertResourceList compares two ResourceLists by quantity value rather than by
+// struct equality. resource.Quantity caches its source formatting in unexported
+// fields, so a parsed "4Gi" and a computed 4294967296 are equal in value but not
+// with assert.Equal.
+func assertResourceList(t *testing.T, expected, actual corev1.ResourceList) {
+	t.Helper()
+	assert.Len(t, actual, len(expected))
+	for res, exp := range expected {
+		got, ok := actual[res]
+		if !assert.Truef(t, ok, "expected resource %s to be present", res) {
+			continue
+		}
+		assert.Truef(t, exp.Cmp(got) == 0, "resource %s: expected %s, got %s", res, exp.String(), got.String())
+	}
+}
+
+func TestClampRecommendation(t *testing.T) {
+	tests := []struct {
+		name     string
+		rec      corev1.ResourceList
+		bounds   vpaBounds
+		expected corev1.ResourceList
+	}{
+		{
+			name:     "no bounds leaves recommendation untouched",
+			rec:      rl("500m", "1Gi"),
+			bounds:   vpaBounds{},
+			expected: rl("500m", "1Gi"),
+		},
+		{
+			name:     "raises values below minAllowed",
+			rec:      rl("50m", "128Mi"),
+			bounds:   vpaBounds{minAllowed: rl("100m", "256Mi")},
+			expected: rl("100m", "256Mi"),
+		},
+		{
+			name:     "lowers values above maxAllowed",
+			rec:      rl("16", "32Gi"),
+			bounds:   vpaBounds{maxAllowed: rl("8", "16Gi")},
+			expected: rl("8", "16Gi"),
+		},
+		{
+			name:     "values within bounds are unchanged",
+			rec:      rl("2", "4Gi"),
+			bounds:   vpaBounds{minAllowed: rl("100m", "256Mi"), maxAllowed: rl("8", "16Gi")},
+			expected: rl("2", "4Gi"),
+		},
+		{
+			name:     "value exactly at minAllowed is unchanged",
+			rec:      rl("100m", "256Mi"),
+			bounds:   vpaBounds{minAllowed: rl("100m", "256Mi")},
+			expected: rl("100m", "256Mi"),
+		},
+		{
+			name:     "value exactly at maxAllowed is unchanged",
+			rec:      rl("8", "16Gi"),
+			bounds:   vpaBounds{maxAllowed: rl("8", "16Gi")},
+			expected: rl("8", "16Gi"),
+		},
+		{
+			name:     "each resource is clamped independently",
+			rec:      rl("50m", "32Gi"),
+			bounds:   vpaBounds{minAllowed: rl("100m", "256Mi"), maxAllowed: rl("8", "16Gi")},
+			expected: rl("100m", "16Gi"),
+		},
+		{
+			name:     "resource without a bound passes through",
+			rec:      rl("50m", "1Gi"),
+			bounds:   vpaBounds{minAllowed: rl("100m", "")},
+			expected: rl("100m", "1Gi"),
+		},
+		{
+			name:     "bound for a resource absent from the recommendation is ignored",
+			rec:      rl("500m", ""),
+			bounds:   vpaBounds{minAllowed: rl("", "256Mi"), maxAllowed: rl("", "16Gi")},
+			expected: rl("500m", ""),
+		},
+		{
+			name:     "empty recommendation stays empty",
+			rec:      corev1.ResourceList{},
+			bounds:   vpaBounds{minAllowed: rl("100m", "256Mi"), maxAllowed: rl("8", "16Gi")},
+			expected: corev1.ResourceList{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResourceList(t, tt.expected, clampRecommendation(tt.rec, tt.bounds))
+		})
+	}
+}
+
+func TestClampRecommendationDoesNotMutateInput(t *testing.T) {
+	rec := rl("50m", "32Gi")
+	bounds := vpaBounds{minAllowed: rl("100m", "256Mi"), maxAllowed: rl("8", "16Gi")}
+
+	clamped := clampRecommendation(rec, bounds)
+
+	assertResourceList(t, rl("50m", "32Gi"), rec)
+	assertResourceList(t, rl("100m", "16Gi"), clamped)
+}
+
+func TestCapRequestsAtLimits(t *testing.T) {
+	tests := []struct {
+		name     string
+		requests corev1.ResourceList
+		limits   corev1.ResourceList
+		expected corev1.ResourceList
+	}{
+		{
+			name:     "nil limits leaves requests unchanged",
+			requests: rl("4", "8Gi"),
+			limits:   nil,
+			expected: rl("4", "8Gi"),
+		},
+		{
+			name:     "empty limits leaves requests unchanged",
+			requests: rl("4", "8Gi"),
+			limits:   corev1.ResourceList{},
+			expected: rl("4", "8Gi"),
+		},
+		{
+			name:     "request above its limit is capped to the limit",
+			requests: rl("4", "8Gi"),
+			limits:   rl("2", "4Gi"),
+			expected: rl("2", "4Gi"),
+		},
+		{
+			name:     "request below its limit is unchanged",
+			requests: rl("1", "2Gi"),
+			limits:   rl("2", "4Gi"),
+			expected: rl("1", "2Gi"),
+		},
+		{
+			name:     "request equal to its limit is unchanged",
+			requests: rl("2", "4Gi"),
+			limits:   rl("2", "4Gi"),
+			expected: rl("2", "4Gi"),
+		},
+		{
+			name:     "only the exceeding resource is capped",
+			requests: rl("4", "2Gi"),
+			limits:   rl("2", "4Gi"),
+			expected: rl("2", "2Gi"),
+		},
+		{
+			name:     "resource without a matching limit is untouched",
+			requests: rl("4", "8Gi"),
+			limits:   rl("", "4Gi"),
+			expected: rl("4", "4Gi"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertResourceList(t, tt.expected, capRequestsAtLimits(tt.requests, tt.limits))
+		})
+	}
+}
+
+func TestCapRequestsAtLimitsDoesNotMutateInput(t *testing.T) {
+	requests := rl("4", "8Gi")
+	limits := rl("2", "4Gi")
+
+	capped := capRequestsAtLimits(requests, limits)
+
+	assertResourceList(t, rl("4", "8Gi"), requests)
+	assertResourceList(t, rl("2", "4Gi"), capped)
+}
+
+func TestRatioScaledLimits(t *testing.T) {
+	tests := []struct {
+		name        string
+		orig        corev1.ResourceRequirements
+		newRequests corev1.ResourceList
+		expected    corev1.ResourceList
+	}{
+		{
+			name:        "nil original limits returns nil",
+			orig:        corev1.ResourceRequirements{Requests: rl("1", "1Gi")},
+			newRequests: rl("2", "2Gi"),
+			expected:    nil,
+		},
+		{
+			name: "preserves a 2:1 cpu ratio",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("1", ""),
+				Limits:   rl("2", ""),
+			},
+			newRequests: rl("2", ""),
+			expected:    rl("4", ""),
+		},
+		{
+			name: "preserves a 2:1 memory ratio",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("", "1Gi"),
+				Limits:   rl("", "2Gi"),
+			},
+			newRequests: rl("", "2Gi"),
+			expected:    rl("", "4Gi"),
+		},
+		{
+			name: "a 1:1 ratio yields a limit equal to the new request",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("1", "1Gi"),
+				Limits:   rl("1", "1Gi"),
+			},
+			newRequests: rl("3", "3Gi"),
+			expected:    rl("3", "3Gi"),
+		},
+		{
+			name: "preserves a fractional 1.5:1 ratio",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("1", ""),
+				Limits:   rl("1500m", ""),
+			},
+			newRequests: rl("2", ""),
+			expected:    rl("3", ""),
+		},
+		{
+			name: "scales cpu and memory independently",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("1", "1Gi"),
+				Limits:   rl("2", "4Gi"),
+			},
+			newRequests: rl("2", "2Gi"),
+			expected:    rl("4", "8Gi"),
+		},
+		{
+			name: "resource with no original request keeps its original limit",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("1", ""),
+				Limits:   rl("2", "4Gi"),
+			},
+			newRequests: rl("2", "2Gi"),
+			expected:    rl("4", "4Gi"),
+		},
+		{
+			name: "resource with no original limit is not added",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("1", "1Gi"),
+				Limits:   rl("2", ""),
+			},
+			newRequests: rl("2", "2Gi"),
+			expected:    rl("4", ""),
+		},
+		{
+			name: "zero original request is skipped rather than dividing by zero",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("0", ""),
+				Limits:   rl("2", ""),
+			},
+			newRequests: rl("1", ""),
+			expected:    rl("2", ""),
+		},
+		{
+			name: "new request for a resource absent from orig leaves limits untouched",
+			orig: corev1.ResourceRequirements{
+				Requests: rl("1", ""),
+				Limits:   rl("2", ""),
+			},
+			newRequests: rl("", "2Gi"),
+			expected:    rl("2", ""),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ratioScaledLimits(tt.orig, tt.newRequests)
+			if tt.expected == nil {
+				assert.Nil(t, got)
+				return
+			}
+			assertResourceList(t, tt.expected, got)
+		})
+	}
+}
+
+func TestRatioScaledLimitsSerializeReadably(t *testing.T) {
+	// The table test above compares quantities by value, which cannot see how
+	// they serialize. Building a memory limit with NewMilliQuantity yields the
+	// right amount in milli-bytes ("2863311530666m") — a form nobody reads, and
+	// one no user would write back into spec.
+	tests := []struct {
+		name             string
+		reqCPU, limCPU   string
+		reqMem, limMem   string
+		newCPU, newMem   string
+		wantCPU, wantMem string
+	}{
+		{
+			// 4Gi/3Gi is 1.333..., so the result lands off every binary boundary.
+			name:   "non-integer ratio renders as whole bytes",
+			reqMem: "3Gi", limMem: "4Gi", newMem: "2Gi", wantMem: "2863311530",
+		},
+		{
+			name:   "clean ratio keeps the declared binary suffix",
+			reqMem: "1Gi", limMem: "2Gi", newMem: "3Gi", wantMem: "6Gi",
+		},
+		{
+			name:   "a decimal declaration stays decimal",
+			reqMem: "1G", limMem: "2G", newMem: "3G", wantMem: "6G",
+		},
+		{
+			name:   "cpu keeps milli precision, where it means something",
+			reqCPU: "1", limCPU: "1500m", newCPU: "100m", wantCPU: "150m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ratioScaledLimits(corev1.ResourceRequirements{
+				Requests: rl(tt.reqCPU, tt.reqMem),
+				Limits:   rl(tt.limCPU, tt.limMem),
+			}, rl(tt.newCPU, tt.newMem))
+
+			if tt.wantCPU != "" {
+				cpu := got[corev1.ResourceCPU]
+				assert.Equal(t, tt.wantCPU, cpu.String())
+			}
+			if tt.wantMem != "" {
+				mem := got[corev1.ResourceMemory]
+				assert.Equal(t, tt.wantMem, mem.String())
+				assert.NotContains(t, mem.String(), "m",
+					"a memory limit must never serialize as milli-bytes")
+			}
+		})
+	}
+}
+
+func TestRatioScaledLimitsDoesNotMutateInput(t *testing.T) {
+	orig := corev1.ResourceRequirements{
+		Requests: rl("1", "1Gi"),
+		Limits:   rl("2", "4Gi"),
+	}
+
+	scaled := ratioScaledLimits(orig, rl("2", "2Gi"))
+
+	require.NotNil(t, scaled)
+	assertResourceList(t, rl("1", "1Gi"), orig.Requests)
+	assertResourceList(t, rl("2", "4Gi"), orig.Limits)
+	assertResourceList(t, rl("4", "8Gi"), scaled)
+}
+
+// vpaTestClient builds a real client whose RESTMapper either knows the
+// VerticalPodAutoscaler kind or does not, modelling a cluster with or without the
+// VPA CRD installed. The rest.Config points nowhere: these tests only exercise the
+// mapping stage, which happens before any request is sent.
+// vpaScheme knows the VerticalPodAutoscaler kind, which the read decodes into.
+func vpaScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	s := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(s))
+	require.NoError(t, vpav1.AddToScheme(s))
+	return s
+}
+
+func vpaTestClient(t *testing.T, crdInstalled bool) client.Client {
+	t.Helper()
+
+	var mapper meta.RESTMapper
+	if crdInstalled {
+		m := meta.NewDefaultRESTMapper([]schema.GroupVersion{vpaGVK.GroupVersion()})
+		m.Add(vpaGVK, meta.RESTScopeNamespace)
+		mapper = m
+	} else {
+		mapper = meta.NewDefaultRESTMapper(nil)
+	}
+
+	c, err := client.New(&rest.Config{Host: "http://127.0.0.1:1"}, client.Options{
+		Scheme: vpaScheme(t),
+		Mapper: mapper,
+	})
+	require.NoError(t, err)
+	return c
+}
+
+// vpaReconciler wires one client as both the kind resolver and the reader.
+func vpaReconciler(t *testing.T, crdInstalled bool) *ReconcilePerconaServerMongoDB {
+	t.Helper()
+	c := vpaTestClient(t, crdInstalled)
+	return &ReconcilePerconaServerMongoDB{client: c, apiReader: c}
+}
+
+// vpaTestCR returns a CR with VPA enabled and no components, so reconcileVPARecommendations
+// exercises only the CRD guard and never reads a VPA object.
+func vpaTestCR(enabled bool) *api.PerconaServerMongoDB {
+	cr := &api.PerconaServerMongoDB{
+		Name: "some-name", Namespace: "ns",
+	}
+	if enabled {
+		cr.Spec.VPA = &api.VPASpec{Enabled: true, UpdateMode: api.VPAUpdateModeOff}
+	}
+	return cr
+}
+
+func TestReconcileVPACRDNotInstalled(t *testing.T) {
+	r := vpaReconciler(t, false)
+	cr := vpaTestCR(true)
+
+	// A missing CRD must not fail the reconcile: VPA is an optional integration.
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	cond := cr.Status.FindCondition(api.ConditionTypeVPAReady)
+	require.NotNil(t, cond, "expected a VPAReady condition explaining why VPA is inert")
+	assert.Equal(t, api.ConditionFalse, cond.Status)
+	assert.Equal(t, "APINotInstalled", cond.Reason)
+	assert.Contains(t, cond.Message, "autoscaling.k8s.io/v1")
+
+	// Nothing was read, so no per-component status was recorded.
+	assert.Empty(t, cr.Status.VPAStatus)
+}
+
+func TestReconcileVPACRDInstalled(t *testing.T) {
+	r := vpaReconciler(t, true)
+	cr := vpaTestCR(true)
+
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	cond := cr.Status.FindCondition(api.ConditionTypeVPAReady)
+	require.NotNil(t, cond)
+	assert.Equal(t, api.ConditionTrue, cond.Status)
+	assert.Equal(t, "CRDInstalled", cond.Reason)
+}
+
+func TestReconcileVPADisabledClearsCondition(t *testing.T) {
+	r := vpaReconciler(t, false)
+
+	// Start from a cluster that previously reported the missing CRD.
+	cr := vpaTestCR(true)
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+	require.NotNil(t, cr.Status.FindCondition(api.ConditionTypeVPAReady))
+
+	// Disabling VPA must retract the condition rather than leave it stale.
+	cr.Spec.VPA.Enabled = false
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+	assert.Nil(t, cr.Status.FindCondition(api.ConditionTypeVPAReady))
+}
+
+func TestReadVPARecommendationToleratesMissingCRD(t *testing.T) {
+	r := vpaReconciler(t, false)
+
+	// A CRD uninstalled between the reconcile-level check and this read surfaces as
+	// NoKindMatchError, which carries no NotFound status reason and so is not covered
+	// by client.IgnoreNotFound. It must still be treated as "no recommendation".
+	res, err := r.readVPARecommendation(t.Context(), "ns", "some-name-rs0-vpa", "mongod")
+
+	assert.NoError(t, err)
+	assert.Nil(t, res.rec)
+	assert.Equal(t, vpaStateObjectNotFound, res.state)
+}
+
+// vpaObject builds a VerticalPodAutoscaler with the given container recommendations.
+// A nil map omits status.recommendation entirely.
+func vpaObject(name string, recs map[string]corev1.ResourceList) *vpav1.VerticalPodAutoscaler {
+	obj := &vpav1.VerticalPodAutoscaler{
+		Name: name, Namespace: "ns",
+	}
+	if recs == nil {
+		return obj
+	}
+	obj.Status.Recommendation = &vpav1.RecommendedPodResources{}
+	for container, rl := range recs {
+		obj.Status.Recommendation.ContainerRecommendations = append(
+			obj.Status.Recommendation.ContainerRecommendations,
+			vpav1.RecommendedContainerResources{ContainerName: container, Target: rl},
+		)
+	}
+	return obj
+}
+
+func vpaReaderWith(t *testing.T, objs ...client.Object) *ReconcilePerconaServerMongoDB {
+	t.Helper()
+	m := meta.NewDefaultRESTMapper([]schema.GroupVersion{vpaGVK.GroupVersion()})
+	m.Add(vpaGVK, meta.RESTScopeNamespace)
+	c := fake.NewClientBuilder().WithScheme(vpaScheme(t)).WithRESTMapper(m).WithObjects(objs...).Build()
+
+	// client resolves the kind, apiReader serves the reads.
+	return &ReconcilePerconaServerMongoDB{client: c, apiReader: c}
+}
+
+func TestReadVPARecommendationStates(t *testing.T) {
+	tests := []struct {
+		name          string
+		objects       []client.Object
+		vpaName       string
+		container     string
+		expectedState vpaReadState
+		messageHas    []string
+	}{
+		{
+			name:          "object missing",
+			vpaName:       "some-name-rs0-vpa",
+			container:     "mongod",
+			expectedState: vpaStateObjectNotFound,
+			messageHas:    []string{`"some-name-rs0-vpa"`, "not found"},
+		},
+		{
+			name:          "object present but carries no recommendation",
+			objects:       []client.Object{vpaObject("some-name-rs0-vpa", nil)},
+			vpaName:       "some-name-rs0-vpa",
+			container:     "mongod",
+			expectedState: vpaStateNoRecommendation,
+			// This is the Goldilocks-targets-the-CR case; the message must point at targetRef.
+			messageHas: []string{"no recommendation", "targetRef", "PerconaServerMongoDB"},
+		},
+		{
+			name: "recommendations present but not for our container",
+			objects: []client.Object{vpaObject("wrong-workload-vpa", map[string]corev1.ResourceList{
+				"psmdb-client": rl("25m", "250Mi"),
+			})},
+			vpaName:       "wrong-workload-vpa",
+			container:     "mongod",
+			expectedState: vpaStateContainerNotFound,
+			messageHas:    []string{"psmdb-client", `"mongod"`},
+		},
+		{
+			name: "recommendation found for our container",
+			objects: []client.Object{vpaObject("some-name-rs0-vpa", map[string]corev1.ResourceList{
+				"mongod": rl("350m", "350Mi"),
+			})},
+			vpaName:       "some-name-rs0-vpa",
+			container:     "mongod",
+			expectedState: vpaStateOK,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := vpaReaderWith(t, tt.objects...)
+
+			res, err := r.readVPARecommendation(t.Context(), "ns", tt.vpaName, tt.container)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedState, res.state)
+
+			msg := res.message(tt.container)
+			if tt.expectedState == vpaStateOK {
+				assert.Empty(t, msg, "a successful read must not carry a message")
+				assertResourceList(t, rl("350m", "350Mi"), res.rec)
+				return
+			}
+
+			assert.Nil(t, res.rec)
+			for _, want := range tt.messageHas {
+				assert.Containsf(t, msg, want, "message should mention %q: %s", want, msg)
+			}
+		})
+	}
+}
+
+func TestVPAStatusRecordsWhyNoRecommendation(t *testing.T) {
+	// An enabled component with a missing VPA object must still get a status entry,
+	// so that an absent entry means "not configured" rather than "silently broken".
+	r := vpaReaderWith(t)
+	cr := vpaTestCR(true)
+	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	s, ok := cr.Status.VPAStatus["rs0"]
+	require.True(t, ok, "expected a status entry for rs0 even with no recommendation")
+	assert.Contains(t, s.Message, "not found")
+	assert.Nil(t, s.LastAppliedAt)
+}
+
+func TestVPAStatusMessageExplainsOffMode(t *testing.T) {
+	cr := vpaTestCR(true)
+	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+
+	// No VPA object yet, so the component says the object is missing.
+	require.NoError(t, vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr))
+	require.Contains(t, cr.Status.VPAStatus["rs0"].Message, "not found")
+
+	// The object now carries a recommendation. It is read, but updateMode is Off,
+	// so nothing is applied — and the message says so rather than going empty,
+	// which would leave "recorded but not applied" looking like "applied".
+	withRec := vpaReaderWith(t, vpaObject("some-name-rs0-vpa", map[string]corev1.ResourceList{
+		"mongod": rl("350m", "350Mi"),
+	}))
+	require.NoError(t, withRec.reconcileVPARecommendations(t.Context(), cr))
+
+	s := cr.Status.VPAStatus["rs0"]
+	assert.Equal(t, "350m", s.Recommended.Cpu().String(), "the recommendation should still be recorded in Off mode")
+	assert.Contains(t, s.Message, "updateMode is Off")
+	assert.Nil(t, s.LastAppliedAt)
+}
+
+func TestVPAStatusMessageClearsWhenApplying(t *testing.T) {
+	cr := vpaTestCR(true)
+	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
+	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+
+	// First pass: no object, so the component records why.
+	require.NoError(t, vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr))
+	require.Contains(t, cr.Status.VPAStatus["rs0"].Message, "not found")
+
+	// Second pass: a recommendation arrives and Auto applies it, so there is
+	// nothing left to explain.
+	withRec := vpaReaderWith(t, vpaObject("some-name-rs0-vpa", map[string]corev1.ResourceList{
+		"mongod": rl("350m", "350Mi"),
+	}))
+	require.NoError(t, withRec.reconcileVPARecommendations(t.Context(), cr))
+
+	s := cr.Status.VPAStatus["rs0"]
+	assert.Empty(t, s.Message, "message must clear once the recommendation is being applied")
+	assert.NotNil(t, s.LastAppliedAt)
+}
+
+// windowedCR returns a cluster with one replset, VPA in the given mode and a
+// stabilization window wide enough that no window can lapse during a test.
+func windowedCR(mode api.VPAUpdateMode) *api.PerconaServerMongoDB {
+	cr := vpaTestCR(true)
+	cr.Spec.VPA.UpdateMode = mode
+	cr.Spec.VPA.StabilizationWindow = metav1.Duration{Duration: time.Hour}
+	cr.Spec.Replsets = []*api.ReplsetSpec{{
+		Name: "rs0", Size: 3,
+		Resources: corev1.ResourceRequirements{Requests: rl("", "1Gi"), Limits: rl("", "4Gi")},
+	}}
+	return cr
+}
+
+func vpaReaderWithRec(t *testing.T, memory string) *ReconcilePerconaServerMongoDB {
+	t.Helper()
+	return vpaReaderWith(t, vpaObject("some-name-rs0-vpa",
+		map[string]corev1.ResourceList{naming.ContainerMongod: rl("", memory)}))
+}
+
+func TestSpecEditAppliesInsideStabilizationWindow(t *testing.T) {
+	// The window rate-limits adopting new recommendations. It must not hold back
+	// an edit the user makes to spec.<component>.resources: the effective values
+	// are recomputed from spec on every reconcile, so raising a limit takes
+	// effect at once. Holding it would mean spec and the running pods disagree
+	// for up to a full window with nothing but a status message to say why.
+	r := vpaReaderWithRec(t, "2Gi")
+	cr := windowedCR(api.VPAUpdateModeAuto)
+
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+	require.NotNil(t, cr.Status.VPAStatus["rs0"].Applied)
+	require.Equal(t, "4Gi", cr.Status.VPAStatus["rs0"].Applied.Limits.Memory().String())
+
+	// Still well inside the window: the recommendation cannot move, but spec can.
+	cr.Spec.Replsets[0].Resources.Limits[corev1.ResourceMemory] = resource.MustParse("8Gi")
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	assert.Equal(t, "8Gi", cr.Status.VPAStatus["rs0"].Applied.Limits.Memory().String(),
+		"a spec.resources edit was held back by the stabilization window")
+}
+
+func TestNewRecommendationWaitsForStabilizationWindow(t *testing.T) {
+	// The flip side: a changed recommendation must wait, and status must name
+	// the value it is waiting on so the deferred change is visible.
+	cr := windowedCR(api.VPAUpdateModeAuto)
+	require.NoError(t, vpaReaderWithRec(t, "2Gi").reconcileVPARecommendations(t.Context(), cr))
+	first := cr.Status.VPAStatus["rs0"]
+	require.Equal(t, "2Gi", first.Recommended.Memory().String())
+
+	require.NoError(t, vpaReaderWithRec(t, "3Gi").reconcileVPARecommendations(t.Context(), cr))
+
+	s := cr.Status.VPAStatus["rs0"]
+	assert.Equal(t, "2Gi", s.Recommended.Memory().String(),
+		"a new recommendation was adopted before the window elapsed")
+	assert.Contains(t, s.Message, "memory=3Gi", "status does not name the held recommendation")
+	assert.Contains(t, s.Message, "next adoption allowed after")
+}
+
+func TestOffModeNeverAppliesInsideWindow(t *testing.T) {
+	// Off observes without applying. Reaching the window check before the
+	// updateMode check would make Off start committing resources from the second
+	// reconcile onwards, since by then there is a recommendation in status to
+	// fall back on.
+	r := vpaReaderWithRec(t, "2Gi")
+	cr := windowedCR(api.VPAUpdateModeOff)
+
+	for i := range 3 {
+		require.NoErrorf(t, r.reconcileVPARecommendations(t.Context(), cr), "reconcile %d", i)
+
+		s := cr.Status.VPAStatus["rs0"]
+		assert.Nilf(t, s.Applied, "updateMode Off committed resources on reconcile %d", i)
+		assert.Nilf(t, s.LastAppliedAt, "updateMode Off set lastAppliedAt on reconcile %d", i)
+		rec := s.Recommended
+		assert.Equal(t, "2Gi", rec.Memory().String(),
+			"Off must keep recording observations: status is its only output")
+		assert.Contains(t, s.Message, "updateMode is Off")
+	}
+}
+
+func TestMissingVPAInsideWindowStillFailsClosed(t *testing.T) {
+	// A component already sized from a recommendation whose VPA object has gone
+	// is an error for a human to resolve, and an open window must not defer that
+	// for its duration: the operator would keep sizing pods from a recommendation
+	// whose source no longer exists, reporting nothing.
+	cr := windowedCR(api.VPAUpdateModeAuto)
+	require.NoError(t, vpaReaderWithRec(t, "2Gi").reconcileVPARecommendations(t.Context(), cr))
+	require.NotNil(t, cr.Status.VPAStatus["rs0"].Applied)
+
+	err := vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr)
+
+	require.Error(t, err, "a deleted VerticalPodAutoscaler was tolerated inside the window")
+	assert.Contains(t, err.Error(), "some-name-rs0-vpa",
+		"the error must name the object so it can be recreated")
+}
+
+func TestDiagnosticMessageNotFrozenByWindow(t *testing.T) {
+	// Every reconcile must set the message, including those that change nothing.
+	// A path that returns without setting it leaves an earlier reason in status
+	// for the rest of the window, long after it stopped being true.
+	r := vpaReaderWithRec(t, "2Gi")
+	cr := windowedCR(api.VPAUpdateModeAuto)
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	s := cr.Status.VPAStatus["rs0"]
+	s.Message = "stale reason from an earlier reconcile"
+	cr.Status.VPAStatus["rs0"] = s
+
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	assert.Empty(t, cr.Status.VPAStatus["rs0"].Message,
+		"a stale reason survived a reconcile inside the stabilization window")
+}
+
+func TestStabilizationMessageNamesTheNextAdoption(t *testing.T) {
+	adopted := metav1.NewTime(time.Date(2026, 10, 1, 13, 40, 12, 0, time.UTC))
+	cr := vpaTestCR(true)
+	cr.Status.VPAStatus = map[string]api.VPAComponentStatus{
+		"rs0": {LastObservedAt: &adopted, Recommended: rl("350m", "350Mi")},
+	}
+
+	msg := stabilizationMessage(cr, "rs0", rl("500m", "1Gi"), 5*time.Minute)
+
+	// The time has to be the next allowed adoption, not the last one, or it reads
+	// as though the window has already passed.
+	assert.Contains(t, msg, "2026-10-01T13:45:12Z")
+	assert.Contains(t, msg, "stabilizationWindow 5m")
+
+	// The held recommendation is named, not the one already in force: a deferred
+	// change the user cannot see is the same as no explanation at all.
+	assert.Contains(t, msg, "cpu=500m")
+	assert.Contains(t, msg, "memory=1Gi")
+}
+
+func TestStabilizationMessageEmptyBeforeFirstAdoption(t *testing.T) {
+	cr := vpaTestCR(true)
+	cr.Status.VPAStatus = map[string]api.VPAComponentStatus{"rs0": {}}
+
+	assert.Empty(t, stabilizationMessage(cr, "rs0", rl("500m", "1Gi"), 5*time.Minute),
+		"with nothing adopted yet there is no window to report")
+}
+
+func TestStabilizationWindowDefaultIsNonZero(t *testing.T) {
+	// A zero window lets recommender jitter restart the cluster as fast as the
+	// operator reconciles, so the CRD must supply a floor.
+	path := "../../../config/crd/bases/psmdb.percona.com_perconaservermongodbs.yaml"
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var crd map[string]any
+	require.NoError(t, yaml.Unmarshal(data, &crd))
+
+	node := crd["spec"].(map[string]any)["versions"].([]any)[0].(map[string]any)
+	node = node["schema"].(map[string]any)["openAPIV3Schema"].(map[string]any)
+	node = node["properties"].(map[string]any)["spec"].(map[string]any)
+	node = node["properties"].(map[string]any)["vpa"].(map[string]any)
+	window := node["properties"].(map[string]any)["stabilizationWindow"].(map[string]any)
+
+	assert.Equal(t, "5m", window["default"], "spec.vpa.stabilizationWindow must default to a non-zero window")
+}
+
+func TestVPAResourcesResolution(t *testing.T) {
+	declared := corev1.ResourceRequirements{
+		Requests: rl("100m", "100M"),
+		Limits:   rl("4", "4Gi"),
+	}
+	committed := &corev1.ResourceRequirements{
+		Requests: rl("350m", "350Mi"),
+		Limits:   rl("4", "4Gi"),
+	}
+
+	tests := []struct {
+		name      string
+		vpa       *api.VPASpec
+		status    map[string]api.VPAComponentStatus
+		expectCPU string
+	}{
+		{
+			name:      "vpa not configured falls back to the declared spec",
+			expectCPU: "100m",
+		},
+		{
+			name:      "vpa disabled falls back to the declared spec",
+			vpa:       &api.VPASpec{Enabled: false, UpdateMode: api.VPAUpdateModeAuto},
+			status:    map[string]api.VPAComponentStatus{"rs0": {Applied: committed}},
+			expectCPU: "100m",
+		},
+		{
+			name:      "Off observes only, so the declared spec still applies",
+			vpa:       &api.VPASpec{Enabled: true, UpdateMode: api.VPAUpdateModeOff},
+			status:    map[string]api.VPAComponentStatus{"rs0": {Applied: committed}},
+			expectCPU: "100m",
+		},
+		{
+			name:      "Auto with nothing committed yet falls back to the declared spec",
+			vpa:       &api.VPASpec{Enabled: true, UpdateMode: api.VPAUpdateModeAuto},
+			status:    map[string]api.VPAComponentStatus{"rs0": {}},
+			expectCPU: "100m",
+		},
+		{
+			name:      "Auto uses the committed value",
+			vpa:       &api.VPASpec{Enabled: true, UpdateMode: api.VPAUpdateModeAuto},
+			status:    map[string]api.VPAComponentStatus{"rs0": {Applied: committed}},
+			expectCPU: "350m",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{}
+			cr.Spec.VPA = tt.vpa
+			cr.Status.VPAStatus = tt.status
+
+			got := cr.VPAResources("rs0", declared)
+
+			cpu := got.Requests[corev1.ResourceCPU]
+			assert.Equal(t, tt.expectCPU, cpu.String())
+			// Limits are carried through in every case.
+			assertResourceList(t, rl("4", "4Gi"), got.Limits)
+		})
+	}
+}
+
+func TestCommitVPAResources(t *testing.T) {
+	tests := []struct {
+		name             string
+		controlledValues api.VPAControlledValues
+		declared         corev1.ResourceRequirements
+		recs             []corev1.ResourceList
+		wantRequests     corev1.ResourceList
+		wantLimits       corev1.ResourceList
+		wantReapplied    bool
+	}{
+		{
+			name:         "the recommendation is committed to status",
+			declared:     corev1.ResourceRequirements{Requests: rl("100m", "100M"), Limits: rl("4", "4Gi")},
+			recs:         []corev1.ResourceList{rl("350m", "350Mi")},
+			wantRequests: rl("350m", "350Mi"),
+			wantLimits:   rl("4", "4Gi"),
+		},
+		{
+			name:             "limits are computed from the declared baseline",
+			controlledValues: api.VPAControlledValuesRequestsAndLimits,
+			declared:         corev1.ResourceRequirements{Requests: rl("1", ""), Limits: rl("2", "")},
+			recs:             []corev1.ResourceList{rl("2", ""), rl("2", "")},
+			wantRequests:     rl("2", ""),
+			wantLimits:       rl("4", ""),
+			wantReapplied:    false,
+		},
+		{
+			name:          "an unchanged recommendation is skipped",
+			declared:      corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")},
+			recs:          []corev1.ResourceList{rl("350m", "350Mi"), rl("350m", "350Mi")},
+			wantRequests:  rl("350m", "350Mi"),
+			wantLimits:    rl("4", "4Gi"),
+			wantReapplied: false,
+		},
+		{
+			name:          "a changed recommendation is applied",
+			declared:      corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")},
+			recs:          []corev1.ResourceList{rl("350m", "350Mi"), rl("500m", "350Mi")},
+			wantRequests:  rl("500m", "350Mi"),
+			wantLimits:    rl("4", "4Gi"),
+			wantReapplied: true,
+		},
+		{
+			name:          "equivalent quantity forms are not a change",
+			declared:      corev1.ResourceRequirements{Requests: rl("100m", "100Mi"), Limits: rl("4", "4Gi")},
+			recs:          []corev1.ResourceList{rl("350m", "1Gi"), rl("350m", "1024Mi")},
+			wantRequests:  rl("350m", "1Gi"),
+			wantLimits:    rl("4", "4Gi"),
+			wantReapplied: false,
+		},
+		{
+			// A 1:1 declared ratio is what makes a pod Guaranteed. Ratio-preserving
+			// limit scaling must keep requests and limits exactly equal, or the pod
+			// silently drops to Burstable and loses CPU pinning and eviction priority.
+			name:             "RequestsAndLimits keeps a Guaranteed pod Guaranteed",
+			controlledValues: api.VPAControlledValuesRequestsAndLimits,
+			declared:         corev1.ResourceRequirements{Requests: rl("1", "1Gi"), Limits: rl("1", "1Gi")},
+			recs:             []corev1.ResourceList{rl("2", "2Gi")},
+			wantRequests:     rl("2", "2Gi"),
+			wantLimits:       rl("2", "2Gi"),
+		},
+		{
+			// RequestsOnly caps requests at the declared limits so Kubernetes never
+			// rejects the update. On a Guaranteed pod requests already sit at the
+			// limits, so there is no headroom and every upward recommendation is a
+			// no-op. RequestsAndLimits is the mode that can actually grow such a pod.
+			name:             "RequestsOnly cannot scale up a Guaranteed pod",
+			controlledValues: api.VPAControlledValuesRequestsOnly,
+			declared:         corev1.ResourceRequirements{Requests: rl("1", "1Gi"), Limits: rl("1", "1Gi")},
+			recs:             []corev1.ResourceList{rl("2", "2Gi")},
+			wantRequests:     rl("1", "1Gi"),
+			wantLimits:       rl("1", "1Gi"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := vpaReaderWith(t)
+			cr := vpaTestCR(true)
+			cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
+			cr.Spec.VPA.ControlledValues = tt.controlledValues
+
+			// The copy is what the caller hands over, so tt.declared stays as the
+			// pristine reference to compare against afterwards.
+			declared := tt.declared.DeepCopy()
+			backdated := metav1.NewTime(time.Now().Add(-time.Hour))
+
+			for i, rec := range tt.recs {
+				if i > 0 {
+					s := cr.Status.VPAStatus["rs0"]
+					s.LastAppliedAt = &backdated
+					cr.Status.VPAStatus["rs0"] = s
+				}
+				r.commitVPAResources(t.Context(), cr, "rs0", *declared, rec, vpaBounds{})
+			}
+
+			s := cr.Status.VPAStatus["rs0"]
+			require.NotNil(t, s.Applied)
+			assertResourceList(t, tt.wantRequests, s.Applied.Requests)
+			assertResourceList(t, tt.wantLimits, s.Applied.Limits)
+			require.NotNil(t, s.LastAppliedAt)
+
+			if len(tt.recs) > 1 {
+				if tt.wantReapplied {
+					assert.True(t, s.LastAppliedAt.After(backdated.Time),
+						"a changed recommendation did not advance lastAppliedAt")
+				} else {
+					assert.True(t, s.LastAppliedAt.Equal(&backdated),
+						"an unchanged recommendation advanced lastAppliedAt")
+				}
+			}
+
+			// The caller's declared spec is never written through.
+			assertResourceList(t, tt.declared.Requests, declared.Requests)
+			assertResourceList(t, tt.declared.Limits, declared.Limits)
+		})
+	}
+}
+
+func TestRecordVPAStatus(t *testing.T) {
+	tests := []struct {
+		name                string
+		observations        []corev1.ResourceList
+		wantCPU, wantMemory string
+		wantRecorded        bool
+	}{
+		{
+			name:         "an unchanged observation is skipped",
+			observations: []corev1.ResourceList{rl("350m", "350Mi"), rl("350m", "350Mi")},
+			wantCPU:      "350m",
+			wantMemory:   "350Mi",
+			wantRecorded: false,
+		},
+		{
+			name:         "a changed observation is recorded",
+			observations: []corev1.ResourceList{rl("350m", "350Mi"), rl("500m", "350Mi")},
+			wantCPU:      "500m",
+			wantMemory:   "350Mi",
+			wantRecorded: true,
+		},
+		{
+			name:         "equivalent units are not a change",
+			observations: []corev1.ResourceList{rl("350m", "1Gi"), rl("350m", "1024Mi")},
+			wantCPU:      "350m",
+			wantMemory:   "1Gi",
+			wantRecorded: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := vpaReaderWith(t)
+			cr := vpaTestCR(true)
+			backdated := metav1.NewTime(time.Now().Add(-time.Hour))
+
+			for i, rec := range tt.observations {
+				if i > 0 {
+					s := cr.Status.VPAStatus["rs0"]
+					s.LastObservedAt = &backdated
+					cr.Status.VPAStatus["rs0"] = s
+				}
+				r.recordVPAStatus(cr, "rs0", rec)
+			}
+
+			s := cr.Status.VPAStatus["rs0"]
+			require.NotNil(t, s.LastObservedAt)
+			assert.Equal(t, tt.wantCPU, s.Recommended.Cpu().String())
+			assert.Equal(t, tt.wantMemory, s.Recommended.Memory().String())
+
+			if len(tt.observations) > 1 {
+				if tt.wantRecorded {
+					assert.True(t, s.LastObservedAt.After(backdated.Time),
+						"a changed observation did not advance lastObservedAt")
+				} else {
+					assert.True(t, s.LastObservedAt.Equal(&backdated),
+						"an unchanged observation advanced lastObservedAt")
+				}
+			}
+		})
+	}
+}

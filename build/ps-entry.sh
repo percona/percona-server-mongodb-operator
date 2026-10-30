@@ -528,5 +528,14 @@ rm -f "$jsonConfigFile" "$tempConfigFile"
 # shellcheck disable=SC1091
 test -e /opt/percona/hookscript/hook.sh && source /opt/percona/hookscript/hook.sh
 
+# Set instead of --wiredTigerCacheSizeGB when VPA in-place resize is enabled, so
+# the cache follows the container's current memory limit. Same formula as
+# getWiredTigerCacheSizeGB in pkg/psmdb/container.go.
+if [ -n "${MONGOD_MEMORY_LIMIT:-}" ] && [ -n "${WT_CACHE_SIZE_RATIO:-}" ]; then
+	wtCacheSizeGB=$(awk -v limit="$MONGOD_MEMORY_LIMIT" -v ratio="$WT_CACHE_SIZE_RATIO" \
+		'BEGIN { gb = 1073741824; size = int(ratio * (limit - gb)) / gb; if (size < 0.25) size = 0.25; printf "%.2f", size }')
+	set -- "$@" --wiredTigerCacheSizeGB="$wtCacheSizeGB"
+fi
+
 set -o xtrace
 exec "$@"
