@@ -1,0 +1,143 @@
+#!/bin/bash
+
+# Smart update must not step down the primary while no electable secondary is caught up.
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+cluster="smart-update-lag"
+rs="${cluster}-rs0"
+
+client_pod() {
+	kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}'
+}
+
+run_on_pod() {
+	local pod=$1
+	local command=$2
+
+	kubectl_bin exec $(client_pod) -- \
+		mongo "mongodb://clusterAdmin:clusterAdmin123456@${pod}.${rs}.${namespace}.svc.cluster.local/admin?ssl=false" \
+		--quiet --eval "${command}"
+}
+
+set_failpoint() {
+	local pod=$1
+	local mode=$2
+
+	run_on_pod "${pod}" "printjson(db.adminCommand({configureFailPoint: \"rsSyncApplyStop\", mode: \"${mode}\"}))"
+}
+
+is_primary() {
+	run_on_pod "$1" "print(db.isMaster().ismaster)" | tail -1
+}
+
+pod_uid() {
+	kubectl_bin get pod "$1" -o jsonpath='{.metadata.uid}'
+}
+
+operator_log() {
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+}
+
+wait_operator_log() {
+	local pattern=$1
+	local timeout=${2:-600}
+
+	set +o xtrace
+	echo -n "waiting for operator log: ${pattern}"
+	for i in $(seq ${timeout}); do
+		if operator_log | grep -q "${pattern}"; then
+			echo " found"
+			set_debug
+			return
+		fi
+		echo -n .
+		sleep 1
+	done
+	echo
+	echo "ERROR: operator log has no '${pattern}' after ${timeout}s"
+	exit 1
+}
+
+create_infra ${namespace}
+
+desc 'create secrets and start client'
+kubectl_bin apply -f ${conf_dir}/secrets.yml -f ${conf_dir}/client.yml
+
+desc "create PSMDB cluster ${cluster}"
+apply_cluster ${test_dir}/conf/${rs}.yml
+wait_for_running "${rs}" 3
+
+initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@${rs}.${namespace}" "${cluster}")
+initial_primary_uid=$(pod_uid "${initial_primary}")
+secondaries=($(kubectl_bin get pods -l app.kubernetes.io/instance=${cluster} -o name | sed 's/pod\///g' | grep -v "^${initial_primary}$"))
+
+desc 'start background writes'
+kubectl_bin exec $(client_pod) -- bash -c "setsid nohup mongo 'mongodb+srv://databaseAdmin:databaseAdmin123456@${rs}.${namespace}.svc.cluster.local/admin?ssl=false&replicaSet=rs0' --quiet --eval 'while (true) { try { db.getSiblingDB(\"lag\").w.insertOne({ts: new Date()}, {writeConcern: {w: 1}}) } catch (e) { print(e) } sleep(20) }' >/tmp/writer.log 2>&1 &"
+sleep 15
+
+desc 'start smart update, restarted members stop applying oplog'
+apply_cluster ${test_dir}/conf/${rs}-failpoint.yml
+
+wait_operator_log 'waiting for secondary to catch up'
+
+desc 'primary must not be stepped down while secondaries lag'
+sleep 60
+if [[ $(pod_uid "${initial_primary}") != "${initial_primary_uid}" ]]; then
+	echo "ERROR: primary pod ${initial_primary} was restarted while secondaries lag"
+	exit 1
+fi
+if [[ $(is_primary "${initial_primary}") != "true" ]]; then
+	echo "ERROR: ${initial_primary} is not primary anymore while secondaries lag"
+	exit 1
+fi
+if operator_log | grep -q 'doing step down'; then
+	echo "ERROR: operator tried to step down while secondaries lag"
+	exit 1
+fi
+
+desc 'let secondaries catch up'
+for pod in "${secondaries[@]}"; do
+	set_failpoint "${pod}" off
+done
+
+wait_operator_log 'secondary caught up'
+wait_operator_log 'doing step down'
+
+desc "wait for ${initial_primary} restart"
+set +o xtrace
+retry=0
+until [[ $(pod_uid "${initial_primary}" || :) != "${initial_primary_uid}" ]]; do
+	let retry+=1
+	if [[ ${retry} -ge 300 ]]; then
+		echo "ERROR: ${initial_primary} was not restarted after step down"
+		exit 1
+	fi
+	echo -n .
+	sleep 1
+done
+set_debug
+wait_pod "${initial_primary}"
+set_failpoint "${initial_primary}" off
+
+desc 'check step down was not forced'
+if operator_log | grep -q -e 'failed to do step down' -e 'forced step down'; then
+	echo "ERROR: unexpected step down failure or forced step down"
+	exit 1
+fi
+
+new_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@${rs}.${namespace}" "${cluster}")
+if [[ ${new_primary} == "${initial_primary}" ]]; then
+	echo "ERROR: primary didn't change"
+	exit 1
+fi
+
+wait_operator_log 'smart update finished for statefulset'
+
+destroy ${namespace}
+
+desc 'test passed'

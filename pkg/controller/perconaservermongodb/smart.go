@@ -23,6 +23,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(
@@ -203,6 +204,13 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 			continue
 		}
 
+		// after a failed step down the old primary is a secondary, don't restart it without a new primary
+		if replset.Size > 1 {
+			if err := r.checkReplsetHasPrimary(ctx, cr, replset, pod); err != nil {
+				return errors.Wrapf(err, "can't update secondary pod %s", pod.Name)
+			}
+		}
+
 		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
 		if err := updatePod(&pod); err != nil {
@@ -215,7 +223,9 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	// If the primary is external, we can't match it with a running pod and it'll have an empty name
 	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
 		forceStepDown := replset.Size == 1
-		log.Info("doing step down...", "force", forceStepDown)
+		// replication may be broken by a cert change, only then a forced step down is allowed
+		sslChanged := isSSLChanged(sfs, &primaryPod)
+
 		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 		if err != nil {
 			return fmt.Errorf("failed to get mongo client: %v", err)
@@ -228,9 +238,17 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 			}
 		}()
 
+		if !forceStepDown && !sslChanged {
+			if err := client.WaitSecondaryCatchUp(ctx, maxStepDownLag, secondaryCatchUpTimeout); err != nil {
+				return errors.Wrap(err, "wait secondary catch up")
+			}
+		}
+
+		log.Info("doing step down...", "force", forceStepDown, "sslChanged", sslChanged)
 		err = client.StepDown(ctx, 60, forceStepDown)
 		if err != nil {
-			if strings.Contains(err.Error(), "No electable secondaries caught up") {
+			if sslChanged && strings.Contains(err.Error(), "No electable secondaries caught up") {
+				log.Info("no electable secondaries caught up after SSL change, doing forced step down")
 				err = client.StepDown(ctx, 60, true)
 				if err != nil {
 					return errors.Wrap(err, "failed to do forced step down")
@@ -249,6 +267,46 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	log.Info("smart update finished for statefulset")
 
 	return nil
+}
+
+const (
+	maxStepDownLag          = 10 * time.Second
+	secondaryCatchUpTimeout = 2 * time.Minute
+)
+
+func (r *ReconcilePerconaServerMongoDB) checkReplsetHasPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod) error {
+	log := logf.FromContext(ctx)
+
+	client, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
+	if err != nil {
+		return errors.Wrap(err, "failed to create standalone client")
+	}
+	defer func() {
+		if err := client.Disconnect(ctx); err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	status, err := client.RSStatus(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get replset status")
+	}
+	for _, m := range status.Members {
+		if m.State == mongo.MemberStatePrimary {
+			return nil
+		}
+	}
+
+	return errors.New("no primary in replset")
+}
+
+func isSSLChanged(sfs *appsv1.StatefulSet, pod *corev1.Pod) bool {
+	for _, key := range []string{"percona.com/ssl-hash", "percona.com/ssl-internal-hash"} {
+		if sfs.Spec.Template.Annotations[key] != pod.Annotations[key] {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {

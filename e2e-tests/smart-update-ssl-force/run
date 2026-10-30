@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# After an SSL change smart update skips the lag check and falls back
+# to a forced step down, so the primary is restarted even if secondaries lag.
+
+set -o errexit
+
+test_dir=$(realpath $(dirname $0))
+. ${test_dir}/../functions
+set_debug
+
+cluster="smart-update-lag"
+rs="${cluster}-rs0"
+conf="${test_dir}/../smart-update-lag/conf"
+
+client_pod() {
+	kubectl_bin get pods --selector=name=psmdb-client -o 'jsonpath={.items[].metadata.name}'
+}
+
+run_on_pod() {
+	local pod=$1
+	local command=$2
+
+	kubectl_bin exec $(client_pod) -- \
+		mongo "mongodb://clusterAdmin:clusterAdmin123456@${pod}.${rs}.${namespace}.svc.cluster.local/admin?ssl=false" \
+		--quiet --eval "${command}"
+}
+
+set_failpoint() {
+	local pod=$1
+	local mode=$2
+
+	# pod DNS record may appear a bit later than readiness
+	for i in {1..30}; do
+		if run_on_pod "${pod}" "printjson(db.adminCommand({configureFailPoint: \"rsSyncApplyStop\", mode: \"${mode}\"}))"; then
+			return
+		fi
+		sleep 2
+	done
+	echo "ERROR: can't set failpoint on ${pod}"
+	exit 1
+}
+
+pod_uid() {
+	kubectl_bin get pod "$1" -o jsonpath='{.metadata.uid}'
+}
+
+operator_log() {
+	kubectl_bin logs ${OPERATOR_NS:+-n $OPERATOR_NS} $(get_operator_pod)
+}
+
+wait_operator_log() {
+	local pattern=$1
+	local timeout=${2:-600}
+
+	set +o xtrace
+	echo -n "waiting for operator log: ${pattern}"
+	for i in $(seq ${timeout}); do
+		if operator_log | grep -q "${pattern}"; then
+			echo " found"
+			set_debug
+			return
+		fi
+		echo -n .
+		sleep 1
+	done
+	echo
+	echo "ERROR: operator log has no '${pattern}' after ${timeout}s"
+	exit 1
+}
+
+operator_replicas() {
+	kubectl_bin scale ${OPERATOR_NS:+-n $OPERATOR_NS} deployment/percona-server-mongodb-operator --replicas=$1
+	kubectl_bin rollout status ${OPERATOR_NS:+-n $OPERATOR_NS} deployment/percona-server-mongodb-operator
+}
+
+create_infra ${namespace}
+deploy_cert_manager
+
+desc 'create secrets and start client'
+kubectl_bin apply -f ${conf_dir}/secrets.yml -f ${conf_dir}/client.yml
+deploy_cmctl
+
+desc "create PSMDB cluster ${cluster}"
+apply_cluster ${conf}/${rs}.yml
+wait_for_running "${rs}" 3
+
+initial_primary=$(get_mongo_primary "clusterAdmin:clusterAdmin123456@${rs}.${namespace}" "${cluster}")
+initial_primary_uid=$(pod_uid "${initial_primary}")
+
+desc 'start background writes'
+kubectl_bin exec $(client_pod) -- bash -c "setsid nohup mongo 'mongodb+srv://databaseAdmin:databaseAdmin123456@${rs}.${namespace}.svc.cluster.local/admin?ssl=false&replicaSet=rs0' --quiet --eval 'while (true) { try { db.getSiblingDB(\"lag\").w.insertOne({ts: new Date()}, {writeConcern: {w: 1}}) } catch (e) { print(e) } sleep(20) }' >/tmp/writer.log 2>&1 &"
+sleep 15
+
+desc 'stop operator to get failpoint and SSL change into one revision'
+operator_replicas 0
+apply_cluster ${conf}/${rs}-failpoint.yml
+renew_certificate "${cluster}-ssl-internal"
+sleep 10
+operator_replicas 1
+
+desc 'primary must be stepped down with force and restarted while secondaries lag'
+wait_operator_log '"sslChanged": true'
+wait_operator_log 'doing forced step down'
+
+set +o xtrace
+retry=0
+until [[ $(pod_uid "${initial_primary}" || :) != "${initial_primary_uid}" ]]; do
+	let retry+=1
+	if [[ ${retry} -ge 300 ]]; then
+		echo "ERROR: ${initial_primary} was not restarted after forced step down"
+		exit 1
+	fi
+	echo -n .
+	sleep 1
+done
+set_debug
+
+if operator_log | grep -q 'waiting for secondary to catch up'; then
+	echo "ERROR: lag check must be skipped after SSL change"
+	exit 1
+fi
+
+desc 'release all members'
+wait_pod "${initial_primary}"
+for pod in $(kubectl_bin get pods -l app.kubernetes.io/instance=${cluster} -o name | sed 's/pod\///g'); do
+	set_failpoint "${pod}" off
+done
+
+wait_operator_log 'smart update finished for statefulset'
+
+destroy ${namespace}
+
+desc 'test passed'

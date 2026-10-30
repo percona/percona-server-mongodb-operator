@@ -543,6 +543,21 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [core, upgrade]
 
+  smart-update-lag:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, upgrade]
+
+  smart-update-lag-timeout:
+    suites: [release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, upgrade]
+
+  smart-update-ssl-force:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade, tls]
+
   split-horizon:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
