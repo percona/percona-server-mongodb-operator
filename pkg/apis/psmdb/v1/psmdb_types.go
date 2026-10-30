@@ -2172,3 +2172,10 @@ func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
 	}
 	return replsets
 }
+
+func (r ReplsetSpec) MongoReplsetName() string {
+	if name, err := r.CustomReplsetName(); err == nil {
+		return name
+	}
+	return r.Name
+}
