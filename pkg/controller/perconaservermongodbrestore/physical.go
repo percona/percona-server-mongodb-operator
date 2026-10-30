@@ -97,6 +97,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 		}
 
 		status.State = psmdbv1.RestoreStateWaiting
+		status.WaitingReason = psmdbv1.RestoreWaitingReasonPreparation
 	}
 
 	if ok, err := r.prepareStatefulSetsForPhysicalRestore(ctx, cluster); err != nil {
@@ -113,6 +114,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	if (!sfsReady && cr.Status.State != psmdbv1.RestoreStateRunning) || cr.Status.State == psmdbv1.RestoreStateNew {
 		log.Info("Waiting for statefulsets to be ready before restore", "ready", sfsReady)
+		if !sfsReady {
+			status.WaitingReason = psmdbv1.RestoreWaitingReasonStatefulSets
+		}
 		return status, nil
 	}
 
@@ -129,6 +133,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 		if !pbmAgentsReady {
 			log.Info("Waiting for pbm-agents to be ready before restore", "ready", pbmAgentsReady)
+			status.WaitingReason = psmdbv1.RestoreWaitingReasonPBMAgent
 			return status, nil
 		}
 

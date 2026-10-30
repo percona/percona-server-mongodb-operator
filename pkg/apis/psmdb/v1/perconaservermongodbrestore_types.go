@@ -74,18 +74,35 @@ const (
 	RestoreStateReady     RestoreState = "ready"
 )
 
+type RestoreWaitingReason string
+
+const (
+	RestoreWaitingReasonBackupLease  RestoreWaitingReason = "BackupLease"
+	RestoreWaitingReasonClusterSync  RestoreWaitingReason = "ClusterSync"
+	RestoreWaitingReasonPBMAgent     RestoreWaitingReason = "PBMAgent"
+	RestoreWaitingReasonPBMResync    RestoreWaitingReason = "PBMResync"
+	RestoreWaitingReasonPITR         RestoreWaitingReason = "PITR"
+	RestoreWaitingReasonPreparation  RestoreWaitingReason = "Preparation"
+	RestoreWaitingReasonRestoreLock  RestoreWaitingReason = "RestoreLock"
+	RestoreWaitingReasonStatefulSets RestoreWaitingReason = "StatefulSets"
+	RestoreWaitingReasonMongosPods   RestoreWaitingReason = "MongosPods"
+)
+
 // PerconaServerMongoDBRestoreStatus defines the observed state of PerconaServerMongoDBRestore
 type PerconaServerMongoDBRestoreStatus struct {
-	State          RestoreState       `json:"state,omitempty"`
-	PBMname        string             `json:"pbmName,omitempty"`
-	PITRTarget     string             `json:"pitrTarget,omitempty"`
-	Error          string             `json:"error,omitempty"`
-	CompletedAt    *metav1.Time       `json:"completed,omitempty"`
-	LastTransition *metav1.Time       `json:"lastTransition,omitempty"`
-	Conditions     []metav1.Condition `json:"conditions,omitempty"`
+	State RestoreState `json:"state,omitempty"`
+	// WaitingReason identifies the blocker while State is waiting.
+	WaitingReason  RestoreWaitingReason `json:"waitingReason,omitempty"`
+	PBMname        string               `json:"pbmName,omitempty"`
+	PITRTarget     string               `json:"pitrTarget,omitempty"`
+	Error          string               `json:"error,omitempty"`
+	CompletedAt    *metav1.Time         `json:"completed,omitempty"`
+	LastTransition *metav1.Time         `json:"lastTransition,omitempty"`
+	Conditions     []metav1.Condition   `json:"conditions,omitempty"`
 }
 
 const (
+	ConditionClusterSyncActive               string = "ClusterSyncActive"
 	ConditionPBMAgentConfiguredForSnapshot   string = "PBMAgentConfiguredForSnapshot"
 	ConditionReplsetPVCsRestoredFromSnapshot string = "ReplsetPVCsRestoredFromSnapshot"
 	ConditionPBMAgentAwaitingRestoreFinish   string = "PBMAgentAwaitingRestoreFinish"
