@@ -1,6 +1,7 @@
 package naming
 
 const (
+	AnnotationCancelBackup    = perconaPrefix + "cancel-backup"
 	AnnotationRestoreName     = perconaPrefix + "restore-name"
 	AnnotationSSLHash         = perconaPrefix + "ssl-hash"
 	AnnotationSSLInternalHash = perconaPrefix + "ssl-internal-hash"

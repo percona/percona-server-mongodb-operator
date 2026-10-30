@@ -76,6 +76,20 @@ func (mr *MockPBMMockRecorder) AgentStatuses(ctx, hosts interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AgentStatuses", reflect.TypeOf((*MockPBM)(nil).AgentStatuses), ctx, hosts)
 }
 
+// CancelBackup mocks base method.
+func (m *MockPBM) CancelBackup(ctx context.Context, bcpName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelBackup", ctx, bcpName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CancelBackup indicates an expected call of CancelBackup.
+func (mr *MockPBMMockRecorder) CancelBackup(ctx, bcpName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelBackup", reflect.TypeOf((*MockPBM)(nil).CancelBackup), ctx, bcpName)
+}
+
 // Close mocks base method.
 func (m *MockPBM) Close(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -306,6 +320,21 @@ func (m *MockPBM) GetStorage(ctx context.Context, e log.LogEvent) (storage.Stora
 func (mr *MockPBMMockRecorder) GetStorage(ctx, e interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorage", reflect.TypeOf((*MockPBM)(nil).GetStorage), ctx, e)
+}
+
+// HasBackupLock mocks base method.
+func (m *MockPBM) HasBackupLock(ctx context.Context, opID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasBackupLock", ctx, opID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HasBackupLock indicates an expected call of HasBackupLock.
+func (mr *MockPBMMockRecorder) HasBackupLock(ctx, opID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasBackupLock", reflect.TypeOf((*MockPBM)(nil).HasBackupLock), ctx, opID)
 }
 
 // HasLocks mocks base method.

@@ -38,6 +38,7 @@ var defaultBackoff = wait.Backoff{
 type backupExecutor interface {
 	Start(context.Context, client.Client, *api.PerconaServerMongoDB, *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error)
 	Status(context.Context, client.Client, *api.PerconaServerMongoDB, *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error)
+	Close(context.Context) error
 	PBM() backup.PBM
 }
 
@@ -60,6 +61,13 @@ func (r *ReconcilePerconaServerMongoDBBackup) newManagedBackups(ctx context.Cont
 
 func (b *managedBackups) PBM() backup.PBM {
 	return b.pbm
+}
+
+func (b *managedBackups) Close(ctx context.Context) error {
+	if b.pbm == nil {
+		return nil
+	}
+	return b.pbm.Close(ctx)
 }
 
 // Start requests backup on PBM
@@ -226,16 +234,22 @@ func (b *managedBackups) Status(
 	cluster *api.PerconaServerMongoDB,
 	cr *api.PerconaServerMongoDBBackup,
 ) (api.PerconaServerMongoDBBackupStatus, error) {
+	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
+	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
+		return cr.Status, errors.Wrap(err, "get pbm backup meta")
+	}
+	if errors.Is(err, pbmErrors.ErrNotFound) {
+		meta = nil
+	}
+	return b.statusFromMeta(ctx, cluster, cr, meta)
+}
+
+func (b *managedBackups) statusFromMeta(ctx context.Context, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup, meta *backup.BackupMeta) (api.PerconaServerMongoDBBackupStatus, error) {
 	status := cr.Status
 
 	log := logf.FromContext(ctx).WithName("backupStatus").WithValues("backup", cr.Name, "pbmName", status.PBMname)
 
-	meta, err := b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
-	if err != nil && !errors.Is(err, pbmErrors.ErrNotFound) {
-		return status, errors.Wrap(err, "get pbm backup meta")
-	}
-
-	if meta == nil || meta.Name == "" || errors.Is(err, pbmErrors.ErrNotFound) {
+	if meta == nil || meta.Name == "" {
 		logf.FromContext(ctx).Info("Waiting for backup metadata", "pbmName", cr.Status.PBMname, "backup", cr.Name)
 		return status, nil
 	}
@@ -249,6 +263,9 @@ func (b *managedBackups) Status(
 	log.V(1).Info("Got backup meta", "meta", meta)
 
 	switch meta.Status {
+	case defs.StatusCancelled:
+		status.State = api.BackupStateCanceled
+		status.Error = ""
 	case defs.StatusError:
 		status.State = api.BackupStateError
 		status.Error = fmt.Sprintf("%v", meta.Error())
@@ -273,18 +290,32 @@ func (b *managedBackups) Status(
 			timeoutSeconds = *s
 		}
 		if passed >= time.Duration(timeoutSeconds)*time.Second {
+			if cr.Status.State == api.BackupStateCanceling {
+				hasLock, err := b.pbm.HasBackupLock(ctx, meta.OPID)
+				if err != nil {
+					return status, errors.Wrap(err, "check starting backup locks")
+				}
+				if hasLock {
+					break
+				}
+			}
 			status.State = api.BackupStateError
 			status.Error = pbmStartingDeadlineErrMsg
+			break
+		}
+		if cr.Status.State == api.BackupStateCanceling {
 			break
 		}
 
 		status.State = api.BackupStateRequested
 	default:
-		status.State = api.BackupStateRunning
+		if cr.Status.State != api.BackupStateCanceling {
+			status.State = api.BackupStateRunning
+		}
 	}
 
-	status.LastTransition = &metav1.Time{
-		Time: time.Unix(meta.LastTransitionTS, 0),
+	if status.State != api.BackupStateCanceling {
+		status.LastTransition = &metav1.Time{Time: time.Unix(meta.LastTransitionTS, 0)}
 	}
 	status.Type = cr.Spec.Type
 

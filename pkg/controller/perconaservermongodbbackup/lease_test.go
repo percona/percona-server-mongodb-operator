@@ -163,6 +163,17 @@ func TestTryAcquireLease(t *testing.T) {
 			wantAcquired: true,
 			wantHolder:   naming.BackupHolderId(newBackup),
 		},
+		"lease held by canceling backup: waits": {
+			holderBackup: backupWithState("backup-old", ns, "old-uid", clusterName, psmdbv1.BackupStateCanceling),
+			seedLease:    true,
+			wantAcquired: false,
+		},
+		"lease held by canceled backup: takes stale lease": {
+			holderBackup: backupWithState("backup-old", ns, "old-uid", clusterName, psmdbv1.BackupStateCanceled),
+			seedLease:    true,
+			wantAcquired: true,
+			wantHolder:   naming.BackupHolderId(newBackup),
+		},
 		"lease held by missing backup: takes stale lease": {
 			seedLease:    true,
 			wantAcquired: true,
