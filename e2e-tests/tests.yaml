@@ -385,7 +385,7 @@ tests:
 
   logcollector-pvc:
     suites: [pr, release]
-    operatorModes: [namespaced]
+    operatorModes: [cluster-wide, namespaced]
     groups: [monitoring, storage]
 
   mongod-major-upgrade:
