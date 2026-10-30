@@ -217,14 +217,27 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 				return rr, nil
 			}
 
+			if errors.Is(err, errWaitingPBMVersion) {
+				err = nil
+				log.Info("waiting for pbm-agent version in cluster status", "cluster", cluster.Name)
+				return rr, nil
+			}
+
 			if errors.Is(err, pbmErrors.ErrNotFound) {
 				log.Info("backup not found in PBM metadata. we need to resync...",
 					"backup", bcp.Name,
 					"pbmName", bcp.Status.PBMname,
 					"storage", bcp.Status.StorageName)
 
-				if err := r.resyncStorage(ctx, cluster, cr); err != nil {
-					return reconcile.Result{}, errors.Wrap(err, "resync storage")
+				if rerr := r.resyncStorage(ctx, cluster, cr); rerr != nil {
+					if errors.Is(rerr, backup.ErrResyncNotStarted) &&
+						bcp.PBMBackupType() == defs.LogicalBackup &&
+						!isPBMConfigured(cluster) {
+						err = nil
+						log.Info("resync is not started and PBM is not configured for the cluster yet, will retry", "cluster", cluster.Name)
+						return rr, nil
+					}
+					return reconcile.Result{}, errors.Wrap(rerr, "resync storage")
 				}
 
 				backoff := wait.Backoff{
@@ -329,7 +342,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkRestoreLocks(ctx context.Con
 		return true, nil
 	}
 
-	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
+	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		log.Info("Waiting for pbm-agent.")
 		return true, nil
@@ -505,7 +518,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 ) error {
 	log := logf.FromContext(ctx)
 
-	pbmC, err := backup.NewPBM(ctx, r.client, cluster)
+	pbmC, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		return errors.Wrap(err, "new PBM connection")
 	}
@@ -582,6 +595,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 		return errors.Wrap(err, "get main storage")
 	}
 
+	if bcp.PBMBackupType() == defs.LogicalBackup {
+		if _, err := pbmC.GetConfig(ctx); backup.IsErrNoDocuments(err) {
+			log.Info("PBM config not found, configuring storages from the cluster spec", "mainStorage", mainStgName)
+
+			if err := pbmC.GetNSetConfig(ctx, r.client, cluster); err != nil {
+				return errors.Wrap(err, "set PBM config")
+			}
+		}
+	}
+
 	if bcp.Status.StorageName == mainStgName {
 		if err := pbmC.ResyncMainStorageAndWait(ctx); err != nil {
 			return errors.Wrap(err, "start config resync")
@@ -593,4 +616,16 @@ func (r *ReconcilePerconaServerMongoDBRestore) resyncStorage(
 	}
 
 	return nil
+}
+
+// isPBMConfigured returns false if the cluster controller has not configured PBM for the cluster yet.
+// It sets status.backupConfigHash only when no restore is pending,
+// so the hash stays empty on a cluster created together with a restore.
+// Clusters before 1.20.0 and clusters without backup storages are reported as configured.
+func isPBMConfigured(cluster *psmdbv1.PerconaServerMongoDB) bool {
+	if cluster.CompareVersion("1.20.0") < 0 || len(cluster.Spec.Backup.Storages) == 0 {
+		return true
+	}
+
+	return cluster.Status.BackupConfigHash != ""
 }

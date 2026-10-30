@@ -208,6 +208,8 @@ type NewPBMFunc func(ctx context.Context, c client.Client, cluster *psmdbv1.Perc
 
 var ErrNoReplsetAddrs = errors.New("no replset addresses")
 
+var ErrResyncNotStarted = errors.New("resync is not started until deadline")
+
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
 func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServerMongoDB) (PBM, error) {
@@ -1453,7 +1455,7 @@ func (b *pbmC) WaitForResync(ctx context.Context) error {
 		for {
 			select {
 			case <-startCtx.Done():
-				return errors.New("resync is not started until deadline")
+				return ErrResyncNotStarted
 			case <-ticker.C:
 				resyncRunning, err := b.HasLocks(startCtx, IsResync)
 				if err != nil {
