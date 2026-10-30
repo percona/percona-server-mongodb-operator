@@ -35,6 +35,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		WithName("SmartUpdate").
 		WithValues("statefulset", sfs.Name, "replset", replset.Name)
 
+	// Every pod is about to be deleted, so no point rolling
+	if cr.Spec.Pause {
+		log.V(1).Info("cluster is paused, skipping smart update")
+		return nil
+	}
+
 	if replset.Size == 0 {
 		return nil
 	}
