@@ -203,4 +203,5 @@ def generate_report(namespace: str) -> list[Any]:
         extras.html(
             create_collapsible_section("PBM Status and Logs", html.escape(summary["pbm"]))
         ),
+        extras.html(create_collapsible_section("Mongod Logs", html.escape(summary["mongod"]))),
     ]

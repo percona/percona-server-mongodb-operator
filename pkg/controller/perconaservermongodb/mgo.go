@@ -72,12 +72,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 	replsetSize := replset.GetSize()
 
-	restoreInProgress, err := r.restoreInProgress(ctx, cr, replset)
+	physicalRestoreInProgress, err := r.physicalRestoreInProgress(ctx, cr, replset)
 	if err != nil {
 		return api.AppStateError, nil, errors.Wrap(err, "check if restore in progress")
 	}
 
-	if restoreInProgress {
+	if physicalRestoreInProgress {
 		return api.AppStateInit, nil, nil
 	}
 
@@ -195,9 +195,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 		return api.AppStateReady, nil, nil
 	}
-	err = r.createOrUpdateSystemUsers(ctx, cr, replset)
+
+	rstRunning, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
-		return api.AppStateInit, nil, errors.Wrap(err, "create system users")
+		return api.AppStateInit, nil, errors.Wrap(err, "failed to check running restore")
+	}
+
+	if !rstRunning {
+		err = r.createOrUpdateSystemUsers(ctx, cr, replset)
+		if err != nil {
+			return api.AppStateInit, nil, errors.Wrap(err, "create system users")
+		}
 	}
 
 	// this can happen if cluster is initialized but status update failed
@@ -214,11 +222,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		})
 
 		return api.AppStateInit, nil, nil
-	}
-
-	rstRunning, err := r.isRestoreRunning(ctx, cr)
-	if err != nil {
-		return api.AppStateInit, nil, errors.Wrap(err, "failed to check running restore")
 	}
 
 	// mongos may not be reachable until it's updated
@@ -284,7 +287,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			rsStatus.AddedAsShard = new(true)
 			cr.Status.Replsets[replset.Name] = rsStatus
 		} else {
-			return api.AppStateInit, nil, nil
+			// Keep the members recorded on init. Smart update waits for them,
+			// and mongos isn't created until smart update finishes.
+			return api.AppStateInit, rsStatus.Members, nil
 		}
 	}
 
@@ -1227,7 +1232,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) physicalRestoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) (bool, error) {
 	sts := appsv1.StatefulSet{}
 	stsName := cr.Name + "-" + replset.Name
 	nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}
