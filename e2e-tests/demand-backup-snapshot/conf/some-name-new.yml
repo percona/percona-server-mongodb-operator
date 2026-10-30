@@ -64,6 +64,33 @@ spec:
             journalCompressor: snappy
           indexConfig:
             prefixCompression: true
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        enabled: false
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+      # Must match the source cluster: the backup's snapshots are keyed by the
+      # MongoDB replset name, so a cross-cluster restore only resolves them when
+      # the target config server carries the same custom replSetName.
+      configuration: |
+        replication:
+          replSetName: csReplSet
+        security:
+          enableEncryption: false
+    mongos:
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        type: ClusterIP
   secrets:
     users: some-users
     ssl: some-name-ssl
