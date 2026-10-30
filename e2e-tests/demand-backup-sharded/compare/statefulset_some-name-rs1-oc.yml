@@ -176,6 +176,8 @@ spec:
               value: "5"
             - name: SHARDED
               value: "TRUE"
+            - name: PBM_AGENT_TLS_DIR
+              value: /etc/mongodb-pbm
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -202,6 +204,9 @@ spec:
               name: mongod-data
             - mountPath: /opt/percona/pbm-hookscript
               name: pbm-hookscript
+            - mountPath: /etc/mongodb-pbm
+              name: pbm-tls
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -255,6 +260,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-tls
+          secret:
+            defaultMode: 288
+            secretName: some-name-pbm
         - configMap:
             defaultMode: 420
             name: some-name-pbm-hookscript

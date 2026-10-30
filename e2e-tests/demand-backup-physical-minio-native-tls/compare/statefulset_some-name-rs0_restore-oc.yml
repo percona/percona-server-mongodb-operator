@@ -68,6 +68,8 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
+            - name: PBM_AGENT_TLS_DIR
+              value: /etc/mongodb-pbm
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -179,6 +181,9 @@ spec:
             - mountPath: /etc/pbm/
               name: pbm-config
               readOnly: true
+            - mountPath: /etc/mongodb-pbm
+              name: pbm-tls
+              readOnly: true
             - mountPath: /etc/s3/certs-in
               name: ca-bundle-in
               readOnly: true
@@ -250,6 +255,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-tls
+          secret:
+            defaultMode: 288
+            secretName: some-name-pbm
         - name: ca-bundle-in
           projected:
             defaultMode: 420
