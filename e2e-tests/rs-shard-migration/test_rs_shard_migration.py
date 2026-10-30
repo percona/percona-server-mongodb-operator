@@ -72,8 +72,7 @@ def _exists(kind: str, name: str) -> bool:
 
 
 class TestRsShardMigration:
-    """Convert a replica set with a hidden member into a sharded cluster and back.
-    """
+    """Convert a replica set with a hidden member into a sharded cluster and back."""
 
     @pytest.mark.dependency()
     def test_create_replset_cluster(self, config: MigrationConfig, test_paths: Paths) -> None:
@@ -170,16 +169,20 @@ class TestRsShardMigration:
         self, config: MigrationConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
         """Migration to shards wipes out rs users, so recreate them and read through mongos"""
-        psmdb_client.run_mongos(
+        # mongos is not a replica set member, so the connection string must not carry a
+        # replicaSet option: replica_set="" drops it.
+        psmdb_client.run_mongosh(
             'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})',
             f"userAdmin:userAdmin123456@{MONGOS}.{config.namespace}",
+            "mongodb",
+            replica_set="",
         )
 
         psmdb_client.compare_mongo_cmd(
             "find({}, { _id: 0 }).toArray()",
             f"myApp:myPass@{MONGOS}.{config.namespace}",
             test_file=f"{test_paths['test_dir']}/compare/find.json",
-            sharded=True,
+            replica_set="",
         )
 
         majority_ts = psmdb_client.run_mongosh(
