@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -8,7 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 )
 
 func TestMongoExpression(t *testing.T) {
@@ -349,6 +353,66 @@ func TestGetRoles(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{Spec: api.PerconaServerMongoDBSpec{CRVersion: tt.crVersion}}
 			actual := getRoles(cr, tt.role)
 			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
+func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
+	ctx := context.Background()
+	cr := newTestCR()
+	cr.Spec.ClusterServiceDNSMode = api.DNSModeInternal
+	cr.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 49
+	objects := fakePodsForRS(cr, rs)
+	objects = append(objects, fakeStatefulset(cr, rs, rs.Size, "", naming.ComponentMongod))
+	r := buildFakeClient(objects...)
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Len(t, pods.Items, 49)
+
+	initialConfig := mongo.RSConfig{Version: 1}
+	for i := range pods.Items {
+		member, err := r.getConfigMemberForPod(ctx, cr, rs, i, &pods.Items[i])
+		require.NoError(t, err)
+		initialConfig.Members = append(initialConfig.Members, member)
+	}
+	initialConfig.Members.SetVotes(initialConfig.Members, false)
+	externalNodes := []*api.ExternalNode{
+		{Host: "external-0.example.com", Port: 27017},
+		{Host: "external-1.example.com", Port: 27017},
+	}
+
+	tests := map[string]struct {
+		externalNodes   int
+		expectedMembers int
+	}{
+		"below limit": {externalNodes: 0, expectedMembers: 49},
+		"at limit":    {externalNodes: 1, expectedMembers: 50},
+		"above limit": {externalNodes: 2, expectedMembers: 50},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			rs.ExternalNodes = externalNodes[:tc.externalNodes]
+			cli := mongoFake.NewClientWithConfig(initialConfig)
+
+			// AddNew adds one member per call; repeat to check the 51st stays excluded.
+			for range 2 {
+				_, _, err := r.updateConfigMembers(ctx, cli, cr, rs)
+				require.NoError(t, err)
+				config, err := cli.ReadConfig(ctx)
+				require.NoError(t, err)
+
+				var hosts []string
+				for _, member := range config.Members {
+					hosts = append(hosts, member.Host)
+				}
+				assert.Len(t, config.Members, tc.expectedMembers)
+				if tc.externalNodes > 0 {
+					assert.Contains(t, hosts, "external-0.example.com:27017")
+				}
+				assert.NotContains(t, hosts, "external-1.example.com:27017")
+			}
 		})
 	}
 }
