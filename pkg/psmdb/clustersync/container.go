@@ -7,14 +7,18 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
+const imageEntrypoint = "/pcsm-entry.sh"
+
 // Container builds the PCSM container.
-func Container(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB) corev1.Container {
+func Container(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB, tls TLS) corev1.Container {
 	return corev1.Container{
 		Name:            ContainerName,
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
+		Command:         command(tls),
 		Args:            pcsmArgs(cr),
 		Ports: []corev1.ContainerPort{{
 			Name:          HTTPPortName,
@@ -26,7 +30,36 @@ func Container(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServ
 		SecurityContext: cr.Spec.ContainerSecurityContext,
 		LivenessProbe:   probeOrDefault(cluster, cr.Spec.LivenessProbe, livenessProbe),
 		ReadinessProbe:  probeOrDefault(cluster, cr.Spec.ReadinessProbe, readinessProbe),
+		VolumeMounts:    volumeMounts(cr, tls),
 	}
+}
+
+func command(tls TLS) []string {
+	if !tls.Enabled() {
+		return nil
+	}
+	script := fmt.Sprintf("cat %s/tls.key %s/tls.crt > %s\nexec %s pcsm \"$@\"",
+		config.SSLDir, config.SSLDir, TLSPEMFile, imageEntrypoint)
+	return []string{"/bin/bash", "-c", script, "--"}
+}
+
+func volumeMounts(cr *api.PerconaServerMongoDBClusterSync, tls TLS) []corev1.VolumeMount {
+	if !tls.Enabled() {
+		return nil
+	}
+
+	mounts := []corev1.VolumeMount{{
+		Name:      sslVolumeName,
+		MountPath: config.SSLDir,
+		ReadOnly:  true,
+	}}
+	if readOnlyRootFilesystemEnabled(cr.Spec.ContainerSecurityContext) {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      tmpVolumeName,
+			MountPath: tmpMountPath,
+		})
+	}
+	return mounts
 }
 
 // ReservedEnv holds the operator-managed vars. A spec.env duplicate would

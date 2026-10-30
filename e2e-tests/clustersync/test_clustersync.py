@@ -539,7 +539,7 @@ class TestClusterSync:
     def test_restore_after_finalize(self, test_paths: Paths) -> None:
         """The clustersync lease is released, so a restore completes"""
         apply_restore(test_paths, "restore-after-finalize", INITIAL_BACKUP)
-        wait_restore("restore-after-finalize")
+        wait_restore("restore-after-finalize", TARGET_CLUSTER)
 
         # initial-backup was taken before the sync started, so it holds an empty
         # target: both collections must be gone once the restore lands.
