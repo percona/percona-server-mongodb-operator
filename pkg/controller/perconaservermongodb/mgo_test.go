@@ -592,7 +592,7 @@ func TestLiveMembers(t *testing.T) {
 	}
 }
 
-func TestRemoveMembersWithoutPods(t *testing.T) {
+func TestRemoveUndesiredMembers(t *testing.T) {
 	t.Parallel()
 
 	const namespace = "psmdb"
@@ -748,7 +748,7 @@ func TestRemoveMembersWithoutPods(t *testing.T) {
 			}
 
 			r := &ReconcilePerconaServerMongoDB{}
-			r.removeMembersWithoutPods(context.Background(), cr, rs, c.pods, &cfg)
+			r.removeUndesiredMembers(context.Background(), cr, rs, c.pods, &cfg)
 
 			got := make([]string, 0, len(cfg.Members))
 			for _, m := range cfg.Members {
