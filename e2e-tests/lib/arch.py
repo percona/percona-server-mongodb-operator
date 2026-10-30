@@ -11,6 +11,7 @@ _TEMPLATE = ("spec", "template", "spec")
 # Kind -> path to its pod spec (where nodeSelector/tolerations live).
 _POD_SPEC_PATHS: dict[str, tuple[str, ...]] = {
     "Pod": ("spec",),
+    "PerconaServerMongoDBClusterSync": ("spec",),
     "Deployment": _TEMPLATE,
     "StatefulSet": _TEMPLATE,
     "DaemonSet": _TEMPLATE,
