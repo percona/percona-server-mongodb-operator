@@ -393,6 +393,12 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		}
 	}
 
+	if s := cr.LogStorage(); s != nil && s.PersistentVolumeClaimSpec != nil {
+		if len(s.AccessModes) == 0 {
+			s.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+		}
+	}
+
 	repls := cr.Spec.Replsets
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		cr.Spec.Sharding.ConfigsvrReplSet.Arbiter.Enabled = false

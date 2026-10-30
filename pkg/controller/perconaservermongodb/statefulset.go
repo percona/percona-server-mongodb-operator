@@ -3,10 +3,13 @@ package perconaservermongodb
 import (
 	"context"
 	"maps"
+	"slices"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -68,6 +71,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
+	recreated, err := r.recreateStsForLogStorageIfNeeded(ctx, cr, sfs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "recreate StatefulSet %s for log storage", sfs.Name)
+	}
+	if recreated {
+		return sfs, nil
+	}
+
 	var pvcSpec *api.PVCSpec
 	if volumeSpec != nil {
 		pvcSpec = &volumeSpec.PersistentVolumeClaim
@@ -106,6 +117,50 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	}
 
 	return sfs, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) recreateStsForLogStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
+	if cr.CompareVersion("1.24.0") < 0 {
+		return false, nil
+	}
+
+	if sfs.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
+		return false, nil
+	}
+
+	current := new(appsv1.StatefulSet)
+	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current); err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+
+	hasLogVCT := slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+		return vct.Name == psmdbconfig.MongodLogVolClaimName
+	})
+	if hasLogVCT == (cr.LogStorage() != nil) {
+		return false, nil
+	}
+
+	err := r.client.Delete(ctx, current,
+		client.PropagationPolicy(metav1.DeletePropagationOrphan),
+		client.Preconditions{UID: &current.UID},
+	)
+	if err != nil {
+		if k8sErrors.IsNotFound(err) || k8sErrors.IsConflict(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "delete statefulset/%s", current.Name)
+	}
+
+	logf.FromContext(ctx).Info("Recreating statefulset to change log storage", "statefulset", sfs.Name)
+
+	sfs.ResourceVersion = ""
+	sfs.UID = ""
+
+	if err := r.createOrUpdate(ctx, sfs); err != nil {
+		return false, errors.Wrapf(err, "create statefulset/%s", sfs.Name)
+	}
+
+	return true, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {

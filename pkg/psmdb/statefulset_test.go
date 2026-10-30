@@ -9,10 +9,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -897,6 +899,148 @@ func TestBuildMongoDBURI(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedURI, BuildMongoDBURI(t.Context(), cr, tt.tlsEnabled, sslSecret))
+		})
+	}
+}
+
+func logStorageSpec(size string) *api.LogStorageSpec {
+	return &api.LogStorageSpec{
+		PersistentVolumeClaim: &api.PVCSpec{
+			Labels:      map[string]string{"custom-label": "custom"},
+			Annotations: map[string]string{"custom-annotation": "custom"},
+			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse(size),
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestLogStorageVersionGate(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		crVersion string
+		storage   *api.LogStorageSpec
+		want      bool
+	}{
+		"not configured":    {crVersion: version.Version(), storage: nil, want: false},
+		"configured":        {crVersion: version.Version(), storage: logStorageSpec("2Gi"), want: true},
+		"ignored on 1.23.1": {crVersion: "1.23.1", storage: logStorageSpec("2Gi"), want: false},
+		"ignored on 1.21.0": {crVersion: "1.21.0", storage: logStorageSpec("2Gi"), want: false},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: tt.crVersion,
+					LogCollector: &api.LogCollectorSpec{
+						Enabled: true,
+						Storage: tt.storage,
+					},
+				},
+			}
+
+			assert.Equal(t, tt.want, cr.LogStorage() != nil)
+		})
+	}
+}
+
+func TestMongodLogPVC(t *testing.T) {
+	t.Parallel()
+
+	cr := &api.PerconaServerMongoDB{
+		Name:      "test-cr",
+		Namespace: "test-ns",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			LogCollector: &api.LogCollectorSpec{
+				Enabled: true,
+				Storage: logStorageSpec("2Gi"),
+			},
+		},
+	}
+
+	ls := map[string]string{"app.kubernetes.io/component": "mongod"}
+	pvc := mongodLogPVC(cr, ls)
+
+	assert.Equal(t, config.MongodLogVolClaimName, pvc.Name)
+	assert.Equal(t, "test-ns", pvc.Namespace)
+	assert.Equal(t, map[string]string{
+		"custom-label":                "custom",
+		"app.kubernetes.io/component": "mongod",
+	}, pvc.Labels)
+	assert.Equal(t, map[string]string{"custom-annotation": "custom"}, pvc.Annotations)
+	assert.Equal(t, resource.MustParse("2Gi"), pvc.Spec.Resources.Requests[corev1.ResourceStorage])
+}
+
+func TestContainerLogVolumeMount(t *testing.T) {
+	t.Parallel()
+
+	logMount := corev1.VolumeMount{
+		Name:      config.MongodLogVolClaimName,
+		MountPath: config.MongodContainerDataLogsDir,
+	}
+	dataMount := corev1.VolumeMount{
+		Name:      config.MongodDataVolClaimName,
+		MountPath: config.MongodContainerDataDir,
+	}
+
+	pvcLogVol := config.MongodPVCLogVolume()
+
+	tests := map[string]struct {
+		logVolume *config.LogVolume
+		wantMount bool
+	}{
+		"logs stay on the data volume": {
+			logVolume: nil,
+			wantMount: false,
+		},
+		"logs get a dedicated volume": {
+			logVolume: &pvcLogVol,
+			wantMount: true,
+		},
+	}
+
+	allowInvalidCerts := true
+	cr := &api.PerconaServerMongoDB{
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{Users: "some-users"},
+			TLS: &api.TLSSpec{
+				Mode:                     api.TLSModePrefer,
+				AllowInvalidCertificates: &allowInvalidCerts,
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			c, err := container(t.Context(), cr, containerFnParams{
+				replset: &api.ReplsetSpec{
+					Name:    "rs0",
+					Storage: &api.MongodSpecStorage{},
+				},
+				name:          naming.ContainerMongod,
+				livenessProbe: &api.LivenessProbeExtended{},
+				logVolume:     tt.logVolume,
+			})
+			require.NoError(t, err)
+
+			if tt.wantMount {
+				assert.Contains(t, c.VolumeMounts, logMount)
+			} else {
+				assert.NotContains(t, c.VolumeMounts, logMount)
+			}
+
+			assert.Contains(t, c.VolumeMounts, dataMount)
 		})
 	}
 }

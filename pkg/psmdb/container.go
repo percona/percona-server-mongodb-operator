@@ -25,6 +25,7 @@ type containerFnParams struct {
 	containerSecurityContext *corev1.SecurityContext
 	containerEnv             []corev1.EnvVar
 	containerEnvFrom         []corev1.EnvFromSource
+	logVolume                *config.LogVolume
 }
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, params containerFnParams) (corev1.Container, error) {
@@ -48,6 +49,13 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 			Name:      config.MongodDataVolClaimName,
 			MountPath: config.MongodContainerDataDir,
 		},
+	}
+
+	if logVol := params.logVolume; logVol != nil {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      logVol.Name,
+			MountPath: logVol.MountPath,
+		})
 	}
 
 	if mountKeyFile {

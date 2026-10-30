@@ -1945,6 +1945,7 @@ const (
 	AnnotationResyncPBM                = "percona.com/resync-pbm"
 	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
+	AnnotationPVCResizeClaim           = "percona.com/pvc-resize-claim"
 	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
 )
 
@@ -2134,6 +2135,18 @@ type LogCollectorSpec struct {
 	// ReadinessProbe sets a readiness probe for the logs (fluent-bit) container.
 	// When not set the container has no readiness probe.
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+
+	// Storage configures where mongod logs are stored.
+	Storage *LogStorageSpec `json:"storage,omitempty"`
+}
+
+// LogStorageSpec defines storage for mongod logs.
+type LogStorageSpec struct {
+	// PersistentVolumeClaim specifies the PVC for storing mongod logs. When set,
+	// logs are written to a dedicated volume instead of the mongod data volume.
+	//
+	// +kubebuilder:validation:XValidation:rule="has(self.resources) && has(self.resources.requests) && 'storage' in self.resources.requests",message="logCollector.storage.persistentVolumeClaim.resources.requests.storage must be set"
+	PersistentVolumeClaim *PVCSpec `json:"persistentVolumeClaim,omitempty"`
 }
 
 // LogRotateSpec defines the configuration for the logrotate container.
@@ -2162,6 +2175,17 @@ type LogRotateSpec struct {
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
+}
+
+// LogStorage returns the PVC spec for mongod logs, or nil when logs stay on the data volume.
+func (cr *PerconaServerMongoDB) LogStorage() *PVCSpec {
+	if cr.CompareVersion("1.24.0") < 0 {
+		return nil
+	}
+	if cr.Spec.LogCollector == nil || cr.Spec.LogCollector.Storage == nil {
+		return nil
+	}
+	return cr.Spec.LogCollector.Storage.PersistentVolumeClaim
 }
 
 func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
