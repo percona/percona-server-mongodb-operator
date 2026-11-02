@@ -323,7 +323,9 @@ validate-%-image:
 ## Run the OLM upgrade e2e test against the deployed development catalogs
 .PHONY: tests $(BUNDLE_TYPES:%=tests/%)
 tests: ## Run OLM upgrade e2e tests against deployed catalogs (run deploy/<type> first)
-tests: $(BUNDLE_TYPES:%=tests/%)
+# One type at a time, also under make -j: each run deletes the cluster-wide operator CRDs.
+tests:
+	@for type in $(BUNDLE_TYPES); do $(MAKE) --no-print-directory "tests/$$type" || exit 1; done
 
 tests/community:
 tests/certified:

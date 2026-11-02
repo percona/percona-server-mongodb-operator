@@ -334,7 +334,14 @@ make tests/community
 make tests/certified
 ```
 
-The test runs once for every bundle in the catalog except the newest one. Each
+`make tests` runs `tests/community` and then `tests/certified`, one at a time
+(also under `make -j`), because each run deletes the cluster-wide operator CRDs.
+Each one first waits for the CatalogSource to be `READY` and to serve the
+package (`OLM_CATALOG_TIMEOUT`, 300 seconds), so it can run right after
+`make deploy/<type>`.
+
+The target is the head of the default channel, or of `OLM_TARGET_CHANNEL`. The
+test runs once for every bundle in the catalog older than the target. Each
 run installs that bundle with a Manual-approval Subscription, deploys a replica
 set from the bundle's example CR and writes data. It then switches the
 Subscription to the default channel. It deletes any pending InstallPlan left
@@ -343,9 +350,13 @@ InstallPlan straight to the newest version, so each starting version is
 upgraded directly. After the upgrade it checks that:
 
 - only the target CSV is left and the operator runs its image;
-- the operator logs and the namespace's Warning events have no new errors;
-- the cluster stayed `ready`, and no DB pod was recreated or restarted;
-- the data written before the upgrade is readable, and new writes succeed.
+- the operator pod stays Ready and is not replaced or restarted, and its logs
+  and the namespace's Warning events have no new errors, both right after the
+  upgrade and after a 3-minute soak;
+- the operator reconciled the cluster (`status.observedGeneration`), the cluster
+  stayed `ready`, and no DB pod was recreated or restarted;
+- the data written before the upgrade is readable on every member (direct
+  connection to each pod), and new writes succeed.
 
 For a dev catalog, the test checks that the head of the default channel is
 `OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
@@ -364,8 +375,9 @@ OLM tests live in `installers/olm/e2e-tests/` and are not part of the regular
 e2e suite: they need an OpenShift cluster with the catalogs deployed, and
 changes here do not trigger the PR e2e run (`installers/olm/**` is in
 `.e2eignore`). They reuse the shared pytest harness from the repository's
-`e2e-tests/` (`conftest.py` and `lib/`), loaded with `-p conftest`;
-`olm.py` holds the OLM helpers. To run one test by hand from the repository
+`e2e-tests/` (`conftest.py` and `lib/`) unchanged, loaded with `-p conftest`;
+each test overrides `test_paths` for its location, and `olm.py` holds the OLM
+helpers. To run one test by hand from the repository
 root:
 
 ```bash
@@ -376,7 +388,8 @@ PYTHONPATH=e2e-tests:installers/olm/e2e-tests \
 Before and after each run, the test deletes the operator CRDs, together with
 every `psmdb` resource in the cluster. OLM leaves CRDs behind, and a newer CRD
 blocks installing an older bundle. Use a dedicated cluster. Set `SKIP_DELETE=1`
-to keep the last run's resources for debugging.
+to keep the last run's resources for debugging; earlier runs are always cleaned
+up, since the next run deletes the CRDs anyway.
 
 ---
 

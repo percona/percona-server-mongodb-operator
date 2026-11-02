@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import logging
 import os
 import re
@@ -56,6 +57,8 @@ DEPRECATION_WARNING = re.compile(r"\S+ PerconaServerMongoDB is deprecated and wi
 # A brief "initializing" while the new operator takes over is tolerated; pods must not change.
 ALLOWED_STATES = {"ready", "initializing"}
 SOAK_SECONDS = 180
+# A single failed read of the CR state is skipped; this many in a row fail the test.
+MAX_EMPTY_READS = 6
 # Only read by the version-service cron, which upgradeOptions.apply=disabled and
 # DISABLE_TELEMETRY leave idle: changing it bumps the CR generation without touching pods.
 RECONCILE_PROBE = '{"spec":{"upgradeOptions":{"schedule":"0 3 * * *"}}}'
@@ -82,6 +85,8 @@ class UpgradeState:
     sts_revisions: dict[str, tuple[str, str]] = field(default_factory=dict)
     events: dict[str, int] = field(default_factory=dict)
     states: list[str] = field(default_factory=list)
+    empty_reads: int = 0
+    operator_pod_uid: str = ""
 
 
 def _version(csv: str) -> tuple[int, ...]:
@@ -100,6 +105,19 @@ def _default_from_csv(manifest: dict[str, Any], target_channel: str) -> str:
     ]
     assert heads, f"Catalog has no channel to upgrade from besides {target_channel}"
     return str(max(heads, key=_version))
+
+
+@pytest.fixture(scope="class")
+def test_paths(request: pytest.FixtureRequest) -> Paths:
+    """Overrides the shared fixture: this test lives in installers/olm/e2e-tests/."""
+    test_file = request.path
+    src_dir = test_file.parents[4]
+    return {
+        "test_file": str(test_file),
+        "test_dir": str(test_file.parent),
+        "conf_dir": str(src_dir / "e2e-tests" / "conf"),
+        "src_dir": str(src_dir),
+    }
 
 
 def _delete_crds(src_dir: str) -> None:
@@ -256,6 +274,60 @@ def _psmdb_state(config: OlmUpgradeConfig) -> str:
     ).strip()
 
 
+def _sample_state(config: OlmUpgradeConfig, state: UpgradeState) -> None:
+    """Record the CR state; a state that stays unreadable is recorded as such."""
+    if current := _psmdb_state(config):
+        state.states.append(current)
+        state.empty_reads = 0
+        return
+    state.empty_reads += 1
+    if state.empty_reads >= MAX_EMPTY_READS:
+        state.states.append("unreadable")
+
+
+def _check_members(
+    config: OlmUpgradeConfig, psmdb_client: MongoManager, expected_file: str
+) -> None:
+    """Read from every member over a direct connection.
+
+    A replicaSet URI (run_mongosh, compare_mongo_cmd) sends every read to the primary.
+    """
+    expected = json.loads(Path(expected_file).read_text())
+    query = "EJSON.stringify(db.getSiblingDB('myApp').test.find({}, { _id: 0 }).toArray())"
+    for i in range(3):
+        uri = (
+            f"mongodb://{_cluster_uri(config, 'myApp', 'myPass', i)}.svc.cluster.local/admin"
+            "?ssl=false&directConnection=true&readPreference=secondaryPreferred"
+        )
+
+        def read(uri: str = uri) -> Any:
+            out = kubectl_bin(
+                "exec",
+                psmdb_client.client,
+                "--",
+                "env",
+                "HOME=/tmp",
+                "mongosh",
+                uri,
+                "--quiet",
+                "--eval",
+                query,
+                check=False,
+            )
+            try:
+                return json.loads(out)
+            except json.JSONDecodeError:
+                return out
+
+        wait_until(
+            f"member {i} to return {expected}",
+            read,
+            lambda result: result == expected,
+            timeout=60,
+            interval=5,
+        )
+
+
 def _operator_pod(config: OlmUpgradeConfig, csv: dict[str, Any]) -> dict[str, Any]:
     """The single pod of the CSV's operator Deployment, found by its own selector."""
     deployment = csv["spec"]["install"]["spec"]["deployments"][0]
@@ -277,6 +349,14 @@ def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> Non
     pod = _operator_pod(config, target)
     name = pod["metadata"]["name"]
 
+    # A replacement pod starts with a fresh restart count and log, hiding what happened.
+    if state.operator_pod_uid:
+        assert pod["metadata"]["uid"] == state.operator_pod_uid, (
+            f"Operator pod was replaced: {name} is not the pod that became ready after upgrade"
+        )
+    ready = [c["status"] for c in pod["status"].get("conditions", []) if c["type"] == "Ready"]
+    assert ready == ["True"], f"Operator pod {name} is not Ready: {pod['status']}"
+
     restarts = sum(c.get("restartCount", 0) for c in pod["status"]["containerStatuses"])
     if restarts:
         previous = kubectl_bin("logs", name, "-n", config.namespace, "--previous", check=False)
@@ -297,10 +377,11 @@ def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> Non
         if obj["kind"] == "InstallPlan" and ev.get("reason") == "AppliedWithWarnings":
             warnings = ev.get("message", "").split("):", 1)[-1].split(", psmdb.")
             return all(DEPRECATION_WARNING.search(w) for w in warnings)
-        # Readiness probe noise of the operator pods being replaced.
+        # Readiness probe noise of the operator pods being replaced, never the target pod.
         return (
             obj["kind"] == "Pod"
             and obj["name"].startswith(f"{deployment}-")
+            and obj["name"] != name
             and ev.get("reason") == "Unhealthy"
         )
 
@@ -385,12 +466,7 @@ class TestOlmUpgrade:
             ),
             condition=lambda result: "acknowledged: true" in result,
         )
-        for i in range(3):
-            psmdb_client.compare_mongo_cmd(
-                "find({}, { _id: 0 }).toArray()",
-                _cluster_uri(config, "myApp", "myPass", i),
-                test_file=f"{test_paths['test_dir']}/compare/find-1.json",
-            )
+        _check_members(config, psmdb_client, f"{test_paths['test_dir']}/compare/find-1.json")
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_write_data"])
     def test_upgrade_operator(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
@@ -413,10 +489,6 @@ class TestOlmUpgrade:
             f'{{"spec":{{"channel":"{config.target_channel}"}}}}',
         )
 
-        def sample_state() -> None:
-            if current := _psmdb_state(config):
-                state.states.append(current)
-
         # Only the plan straight to the target. A Manual Subscription may still point at a
         # plan for a newer patch of the old channel, created before the channel switch;
         # delete it so OLM resolves the target. Bundles skip every older version
@@ -430,7 +502,7 @@ class TestOlmUpgrade:
             config.package,
             config.target_csv,
             allowed_csvs=to_target,
-            on_poll=sample_state,
+            on_poll=lambda: _sample_state(config, state),
             delete_rejected=True,
         )
         assert len(plans) == 1, f"Expected one InstallPlan to {config.target_csv}, got {plans}"
@@ -463,9 +535,11 @@ class TestOlmUpgrade:
             config.namespace,
             "--timeout=300s",
         )
-        image = _operator_pod(config, target)["spec"]["containers"][0]["image"]
+        pod = _operator_pod(config, target)
+        image = pod["spec"]["containers"][0]["image"]
         assert image == csv_operator_image(target), f"Operator runs {image} after upgrade"
         _assert_operator_clean(config, state)
+        state.operator_pod_uid = pod["metadata"]["uid"]
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_operator_ready"])
     def test_cluster_not_restarted(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
@@ -505,8 +579,7 @@ class TestOlmUpgrade:
         # so keep watching for a while before comparing.
         deadline = time.monotonic() + SOAK_SECONDS
         while time.monotonic() < deadline:
-            if current := _psmdb_state(config):
-                state.states.append(current)
+            _sample_state(config, state)
             time.sleep(10)
 
         logger.info(f"Cluster states seen during upgrade: {sorted(set(state.states))}")
@@ -528,19 +601,9 @@ class TestOlmUpgrade:
         self, config: OlmUpgradeConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
         """Data written before the upgrade is there and the cluster accepts writes"""
-        for i in range(3):
-            psmdb_client.compare_mongo_cmd(
-                "find({}, { _id: 0 }).toArray()",
-                _cluster_uri(config, "myApp", "myPass", i),
-                test_file=f"{test_paths['test_dir']}/compare/find-1.json",
-            )
+        _check_members(config, psmdb_client, f"{test_paths['test_dir']}/compare/find-1.json")
         psmdb_client.run_mongosh(
             "db.getSiblingDB('myApp').test.insertOne({ x: 100501 })",
             _cluster_uri(config, "myApp", "myPass"),
         )
-        for i in range(3):
-            psmdb_client.compare_mongo_cmd(
-                "find({}, { _id: 0 }).toArray()",
-                _cluster_uri(config, "myApp", "myPass", i),
-                test_file=f"{test_paths['test_dir']}/compare/find-2.json",
-            )
+        _check_members(config, psmdb_client, f"{test_paths['test_dir']}/compare/find-2.json")
