@@ -106,6 +106,7 @@ type PerconaServerMongoDBSpec struct {
 	EnableExternalVolumeAutoscaling bool                `json:"enableExternalVolumeAutoscaling,omitempty"`
 	StorageScaling                  *StorageScalingSpec `json:"storageScaling,omitempty"`
 	VaultSpec                       *VaultSpec          `json:"vault,omitempty"`
+	VPA                             *VPASpec            `json:"vpa,omitempty"`
 	Search                          *SearchSpec         `json:"search,omitempty"`
 	DefaultRWConcern                *DefaultRWConcern   `json:"defaultRWConcern,omitempty"`
 }
@@ -253,6 +254,21 @@ func (spec *PerconaServerMongoDBSpec) IsVolumeExpansionEnabled() bool {
 	return spec.VolumeExpansionEnabled
 }
 
+// IsVolumeShrinkEnabled returns whether PVC shrink operations are enabled.
+func (spec *PerconaServerMongoDBSpec) IsVolumeShrinkEnabled() bool {
+	if spec.StorageScaling != nil {
+		return spec.StorageScaling.EnableVolumeShrink
+	}
+	return false
+}
+
+func (spec *PerconaServerMongoDBSpec) ShrinkMaxDiskUsagePercent() float64 {
+	if spec.StorageScaling != nil && spec.StorageScaling.ShrinkOpts != nil && spec.StorageScaling.ShrinkOpts.MaxDiskUsagePercent != nil {
+		return float64(*spec.StorageScaling.ShrinkOpts.MaxDiskUsagePercent) / 100.0
+	}
+	return 0.8
+}
+
 // StorageAutoscaling returns the storage autoscaling configuration.
 func (spec *PerconaServerMongoDBSpec) StorageAutoscaling() *AutoscalingSpec {
 	if spec.StorageScaling == nil {
@@ -397,6 +413,8 @@ type PerconaServerMongoDBStatus struct {
 	Size                 int32                               `json:"size"`
 	Ready                int32                               `json:"ready"`
 	StorageAutoscaling   map[string]StorageAutoscalingStatus `json:"storageAutoscaling,omitempty"`
+	VPAStatus            map[string]VPAComponentStatus       `json:"vpaStatus,omitempty"`
+	PVCShrink            map[string]PVCShrinkState           `json:"pvcShrink,omitempty"`
 	Search               map[string]SearchStatus             `json:"search,omitempty"`
 	VaultLastRequestedAt *metav1.Time                        `json:"vaultLastRequestedAt,omitempty"`
 }
@@ -417,6 +435,11 @@ const (
 
 	ConditionTypeTLSSecretsReady        AppState = "TLSSecretsReady"
 	ConditionTypeImageUpgradeInProgress AppState = "ImageUpgradeInProgress"
+
+	// ConditionTypeVPAReady reports whether the operator is able to read VerticalPodAutoscaler
+	// recommendations. It is False when spec.vpa.enabled is set but the VerticalPodAutoscaler
+	// CRD is not installed in the cluster, and absent when spec.vpa is disabled.
+	ConditionTypeVPAReady AppState = "VPAReady"
 )
 
 type ClusterCondition struct {
@@ -639,6 +662,7 @@ type NonVotingSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -659,6 +683,7 @@ type HiddenSpec struct {
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
+	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -907,6 +932,7 @@ type ReplsetSpec struct {
 	PrimaryPreferTagSelector PrimaryPreferTagSelectorSpec `json:"primaryPreferTagSelector,omitempty"`
 	Env                      []corev1.EnvVar              `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
+	VPA                      *ComponentVPASpec            `json:"vpa,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
 }
 
@@ -1066,8 +1092,25 @@ type StorageScalingSpec struct {
 	// When disabled, PVC sizes will not be modified even if storage changes in the spec
 	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
 
+	// EnableVolumeShrink allows PVC shrink operations by deleting and recreating PVCs
+	// Requires initial sync for data recovery; only enable when replica set is healthy
+	EnableVolumeShrink bool `json:"enableVolumeShrink,omitempty"`
+
+	// ShrinkOpts configures PVC shrink behavior
+	ShrinkOpts *ShrinkOptsSpec `json:"shrinkOpts,omitempty"`
+
 	// Autoscaling configures automatic storage expansion based on disk usage
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
+}
+
+// ShrinkOptsSpec defines options for PVC shrink operations
+type ShrinkOptsSpec struct {
+	// MaxDiskUsagePercent is the maximum allowed disk usage as a percentage
+	// of the target PVC size. Shrink is rejected if any pod exceeds this
+	// threshold. Default is 80 (20% headroom).
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=99
+	MaxDiskUsagePercent *int `json:"maxDiskUsagePercent,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -1138,6 +1181,7 @@ type MongosSpec struct {
 	Env                      []corev1.EnvVar            `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
 	HostAliases              []corev1.HostAlias         `json:"hostAliases,omitempty"`
+	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 	Logs                     *MongosLogsSpec            `json:"logs,omitempty"`
 }
 
@@ -1919,6 +1963,37 @@ func AnnotationPreservedRestartedAt(stsName string) string {
 	return annotationPreservedRestartedAtBase + "." + stsName
 }
 
+type PVCShrinkState struct {
+	TargetSize    string   `json:"targetSize"`
+	StartedAt     string   `json:"startedAt"`
+	Phase         string   `json:"phase"`
+	ProcessedPods []string `json:"processedPods"`
+	PrimaryPod    string   `json:"primaryPod"`
+}
+
+func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {
+	return len(cr.Status.PVCShrink) > 0
+}
+
+func (cr *PerconaServerMongoDB) GetPVCShrinkState(stsName string) (PVCShrinkState, bool) {
+	if cr.Status.PVCShrink == nil {
+		return PVCShrinkState{}, false
+	}
+	state, ok := cr.Status.PVCShrink[stsName]
+	return state, ok
+}
+
+func (cr *PerconaServerMongoDB) SetPVCShrinkState(stsName string, state PVCShrinkState) {
+	if cr.Status.PVCShrink == nil {
+		cr.Status.PVCShrink = make(map[string]PVCShrinkState)
+	}
+	cr.Status.PVCShrink[stsName] = state
+}
+
+func (cr *PerconaServerMongoDB) ClearPVCShrinkState(stsName string) {
+	delete(cr.Status.PVCShrink, stsName)
+}
+
 func (cr *PerconaServerMongoDB) PBMResyncNeeded() bool {
 	v, ok := cr.Annotations[AnnotationResyncPBM]
 	return ok && v != ""
@@ -2107,4 +2182,157 @@ func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {
 		replsets = append(replsets, cr.Spec.Sharding.ConfigsvrReplSet)
 	}
 	return replsets
+}
+
+// VPAUpdateMode controls how the operator applies VPA recommendations.
+// +kubebuilder:validation:Enum=Off;Auto
+type VPAUpdateMode string
+
+const (
+	// VPAUpdateModeOff — operator reads VPA recommendations and records them in status,
+	// but never patches CR resources. Use for observation/evaluation.
+	VPAUpdateModeOff VPAUpdateMode = "Off"
+
+	// VPAUpdateModeAuto — operator reads VPA recommendations, clamps them to the
+	// configured bounds, checks the stabilization window, patches CR resources, and
+	// triggers a SmartUpdate rolling restart.
+	VPAUpdateModeAuto VPAUpdateMode = "Auto"
+)
+
+// VPAControlledValues selects which resource fields are updated when a recommendation is applied.
+// +kubebuilder:validation:Enum=RequestsOnly;RequestsAndLimits
+type VPAControlledValues string
+
+const (
+	// VPAControlledValuesRequestsOnly — only resource requests are updated. Limits are left unchanged.
+	VPAControlledValuesRequestsOnly VPAControlledValues = "RequestsOnly"
+
+	// VPAControlledValuesRequestsAndLimits — requests are updated to the recommendation;
+	// limits are scaled proportionally to preserve the original limit/request ratio.
+	VPAControlledValuesRequestsAndLimits VPAControlledValues = "RequestsAndLimits"
+)
+
+// +kubebuilder:validation:XValidation:rule="!has(self.minAllowed) || !has(self.maxAllowed) || ((!('cpu' in self.minAllowed) || !('cpu' in self.maxAllowed) || quantity(string(self.minAllowed['cpu'])).compareTo(quantity(string(self.maxAllowed['cpu']))) <= 0) && (!('memory' in self.minAllowed) || !('memory' in self.maxAllowed) || quantity(string(self.minAllowed['memory'])).compareTo(quantity(string(self.maxAllowed['memory']))) <= 0))",message="minAllowed must not exceed maxAllowed for any resource"
+// VPASpec configures how the operator reads and applies VPA recommendations cluster-wide.
+// The operator never creates or modifies VPA objects — an external tool (e.g. VPA Recommender,
+// Goldilocks) must create and populate them. The operator only reads status.recommendation.
+type VPASpec struct {
+	// Enabled activates VPA recommendation reading. Defaults to false.
+	Enabled bool `json:"enabled"`
+
+	// UpdateMode controls whether recommendations are applied (Auto) or only observed (Off).
+	// Defaults to Off.
+	// +kubebuilder:default=Off
+	UpdateMode VPAUpdateMode `json:"updateMode,omitempty"`
+
+	// ControlledValues selects which resource fields are updated.
+	// Defaults to RequestsOnly.
+	// +kubebuilder:default=RequestsOnly
+	ControlledValues VPAControlledValues `json:"controlledValues,omitempty"`
+
+	// MinAllowed sets a floor for recommendations across all components.
+	// Per-component MinAllowed takes precedence when both are set.
+	MinAllowed corev1.ResourceList `json:"minAllowed,omitempty"`
+
+	// MaxAllowed sets a ceiling for recommendations across all components.
+	// Per-component MaxAllowed takes precedence when both are set.
+	MaxAllowed corev1.ResourceList `json:"maxAllowed,omitempty"`
+
+	// StabilizationWindow is the minimum time between adopting new recommendations.
+	// Prevents thrashing when recommendations change frequently.
+	// +kubebuilder:default="5m"
+	StabilizationWindow metav1.Duration `json:"stabilizationWindow,omitempty"`
+
+	// InPlaceResize applies committed resources by resizing running pods in place
+	// instead of recreating them, and falls back to recreating a pod when the
+	// resize is not possible. It requires Kubernetes 1.33+ and updateStrategy
+	// SmartUpdate, and only takes effect with updateMode Auto.
+	//
+	// Enabling or disabling it changes how the WiredTiger cache size is passed
+	// to mongod, which causes one rolling restart. While it is enabled, applies
+	// no longer restart pods, so stabilizationWindow can be lowered.
+	//
+	// The VerticalPodAutoscaler objects must keep updatePolicy.updateMode Off,
+	// otherwise the VPA updater evicts or resizes pods as well.
+	InPlaceResize bool `json:"inPlaceResize,omitempty"`
+}
+
+// ComponentVPASpec provides per-component VPA configuration that overrides the cluster-wide VPASpec.
+type ComponentVPASpec struct {
+	// ObjectName is the name of the VPA object to read recommendations from.
+	// When omitted the operator uses the convention "<cluster>-<component>-vpa".
+	ObjectName string `json:"objectName,omitempty"`
+
+	// MinAllowed overrides spec.vpa.minAllowed for this component.
+	MinAllowed corev1.ResourceList `json:"minAllowed,omitempty"`
+
+	// MaxAllowed overrides spec.vpa.maxAllowed for this component.
+	MaxAllowed corev1.ResourceList `json:"maxAllowed,omitempty"`
+
+	// StabilizationWindow overrides spec.vpa.stabilizationWindow for this component.
+	StabilizationWindow *metav1.Duration `json:"stabilizationWindow,omitempty"`
+}
+
+// VPAComponentStatus records the last observed and applied VPA recommendation for one component.
+type VPAComponentStatus struct {
+	// LastObservedAt is the time the recommendation in Recommended was read from
+	// the VPA object. Under updateMode Auto it is therefore also when that
+	// recommendation was adopted, and stabilizationWindow is measured from it.
+	LastObservedAt *metav1.Time `json:"lastObservedAt,omitempty"`
+
+	// LastAppliedAt is the time Applied last changed. Nil when updateMode is Off
+	// or nothing has been applied yet. It is informational: the stabilization
+	// window is measured from LastObservedAt, not from this.
+	LastAppliedAt *metav1.Time `json:"lastAppliedAt,omitempty"`
+
+	// Recommended is the recommendation the operator is currently sizing this
+	// component from. Under updateMode Auto a newer recommendation is not adopted
+	// here until the stabilization window allows it, and Message names the one
+	// waiting in the meantime. Under Off nothing is applied, so it simply tracks
+	// the latest observation.
+	Recommended corev1.ResourceList `json:"recommended,omitempty"`
+
+	// Applied is the last set of resource requirements that the operator has actually
+	// applied to the StatefulSet for this component. The StatefulSet is generated from this.
+	Applied *corev1.ResourceRequirements `json:"applied,omitempty"`
+
+	// Message contains additional explanation for the current VPA recommendations.
+	Message string `json:"message,omitempty"`
+}
+
+// VPAResources returns the resource requirements to generate a component's
+// StatefulSet from: the values the operator has committed from a VPA
+// recommendation, or the declared spec values when VPA is not managing this
+// component.
+func (cr *PerconaServerMongoDB) VPAResources(
+	statusKey string, declared corev1.ResourceRequirements,
+) corev1.ResourceRequirements {
+	// Off observes without changing anything, so the declared values apply. This
+	// also means switching Auto -> Off returns the component to what spec says.
+	if cr.Spec.VPA == nil || !cr.Spec.VPA.Enabled || cr.Spec.VPA.UpdateMode != VPAUpdateModeAuto {
+		return declared
+	}
+	s, ok := cr.Status.VPAStatus[statusKey]
+	if !ok || s.Applied == nil {
+		return declared
+	}
+	return *s.Applied.DeepCopy()
+}
+
+// VPAInPlaceResizeEnabled reports whether VPA-committed resources are applied to
+// running pods with in-place resize rather than by recreating them.
+func (cr *PerconaServerMongoDB) VPAInPlaceResizeEnabled() bool {
+	return cr.CompareVersion("1.24.0") >= 0 &&
+		cr.Spec.UpdateStrategy == SmartUpdateStatefulSetStrategyType &&
+		cr.Spec.VPA != nil &&
+		cr.Spec.VPA.Enabled &&
+		cr.Spec.VPA.UpdateMode == VPAUpdateModeAuto &&
+		cr.Spec.VPA.InPlaceResize
+}
+
+func (r ReplsetSpec) MongoReplsetName() string {
+	if name, err := r.CustomReplsetName(); err == nil {
+		return name
+	}
+	return r.Name
 }

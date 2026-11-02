@@ -427,6 +427,14 @@ spec:
       jsonPath: .status.lagTimeSeconds
       name: Lag(s)
       type: integer
+    - description: Ready PCSM instances
+      jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - description: Pod holding the PCSM lease
+      jsonPath: .status.activeInstance
+      name: Active
+      type: string
     - description: Created time
       jsonPath: .metadata.creationTimestamp
       name: Age
@@ -1177,6 +1185,19 @@ spec:
                     - error
                     type: string
                 type: object
+              podDisruptionBudget:
+                properties:
+                  maxUnavailable:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    x-kubernetes-int-or-string: true
+                  minAvailable:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    x-kubernetes-int-or-string: true
+                type: object
               podSecurityContext:
                 properties:
                   appArmorProfile:
@@ -1376,6 +1397,11 @@ spec:
                 type: object
               runtimeClassName:
                 type: string
+              size:
+                default: 1
+                format: int32
+                minimum: 1
+                type: integer
               source:
                 properties:
                   credentialsSecret:
@@ -1409,6 +1435,8 @@ spec:
             type: object
           status:
             properties:
+              activeInstance:
+                type: string
               conditions:
                 items:
                   properties:
@@ -1456,6 +1484,12 @@ spec:
                 - running
                 - finalized
                 type: string
+              readyReplicas:
+                format: int32
+                type: integer
+              size:
+                format: int32
+                type: integer
               startedAt:
                 format: date-time
                 type: string
@@ -9992,6 +10026,29 @@ spec:
                                   type: string
                               type: object
                           type: object
+                        vpa:
+                          properties:
+                            maxAllowed:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            minAllowed:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            objectName:
+                              type: string
+                            stabilizationWindow:
+                              type: string
+                          type: object
                       required:
                       - enabled
                       - size
@@ -12940,6 +12997,29 @@ spec:
                                 volumeName:
                                   type: string
                               type: object
+                          type: object
+                        vpa:
+                          properties:
+                            maxAllowed:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            minAllowed:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              type: object
+                            objectName:
+                              type: string
+                            stabilizationWindow:
+                              type: string
                           type: object
                       required:
                       - enabled
@@ -15998,6 +16078,29 @@ spec:
                             volumeName:
                               type: string
                           type: object
+                      type: object
+                    vpa:
+                      properties:
+                        maxAllowed:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          type: object
+                        minAllowed:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          type: object
+                        objectName:
+                          type: string
+                        stabilizationWindow:
+                          type: string
                       type: object
                   required:
                   - size
@@ -22975,6 +23078,29 @@ spec:
                                     type: string
                                 type: object
                             type: object
+                          vpa:
+                            properties:
+                              maxAllowed:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                type: object
+                              minAllowed:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                type: object
+                              objectName:
+                                type: string
+                              stabilizationWindow:
+                                type: string
+                            type: object
                         required:
                         - enabled
                         - size
@@ -25923,6 +26049,29 @@ spec:
                                   volumeName:
                                     type: string
                                 type: object
+                            type: object
+                          vpa:
+                            properties:
+                              maxAllowed:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                type: object
+                              minAllowed:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                type: object
+                              objectName:
+                                type: string
+                              stabilizationWindow:
+                                type: string
                             type: object
                         required:
                         - enabled
@@ -28982,6 +29131,29 @@ spec:
                                 type: string
                             type: object
                         type: object
+                      vpa:
+                        properties:
+                          maxAllowed:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            type: object
+                          minAllowed:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            type: object
+                          objectName:
+                            type: string
+                          stabilizationWindow:
+                            type: string
+                        type: object
                     required:
                     - size
                     - volumeSpec
@@ -31975,6 +32147,29 @@ spec:
                           - whenUnsatisfiable
                           type: object
                         type: array
+                      vpa:
+                        properties:
+                          maxAllowed:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            type: object
+                          minAllowed:
+                            additionalProperties:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                              x-kubernetes-int-or-string: true
+                            type: object
+                          objectName:
+                            type: string
+                          stabilizationWindow:
+                            type: string
+                        type: object
                     type: object
                 required:
                 - enabled
@@ -32008,6 +32203,15 @@ spec:
                     type: boolean
                   enableVolumeScaling:
                     type: boolean
+                  enableVolumeShrink:
+                    type: boolean
+                  shrinkOpts:
+                    properties:
+                      maxDiskUsagePercent:
+                        maximum: 99
+                        minimum: 1
+                        type: integer
+                    type: object
                 type: object
                 x-kubernetes-validations:
                 - message: autoscaling cannot be enabled when enableVolumeScaling
@@ -32133,6 +32337,53 @@ spec:
                 required:
                 - endpointURL
                 type: object
+              vpa:
+                properties:
+                  controlledValues:
+                    default: RequestsOnly
+                    enum:
+                    - RequestsOnly
+                    - RequestsAndLimits
+                    type: string
+                  enabled:
+                    type: boolean
+                  inPlaceResize:
+                    type: boolean
+                  maxAllowed:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    type: object
+                  minAllowed:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    type: object
+                  stabilizationWindow:
+                    default: 5m
+                    type: string
+                  updateMode:
+                    default: "Off"
+                    enum:
+                    - "Off"
+                    - Auto
+                    type: string
+                required:
+                - enabled
+                type: object
+                x-kubernetes-validations:
+                - message: minAllowed must not exceed maxAllowed for any resource
+                  rule: '!has(self.minAllowed) || !has(self.maxAllowed) || ((!(''cpu''
+                    in self.minAllowed) || !(''cpu'' in self.maxAllowed) || quantity(string(self.minAllowed[''cpu''])).compareTo(quantity(string(self.maxAllowed[''cpu''])))
+                    <= 0) && (!(''memory'' in self.minAllowed) || !(''memory'' in
+                    self.maxAllowed) || quantity(string(self.minAllowed[''memory''])).compareTo(quantity(string(self.maxAllowed[''memory''])))
+                    <= 0))'
             required:
             - image
             type: object
@@ -32196,6 +32447,29 @@ spec:
                 type: string
               pmmVersion:
                 type: string
+              pvcShrink:
+                additionalProperties:
+                  properties:
+                    phase:
+                      type: string
+                    primaryPod:
+                      type: string
+                    processedPods:
+                      items:
+                        type: string
+                      type: array
+                    startedAt:
+                      type: string
+                    targetSize:
+                      type: string
+                  required:
+                  - phase
+                  - primaryPod
+                  - processedPods
+                  - startedAt
+                  - targetSize
+                  type: object
+                type: object
               ready:
                 format: int32
                 type: integer
@@ -32275,6 +32549,60 @@ spec:
               vaultLastRequestedAt:
                 format: date-time
                 type: string
+              vpaStatus:
+                additionalProperties:
+                  properties:
+                    applied:
+                      properties:
+                        claims:
+                          items:
+                            properties:
+                              name:
+                                type: string
+                              request:
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          type: array
+                          x-kubernetes-list-map-keys:
+                          - name
+                          x-kubernetes-list-type: map
+                        limits:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          type: object
+                        requests:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          type: object
+                      type: object
+                    lastAppliedAt:
+                      format: date-time
+                      type: string
+                    lastObservedAt:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    recommended:
+                      additionalProperties:
+                        anyOf:
+                        - type: integer
+                        - type: string
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        x-kubernetes-int-or-string: true
+                      type: object
+                  type: object
+                type: object
             required:
             - ready
             - size
@@ -32432,6 +32760,28 @@ rules:
   - watch
   - create
   - delete
+- apiGroups:
+  - autoscaling.k8s.io
+  resources:
+  - verticalpodautoscalers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/resize
+  verbs:
+  - patch
+- apiGroups:
+  - apps
+  resources:
+  - controllerrevisions
+  verbs:
+  - get
+  - list
+  - watch
 ---
 apiVersion: v1
 kind: ServiceAccount
