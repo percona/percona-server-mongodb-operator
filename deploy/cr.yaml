@@ -23,6 +23,18 @@ spec:
 #     triggerThresholdPercent: 80
 #     growthStep: 2Gi
 #     maxSize: "10Gi"
+#  vpa:
+#    enabled: false
+#    updateMode: "Off"
+#    controlledValues: RequestsOnly
+#    minAllowed:
+#      cpu: 100m
+#      memory: 256Mi
+#    maxAllowed:
+#      cpu: "8"
+#      memory: 16Gi
+#    stabilizationWindow: 2h
+#    inPlaceResize: true
   crVersion: 1.24.0
   image: perconalab/percona-server-mongodb-operator:main-mongod8.0
   imagePullPolicy: Always
@@ -123,6 +135,13 @@ spec:
   replsets:
   - name: rs0
     size: 3
+#    # vpa per-replset overrides (requires spec.vpa.enabled: true).
+#    # objectName defaults to "<cluster>-rs0-vpa" when omitted.
+#    vpa:
+#      objectName: my-custom-vpa-for-rs0   # optional: override convention name
+#      minAllowed:
+#        memory: 512Mi                      # override global minAllowed for rs0
+#      stabilizationWindow: 4h             # override global stabilizationWindow
 #    terminationGracePeriodSeconds: 300
 #    serviceAccountName: default
 #    topologySpreadConstraints:
@@ -655,6 +674,12 @@ spec:
 
     mongos:
       size: 3
+#      # vpa per-mongos overrides (requires spec.vpa.enabled: true).
+#      # objectName defaults to "<cluster>-mongos-vpa" when omitted.
+#      vpa:
+#        objectName: my-custom-vpa-for-mongos
+#        maxAllowed:
+#          cpu: "4"
 #      terminationGracePeriodSeconds: 300
 #      serviceAccountName: default
 #      topologySpreadConstraints:
