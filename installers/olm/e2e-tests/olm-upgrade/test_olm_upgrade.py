@@ -96,15 +96,24 @@ def _version(csv: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.groups())
 
 
-def _default_from_csv(manifest: dict[str, Any], target_channel: str) -> str:
-    """Head of the newest channel older than the target one."""
-    heads = [
-        channel["currentCSV"]
+def _default_from_csv(manifest: dict[str, Any], target_csv: str) -> str:
+    """Newest CSV in the catalog older than the target."""
+    older = [
+        entry["name"]
         for channel in manifest["status"]["channels"]
-        if channel["name"] != target_channel
+        for entry in channel.get("entries", [])
+        if _version(entry["name"]) < _version(target_csv)
     ]
-    assert heads, f"Catalog has no channel to upgrade from besides {target_channel}"
-    return str(max(heads, key=_version))
+    assert older, f"Catalog has no version older than {target_csv}"
+    return str(max(older, key=_version))
+
+
+def _from_channel(manifest: dict[str, Any], from_csv: str, target_channel: str) -> str:
+    """The target channel when it holds the starting CSV, as in published catalogs."""
+    target = next(c for c in manifest["status"]["channels"] if c["name"] == target_channel)
+    if any(entry["name"] == from_csv for entry in target.get("entries", [])):
+        return target_channel
+    return channel_of_csv(manifest, from_csv)
 
 
 @pytest.fixture(scope="class")
@@ -166,8 +175,8 @@ def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmUpgr
             f"Catalog {source} upgrades to {target_csv}, but the version under test is "
             f"{expected}. Rebuild the catalog (make deploy/<type>) or set OLM_TARGET_VERSION."
         )
-    from_csv = os.environ.get("OLM_FROM_CSV") or _default_from_csv(manifest, target_channel)
-    from_channel = channel_of_csv(manifest, from_csv)
+    from_csv = os.environ.get("OLM_FROM_CSV") or _default_from_csv(manifest, target_csv)
+    from_channel = _from_channel(manifest, from_csv, target_channel)
     assert _version(from_csv) < _version(target_csv), (
         f"Starting CSV {from_csv} is not older than target {target_csv}"
     )
@@ -470,7 +479,7 @@ class TestOlmUpgrade:
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_write_data"])
     def test_upgrade_operator(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
-        """Switch the Subscription to the target channel and upgrade in one hop"""
+        """Upgrade to the target CSV in one hop"""
         state.pods = _db_pods(config)
         state.sts_revisions = _sts_revisions(config)
         state.events = {
@@ -478,21 +487,24 @@ class TestOlmUpgrade:
         }
         assert len(state.pods) >= 3, f"Expected the DB pods before upgrade, got {state.pods}"
 
-        kubectl_bin(
-            "patch",
-            SUBSCRIPTION,
-            config.package,
-            "-n",
-            config.namespace,
-            "--type=merge",
-            "-p",
-            f'{{"spec":{{"channel":"{config.target_channel}"}}}}',
-        )
+        # Published catalogs have one channel, so users upgrade without changing it. Only
+        # a catalog with a channel per minor needs the Subscription moved to the target.
+        if config.from_channel != config.target_channel:
+            kubectl_bin(
+                "patch",
+                SUBSCRIPTION,
+                config.package,
+                "-n",
+                config.namespace,
+                "--type=merge",
+                "-p",
+                f'{{"spec":{{"channel":"{config.target_channel}"}}}}',
+            )
 
         # Only the plan straight to the target. A Manual Subscription may still point at a
-        # plan for a newer patch of the old channel, created before the channel switch;
-        # delete it so OLM resolves the target. Bundles skip every older version
-        # (olm.skipRange / spec.skips), so one hop is enough.
+        # plan for a newer patch, created before the channel switch; delete it so OLM
+        # resolves the target. Bundles skip every older version (olm.skipRange /
+        # spec.skips), so one hop is enough.
         def to_target(csvs: list[str]) -> bool:
             return csvs == [config.target_csv]
 

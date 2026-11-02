@@ -179,9 +179,10 @@ docker.io/perconalab/percona-server-mongodb-operator:1.22.0-certified-bundle-dev
 docker.io/perconalab/percona-server-mongodb-operator:1.21.2-certified-bundle-dev-catalog
 ```
 
-All bundles are rendered into their own versioned channel. `BUNDLE_PACKAGE_CHANNEL`
-sets the channel prefix (`stable` by default), so versions are rendered into
-channels such as `stable-v1.23`, `stable-v1.22`, and `stable-v1.21`.
+All bundles are rendered into one channel, as in the published catalogs.
+`BUNDLE_PACKAGE_CHANNEL` sets its name (`stable` by default). Each version
+skips every older one (`olm.skipRange` in community catalogs, `spec.skips` in
+certified ones), so OLM upgrades any older version straight to the newest.
 
 ```bash
 make catalog-build-push/community VERSION=1.23.0
@@ -342,12 +343,13 @@ package (`OLM_CATALOG_TIMEOUT`, 300 seconds), so it can run right after
 
 The target is the head of the default channel, or of `OLM_TARGET_CHANNEL`. The
 test runs once for every bundle in the catalog older than the target. Each
-run installs that bundle with a Manual-approval Subscription, deploys a replica
-set from the bundle's example CR and writes data. It then switches the
-Subscription to the default channel. It deletes any pending InstallPlan left
-from the old channel, such as one for a newer patch, and approves only the
-InstallPlan straight to the newest version, so each starting version is
-upgraded directly. After the upgrade it checks that:
+run installs that bundle with a Manual-approval Subscription (`startingCSV`) on
+the target's channel, deploys a replica set from the bundle's example CR and
+writes data. It then approves only the InstallPlan straight to the target and
+deletes any other pending one, such as one for a newer patch, so each starting
+version is upgraded directly, without changing the channel, as users do. In a
+catalog with a channel per minor version, the test moves the Subscription to
+the target's channel first. After the upgrade it checks that:
 
 - only the target CSV is left and the operator runs its image;
 - the operator pod stays Ready and is not replaced or restarted, and its logs

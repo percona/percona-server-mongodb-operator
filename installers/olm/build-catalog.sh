@@ -311,6 +311,31 @@ write_catalog_template() {
 	} >"$CATALOG_TEMPLATE"
 }
 
+# The semver template always generates a channel per minor version: opm falls
+# back to GenerateMinorChannels when both generate options are false. Published
+# catalogs have one channel, so rebuild the channels as a single channel with
+# the edges the bundles declare: olm.skipRange (community) or spec.skips
+# (certified), both covering every older version.
+single_channel_catalog() {
+	jq -s -c \
+		--arg channel "${BUNDLE_PACKAGE_CHANNEL:-stable}" \
+		--arg type "$BUNDLE_TYPE" '
+		def ver: capture("v(?<a>[0-9]+)\\.(?<b>[0-9]+)\\.(?<c>[0-9]+)$") | [.a, .b, .c] | map(tonumber);
+		(map(select(.schema == "olm.bundle")) | sort_by(.name | ver)) as $bundles
+		| [range(0; $bundles | length) as $i
+			| {name: $bundles[$i].name}
+			+ (if $i > 0 then {replaces: $bundles[$i - 1].name} else {} end)
+			+ (if $type == "certified"
+				then (if $i > 1 then {skips: [$bundles[0:$i - 1][].name]} else {} end)
+				else {skipRange: ("<" + ($bundles[$i].name | ver | map(tostring) | join(".")))}
+				end)
+		] as $entries
+		| (map(select(.schema != "olm.channel")
+			| if .schema == "olm.package" then .defaultChannel = $channel else . end)
+			+ [{schema: "olm.channel", package: $bundles[0].package, name: $channel, entries: $entries}])[]
+	'
+}
+
 build_catalog() {
 	local image
 
@@ -324,9 +349,10 @@ build_catalog() {
 	echo "[olm] Rendering ${BUNDLE_TYPE} catalog"
 
 	opm alpha render-template semver \
-		-o yaml \
+		-o json \
 		<"$CATALOG_TEMPLATE" \
-		>"${CATALOG_DIR}/catalog.yaml"
+		>"${TMP_DIR}/catalog-semver.json"
+	single_channel_catalog <"${TMP_DIR}/catalog-semver.json" >"${CATALOG_DIR}/catalog.json"
 
 	echo "[olm] Validating ${BUNDLE_TYPE} catalog"
 	opm validate "$CATALOG_DIR"
