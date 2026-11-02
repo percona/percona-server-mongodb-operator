@@ -97,10 +97,7 @@ func ApplyIf(ctx context.Context, cl client.Client, obj client.Object, canWrite 
 		// The object was deleted between the read and the update.
 		obj.SetResourceVersion("")
 		if err := cl.Create(ctx, obj); err != nil {
-			if k8serrors.IsAlreadyExists(err) {
-				return ApplyStatusUnchanged, nil
-			}
-			return "", err
+			return "", errors.Wrap(err, "recreate object")
 		}
 
 		return ApplyStatusCreated, nil

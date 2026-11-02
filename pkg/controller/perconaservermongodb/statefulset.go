@@ -123,6 +123,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	return sfs, nil
 }
 
+var errJournalStorageDisable = errors.New("journalStorage can't be disabled on a running statefulset")
+
 func (r *ReconcilePerconaServerMongoDB) validateJournalStorage(ctx context.Context, sfs *appsv1.StatefulSet, wantJournal bool) error {
 	if wantJournal {
 		return nil
@@ -140,7 +142,7 @@ func (r *ReconcilePerconaServerMongoDB) validateJournalStorage(ctx context.Conte
 		return nil
 	}
 
-	return errors.Errorf("journalStorage can't be disabled on running statefulset %s", sfs.Name)
+	return errors.Wrapf(errJournalStorageDisable, "statefulset %s", sfs.Name)
 }
 
 func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {

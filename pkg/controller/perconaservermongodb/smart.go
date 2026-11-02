@@ -268,7 +268,7 @@ func (r *ReconcilePerconaServerMongoDB) stepDownPrimary(ctx context.Context, cr 
 
 	client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 	if err != nil {
-		return fmt.Errorf("failed to get mongo client: %v", err)
+		return errors.Wrap(err, "get mongo client")
 	}
 
 	defer func() {

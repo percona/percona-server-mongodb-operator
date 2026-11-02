@@ -59,8 +59,16 @@ func Containers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Contain
 }
 
 const journalMigrationScript = `set -e
-src="$1"
-dst="$2"
+data="$1"
+src="$2"
+dst="$3"
+if [ ! -e "$data/WiredTiger.wt" ]; then
+	if [ -n "$(ls -A "$dst" | grep -v '^lost+found$')" ]; then
+		echo "data volume is empty, removing stale journal from $dst"
+		find "$dst" -mindepth 1 -maxdepth 1 ! -name lost+found -exec rm -rf {} +
+	fi
+	exit 0
+fi
 [ -d "$src" ] || exit 0
 [ -n "$(ls -A "$src" 2>/dev/null)" ] || exit 0
 echo "migrating journal from $src to $dst"
@@ -80,14 +88,15 @@ echo "journal migrated to $dst"
 
 // JournalMigrationContainer copies an existing journal from the data volume to
 // the journal volume before mongod starts. Without it the journal volume would
-// shadow the write-ahead log the data files still reference.
+// shadow the write-ahead log the data files still reference. A journal left
+// behind after the data volume was wiped (shrink, resync) is removed.
 func JournalMigrationContainer(cr *api.PerconaServerMongoDB, securityContext *corev1.SecurityContext) corev1.Container {
 	return corev1.Container{
 		Name:            "journal-migration",
 		Image:           cr.Spec.Image,
 		ImagePullPolicy: cr.Spec.ImagePullPolicy,
 		Command:         []string{"/bin/sh", "-c", journalMigrationScript, "journal-migration"},
-		Args:            []string{config.MongodContainerJournalDir, config.JournalMigrationDir},
+		Args:            []string{config.MongodContainerDataDir, config.MongodContainerJournalDir, config.JournalMigrationDir},
 		SecurityContext: securityContext,
 		VolumeMounts: []corev1.VolumeMount{
 			{

@@ -48,6 +48,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	return nil
 }
 
+var (
+	errAuxiliaryShrink    = errors.New("shrinking is not supported")
+	errMissingStorageSpec = errors.New("missing storage spec")
+)
+
 // journalStorage returns the journal PVC spec for the component sts belongs to.
 func journalStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
 	component := sts.Labels[naming.LabelKubernetesComponent]
@@ -119,7 +124,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileAuxiliaryPVCs(ctx context.Conte
 		if err := r.revertVolumeTemplate(ctx, cr, sts, claimName, actual); err != nil {
 			return errors.Wrapf(err, "revert %s volume template for sts/%s", claimName, sts.Name)
 		}
-		return errors.Errorf("shrinking %s volumes is not supported: requested storage (%s) is less than actual storage (%s)", claimName, requested.String(), actual.String())
+		return errors.Wrapf(errAuxiliaryShrink, "%s: requested storage (%s) is less than actual storage (%s)", claimName, requested.String(), actual.String())
 	}
 
 	return r.resizeVolumesIfNeeded(ctx, cr, sts, ls, claimName, *pvcSpec)
@@ -538,7 +543,7 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 			pvcSpec = journalStorage(cr, sts)
 		}
 		if pvcSpec == nil || pvcSpec.Resources.Requests == nil {
-			return errors.Errorf("missing %s storage spec", claimName)
+			return errors.Wrap(errMissingStorageSpec, claimName)
 		}
 
 		log.Info("Reverting volume template", "claim", claimName, "component", component, "originalSize", originalSize)

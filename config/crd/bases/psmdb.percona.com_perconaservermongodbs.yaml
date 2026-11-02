@@ -1627,6 +1627,9 @@ spec:
                             && 'storage' in self.resources.requests
                     type: object
                 type: object
+                x-kubernetes-validations:
+                - message: storage requires the log collector to be enabled
+                  rule: '!has(self.storage) || (has(self.enabled) && self.enabled)'
               multiCluster:
                 properties:
                   DNSSuffix:

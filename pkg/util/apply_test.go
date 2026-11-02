@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -119,18 +120,36 @@ func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 		Annotations:     map[string]string{"percona.com/last-config-hash": "stale"},
 	}
 
-	notFound := k8serrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, nn.Name)
+	gr := schema.GroupResource{Group: "apps", Resource: "statefulsets"}
+	notFound := k8serrors.NewNotFound(gr, nn.Name)
+	conflict := k8serrors.NewConflict(gr, nn.Name, errors.New("modified"))
+	forbidden := k8serrors.NewForbidden(gr, nn.Name, errors.New("quota"))
 
 	tests := map[string]struct {
-		stored []client.Object
-		want   ApplyStatus
+		stored    []client.Object
+		updateErr error
+		createErr error
+		want      ApplyStatus
+		wantErr   func(error) bool
 	}{
 		"recreated when the object is gone": {
-			want: ApplyStatusCreated,
+			updateErr: notFound,
+			want:      ApplyStatusCreated,
 		},
-		"left alone when the object reappeared": {
-			stored: []client.Object{cached.DeepCopy()},
-			want:   ApplyStatusUnchanged,
+		"object reappeared before the create": {
+			stored:    []client.Object{cached.DeepCopy()},
+			updateErr: notFound,
+			wantErr:   k8serrors.IsAlreadyExists,
+		},
+		"create fails": {
+			updateErr: notFound,
+			createErr: forbidden,
+			wantErr:   k8serrors.IsForbidden,
+		},
+		"update fails with another error": {
+			updateErr: conflict,
+			want:      ApplyStatusUpdated,
+			wantErr:   k8serrors.IsConflict,
 		},
 	}
 
@@ -147,7 +166,13 @@ func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 						return nil
 					},
 					Update: func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.UpdateOption) error {
-						return notFound
+						return tt.updateErr
+					},
+					Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+						if tt.createErr != nil {
+							return tt.createErr
+						}
+						return c.Create(ctx, obj, opts...)
 					},
 				}).
 				Build()
@@ -158,6 +183,12 @@ func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 			}
 
 			status, err := Apply(t.Context(), cl, desired)
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.True(t, tt.wantErr(err), "unexpected error: %v", err)
+				assert.Equal(t, tt.want, status)
+				return
+			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, status)
 		})

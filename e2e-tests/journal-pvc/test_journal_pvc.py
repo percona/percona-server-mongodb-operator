@@ -3,7 +3,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 from lib.config import apply_cluster
@@ -99,10 +99,20 @@ def _fill_journal(pod: str, target_percent: int) -> None:
     fill_mb = (total_kb * target_percent // 100 - used_kb) // 1024
     if fill_mb <= 0:
         return
-    logger.info(f"Filling {JOURNAL_DIR} on {pod} with {fill_mb}MiB to cross the autoscaling threshold")
+    logger.info(
+        f"Filling {JOURNAL_DIR} on {pod} with {fill_mb}MiB to cross the autoscaling threshold"
+    )
     kubectl_bin(
-        "exec", pod, "-c", "mongod", "--",
-        "dd", "if=/dev/zero", f"of={JOURNAL_FILLER}", "bs=1M", f"count={fill_mb}",
+        "exec",
+        pod,
+        "-c",
+        "mongod",
+        "--",
+        "dd",
+        "if=/dev/zero",
+        f"of={JOURNAL_FILLER}",
+        "bs=1M",
+        f"count={fill_mb}",
     )
 
 
@@ -274,6 +284,34 @@ def _allows_volume_expansion() -> bool:
     )
 
 
+def _cr_state(kind: str, name: str) -> str:
+    return kubectl_bin("get", kind, name, "-o", "jsonpath={.status.state}", check=False).strip()
+
+
+def _wait_cr_ready(kind: str, name: str, max_attempts: int = 120, delay: int = 10) -> None:
+    logger.info(f"Waiting for {kind}/{name} to be ready")
+    try:
+        retry(
+            lambda: _cr_state(kind, name),
+            max_attempts=max_attempts,
+            delay=delay,
+            condition=lambda state: state in ("ready", "error"),
+        )
+    except RuntimeError:
+        pytest.fail(f"{kind}/{name} is {_cr_state(kind, name)}, expected ready")
+    state = _cr_state(kind, name)
+    assert state == "ready", f"{kind}/{name} ended in state {state}"
+
+
+def _seed_count(psmdb_client: MongoManager, namespace: str) -> str:
+    uri = f"testWriter:testWriter123456@{CLUSTER}-{RS}.{namespace}"
+    return psmdb_client.run_mongosh(
+        "db.getSiblingDB('journalStorage').seedData.countDocuments({})",
+        uri,
+        driver="mongodb",
+    ).strip()
+
+
 @dataclass(frozen=True)
 class JournalPVCConfig:
     namespace: str
@@ -297,8 +335,16 @@ class TestJournalPVC:
 
     @pytest.fixture(scope="class", autouse=True)
     @classmethod
-    def setup_tests(cls, config: JournalPVCConfig, test_paths: Paths) -> None:
-        kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets.yml")
+    def setup_tests(
+        cls, config: JournalPVCConfig, test_paths: Paths, deploy_s3_storage: Any
+    ) -> None:
+        kubectl_bin(
+            "apply",
+            "-f",
+            f"{test_paths['conf_dir']}/secrets.yml",
+            "-f",
+            f"{test_paths['conf_dir']}/s3-secret.yml",
+        )
 
     @pytest.mark.dependency()
     def test_01_create_cluster_without_journal_pvc(self, test_paths: Paths) -> None:
@@ -505,3 +551,90 @@ class TestJournalPVC:
             driver="mongodb",
         ).strip()
         assert count == "100", f"Expected 100 documents, got {count}"
+
+    @pytest.mark.dependency(depends=["TestJournalPVC::test_08_disabling_is_rejected"])
+    def test_09_resync_clears_the_stale_journal(
+        self, config: JournalPVCConfig, psmdb_client: MongoManager
+    ) -> None:
+        """A member whose data volume is wiped starts with a clean journal and resyncs."""
+        _patch_enable_journal_storage(_journal_storage_request() or self.INITIAL_SIZE)
+        wait_for_running(f"{CLUSTER}-{RS}", 3)
+        wait_cluster_consistency(CLUSTER)
+
+        pod = _pods()[-1]
+        data_pvc = f"{DATA_CLAIM}-{pod}"
+        journal_pvc = f"{JOURNAL_CLAIM}-{pod}"
+        journal_uid = _pvc_field(journal_pvc, "{.metadata.uid}")
+
+        kubectl_bin("delete", "pvc", data_pvc, "--wait=false")
+        kubectl_bin("delete", "pod", pod)
+        wait_for_running(f"{CLUSTER}-{RS}", 3)
+        wait_cluster_consistency(CLUSTER)
+
+        assert _pvc_field(journal_pvc, "{.metadata.uid}") == journal_uid, (
+            "the journal PVC must be reused, not recreated"
+        )
+        init_logs = kubectl_bin("logs", pod, "-c", "journal-migration")
+        assert "removing stale journal" in init_logs, (
+            f"{pod} did not clear the journal left by the old data volume: {init_logs}"
+        )
+        assert any(f.startswith("WiredTigerLog") for f in _journal_files(pod))
+        assert _seed_count(psmdb_client, config.namespace) == "100"
+
+    @pytest.mark.dependency(depends=["TestJournalPVC::test_09_resync_clears_the_stale_journal"])
+    def test_10_physical_backup_and_restore(
+        self, config: JournalPVCConfig, test_paths: Paths, psmdb_client: MongoManager
+    ) -> None:
+        """A physical backup taken with the journal on its own PVC restores the data."""
+        backup = "journal-physical"
+        kubectl_bin(
+            "apply",
+            "-f",
+            "-",
+            input_data=json.dumps(
+                {
+                    "apiVersion": "psmdb.percona.com/v1",
+                    "kind": "PerconaServerMongoDBBackup",
+                    "metadata": {"name": backup, "finalizers": ["percona.com/delete-backup"]},
+                    "spec": {
+                        "type": "physical",
+                        "clusterName": CLUSTER,
+                        "storageName": "local-s3",
+                    },
+                }
+            ),
+        )
+        _wait_cr_ready("psmdb-backup", backup)
+
+        uri = f"testWriter:testWriter123456@{CLUSTER}-{RS}.{config.namespace}"
+        psmdb_client.run_mongosh(
+            "db.getSiblingDB('journalStorage').seedData.insertOne({idx: 100}, {writeConcern: {w: 'majority', j: true}})",
+            uri,
+            driver="mongodb",
+        )
+        assert _seed_count(psmdb_client, config.namespace) == "101"
+
+        restore = f"restore-{backup}"
+        kubectl_bin(
+            "apply",
+            "-f",
+            "-",
+            input_data=json.dumps(
+                {
+                    "apiVersion": "psmdb.percona.com/v1",
+                    "kind": "PerconaServerMongoDBRestore",
+                    "metadata": {"name": restore},
+                    "spec": {"clusterName": CLUSTER, "backupName": backup},
+                }
+            ),
+        )
+        _wait_cr_ready("psmdb-restore", restore, max_attempts=180)
+        wait_for_running(f"{CLUSTER}-{RS}", 3)
+        wait_cluster_consistency(CLUSTER)
+
+        assert _seed_count(psmdb_client, config.namespace) == "100"
+        for pod in _pods():
+            assert _mount_device(pod, JOURNAL_DIR) != _mount_device(pod, DATA_DIR), (
+                f"{pod} lost the journal volume after the restore"
+            )
+            assert any(f.startswith("WiredTigerLog") for f in _journal_files(pod))

@@ -659,6 +659,8 @@ type NonVotingSpec struct {
 	// JournalStorage puts the WiredTiger journal on a dedicated PVC mounted at
 	// /data/db/journal. Enabling it on a running cluster rolls the members one at
 	// a time, copying each journal onto the new volume. Disabling it is rejected.
+	// Only the storage request can change afterwards; storageClassName and
+	// accessModes are immutable.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
@@ -684,6 +686,8 @@ type HiddenSpec struct {
 	// JournalStorage puts the WiredTiger journal on a dedicated PVC mounted at
 	// /data/db/journal. Enabling it on a running cluster rolls the members one at
 	// a time, copying each journal onto the new volume. Disabling it is rejected.
+	// Only the storage request can change afterwards; storageClassName and
+	// accessModes are immutable.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
@@ -938,6 +942,8 @@ type ReplsetSpec struct {
 	// JournalStorage puts the WiredTiger journal on a dedicated PVC mounted at
 	// /data/db/journal. Enabling it on a running cluster rolls the members one at
 	// a time, copying each journal onto the new volume. Disabling it is rejected.
+	// Only the storage request can change afterwards; storageClassName and
+	// accessModes are immutable.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
 }
 
@@ -2132,6 +2138,8 @@ func (cr *PerconaServerMongoDB) IsSearchEnabled() bool {
 
 // LogCollectorSpec defines the configuration for enabling and customizing
 // the log collection component that stores logs in a PVC.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.storage) || (has(self.enabled) && self.enabled)",message="storage requires the log collector to be enabled"
 type LogCollectorSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image,omitempty"`

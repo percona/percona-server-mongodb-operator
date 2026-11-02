@@ -393,6 +393,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 		}
 	}
 
+	if err := cr.validateLogStorage(); err != nil {
+		return err
+	}
+
 	setDefaultAccessModes(cr.LogStorage())
 
 	repls := cr.Spec.Replsets
@@ -576,6 +580,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 		if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
+		}
+
+		if err := cr.validateJournalStorage(replset); err != nil {
+			return errors.Wrapf(err, "replset %s", replset.Name)
 		}
 	}
 
@@ -1349,6 +1357,52 @@ func validateOCIStorages(cr *PerconaServerMongoDB) error {
 			} else if okeWorkloadIdentityRegion != stg.OCI.Region {
 				return errors.New("all OCI storages using okeWorkloadIdentity need to be in the same region")
 			}
+		}
+	}
+
+	return nil
+}
+
+var (
+	errStorageCRVersion = errors.New("dedicated storage requires crVersion 1.24.0 or newer")
+	errJournalInMemory  = errors.New("journalStorage is not supported with the inMemory storage engine")
+	errJournalNoDataPVC = errors.New("journalStorage requires the data volume to be a persistentVolumeClaim")
+)
+
+func (cr *PerconaServerMongoDB) validateLogStorage() error {
+	if cr.Spec.LogCollector == nil || cr.Spec.LogCollector.Storage == nil {
+		return nil
+	}
+	if cr.CompareVersion("1.24.0") < 0 {
+		return errors.Wrap(errStorageCRVersion, "logCollector.storage")
+	}
+	return nil
+}
+
+func (cr *PerconaServerMongoDB) validateJournalStorage(rs *ReplsetSpec) error {
+	components := []struct {
+		name    string
+		enabled bool
+		journal *StorageSpec
+		volume  *VolumeSpec
+	}{
+		{name: "journalStorage", enabled: true, journal: rs.JournalStorage, volume: rs.VolumeSpec},
+		{name: "nonvoting.journalStorage", enabled: rs.NonVoting.Enabled, journal: rs.NonVoting.JournalStorage, volume: rs.NonVoting.VolumeSpec},
+		{name: "hidden.journalStorage", enabled: rs.Hidden.Enabled, journal: rs.Hidden.JournalStorage, volume: rs.Hidden.VolumeSpec},
+	}
+
+	for _, c := range components {
+		if !c.enabled || c.journal == nil {
+			continue
+		}
+		if cr.CompareVersion("1.24.0") < 0 {
+			return errors.Wrap(errStorageCRVersion, c.name)
+		}
+		if rs.Storage != nil && rs.Storage.Engine == StorageEngineInMemory {
+			return errors.Wrap(errJournalInMemory, c.name)
+		}
+		if c.volume == nil || c.volume.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+			return errors.Wrap(errJournalNoDataPVC, c.name)
 		}
 	}
 

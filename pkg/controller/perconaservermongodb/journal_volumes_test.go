@@ -147,7 +147,7 @@ func TestValidateJournalStorage(t *testing.T) {
 		claims      []string
 		stsMissing  bool
 		wantJournal bool
-		wantErrMsg  string
+		wantErr     error
 	}{
 		"journal stays off": {
 			claims: []string{config.MongodDataVolClaimName},
@@ -161,8 +161,8 @@ func TestValidateJournalStorage(t *testing.T) {
 			wantJournal: true,
 		},
 		"disabling on a running statefulset": {
-			claims:     []string{config.MongodDataVolClaimName, config.MongodJournalVolClaimName},
-			wantErrMsg: "journalStorage can't be disabled on running statefulset",
+			claims:  []string{config.MongodDataVolClaimName, config.MongodJournalVolClaimName},
+			wantErr: errJournalStorageDisable,
 		},
 		"new statefulset": {
 			stsMissing:  true,
@@ -183,13 +183,11 @@ func TestValidateJournalStorage(t *testing.T) {
 			r := buildFakeClient(objs...)
 
 			err := r.validateJournalStorage(t.Context(), sts, tt.wantJournal)
-			if tt.wantErrMsg == "" {
-				require.NoError(t, err)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
 				return
 			}
-
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErrMsg)
+			require.NoError(t, err)
 		})
 	}
 }
@@ -203,7 +201,7 @@ func TestReconcileJournalPVCs(t *testing.T) {
 		requested    string
 		autoscaling  bool
 		pvcSize      string
-		wantErrMsg   string
+		wantErr      error
 		wantSize     string
 		wantSpecSize string
 	}{
@@ -217,7 +215,7 @@ func TestReconcileJournalPVCs(t *testing.T) {
 		"rejects a shrink and reverts the request": {
 			requested:    "1Gi",
 			pvcSize:      "3Gi",
-			wantErrMsg:   "shrinking mongod-journal volumes is not supported",
+			wantErr:      errAuxiliaryShrink,
 			wantSize:     "3Gi",
 			wantSpecSize: "3Gi",
 		},
@@ -248,9 +246,8 @@ func TestReconcileJournalPVCs(t *testing.T) {
 			r := buildFakeClient(cr, sts, pod, journalPVC, dataPVC)
 
 			err = r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodJournalVolClaimName, journalStorage(cr, sts))
-			if tt.wantErrMsg != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErrMsg)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
 			} else {
 				require.NoError(t, err)
 			}

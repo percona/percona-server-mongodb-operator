@@ -12,6 +12,15 @@ spec:
     enableVolumeScaling: true
   backup:
     enabled: true
+    storages:
+      local-s3:
+        type: s3
+        s3:
+          credentialsSecret: s3-secret
+          region: us-east-1
+          bucket: operator-testing
+          endpointUrl: http://s3-storage-all-in-one:8333/
+          insecureSkipTLSVerify: false
   replsets:
     - name: rs0
       size: 3

@@ -208,7 +208,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 		requested    string
 		autoscaling  bool
 		pvcSize      string
-		wantErrMsg   string
+		wantErr      error
 		wantLogSize  string
 		wantSpecSize string
 	}{
@@ -222,7 +222,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 		"rejects a shrink and reverts the request": {
 			requested:    "1Gi",
 			pvcSize:      "3Gi",
-			wantErrMsg:   "shrinking mongod-logs volumes is not supported",
+			wantErr:      errAuxiliaryShrink,
 			wantLogSize:  "3Gi",
 			wantSpecSize: "3Gi",
 		},
@@ -253,9 +253,8 @@ func TestReconcileLogPVCs(t *testing.T) {
 			r := buildFakeClient(cr, sts, pod, logPVC, dataPVC)
 
 			err = r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, cr.LogStorage())
-			if tt.wantErrMsg != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.wantErrMsg)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
@@ -274,65 +273,6 @@ func TestReconcileLogPVCs(t *testing.T) {
 			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), updatedCR))
 			gotSpec := updatedCR.LogStorage().Resources.Requests[corev1.ResourceStorage]
 			assert.Equal(t, tt.wantSpecSize, gotSpec.String(), "log storage request in the CR")
-		})
-	}
-}
-
-func TestPodsMissingClaimVolumes(t *testing.T) {
-	t.Parallel()
-
-	podWith := func(volumes ...string) corev1.Pod {
-		pod := corev1.Pod{}
-		for _, name := range volumes {
-			pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: name})
-		}
-		return pod
-	}
-
-	tests := map[string]struct {
-		claims []string
-		pods   []corev1.Pod
-		want   bool
-	}{
-		"every pod has every claim volume": {
-			claims: []string{config.MongodDataVolClaimName, config.MongodLogVolClaimName},
-			pods: []corev1.Pod{
-				podWith(config.MongodDataVolClaimName, config.MongodLogVolClaimName),
-				podWith(config.MongodDataVolClaimName, config.MongodLogVolClaimName),
-			},
-			want: false,
-		},
-		"one pod predates the log claim": {
-			claims: []string{config.MongodDataVolClaimName, config.MongodLogVolClaimName},
-			pods: []corev1.Pod{
-				podWith(config.MongodDataVolClaimName, config.MongodLogVolClaimName),
-				podWith(config.MongodDataVolClaimName),
-			},
-			want: true,
-		},
-		"log claim removed from the statefulset": {
-			claims: []string{config.MongodDataVolClaimName},
-			pods: []corev1.Pod{
-				podWith(config.MongodDataVolClaimName, config.MongodLogVolClaimName),
-			},
-			want: false,
-		},
-		"statefulset has no claim templates": {
-			pods: []corev1.Pod{podWith(config.MongodDataVolClaimName)},
-			want: false,
-		},
-		"no pods": {
-			claims: []string{config.MongodDataVolClaimName},
-			want:   false,
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			sts := logStorageSts("some-cluster-rs0", "log-storage", naming.ComponentMongod, tt.claims...)
-			assert.Equal(t, tt.want, podsMissingClaimVolumes(sts, tt.pods))
 		})
 	}
 }
