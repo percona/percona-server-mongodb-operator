@@ -1,7 +1,6 @@
 docs/**
-code-of-conduct.md
-CONTRIBUTING.md
-README.md
+*.md
+**/*.md
 .gitattributes
 .gitignore
 LICENSE
@@ -11,6 +10,3 @@ e2e-tests/release_versions
 .github/**
 .e2eignore
 installers/olm/**
-AGENTS.md
-**/AGENTS.md
-CLAUDE.md
