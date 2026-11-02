@@ -26,23 +26,14 @@ Contribution rules (CLA, Jira, branches, review) are in
 
 ## Code placement
 
-Agreed in team discussion: keep each piece of logic in one obvious place, so a
-feature touches only the packages it is about.
-
-- Domain logic (backups, restores, TLS, users and so on) belongs in its
-  package under `pkg/psmdb/<domain>/`. Controllers in `pkg/controller/*` call
-  it and orchestrate; a feature should not need edits in an unrelated
-  controller.
-- Before adding a helper, search for an existing one. When two functions do
-  the same job, use or merge them instead of adding a third. Example:
-  `isBackupRunning` and `isRestoreRunning` in
-  `pkg/controller/perconaservermongodb/backup.go` overlap with
-  `HasActiveJobs` in `pkg/psmdb/backup/backup.go`, and the copies have
-  drifted apart.
-- Boy scout rule: when the code you touch sits in the wrong package or
-  duplicates logic, make the small fix in the same PR. Leave larger
-  refactors to a separate PR and mention them in the description, so they
-  do not delay or conflict with the feature.
+- Put domain logic (backups, restores, TLS, users) in its package under
+  `pkg/psmdb/<domain>/`. Controllers in `pkg/controller/*` call it.
+- Before adding a helper, look for an existing one. Reuse or merge
+  duplicates instead of adding another. Example: `isBackupRunning` in
+  `pkg/controller/perconaservermongodb/backup.go` and `HasActiveJobs` in
+  `pkg/psmdb/backup/backup.go`.
+- Clean up the code you touch: small fixes go in the same PR, large
+  refactors in a separate one.
 
 ## Checks to run before pushing
 

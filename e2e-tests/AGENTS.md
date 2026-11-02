@@ -97,8 +97,6 @@ check against that.
 
 ## OLM and OpenShift tests
 
-Lessons from the OLM bundle upgrade test (K8SPSMDB-1753):
-
 - Use fully qualified OLM resource names (`subscriptions.operators.coreos.com`,
   `installplans.operators.coreos.com`, ...). On OpenShift, `subscription` can
   resolve to Knative's Subscription.
@@ -109,12 +107,12 @@ Lessons from the OLM bundle upgrade test (K8SPSMDB-1753):
   point at that stale pending plan, or at a plan or CSV that was already
   deleted. Delete pending plans you do not want, and read referenced plans and
   CSVs as "may be gone".
-- Approve only the plan you intend to test. Our bundles skip every older
+- Approve only the plan you intend to test. The bundles skip every older
   version (`olm.skipRange` in community bundles, `spec.skips` in certified
   ones), so an upgrade to the newest version is one hop.
 - OLM does not delete CRDs when a CSV is removed, and a newer CRD blocks
   installing an older bundle. Delete the CRDs before and after such a test.
-- Applying our CRD makes an InstallPlan emit `AppliedWithWarnings` for the
+- Applying the operator CRD makes an InstallPlan emit `AppliedWithWarnings` for the
   deprecated `psmdb.percona.com/v1-x-0` versions. Allow that event only when
   every warning in it is a deprecation notice.
 - Build the starting CR from the old bundle's `alm-examples`, so its
