@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -71,6 +72,7 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 		component      string
 		claims         []string
 		stsMissing     bool
+		terminating    bool
 		wantRecreated  bool
 	}{
 		"journal storage added": {
@@ -132,6 +134,13 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 			stsMissing:    true,
 			wantRecreated: false,
 		},
+		"waits for the old statefulset to be deleted": {
+			storage:       logStorage("2Gi"),
+			component:     naming.ComponentMongod,
+			claims:        []string{config.MongodDataVolClaimName},
+			terminating:   true,
+			wantRecreated: true,
+		},
 	}
 
 	for name, tt := range tests {
@@ -148,11 +157,15 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 			}
 
 			sts := logStorageSts("some-cluster-rs0", ns, tt.component, tt.claims...)
+			if tt.terminating {
+				sts.Finalizers = []string{metav1.FinalizerOrphanDependents}
+				sts.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+			}
 			nn := types.NamespacedName{Name: sts.Name, Namespace: ns}
 
 			objs := []client.Object{cr}
 			if !tt.stsMissing {
-				objs = append(objs, sts)
+				objs = append(objs, sts.DeepCopy())
 			}
 			r := buildFakeClient(objs...)
 
@@ -161,19 +174,27 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 				require.NoError(t, r.client.Get(t.Context(), nn, before))
 			}
 
-			recreated, err := r.recreateStsForStorageIfNeeded(t.Context(), cr, sts)
+			desired := sts.DeepCopy()
+			desired.ResourceVersion = "999"
+			recreated, err := r.recreateStsForStorageIfNeeded(t.Context(), cr, desired)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantRecreated, recreated)
 
 			after := new(appsv1.StatefulSet)
 			err = r.client.Get(t.Context(), nn, after)
-			if tt.stsMissing {
+			switch {
+			case tt.stsMissing:
 				assert.True(t, k8serrors.IsNotFound(err), "statefulset must not be created here")
-				return
+				assert.Empty(t, desired.ResourceVersion, "resourceVersion must be cleared for create")
+			case tt.terminating:
+				require.NoError(t, err)
+				assert.Equal(t, before.ResourceVersion, after.ResourceVersion, "terminating statefulset must be left alone")
+			case tt.wantRecreated:
+				assert.True(t, k8serrors.IsNotFound(err), "statefulset must be deleted and created on the next reconcile")
+			default:
+				require.NoError(t, err)
+				assert.Equal(t, before.ResourceVersion, after.ResourceVersion, "statefulset must not be touched")
 			}
-
-			require.NoError(t, err, "statefulset must exist after the call")
-			assert.Equal(t, tt.wantRecreated, before.ResourceVersion != after.ResourceVersion, "statefulset recreation")
 		})
 	}
 }

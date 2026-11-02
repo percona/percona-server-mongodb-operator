@@ -154,7 +154,17 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 
 	current := new(appsv1.StatefulSet)
 	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current); err != nil {
+		if k8sErrors.IsNotFound(err) {
+			// sfs may carry the resourceVersion of a statefulset deleted after it was read
+			sfs.ResourceVersion = ""
+			sfs.UID = ""
+		}
 		return false, client.IgnoreNotFound(err)
+	}
+
+	// orphan deletion keeps the object until its finalizer is processed
+	if current.DeletionTimestamp != nil {
+		return true, nil
 	}
 
 	hasVCT := func(claimName string) bool {
@@ -182,13 +192,6 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 
 	logf.FromContext(ctx).Info("Recreating statefulset to change storage", "statefulset", sfs.Name,
 		"logStorage", logChanged, "journalStorage", journalChanged)
-
-	sfs.ResourceVersion = ""
-	sfs.UID = ""
-
-	if err := r.createOrUpdate(ctx, sfs); err != nil {
-		return false, errors.Wrapf(err, "create statefulset/%s", sfs.Name)
-	}
 
 	return true, nil
 }
