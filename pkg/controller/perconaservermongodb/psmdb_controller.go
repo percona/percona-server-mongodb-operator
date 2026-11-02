@@ -115,6 +115,7 @@ func newReconciler(ctx context.Context, mgr manager.Manager) (reconcile.Reconcil
 
 	return &ReconcilePerconaServerMongoDB{
 		client:                 mgr.GetClient(),
+		apiReader:              mgr.GetAPIReader(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
 		reconcileIn:            util.ReconcileInterval(logf.Log.WithName("psmdb-controller"), "RECONCILE_INTERVAL"),
@@ -207,6 +208,7 @@ type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client     client.Client
+	apiReader  client.Reader
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
@@ -465,6 +467,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	err = r.reconcileBackups(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile backup tasks")
+	}
+
+	err = r.reconcileVPARecommendations(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile VPA recommendations")
 	}
 
 	clusterStatus, err = r.reconcileReplsets(ctx, cr, repls)
