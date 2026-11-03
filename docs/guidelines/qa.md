@@ -19,6 +19,9 @@ review skill `review-qa` applies both.
 - A "nothing changed" claim has a before and after snapshot: pod UIDs,
   container `restartCount`, StatefulSet revisions.
 - A new reconcile branch or CR field has a test for the error path too.
+- A negative check (an object must not exist, a line must not appear) has a
+  positive control: the same check finds the object or line when it is
+  present.
 
 ## e2e review checklist
 
@@ -36,6 +39,8 @@ Each item is a Major finding when missing, unless marked otherwise.
 - Allowlists for log lines and event reasons have one specific entry each,
   with a comment.
 - The version under test is asserted before an upgrade or image check.
+- A step that changes a CR field asserts the starting value first. A patch
+  that sets the value the fixture already has is a no-op and proves nothing.
 - Bash: `set -o errexit` kept, variables quoted, helpers from `functions`
   reused instead of copied.
 - pytest: dependent steps chained with `pytest.mark.dependency`,

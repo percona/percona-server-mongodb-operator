@@ -51,6 +51,15 @@ guidelines in `docs/guidelines/`, and the skills in `.agents/skills/`.
   `.claude/skills/<name>` pointing to `../../.agents/skills/<name>`, and add a
   row to the skills table in the root `AGENTS.md`.
 
+## Review set
+
+- `.agents/evals/review-set/` holds a generator for diffs with known defects
+  and clean diffs, and `expected.md` with the finding each diff must produce.
+  Its `README.md` says how to run and score it.
+- Rerun the set when a guideline or a review skill changes. A missed defect,
+  or a wrong Major or Critical finding on a clean diff, blocks the change.
+- Reviewers never read `expected.md`; the person running the set does.
+
 ## When a bug escapes
 
 When a bug reaches review or a release that a skill or guideline should have
@@ -58,4 +67,6 @@ caught: fix the bug, then find the step that missed it. A wrong or missing
 acceptance criterion points at the `plan` skill, a missing test at the
 `implement` skill or `qa.md`, a check that was not run at the `verify` skill,
 a missing rule at the guideline. Add the smallest rule that would have caught
-this bug, in the same PR or a follow-up. Do not add general advice.
+this bug, in the same PR or a follow-up. Do not add general advice. When a
+review skill should have caught the bug, add the diff as a case to the review
+set.

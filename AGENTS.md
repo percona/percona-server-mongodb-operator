@@ -66,6 +66,8 @@ Guidelines in `docs/guidelines/` hold the rules each review skill applies.
 Content for agents lives only in these tool-neutral files and in `AGENTS.md`;
 tool-specific directories only point at them. The rules for maintaining them
 are in [`docs/guidelines/agent-files.md`](docs/guidelines/agent-files.md).
+The review set in `.agents/evals/review-set/` checks the review skills against
+diffs with known defects; rerun it when a guideline or a review skill changes.
 
 | Skill | Use it to |
 | ----- | --------- |
