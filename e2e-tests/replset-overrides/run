@@ -37,7 +37,7 @@ delete_cluster() {
 
 test_override_host_after_deploy() {
 	kubectl_bin apply \
-		-f ${conf_dir}/secrets_with_tls.yml \
+		-f ${conf_dir}/secrets.yml \
 		-f ${conf_dir}/s3-secret.yml
 
 	echo "creating PSMDB cluster: ${cluster}"
@@ -74,7 +74,7 @@ test_override_host_after_deploy() {
 
 test_deploy_with_host_overrides() {
 	kubectl_bin apply \
-		-f ${conf_dir}/secrets_with_tls.yml \
+		-f ${conf_dir}/secrets.yml \
 		-f ${conf_dir}/s3-secret.yml
 
 	echo "creating external services"
@@ -100,7 +100,7 @@ test_deploy_with_host_overrides() {
 
 test_override_priority() {
 	kubectl_bin apply \
-		-f ${conf_dir}/secrets_with_tls.yml \
+		-f ${conf_dir}/secrets.yml \
 		-f ${conf_dir}/s3-secret.yml
 
 	echo "creating PSMDB cluster: ${cluster}"
