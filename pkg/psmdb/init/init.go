@@ -72,6 +72,7 @@ fi
 [ -d "$src" ] || exit 0
 [ -n "$(ls -A "$src" 2>/dev/null)" ] || exit 0
 echo "migrating journal from $src to $dst"
+find "$dst" -mindepth 1 -maxdepth 1 ! -name lost+found -exec rm -rf {} +
 find "$src" -mindepth 1 -maxdepth 1 -exec cp -a {} "$dst"/ \;
 sync
 for f in "$src"/*; do

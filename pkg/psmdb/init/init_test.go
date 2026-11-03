@@ -59,6 +59,18 @@ func TestJournalMigrationScript(t *testing.T) {
 			wantSrc: map[string]string{},
 			wantDst: map[string]string{"WiredTigerLog.0000000002": "journal"},
 		},
+		"restored journal replaces the old one": {
+			needsGNUStat: true,
+			setup: func(t *testing.T, d dirs) {
+				write(t, filepath.Join(d.data, "WiredTiger.wt"), "meta")
+				write(t, filepath.Join(d.src, "WiredTigerLog.0000000002"), "restored")
+				write(t, filepath.Join(d.dst, "WiredTigerLog.0000000002"), "old")
+				write(t, filepath.Join(d.dst, "WiredTigerLog.0000000005"), "old")
+				require.NoError(t, os.Mkdir(filepath.Join(d.dst, "lost+found"), 0o755))
+			},
+			wantSrc: map[string]string{},
+			wantDst: map[string]string{"WiredTigerLog.0000000002": "restored", "lost+found": ""},
+		},
 		"already migrated": {
 			setup: func(t *testing.T, d dirs) {
 				write(t, filepath.Join(d.data, "WiredTiger.wt"), "meta")

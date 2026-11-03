@@ -17,6 +17,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -141,6 +142,10 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 								{
 									Name:  "mongod",
 									Image: "percona/percona-server-mongodb:latest",
+									VolumeMounts: []corev1.VolumeMount{
+										{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
+										{Name: config.MongodJournalVolClaimName, MountPath: config.MongodContainerJournalDir},
+									},
 								},
 								{
 									Name:  naming.ContainerBackupAgent,
@@ -199,6 +204,14 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			assert.True(t,
 				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
 					return c.MountPath == "/etc/pbm/"
+				}))
+			assert.True(t,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
+					return c.Name == config.MongodDataVolClaimName
+				}))
+			assert.False(t,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
+					return c.Name == config.MongodJournalVolClaimName
 				}))
 
 			assert.Equal(t, tt.wantAWSChecksumEnvs,
