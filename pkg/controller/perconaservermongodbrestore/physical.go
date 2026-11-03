@@ -206,7 +206,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	err = retry.OnError(transientErrorBackoff, func(err error) bool {
 		return isTransientNetworkError(err) ||
-			strings.Contains(err.Error(), "container is not created or running") ||
+			isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
@@ -1068,6 +1068,22 @@ func isTransientNetworkError(err error) bool {
 		"TLS handshake timeout",
 		"error dialing backend",
 		"unable to upgrade connection",
+	} {
+		if strings.Contains(err.Error(), s) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isContainerUnavailableError reports exec failures caused by the target
+// container not running, e.g. while pods restart at the end of a restore.
+func isContainerUnavailableError(err error) bool {
+	for _, s := range []string{
+		"container is not created or running",
+		"container not found",
+		"cannot exec in a stopped container",
 	} {
 		if strings.Contains(err.Error(), s) {
 			return true
