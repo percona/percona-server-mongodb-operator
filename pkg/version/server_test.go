@@ -103,6 +103,8 @@ func writeGroups(t *testing.T, w http.ResponseWriter, names ...string) {
 }
 
 func TestServerVersionString(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		version *ServerVersion
 		want    string
@@ -136,6 +138,8 @@ func TestServerVersionString(t *testing.T) {
 }
 
 func TestMatchCloudProvider(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		groups map[string]struct{}
 		host   string
@@ -202,6 +206,8 @@ func TestMatchCloudProvider(t *testing.T) {
 }
 
 func TestDetectCloudProvider(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		handler http.HandlerFunc
 		host    string
@@ -255,6 +261,8 @@ func TestDetectCloudProvider(t *testing.T) {
 }
 
 func TestGetServer(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		handler      http.HandlerFunc
 		wantPlatform Platform
@@ -338,6 +346,8 @@ func TestGetServer(t *testing.T) {
 }
 
 func TestServerGroups(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		handler    http.HandlerFunc
 		want       map[string]struct{}
@@ -386,6 +396,8 @@ func TestServerGroups(t *testing.T) {
 }
 
 func TestDetectAKS(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		setup func(t *testing.T) *rest.Config
 		want  bool
@@ -435,6 +447,8 @@ func TestDetectAKS(t *testing.T) {
 }
 
 func TestProbeAPI(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		handler    http.HandlerFunc
 		want       k8sversion.Info

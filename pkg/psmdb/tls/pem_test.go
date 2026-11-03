@@ -9,6 +9,8 @@ import (
 )
 
 func TestEqualPEM(t *testing.T) {
+	t.Parallel()
+
 	ca1, _, err := IssueCA()
 	require.NoError(t, err)
 	ca2, _, err := IssueCA()

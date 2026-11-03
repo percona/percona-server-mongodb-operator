@@ -34,6 +34,8 @@ func (e *erroringGetClient) Get(ctx context.Context, key types.NamespacedName, o
 }
 
 func TestReconcileDeleteClearsFinalizersWhenPBMUnavailable(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "restored-mongodb"
@@ -108,6 +110,8 @@ func TestReconcileDeleteClearsFinalizersWhenPBMUnavailable(t *testing.T) {
 }
 
 func TestReconcileDeleteRetriesOnTransientClusterFetchError(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "restored-mongodb"

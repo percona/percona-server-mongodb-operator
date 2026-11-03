@@ -16,6 +16,88 @@ run_snapshot_backup() {
 		| kubectl_bin apply -f -
 }
 
+check_snapshot_backup_cancellation() (
+	set -o pipefail
+
+	local backup_name="backup-snapshot-canceled"
+	local pending_snapshot="${backup_name}-rs0"
+	local pending_content="${namespace}-${pending_snapshot}"
+	local lease_name="psmdb-${cluster}-backup-lock"
+
+	release_pending_snapshot() {
+		local patch
+		patch=$(kubectl_bin get volumesnapshot "${pending_snapshot}" --ignore-not-found -o json | jq -c '
+			{metadata: {
+				resourceVersion: .metadata.resourceVersion,
+				finalizers: [.metadata.finalizers[]? | select(. != "e2e.percona.com/hold-snapshot")]
+			}}
+		') || return
+		if [[ -n ${patch} ]]; then
+			kubectl_bin patch volumesnapshot "${pending_snapshot}" --type=merge -p "${patch}"
+		fi
+	}
+
+	cleanup_snapshot_cancellation() {
+		release_pending_snapshot || true
+		kubectl_bin delete volumesnapshot "${pending_snapshot}" --ignore-not-found --wait=false || true
+		kubectl_bin delete volumesnapshotcontent "${pending_content}" --ignore-not-found --wait=false || true
+	}
+	trap cleanup_snapshot_cancellation EXIT
+
+	# A test driver keeps the snapshot pending so the backup cannot finish.
+	# The test finalizer holds deletion so canceling and lease retention can be checked.
+	pending_content="${pending_content}" pending_snapshot="${pending_snapshot}" namespace="${namespace}" \
+		yq eval '
+			.metadata.name = strenv(pending_content) |
+			.spec.source.snapshotHandle = strenv(pending_content) |
+			.spec.volumeSnapshotRef.name = strenv(pending_snapshot) |
+			.spec.volumeSnapshotRef.namespace = strenv(namespace)
+		' "${test_dir}/conf/pending-snapshot-content.yml" \
+		| kubectl_bin create -f -
+	pending_content="${pending_content}" pending_snapshot="${pending_snapshot}" namespace="${namespace}" \
+		yq eval '
+			.metadata.name = strenv(pending_snapshot) |
+			.metadata.namespace = strenv(namespace) |
+			.spec.source.volumeSnapshotContentName = strenv(pending_content)
+		' "${test_dir}/conf/pending-snapshot.yml" \
+		| kubectl_bin create -f -
+
+	run_snapshot_backup "${backup_name}"
+	wait_backup "${backup_name}" running
+
+	local snapshots
+	snapshots=$(kubectl_bin get psmdb-backup "${backup_name}" -o jsonpath='{.status.snapshots[*].snapshotName}')
+	if [[ -z ${snapshots} ]]; then
+		echo "Expected snapshots to be recorded before cancellation"
+		kubectl_bin get psmdb-backup "${backup_name}" -o yaml
+		exit 1
+	fi
+
+	kubectl_bin annotate psmdb-backup "${backup_name}" percona.com/cancel-backup=true
+	wait_backup "${backup_name}" canceling
+	kubectl_bin wait --for=jsonpath='{.metadata.deletionTimestamp}' "volumesnapshot/${pending_snapshot}" --timeout=120s
+	kubectl_bin get lease "${lease_name}"
+
+	retry 5 1 release_pending_snapshot
+	wait_backup "${backup_name}" canceled
+
+	local backup pbm_name
+	backup=$(kubectl_bin get psmdb-backup "${backup_name}" -o json)
+	echo "${backup}" | jq -e '.status.completed != null and (.status.error // "") == "" and (.status.snapshots | length) == 0'
+	pbm_name=$(echo "${backup}" | jq -r '.status.pbmName')
+	kubectl_bin exec "${cluster}-rs0-0" -c backup-agent -- pbm describe-backup "${pbm_name}" -o json \
+		| jq -e '.status == "canceled"'
+
+	local snapshot
+	for snapshot in ${snapshots}; do
+		if [[ -n "$(kubectl_bin get volumesnapshot "${snapshot}" --ignore-not-found -o name)" ]]; then
+			echo "Snapshot ${snapshot} still exists after cancellation"
+			exit 1
+		fi
+	done
+	kubectl_bin wait --for=delete "lease/${lease_name}" --timeout=60s
+)
+
 run_snapshot_recovery_check() {
 	local backup_name=$1
 	local target_cluster=${2:-$cluster}
@@ -90,7 +172,10 @@ compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespa
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
 
-echo 'Running snapshot backup (unencrypted)'
+desc 'Canceling a running snapshot backup and checking cleanup'
+check_snapshot_backup_cancellation
+
+echo 'Running snapshot backup after cancellation (unencrypted)'
 backup_name="backup-snapshot"
 run_snapshot_backup "${backup_name}"
 wait_backup "${backup_name}"

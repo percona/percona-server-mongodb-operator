@@ -70,6 +70,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupHookScript(ctx context.Co
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcileBackupTasks(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if cr.IsPVCShrinkInProgress() {
+		return nil
+	}
+
 	ctasks := make(map[string]api.BackupTaskSpec)
 
 	for _, task := range cr.Spec.Backup.Tasks {
@@ -426,7 +430,7 @@ func (r *ReconcilePerconaServerMongoDB) isBackupRunning(ctx context.Context, cr 
 			continue
 		}
 		switch bcp.Status.State {
-		case api.BackupStateReady, api.BackupStateError, api.BackupStateWaiting:
+		case api.BackupStateReady, api.BackupStateError, api.BackupStateCanceled, api.BackupStateWaiting:
 			continue
 		default:
 			return true, nil

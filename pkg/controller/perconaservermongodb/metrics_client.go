@@ -16,6 +16,12 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
+var defaultPVCUsageBackoff = wait.Backoff{
+	Steps:    5,
+	Duration: 5 * time.Second,
+	Factor:   2.0,
+}
+
 // PVCUsage contains information about PVC disk usage
 type PVCUsage struct {
 	PVCName      string
@@ -43,10 +49,9 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 		mountPath = config.MongodContainerDataDir
 	}
 
-	backoff := wait.Backoff{
-		Steps:    5,
-		Duration: 5 * time.Second,
-		Factor:   2.0,
+	backoff := r.pvcUsageBackoff
+	if backoff.Steps <= 0 {
+		backoff = defaultPVCUsageBackoff
 	}
 
 	// Execute df command in the container mounting the volume to get disk usage

@@ -2,7 +2,9 @@ package tls
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,6 +25,8 @@ import (
 )
 
 func TestCreateIssuer(t *testing.T) {
+	t.Parallel()
+
 	customIssuerName := "issuer-conf-name"
 
 	cr := &api.PerconaServerMongoDB{
@@ -123,6 +128,8 @@ func TestCreateIssuer(t *testing.T) {
 }
 
 func TestCreateCAIssuer(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name: "psmdb-mock", Namespace: "psmdb",
 		Spec: api.PerconaServerMongoDBSpec{
@@ -146,6 +153,8 @@ func TestCreateCAIssuer(t *testing.T) {
 }
 
 func TestApplyIssuerDoesNotTouchUserClusterIssuer(t *testing.T) {
+	t.Parallel()
+
 	const issuerName = "user-cluster-issuer"
 
 	cr := &api.PerconaServerMongoDB{
@@ -184,6 +193,8 @@ func TestApplyIssuerDoesNotTouchUserClusterIssuer(t *testing.T) {
 }
 
 func TestApplyIssuerDoesNotTouchUserIssuer(t *testing.T) {
+	t.Parallel()
+
 	const issuerName = "user-issuer"
 
 	cr := &api.PerconaServerMongoDB{
@@ -224,6 +235,8 @@ func TestApplyIssuerDoesNotTouchUserIssuer(t *testing.T) {
 }
 
 func TestSharedClusterIssuerAcrossNamespaces(t *testing.T) {
+	t.Parallel()
+
 	const issuerName = "shared-cluster-issuer"
 
 	newCR := func(name, namespace string) *api.PerconaServerMongoDB {
@@ -341,6 +354,8 @@ func TestSharedClusterIssuerAcrossNamespaces(t *testing.T) {
 }
 
 func TestCreateCertificate(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	customIssuerName := "issuer-conf-name"
@@ -404,7 +419,74 @@ func TestCreateCertificate(t *testing.T) {
 	})
 }
 
+func TestPBMClientCertificate(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		issuer     cmmeta.IssuerReference
+		wantIssuer cmmeta.IssuerReference
+	}{
+		{
+			name:       "default issuer",
+			issuer:     cmmeta.IssuerReference{Kind: cm.IssuerKind},
+			wantIssuer: cmmeta.IssuerReference{Name: "psmdb-mock-psmdb-issuer", Kind: cm.IssuerKind},
+		},
+		{
+			name:       "custom issuer",
+			issuer:     cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+			wantIssuer: cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+		},
+		{
+			name:       "custom cluster issuer",
+			issuer:     cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.ClusterIssuerKind, Group: "cert-manager.io"},
+			wantIssuer: cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.ClusterIssuerKind, Group: "cert-manager.io"},
+		},
+		{
+			name:       "external issuer",
+			issuer:     cmmeta.IssuerReference{Name: "external-issuer", Kind: "AWSPCAIssuer", Group: "awspca.cert-manager.io"},
+			wantIssuer: cmmeta.IssuerReference{Name: "external-issuer", Kind: "AWSPCAIssuer", Group: "awspca.cert-manager.io"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			cr := &api.PerconaServerMongoDB{
+				Name: "psmdb-mock", Namespace: "psmdb",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Secrets:   &api.SecretsSpec{SSL: "server-tls"},
+					TLS:       &api.TLSSpec{IssuerConf: tc.issuer},
+				},
+			}
+			cert := CertificatePBMClient(cr)
+			obj := cert.Object()
+			assert.Equal(t, "psmdb-mock-pbm", cert.Name())
+			assert.Equal(t, cert.Name(), obj.Spec.SecretName)
+			assert.Equal(t, "psmdb-mock-pbm", obj.Spec.CommonName)
+			assert.Equal(t, []string{"PBM"}, obj.Spec.Subject.Organizations)
+			server := CertificateTLS(cr, false).Object()
+			assert.NotEqual(t, server.Spec.Subject, obj.Spec.Subject)
+			assert.Equal(t, server.Spec.IssuerRef, obj.Spec.IssuerRef)
+			assert.Equal(t, []cm.KeyUsage{cm.UsageDigitalSignature, cm.UsageKeyEncipherment, cm.UsageClientAuth}, obj.Spec.Usages)
+			assert.Empty(t, obj.Spec.DNSNames)
+			assert.Equal(t, tc.wantIssuer, obj.Spec.IssuerRef)
+
+			r := buildFakeClient(cr)
+			_, err := r.ApplyCertificate(ctx, cr, cert)
+			require.NoError(t, err)
+			issued := &cm.Certificate{}
+			require.NoError(t, r.GetClient().Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cert.Name()}, issued))
+			assert.Equal(t, obj.Spec, issued.Spec)
+
+			cr.Spec.Secrets.SSLPBM = "custom-pbm-tls"
+			assert.Equal(t, "psmdb-mock-pbm", cert.Name())
+			assert.Equal(t, "custom-pbm-tls", cert.SecretName())
+			assert.Equal(t, "custom-pbm-tls", cert.Object().Spec.SecretName)
+		})
+	}
+}
+
 func TestWaitForCerts(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cluster",
 		Namespace: "default",
@@ -489,10 +571,7 @@ func TestWaitForCerts(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			s := scheme.Scheme
-			s.AddKnownTypes(api.SchemeGroupVersion, new(api.PerconaServerMongoDB))
-			s.AddKnownTypes(cm.SchemeGroupVersion, new(cm.Certificate))
-			s.AddKnownTypes(corev1.SchemeGroupVersion, new(corev1.Secret))
+			s := testScheme()
 
 			objects := []client.Object{cr, tc.secret}
 			if tc.certificate != nil {
@@ -506,9 +585,10 @@ func TestWaitForCerts(t *testing.T) {
 				Build()
 
 			controller := &certManagerController{
-				cl:     cl,
-				scheme: s,
-				dryRun: false,
+				cl:           cl,
+				scheme:       s,
+				dryRun:       false,
+				pollInterval: time.Millisecond,
 			}
 
 			err := controller.WaitForCerts(t.Context(), cr, CertificateCA(cr))
@@ -517,9 +597,12 @@ func TestWaitForCerts(t *testing.T) {
 	}
 }
 
-// creates a fake client to mock API calls with the mock objects
-func buildFakeClient(objs ...client.Object) CertManagerController {
-	s := scheme.Scheme
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	if err := scheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
 
 	s.AddKnownTypes(
 		api.SchemeGroupVersion,
@@ -533,6 +616,13 @@ func buildFakeClient(objs ...client.Object) CertManagerController {
 		new(cm.Certificate),
 	)
 
+	return s
+})
+
+// creates a fake client to mock API calls with the mock objects
+func buildFakeClient(objs ...client.Object) CertManagerController {
+	s := testScheme()
+
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &certManagerController{
@@ -542,6 +632,8 @@ func buildFakeClient(objs ...client.Object) CertManagerController {
 }
 
 func TestApplyCertificateSansVersionGate(t *testing.T) {
+	t.Parallel()
+
 	newCR := func(crVersion string) *api.PerconaServerMongoDB {
 		return &api.PerconaServerMongoDB{
 			Name: "psmdb-mock", Namespace: "psmdb",

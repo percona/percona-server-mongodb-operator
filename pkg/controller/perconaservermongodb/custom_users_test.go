@@ -30,6 +30,8 @@ func (m *mockMongoClientForRoles) UpdateUserRoles(ctx context.Context, db, usern
 }
 
 func TestUpdateRoles(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name               string
 		user               *api.User
@@ -118,6 +120,8 @@ func TestUpdateRoles(t *testing.T) {
 }
 
 func TestRolesChanged(t *testing.T) {
+	t.Parallel()
+
 	r2 := &mongo.Role{
 		Privileges: []mongo.RolePrivilege{
 			{
@@ -345,6 +349,7 @@ func TestRolesChanged(t *testing.T) {
 }
 
 func TestValidateUser(t *testing.T) {
+	t.Parallel()
 
 	tests := map[string]struct {
 		user            *api.User
@@ -408,6 +413,8 @@ func TestValidateUser(t *testing.T) {
 }
 
 func TestGetCustomUserSecret(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	err := corev1.AddToScheme(scheme)
@@ -512,6 +519,8 @@ func TestGetCustomUserSecret(t *testing.T) {
 }
 
 func TestBuildAnnotationKey(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		crName    string
@@ -598,6 +607,8 @@ func TestBuildAnnotationKey(t *testing.T) {
 // the same annotation key, even when their cluster/user names share a long common
 // prefix that would have been truncated to an identical value by the old logic.
 func TestBuildAnnotationKeyNoCollision(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      strings.Repeat("c", 20),
 		Namespace: "namespace",
