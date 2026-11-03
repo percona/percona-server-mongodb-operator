@@ -3,6 +3,7 @@ package naming
 const (
 	AnnotationRestoreName     = perconaPrefix + "restore-name"
 	AnnotationSSLHash         = perconaPrefix + "ssl-hash"
+	AnnotationPBMTLSHash      = perconaPrefix + "pbm-tls-hash"
 	AnnotationSSLInternalHash = perconaPrefix + "ssl-internal-hash"
 	AnnotationConfigHash      = perconaPrefix + "configuration-hash"
 )
