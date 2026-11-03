@@ -8,7 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	coordv1 "k8s.io/api/coordination/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,7 +24,9 @@ import (
 func clusterSyncScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	s := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(s))
 	require.NoError(t, coordv1.AddToScheme(s))
+	require.NoError(t, policyv1.AddToScheme(s))
 	require.NoError(t, psmdbv1.SchemeBuilder.AddToScheme(s))
 	return s
 }
@@ -49,6 +53,8 @@ func leaseFor(cr *psmdbv1.PerconaServerMongoDBClusterSync, holder string) *coord
 }
 
 func TestReleaseClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		cr           *psmdbv1.PerconaServerMongoDBClusterSync
 		seedHolder   string
@@ -107,6 +113,8 @@ func TestReleaseClusterSyncLease(t *testing.T) {
 }
 
 func TestAcquireClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		seedLease   bool
 		seedHolder  string
@@ -169,6 +177,8 @@ func TestAcquireClusterSyncLease(t *testing.T) {
 }
 
 func TestEnsureReleaseLockFinalizer(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		existing []string
 		wantAdd  bool
@@ -201,6 +211,8 @@ func TestEnsureReleaseLockFinalizer(t *testing.T) {
 }
 
 func TestClusterBusyByBackupOrRestore(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "tgt"
@@ -290,6 +302,8 @@ func TestClusterBusyByBackupOrRestore(t *testing.T) {
 }
 
 func TestWriteAction(t *testing.T) {
+	t.Parallel()
+
 	assert.True(t, writeAction(actionStart))
 	assert.True(t, writeAction(actionResume))
 	assert.False(t, writeAction(actionPause))
@@ -298,6 +312,8 @@ func TestWriteAction(t *testing.T) {
 }
 
 func TestHandleDeletion(t *testing.T) {
+	t.Parallel()
+
 	t.Run("release-lock finalizer absent: noop, no lease touched", func(t *testing.T) {
 		// "other.example/keep" is just a stand-in: the API server
 		// refuses a deletionTimestamp without any finalizers, but

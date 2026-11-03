@@ -11,6 +11,8 @@ import (
 )
 
 func TestGetCertificateSans(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "mydb",
 		Namespace: "myns",
@@ -86,6 +88,8 @@ func TestGetCertificateSans(t *testing.T) {
 }
 
 func TestGetCertificateSansMongosServicePerPod(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "mydb",
 		Namespace: "myns",
@@ -134,6 +138,8 @@ func TestGetCertificateSansMongosServicePerPod(t *testing.T) {
 }
 
 func TestSansToIssue(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		current []string
 		desired []string

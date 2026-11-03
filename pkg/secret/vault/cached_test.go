@@ -42,6 +42,8 @@ Ekc4if1pC1UuXHjFwOqY
 -----END CERTIFICATE-----`
 
 func TestCachedClientUpdate_ReinitInterval(t *testing.T) {
+	t.Parallel()
+
 	tlsSecret := &corev1.Secret{
 		Name: "vault-tls", Namespace: "new",
 		Data: map[string][]byte{"ca.crt": []byte(fakeCACert)},
@@ -95,6 +97,8 @@ func TestCachedClientUpdate_ReinitInterval(t *testing.T) {
 }
 
 func TestCachedClientUpdate_TokenSecretRotation(t *testing.T) {
+	t.Parallel()
+
 	tlsSecret := &corev1.Secret{
 		Name: "vault-tls", Namespace: "new",
 		Data: map[string][]byte{"ca.crt": []byte(fakeCACert)},

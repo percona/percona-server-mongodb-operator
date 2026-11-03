@@ -22,6 +22,8 @@ import (
 )
 
 func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
+	t.Parallel()
+
 	nonRoot := true
 	allowPrivEsc := false
 	initSC := &corev1.SecurityContext{
@@ -243,6 +245,8 @@ func regularS3Storage() map[string]psmdbv1.BackupStorageSpec {
 }
 
 func TestUpdateKnownFields(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		a    map[string]any
@@ -333,6 +337,8 @@ func TestUpdateKnownFields(t *testing.T) {
 }
 
 func TestUpdateKnownFieldsDoesNotMutateInputs(t *testing.T) {
+	t.Parallel()
+
 	a := map[string]any{
 		"storage": map[string]any{
 			"s3": map[string]any{"bucket": "old-bucket"},
@@ -352,6 +358,8 @@ func TestUpdateKnownFieldsDoesNotMutateInputs(t *testing.T) {
 }
 
 func TestIsTransientNetworkError(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		err  error
 		want bool
@@ -398,6 +406,8 @@ func TestIsTransientNetworkError(t *testing.T) {
 }
 
 func TestCheckStatefulSetForPhysicalRestore(t *testing.T) {
+	t.Parallel()
+
 	const ns = "some-ns"
 
 	cluster := &psmdbv1.PerconaServerMongoDB{

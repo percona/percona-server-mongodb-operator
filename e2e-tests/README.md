@@ -213,7 +213,7 @@ You can use environment variables to override the default images used for testin
 * `IMAGE_PMM_CLIENT` - PMM client, `perconalab/pmm-client:3-dev-latest` by default
 * `IMAGE_PMM_SERVER` - PMM server, `perconalab/pmm-server:3-dev-latest` by default
 * `IMAGE_LOGCOLLECTOR` - log collector, `perconalab/fluentbit:main-logcollector` by default
-* `IMAGE_CLUSTERSYNC` - cluster sync, `percona/percona-clustersync-mongodb:0.9.0` by default
+* `IMAGE_CLUSTERSYNC` - cluster sync, `percona/percona-clustersync-mongodb:1.0.0` by default
 
 `REGISTRY_NAME` changes the registry prefix for `percona/*` and `perconalab/*`
 images. It defaults to `docker.io`.
