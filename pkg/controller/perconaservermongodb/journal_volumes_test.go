@@ -146,6 +146,7 @@ func TestValidateJournalStorage(t *testing.T) {
 	tests := map[string]struct {
 		claims      []string
 		stsMissing  bool
+		pvcs        []string
 		wantJournal bool
 		wantErr     error
 	}{
@@ -168,6 +169,15 @@ func TestValidateJournalStorage(t *testing.T) {
 			stsMissing:  true,
 			wantJournal: true,
 		},
+		"disabling while statefulset is recreated": {
+			stsMissing: true,
+			pvcs:       []string{"mongod-journal-some-cluster-rs0-0"},
+			wantErr:    errJournalStorageDisable,
+		},
+		"journal PVCs of another statefulset": {
+			stsMissing: true,
+			pvcs:       []string{"mongod-journal-some-cluster-rs0-nv-0"},
+		},
 	}
 
 	for name, tt := range tests {
@@ -179,6 +189,9 @@ func TestValidateJournalStorage(t *testing.T) {
 			objs := []client.Object{}
 			if !tt.stsMissing {
 				objs = append(objs, sts)
+			}
+			for _, name := range tt.pvcs {
+				objs = append(objs, &corev1.PersistentVolumeClaim{Name: name, Namespace: ns})
 			}
 			r := buildFakeClient(objs...)
 

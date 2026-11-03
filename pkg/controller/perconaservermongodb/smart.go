@@ -210,7 +210,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 				return errors.Wrap(err, "is pod primary")
 			}
 
-			if isPrimary && canStepDown {
+			if isPrimary && canStepDown && pod.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
 				if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
 					return err
 				}

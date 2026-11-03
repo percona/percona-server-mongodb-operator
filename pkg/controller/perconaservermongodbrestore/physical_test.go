@@ -145,6 +145,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 									VolumeMounts: []corev1.VolumeMount{
 										{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
 										{Name: config.MongodJournalVolClaimName, MountPath: config.MongodContainerJournalDir},
+										{Name: config.MongodLogVolClaimName, MountPath: config.MongodContainerDataLogsDir},
 									},
 								},
 								{
@@ -211,7 +212,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				}))
 			assert.False(t,
 				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
-					return c.Name == config.MongodJournalVolClaimName
+					return c.Name == config.MongodJournalVolClaimName || c.Name == config.MongodLogVolClaimName
 				}))
 
 			assert.Equal(t, tt.wantAWSChecksumEnvs,

@@ -4,6 +4,8 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
@@ -131,18 +133,45 @@ func (r *ReconcilePerconaServerMongoDB) validateJournalStorage(ctx context.Conte
 	}
 
 	current := new(appsv1.StatefulSet)
-	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current); err != nil {
-		return client.IgnoreNotFound(err)
+	err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get statefulset %s", sfs.Name)
 	}
 
-	hasJournal := slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-		return vct.Name == psmdbconfig.MongodJournalVolClaimName
-	})
+	var hasJournal bool
+	if err == nil {
+		hasJournal = slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+			return vct.Name == psmdbconfig.MongodJournalVolClaimName
+		})
+	} else {
+		// the journal moved off the data PVC, so retained journal PVCs still hold it
+		hasJournal, err = r.hasJournalPVCs(ctx, sfs)
+		if err != nil {
+			return err
+		}
+	}
 	if !hasJournal {
 		return nil
 	}
 
 	return errors.Wrapf(errJournalStorageDisable, "statefulset %s", sfs.Name)
+}
+
+func (r *ReconcilePerconaServerMongoDB) hasJournalPVCs(ctx context.Context, sfs *appsv1.StatefulSet) (bool, error) {
+	pvcList := new(corev1.PersistentVolumeClaimList)
+	if err := r.client.List(ctx, pvcList, client.InNamespace(sfs.Namespace)); err != nil {
+		return false, errors.Wrap(err, "list PVCs")
+	}
+
+	prefix := psmdbconfig.MongodJournalVolClaimName + "-" + sfs.Name + "-"
+	return slices.ContainsFunc(pvcList.Items, func(pvc corev1.PersistentVolumeClaim) bool {
+		ordinal, ok := strings.CutPrefix(pvc.Name, prefix)
+		if !ok {
+			return false
+		}
+		_, err := strconv.Atoi(ordinal)
+		return err == nil
+	}), nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
