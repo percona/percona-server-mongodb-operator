@@ -216,7 +216,9 @@ class TestInitDeploy:
         # the second cluster uses a GCS storage, so cloud-secret.yml is needed
         # even if SKIP_BACKUPS_TO_AWS_GCP_AZURE is set
         kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/cloud-secret.yml")
-        assert secret_exists("gcp-cs-sa-key-secret"), "gcp-cs-sa-key-secret not found in cloud-secret.yml"
+        assert secret_exists("gcp-cs-sa-key-secret"), (
+            "gcp-cs-sa-key-secret not found in cloud-secret.yml"
+        )
 
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster2}.yml")
         wait_for_running(config.cluster2, 3)

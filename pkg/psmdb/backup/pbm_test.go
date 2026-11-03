@@ -3,12 +3,14 @@ package backup
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
@@ -31,6 +33,8 @@ import (
 )
 
 func TestPBMConfigPriority(t *testing.T) {
+	t.Parallel()
+
 	secret := &corev1.Secret{
 		APIVersion: "/v1",
 		Kind:       "Secret",
@@ -78,6 +82,8 @@ func TestPBMConfigPriority(t *testing.T) {
 }
 
 func TestApplyCustomPBMConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := expectedCR(t)
 	cr.Status.BackupVersion = pbmVersion.Current().Version
 
@@ -158,6 +164,8 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 }
 
 func TestPBMStorageConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -865,6 +873,8 @@ func TestPBMStorageConfig(t *testing.T) {
 }
 
 func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -914,6 +924,8 @@ func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 }
 
 func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -945,15 +957,20 @@ func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
 	require.EqualError(t, err, "oss storage requires PBM 2.12.0 or newer")
 }
 
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	if err := scheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
+
+	return s
+})
+
 func buildFakeClient(t *testing.T, objs ...client.Object) client.WithWatch {
 	t.Helper()
 
-	s := scheme.Scheme
-	if err := scheme.AddToScheme(s); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-
-	return fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
+	return fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(objs...).Build()
 }
 
 func expectedCR(t *testing.T) *api.PerconaServerMongoDB {

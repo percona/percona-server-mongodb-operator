@@ -202,3 +202,6 @@ config/rbac/namespace/service_account.yaml
 e2e-tests/reports/
 e2e-tests/**/__pycache__/
 installers/olm/e2e-tests/**/__pycache__/
+
+# e2e test logs
+e2e-tests/logs/

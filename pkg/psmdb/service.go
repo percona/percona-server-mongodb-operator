@@ -26,11 +26,10 @@ func Service(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) *corev1.Ser
 	ls := naming.ServiceLabels(cr, replset)
 
 	svc := &corev1.Service{
-		APIVersion:  "v1",
-		Kind:        "Service",
-		Name:        naming.ServiceName(cr, replset),
-		Namespace:   cr.Namespace,
-		Annotations: replset.Expose.ServiceAnnotations,
+		APIVersion: "v1",
+		Kind:       "Service",
+		Name:       naming.ServiceName(cr, replset),
+		Namespace:  cr.Namespace,
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
@@ -182,41 +181,33 @@ func GetServiceAddr(ctx context.Context, svc corev1.Service, pod corev1.Pod, cl 
 
 var ErrNoIngressPoints = errors.New("ingress points not found")
 
+const serviceIngressPollInterval = time.Second
+
 func getServiceIngressAddr(ctx context.Context, cl client.Client, serviceNN types.NamespacedName) (string, error) {
-	var retries uint64 = 0
-
-	var ip string
-	var hostname string
-
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(serviceIngressPollInterval)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		retries++
-
-		if retries >= 1000 {
-			return "", ErrNoIngressPoints
-		}
-
+	for range 1000 {
 		svc := &corev1.Service{}
-		err := cl.Get(ctx, serviceNN, svc)
-		if err != nil {
+		if err := cl.Get(ctx, serviceNN, svc); err != nil {
 			return "", errors.Wrap(err, "failed to fetch service")
 		}
 
 		if len(svc.Status.LoadBalancer.Ingress) != 0 {
-			ip = svc.Status.LoadBalancer.Ingress[0].IP
-			hostname = svc.Status.LoadBalancer.Ingress[0].Hostname
+			if ip := svc.Status.LoadBalancer.Ingress[0].IP; ip != "" {
+				return ip, nil
+			}
+
+			if hostname := svc.Status.LoadBalancer.Ingress[0].Hostname; hostname != "" {
+				return hostname, nil
+			}
 		}
 
-		if ip != "" {
-			return ip, nil
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-ticker.C:
 		}
-
-		if hostname != "" {
-			return hostname, nil
-		}
-
 	}
 
 	return "", ErrNoIngressPoints

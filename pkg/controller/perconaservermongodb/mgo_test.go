@@ -280,6 +280,8 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 }
 
 func TestGetRoles(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		crVersion string
 		role      api.SystemUserRole
@@ -352,6 +354,8 @@ func TestGetRoles(t *testing.T) {
 }
 
 func TestCompareRoles(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		x        []mongo.Role
 		y        []mongo.Role

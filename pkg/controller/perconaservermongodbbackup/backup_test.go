@@ -21,6 +21,8 @@ import (
 )
 
 func TestBackupStartOSSStorageDestination(t *testing.T) {
+	t.Parallel()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -73,6 +75,8 @@ func TestBackupStartOSSStorageDestination(t *testing.T) {
 }
 
 func TestBackup_Status(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	tests := map[string]struct {

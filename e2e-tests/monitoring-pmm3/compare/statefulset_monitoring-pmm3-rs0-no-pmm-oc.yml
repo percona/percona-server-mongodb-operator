@@ -190,6 +190,10 @@ spec:
                   key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
                   name: internal-monitoring-pmm3-users
                   optional: false
+            - name: MONGODB_TLS_ENABLED
+              value: "true"
+            - name: MONGODB_TLS_INSECURE
+              value: "true"
           imagePullPolicy: IfNotPresent
           name: logrotate
           resources: {}
@@ -200,6 +204,9 @@ spec:
               name: mongod-data
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /etc/mongodb-ssl
+              name: ssl
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
