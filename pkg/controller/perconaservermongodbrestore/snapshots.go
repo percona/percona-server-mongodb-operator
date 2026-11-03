@@ -168,7 +168,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRequested(
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
+		return isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
@@ -737,10 +737,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 	err := retry.OnError(anotherOpBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
+		return isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
-			strings.Contains(err.Error(), "container not found") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
