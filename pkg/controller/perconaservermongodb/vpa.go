@@ -294,6 +294,16 @@ type vpaBounds struct {
 	maxAllowed corev1.ResourceList
 }
 
+func mergeResourceBounds(global, component corev1.ResourceList) corev1.ResourceList {
+	if len(component) == 0 {
+		return global
+	}
+	merged := make(corev1.ResourceList, len(global)+len(component))
+	maps.Copy(merged, global)
+	maps.Copy(merged, component)
+	return merged
+}
+
 // effectiveBounds merges global and per-component VPA bounds.
 // Per-component values take precedence over global defaults.
 func effectiveBounds(global *api.VPASpec, component *api.ComponentVPASpec) vpaBounds {
@@ -304,12 +314,8 @@ func effectiveBounds(global *api.VPASpec, component *api.ComponentVPASpec) vpaBo
 	if component == nil {
 		return b
 	}
-	if len(component.MinAllowed) > 0 {
-		b.minAllowed = component.MinAllowed
-	}
-	if len(component.MaxAllowed) > 0 {
-		b.maxAllowed = component.MaxAllowed
-	}
+	b.minAllowed = mergeResourceBounds(global.MinAllowed, component.MinAllowed)
+	b.maxAllowed = mergeResourceBounds(global.MaxAllowed, component.MaxAllowed)
 	return b
 }
 

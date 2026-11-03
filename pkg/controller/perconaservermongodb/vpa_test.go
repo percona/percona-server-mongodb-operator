@@ -389,6 +389,125 @@ func TestRatioScaledLimitsDoesNotMutateInput(t *testing.T) {
 	assertResourceList(t, rl("4", "8Gi"), scaled)
 }
 
+func TestEffectiveBounds(t *testing.T) {
+	tests := []struct {
+		name      string
+		global    *api.VPASpec
+		component *api.ComponentVPASpec
+		expected  vpaBounds
+	}{
+		{
+			name: "nil component leaves the global bounds in place",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: nil,
+			expected: vpaBounds{
+				minAllowed: rl("100m", "256Mi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "component without bounds falls back to the global ones",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{},
+			expected: vpaBounds{
+				minAllowed: rl("100m", "256Mi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "component bounds take precedence over the global ones",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", "1Gi"),
+				MaxAllowed: rl("4", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "1Gi"),
+				maxAllowed: rl("4", "8Gi"),
+			},
+		},
+		{
+			name: "a partial component bound overrides only the specified resource",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", ""),
+				MaxAllowed: rl("", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "256Mi"),
+				maxAllowed: rl("8", "8Gi"),
+			},
+		},
+		{
+			name: "min and max are merged independently",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", "1Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "1Gi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name:   "component bounds stand alone when the global spec sets none",
+			global: &api.VPASpec{},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", "1Gi"),
+				MaxAllowed: rl("4", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "1Gi"),
+				maxAllowed: rl("4", "8Gi"),
+			},
+		},
+		{
+			name: "a component bound for a resource the global spec omits is added",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", ""),
+				MaxAllowed: rl("8", ""),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("", "1Gi"),
+				MaxAllowed: rl("", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("100m", "1Gi"),
+				maxAllowed: rl("8", "8Gi"),
+			},
+		},
+		{
+			name:      "no bounds anywhere yields empty bounds",
+			global:    &api.VPASpec{},
+			component: &api.ComponentVPASpec{},
+			expected:  vpaBounds{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := effectiveBounds(tt.global, tt.component)
+			assertResourceList(t, tt.expected.minAllowed, got.minAllowed)
+			assertResourceList(t, tt.expected.maxAllowed, got.maxAllowed)
+		})
+	}
+}
+
 // vpaTestClient builds a real client whose RESTMapper either knows the
 // VerticalPodAutoscaler kind or does not, modelling a cluster with or without the
 // VPA CRD installed. The rest.Config points nowhere: these tests only exercise the
