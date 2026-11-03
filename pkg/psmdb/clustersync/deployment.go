@@ -10,6 +10,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 const (
@@ -24,8 +25,26 @@ const (
 	URISecretSourceKey = "source-uri"
 	URISecretTargetKey = "target-uri"
 
+	sslVolumeName = "ssl"
+	tmpVolumeName = "tmp"
+	tmpMountPath  = "/tmp"
+
+	TLSPEMFile = tmpMountPath + "/tls.pem"
+	TLSCAFile  = config.SSLDir + "/ca.crt"
+
 	defaultTopologyKey = "kubernetes.io/hostname"
 )
+
+var secretFileMode int32 = 292
+
+type TLS struct {
+	SecretName string
+	Hash       string
+}
+
+func (t TLS) Enabled() bool {
+	return t.SecretName != ""
+}
 
 // Size treats an unset spec.size as 1: the CRD defaults it, but objects
 // stored before the field existed come back as 0.
@@ -102,7 +121,7 @@ func deploymentStrategy(size int32) appsv1.DeploymentStrategy {
 }
 
 // PodTemplateSpec wires the PCSM container into a PodSpec.
-func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB) corev1.PodTemplateSpec {
+func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync, cluster *api.PerconaServerMongoDB, tls TLS) corev1.PodTemplateSpec {
 	ls := Labels(cr)
 	for k, v := range cr.Spec.Labels {
 		if _, ok := ls[k]; !ok {
@@ -110,11 +129,21 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync, cluster *api.Perco
 		}
 	}
 
+	annotations := cr.Spec.Annotations
+	if tls.Enabled() {
+		annotations = maps.Clone(annotations)
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
+		annotations[naming.AnnotationSSLHash] = tls.Hash
+	}
+
 	return corev1.PodTemplateSpec{
 		Labels:      ls,
-		Annotations: cr.Spec.Annotations,
+		Annotations: annotations,
 		Spec: corev1.PodSpec{
-			Containers:       []corev1.Container{Container(cr, cluster)},
+			Containers:       []corev1.Container{Container(cr, cluster, tls)},
+			Volumes:          volumes(cr, tls),
 			ImagePullSecrets: cr.Spec.ImagePullSecrets,
 			NodeSelector:     cr.Spec.NodeSelector,
 			Tolerations:      cr.Spec.Tolerations,
@@ -123,6 +152,31 @@ func PodTemplateSpec(cr *api.PerconaServerMongoDBClusterSync, cluster *api.Perco
 			SecurityContext:  cr.Spec.PodSecurityContext,
 		},
 	}
+}
+
+func volumes(cr *api.PerconaServerMongoDBClusterSync, tls TLS) []corev1.Volume {
+	if !tls.Enabled() {
+		return nil
+	}
+
+	volumes := []corev1.Volume{{
+		Name: sslVolumeName,
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  tls.SecretName,
+			DefaultMode: &secretFileMode,
+		},
+	}}
+	if readOnlyRootFilesystemEnabled(cr.Spec.ContainerSecurityContext) {
+		volumes = append(volumes, corev1.Volume{
+			Name:     tmpVolumeName,
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		})
+	}
+	return volumes
+}
+
+func readOnlyRootFilesystemEnabled(sc *corev1.SecurityContext) bool {
+	return sc != nil && sc.ReadOnlyRootFilesystem != nil && *sc.ReadOnlyRootFilesystem
 }
 
 // podAffinity defaults to preferred anti-affinity, from cluster crVersion

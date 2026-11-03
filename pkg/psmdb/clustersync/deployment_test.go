@@ -38,7 +38,7 @@ func TestDeploymentSpec(t *testing.T) {
 	}
 	// Scaling must change replicas only: a pod-template change rolls the
 	// whole group through a new ReplicaSet and forces a PCSM failover.
-	baseTemplate := PodTemplateSpec(syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: 1}), targetCluster("1.24.0"))
+	baseTemplate := PodTemplateSpec(syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: 1}), targetCluster("1.24.0"), TLS{})
 
 	tests := map[string]struct {
 		size         int32
@@ -56,7 +56,7 @@ func TestDeploymentSpec(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: tc.size})
 
-			spec := DeploymentSpec(cr, PodTemplateSpec(cr, targetCluster("1.24.0")))
+			spec := DeploymentSpec(cr, PodTemplateSpec(cr, targetCluster("1.24.0"), TLS{}))
 
 			require.NotNil(t, spec.Replicas)
 			assert.Equal(t, tc.wantReplicas, *spec.Replicas)
@@ -197,7 +197,7 @@ func TestPodAffinity(t *testing.T) {
 				Labels:   tc.labels,
 			})
 
-			tmpl := PodTemplateSpec(cr, tc.cluster)
+			tmpl := PodTemplateSpec(cr, tc.cluster, TLS{})
 
 			tc.assert(t, tmpl.Spec.Affinity, Labels(cr))
 			for k := range tc.labels {
@@ -260,7 +260,7 @@ func TestPodDisruptionBudget(t *testing.T) {
 			assert.Equal(t, tc.wantMinAvailable, pdb.Spec.MinAvailable)
 
 			require.NotNil(t, pdb.Spec.Selector)
-			assert.Equal(t, DeploymentSpec(cr, PodTemplateSpec(cr, targetCluster("1.24.0"))).Selector.MatchLabels, pdb.Spec.Selector.MatchLabels,
+			assert.Equal(t, DeploymentSpec(cr, PodTemplateSpec(cr, targetCluster("1.24.0"), TLS{})).Selector.MatchLabels, pdb.Spec.Selector.MatchLabels,
 				"a PDB selecting anything other than the deployment's pods protects nothing")
 		})
 	}

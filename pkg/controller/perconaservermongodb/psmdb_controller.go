@@ -56,6 +56,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/secret/vault"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
+	"github.com/percona/percona-server-mongodb-operator/pkg/versionservice"
 )
 
 const eventRegardingNameIndex = "regarding.name"
@@ -114,6 +115,7 @@ func newReconciler(ctx context.Context, mgr manager.Manager) (reconcile.Reconcil
 
 	return &ReconcilePerconaServerMongoDB{
 		client:                 mgr.GetClient(),
+		apiReader:              mgr.GetAPIReader(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
 		reconcileIn:            util.ReconcileInterval(logf.Log.WithName("psmdb-controller"), "RECONCILE_INTERVAL"),
@@ -206,6 +208,7 @@ type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client     client.Client
+	apiReader  client.Reader
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
 
@@ -433,7 +436,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	}
 
 	if cr.Status.MongoVersion == "" || strings.HasSuffix(cr.Status.MongoVersion, "intermediate") {
-		err := r.ensureVersion(ctx, cr, VersionServiceClient{})
+		err := r.ensureVersion(ctx, cr, versionservice.Client{})
 		if err != nil {
 			log.Info("failed to ensure version, running with default", "error", err)
 		}
@@ -464,6 +467,11 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	err = r.reconcileBackups(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile backup tasks")
+	}
+
+	err = r.reconcileVPARecommendations(ctx, cr)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "reconcile VPA recommendations")
 	}
 
 	clusterStatus, err = r.reconcileReplsets(ctx, cr, repls)
@@ -498,12 +506,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, errors.Wrap(err, "export services")
 	}
 
-	err = r.scheduleEnsureVersion(ctx, cr, VersionServiceClient{})
+	err = r.scheduleEnsureVersion(ctx, cr, versionservice.Client{})
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "schedule ensure version job")
 	}
 
-	err = r.scheduleTelemetryRequests(ctx, cr, VersionServiceClient{})
+	err = r.scheduleTelemetryRequests(ctx, cr, versionservice.Client{})
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "schedule telemetry job")
 	}
@@ -738,6 +746,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *
 		}
 		rs.Arbiter.Enabled = false
 		rs.NonVoting.Enabled = false
+		rs.Hidden.Enabled = false
 	}
 
 	if err := r.deletePSMDBPods(ctx, cr); err != nil {
@@ -1101,7 +1110,7 @@ func (r *ReconcilePerconaServerMongoDB) upgradeFCVIfNeeded(ctx context.Context, 
 		return errors.Wrap(err, "failed to get FCV")
 	}
 
-	if !canUpgradeVersion(fcv, MajorMinor(fcvsv)) {
+	if !versionservice.CanUpgradeVersion(fcv, versionservice.MajorMinor(fcvsv)) {
 		return nil
 	}
 

@@ -10,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 // TestDefaultProbesTargetMetrics is the HA-critical probe assertion.
@@ -90,7 +92,7 @@ func TestContainerProbes(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			c := Container(syncCR(tc.spec), tc.cluster)
+			c := Container(syncCR(tc.spec), tc.cluster, TLS{})
 
 			assert.Equal(t, tc.wantLiveness, c.LivenessProbe)
 			assert.Equal(t, tc.wantReadiness, c.ReadinessProbe)
@@ -101,7 +103,7 @@ func TestContainerProbes(t *testing.T) {
 	// every standby NotReady and leave the group with no eligible
 	// successor. /metrics is served by ACTIVE and STANDBY alike.
 	t.Run("default probes target /metrics, never /status", func(t *testing.T) {
-		c := Container(syncCR(api.PerconaServerMongoDBClusterSyncSpec{}), targetCluster("1.24.0"))
+		c := Container(syncCR(api.PerconaServerMongoDBClusterSyncSpec{}), targetCluster("1.24.0"), TLS{})
 
 		for name, probe := range map[string]*corev1.Probe{
 			"liveness":  c.LivenessProbe,
@@ -117,7 +119,7 @@ func TestContainerProbes(t *testing.T) {
 	t.Run("override is deep-copied (no shared pointer with spec)", func(t *testing.T) {
 		cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{LivenessProbe: customLiveness.DeepCopy()})
 
-		c := Container(cr, targetCluster("1.24.0"))
+		c := Container(cr, targetCluster("1.24.0"), TLS{})
 		before := c.LivenessProbe.PeriodSeconds
 		cr.Spec.LivenessProbe.PeriodSeconds = 99
 
@@ -212,7 +214,7 @@ func TestContainerEnv(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			c := Container(syncCR(tc.spec), targetCluster("1.24.0"))
+			c := Container(syncCR(tc.spec), targetCluster("1.24.0"), TLS{})
 			assert.Equal(t, tc.want, c.Env)
 		})
 	}
@@ -242,7 +244,7 @@ func TestContainerGroupNameVersionGate(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := syncCR(api.PerconaServerMongoDBClusterSyncSpec{Size: tc.size})
-			assert.Equal(t, tc.want, groupName(Container(cr, tc.cluster)))
+			assert.Equal(t, tc.want, groupName(Container(cr, tc.cluster, TLS{})))
 		})
 	}
 }
@@ -281,8 +283,73 @@ func TestContainerArgs(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			c := Container(syncCR(api.PerconaServerMongoDBClusterSyncSpec{PCSMConfig: tc.pcsm}), targetCluster("1.24.0"))
+			c := Container(syncCR(api.PerconaServerMongoDBClusterSyncSpec{PCSMConfig: tc.pcsm}), targetCluster("1.24.0"), TLS{})
 			assert.Equal(t, tc.want, c.Args)
 		})
 	}
+}
+
+func TestContainerTLS(t *testing.T) {
+	readOnlyRoot := &corev1.SecurityContext{ReadOnlyRootFilesystem: new(true)}
+	tls := TLS{SecretName: "target-ssl", Hash: "abc123"}
+
+	t.Run("tls disabled: image entrypoint and no volumes", func(t *testing.T) {
+		pod := PodTemplateSpec(&api.PerconaServerMongoDBClusterSync{Name: "mysync"}, nil, TLS{})
+
+		assert.Empty(t, pod.Spec.Containers[0].Command)
+		assert.Empty(t, pod.Spec.Containers[0].VolumeMounts)
+		assert.Empty(t, pod.Spec.Volumes)
+		assert.NotContains(t, pod.Annotations, naming.AnnotationSSLHash)
+	})
+
+	t.Run("tls enabled: ssl secret mounted and PEM assembled before entrypoint", func(t *testing.T) {
+		pod := PodTemplateSpec(&api.PerconaServerMongoDBClusterSync{Name: "mysync"}, nil, tls)
+
+		require.Len(t, pod.Spec.Volumes, 1)
+		require.NotNil(t, pod.Spec.Volumes[0].Secret)
+		assert.Equal(t, sslVolumeName, pod.Spec.Volumes[0].Name)
+		assert.Equal(t, "target-ssl", pod.Spec.Volumes[0].Secret.SecretName)
+
+		c := pod.Spec.Containers[0]
+		require.Len(t, c.VolumeMounts, 1)
+		assert.Equal(t, sslVolumeName, c.VolumeMounts[0].Name)
+		assert.Equal(t, config.SSLDir, c.VolumeMounts[0].MountPath)
+		assert.True(t, c.VolumeMounts[0].ReadOnly)
+
+		require.Len(t, c.Command, 4)
+		assert.Equal(t, "/bin/bash", c.Command[0])
+		assert.Contains(t, c.Command[2], "cat "+config.SSLDir+"/tls.key "+config.SSLDir+"/tls.crt > "+TLSPEMFile)
+		assert.Contains(t, c.Command[2], `exec `+imageEntrypoint+` pcsm "$@"`)
+		assert.Equal(t, "abc123", pod.Annotations[naming.AnnotationSSLHash])
+	})
+
+	t.Run("tls enabled with read-only root: writable /tmp added", func(t *testing.T) {
+		cr := &api.PerconaServerMongoDBClusterSync{
+			Name: "mysync",
+			Spec: api.PerconaServerMongoDBClusterSyncSpec{ContainerSecurityContext: readOnlyRoot},
+		}
+		pod := PodTemplateSpec(cr, nil, tls)
+
+		require.Len(t, pod.Spec.Volumes, 2)
+		assert.Equal(t, tmpVolumeName, pod.Spec.Volumes[1].Name)
+		require.NotNil(t, pod.Spec.Volumes[1].EmptyDir)
+
+		mounts := pod.Spec.Containers[0].VolumeMounts
+		require.Len(t, mounts, 2)
+		assert.Equal(t, tmpVolumeName, mounts[1].Name)
+		assert.Equal(t, tmpMountPath, mounts[1].MountPath)
+	})
+
+	t.Run("user annotations are preserved and not mutated", func(t *testing.T) {
+		userAnnotations := map[string]string{"team": "sre"}
+		cr := &api.PerconaServerMongoDBClusterSync{
+			Name: "mysync",
+			Spec: api.PerconaServerMongoDBClusterSyncSpec{Annotations: userAnnotations},
+		}
+		pod := PodTemplateSpec(cr, nil, tls)
+
+		assert.Equal(t, "sre", pod.Annotations["team"])
+		assert.Equal(t, "abc123", pod.Annotations[naming.AnnotationSSLHash])
+		assert.NotContains(t, userAnnotations, naming.AnnotationSSLHash, "spec annotations must not be mutated")
+	})
 }
