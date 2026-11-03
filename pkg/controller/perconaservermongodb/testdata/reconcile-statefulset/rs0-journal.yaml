@@ -313,17 +313,20 @@ spec:
         command:
         - /bin/sh
         - -c
-        - "set -e\ndata=\"$1\"\nsrc=\"$2\"\ndst=\"$3\"\nif [ ! -e \"$data/WiredTiger.wt\"
-          ]; then\n\tif [ -n \"$(ls -A \"$dst\" | grep -v '^lost+found$')\" ]; then\n\t\techo
-          \"data volume is empty, removing stale journal from $dst\"\n\t\tfind \"$dst\"
-          -mindepth 1 -maxdepth 1 ! -name lost+found -exec rm -rf {} +\n\tfi\n\texit
-          0\nfi\n[ -d \"$src\" ] || exit 0\n[ -n \"$(ls -A \"$src\" 2>/dev/null)\"
-          ] || exit 0\necho \"migrating journal from $src to $dst\"\nfind \"$src\"
-          -mindepth 1 -maxdepth 1 -exec cp -a {} \"$dst\"/ \\;\nsync\nfor f in \"$src\"/*;
-          do\n\t[ -e \"$f\" ] || continue\n\tname=$(basename \"$f\")\n\tif [ \"$(stat
-          -c %s \"$f\")\" != \"$(stat -c %s \"$dst/$name\" 2>/dev/null)\" ]; then\n\t\techo
-          \"size mismatch for $name, keeping the original journal\"\n\t\texit 1\n\tfi\ndone\nfind
-          \"$src\" -mindepth 1 -delete\necho \"journal migrated to $dst\"\n"
+        - "set -e\ndata=\"$1\"\nsrc=\"$2\"\ndst=\"$3\"\nmoved=\"$data/.journal-migrated\"\nrm
+          -rf \"$moved\"\nif [ ! -e \"$data/WiredTiger.wt\" ]; then\n\tif [ -n \"$(ls
+          -A \"$dst\" | grep -v '^lost+found$')\" ]; then\n\t\techo \"data volume
+          is empty, removing stale journal from $dst\"\n\t\tfind \"$dst\" -mindepth
+          1 -maxdepth 1 ! -name lost+found -exec rm -rf {} +\n\tfi\n\texit 0\nfi\n[
+          -d \"$src\" ] || exit 0\n[ -n \"$(ls -A \"$src\" 2>/dev/null)\" ] || exit
+          0\necho \"migrating journal from $src to $dst\"\nfind \"$dst\" -mindepth
+          1 -maxdepth 1 ! -name lost+found -exec rm -rf {} +\nfind \"$src\" -mindepth
+          1 -maxdepth 1 -exec cp -a {} \"$dst\"/ \\;\nsync\nfor f in \"$src\"/*; do\n\t[
+          -e \"$f\" ] || continue\n\tname=$(basename \"$f\")\n\tif [ \"$(wc -c < \"$f\")\"
+          != \"$(wc -c 2>/dev/null < \"$dst/$name\")\" ]; then\n\t\techo \"size mismatch
+          for $name, keeping the original journal\"\n\t\texit 1\n\tfi\ndone\nmv \"$src\"
+          \"$moved\"\nmkdir \"$src\"\nrm -rf \"$moved\"\necho \"journal migrated to
+          $dst\"\n"
         - journal-migration
         image: percona/percona-server-mongodb:sometag
         imagePullPolicy: Always

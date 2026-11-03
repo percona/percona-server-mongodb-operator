@@ -132,6 +132,11 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
+	if pod.DeletionTimestamp != nil {
+		log.V(1).Info("skipping PVC metrics check: pod is terminating")
+		return nil
+	}
+
 	if !isContainerAndPodRunning(*pod, container) {
 		log.V(1).Info("skipping PVC metrics check: container and pod not running",
 			"phase", pod.Status.Phase, "container", container)

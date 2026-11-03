@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1524,4 +1525,33 @@ func TestReconcileStorageAutoscalingPicksOwningContainer(t *testing.T) {
 
 	assert.Equal(t, naming.ContainerMongod, execContainer, "df must run in the container that owns the volume")
 	assert.Equal(t, []string{"df", "-B1", psmdbconfig.MongodContainerDataDir}, execCommand)
+}
+
+func TestCheckAndResizePVCSkipsTerminatingPod(t *testing.T) {
+	t.Parallel()
+
+	r := buildFakeClient()
+	r.clientcmd = &mockClientCmd{
+		execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+			t.Fatal("df must not run in a terminating pod")
+			return nil
+		},
+	}
+
+	pod := &corev1.Pod{
+		Name: "test-cluster-rs0-0", Namespace: "default",
+		DeletionTimestamp: new(metav1.Now()),
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: naming.ContainerMongod, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+	pvc := &corev1.PersistentVolumeClaim{Name: "mongod-data-test-cluster-rs0-0", Namespace: "default"}
+	cr := &api.PerconaServerMongoDB{Name: "test-cluster", Namespace: "default"}
+
+	require.NoError(t, r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
+		naming.ContainerMongod, psmdbconfig.MongodContainerDataDir))
+	assert.Empty(t, cr.Status.StorageAutoscaling)
 }

@@ -108,7 +108,7 @@ func TestApplyIfSkipsUnownedObject(t *testing.T) {
 	}
 }
 
-func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
+func TestApplyIfObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 	t.Parallel()
 
 	nn := types.NamespacedName{Name: "some-name-rs0", Namespace: "psmdb"}
@@ -126,36 +126,53 @@ func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 	forbidden := k8serrors.NewForbidden(gr, nn.Name, errors.New("quota"))
 
 	tests := map[string]struct {
-		stored    []client.Object
-		updateErr error
-		createErr error
-		want      ApplyStatus
-		wantErr   func(error) bool
+		stored      []client.Object
+		canWrite    func(client.Object) bool
+		updateErr   error
+		createErr   error
+		want        ApplyStatus
+		wantErr     func(error) bool
+		wantUpdates int
+		wantCreates int
 	}{
 		"recreated when the object is gone": {
-			updateErr: notFound,
-			want:      ApplyStatusCreated,
+			updateErr:   notFound,
+			want:        ApplyStatusCreated,
+			wantUpdates: 1,
+			wantCreates: 1,
 		},
 		"object reappeared before the create": {
-			stored:    []client.Object{cached.DeepCopy()},
-			updateErr: notFound,
-			wantErr:   k8serrors.IsAlreadyExists,
+			stored:      []client.Object{cached.DeepCopy()},
+			updateErr:   notFound,
+			wantErr:     k8serrors.IsAlreadyExists,
+			wantUpdates: 1,
+			wantCreates: 1,
 		},
 		"create fails": {
-			updateErr: notFound,
-			createErr: forbidden,
-			wantErr:   k8serrors.IsForbidden,
+			updateErr:   notFound,
+			createErr:   forbidden,
+			wantErr:     k8serrors.IsForbidden,
+			wantUpdates: 1,
+			wantCreates: 1,
 		},
 		"update fails with another error": {
-			updateErr: conflict,
-			want:      ApplyStatusUpdated,
-			wantErr:   k8serrors.IsConflict,
+			updateErr:   conflict,
+			want:        ApplyStatusUpdated,
+			wantErr:     k8serrors.IsConflict,
+			wantUpdates: 1,
+		},
+		"rejected object is not written": {
+			canWrite: func(client.Object) bool { return false },
+			want:     ApplyStatusUnchanged,
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+
+			var updates, creates int
+			var created *appsv1.StatefulSet
 
 			cl := fake.NewClientBuilder().
 				WithScheme(scheme.Scheme).
@@ -166,9 +183,12 @@ func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 						return nil
 					},
 					Update: func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.UpdateOption) error {
+						updates++
 						return tt.updateErr
 					},
 					Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+						creates++
+						created = obj.(*appsv1.StatefulSet).DeepCopy()
 						if tt.createErr != nil {
 							return tt.createErr
 						}
@@ -182,15 +202,30 @@ func TestApplyObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 				Spec: appsv1.StatefulSetSpec{ServiceName: nn.Name},
 			}
 
-			status, err := Apply(t.Context(), cl, desired)
+			canWrite := tt.canWrite
+			if canWrite == nil {
+				canWrite = func(client.Object) bool { return true }
+			}
+
+			status, err := ApplyIf(t.Context(), cl, desired, canWrite)
+			assert.Equal(t, tt.want, status)
+			assert.Equal(t, tt.wantUpdates, updates)
+			assert.Equal(t, tt.wantCreates, creates)
+
 			if tt.wantErr != nil {
 				require.Error(t, err)
 				assert.True(t, tt.wantErr(err), "unexpected error: %v", err)
-				assert.Equal(t, tt.want, status)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.want, status)
+
+			if tt.wantCreates == 0 {
+				return
+			}
+			assert.Empty(t, created.ResourceVersion)
+			assert.Equal(t, desired.Spec, created.Spec)
+			assert.NotEqual(t, "stale", created.Annotations["percona.com/last-config-hash"])
+			assert.Equal(t, desired.Annotations["percona.com/last-config-hash"], created.Annotations["percona.com/last-config-hash"])
 		})
 	}
 }

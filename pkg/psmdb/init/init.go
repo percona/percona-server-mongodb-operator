@@ -62,6 +62,8 @@ const journalMigrationScript = `set -e
 data="$1"
 src="$2"
 dst="$3"
+moved="$data/.journal-migrated"
+rm -rf "$moved"
 if [ ! -e "$data/WiredTiger.wt" ]; then
 	if [ -n "$(ls -A "$dst" | grep -v '^lost+found$')" ]; then
 		echo "data volume is empty, removing stale journal from $dst"
@@ -78,12 +80,14 @@ sync
 for f in "$src"/*; do
 	[ -e "$f" ] || continue
 	name=$(basename "$f")
-	if [ "$(stat -c %s "$f")" != "$(stat -c %s "$dst/$name" 2>/dev/null)" ]; then
+	if [ "$(wc -c < "$f")" != "$(wc -c 2>/dev/null < "$dst/$name")" ]; then
 		echo "size mismatch for $name, keeping the original journal"
 		exit 1
 	fi
 done
-find "$src" -mindepth 1 -delete
+mv "$src" "$moved"
+mkdir "$src"
+rm -rf "$moved"
 echo "journal migrated to $dst"
 `
 

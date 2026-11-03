@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 
 import pytest
 from lib.config import apply_cluster
-from lib.kubectl import kubectl_bin, wait_cluster_consistency, wait_for_running
+from lib.kubectl import detect_platform, kubectl_bin, wait_cluster_consistency, wait_for_running
 from lib.mongo import MongoManager
 from lib.operator import get_operator_pod
 from lib.utils import Paths, retry
@@ -21,6 +21,12 @@ DATA_DIR = "/data/db"
 JOURNAL_CLAIM = "mongod-journal"
 DATA_CLAIM = "mongod-data"
 JOURNAL_FILLER = f"{JOURNAL_DIR}/e2e-autoscaling-filler"
+SNAPSHOT_CLASS_FILES = {
+    "aks": "volume-snapshot-class-aks.yaml",
+    "eks": "volume-snapshot-class-ebs.yaml",
+    "openshift": "volume-snapshot-class-ebs.yaml",
+    "gke": "volume-snapshot-class-gke.yaml",
+}
 
 
 def _pods() -> list[str]:
@@ -310,6 +316,52 @@ def _seed_count(psmdb_client: MongoManager, namespace: str) -> str:
         uri,
         driver="mongodb",
     ).strip()
+
+
+def _member_seed_count(psmdb_client: MongoManager, namespace: str, pod: str) -> str:
+    member = (
+        f"mongodb://testWriter:testWriter123456@{pod}.{CLUSTER}-{RS}.{namespace}.svc.cluster.local:27017"
+        "/admin?directConnection=true&readPreference=secondaryPreferred"
+    )
+    return psmdb_client.run_mongosh(
+        f"connect('{member}').getSiblingDB('journalStorage').seedData.countDocuments({{}})",
+        f"testWriter:testWriter123456@{CLUSTER}-{RS}.{namespace}",
+        driver="mongodb",
+    ).strip()
+
+
+def _pbm_running_op() -> str:
+    output = kubectl_bin(
+        "exec",
+        _pods()[0],
+        "-c",
+        "backup-agent",
+        "--",
+        "pbm",
+        "status",
+        "-o",
+        "json",
+        "-s",
+        "running",
+        check=False,
+    )
+    try:
+        return str(json.loads(output).get("running", {}).get("opID"))
+    except json.JSONDecodeError:
+        return "unknown"
+
+
+def _wait_pbm_idle(max_attempts: int = 60, delay: int = 10) -> None:
+    logger.info("Waiting for PBM operations to finish")
+    try:
+        retry(
+            _pbm_running_op,
+            max_attempts=max_attempts,
+            delay=delay,
+            condition=lambda op: op == "None",
+        )
+    except RuntimeError:
+        pytest.fail(f"PBM operation {_pbm_running_op()} is still running")
 
 
 @dataclass(frozen=True)
@@ -638,3 +690,86 @@ class TestJournalPVC:
                 f"{pod} lost the journal volume after the restore"
             )
             assert any(f.startswith("WiredTigerLog") for f in _journal_files(pod))
+
+    @pytest.mark.dependency(depends=["TestJournalPVC::test_10_physical_backup_and_restore"])
+    def test_11_snapshot_backup_and_restore(
+        self, config: JournalPVCConfig, test_paths: Paths, psmdb_client: MongoManager
+    ) -> None:
+        """A snapshot restore replaces the live journal instead of replaying it on restored data."""
+        platform = os.environ.get("PLATFORM") or detect_platform()
+        if platform not in SNAPSHOT_CLASS_FILES:
+            pytest.skip(f"volume snapshots are not configured for platform {platform}")
+
+        kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/{SNAPSHOT_CLASS_FILES[platform]}")
+        snapshot_class = kubectl_bin(
+            "get", "volumesnapshotclass", "-o", "jsonpath={.items[0].metadata.name}"
+        ).strip()
+        _wait_pbm_idle()
+
+        uri = f"testWriter:testWriter123456@{CLUSTER}-{RS}.{config.namespace}"
+        psmdb_client.run_mongosh(
+            "db.getSiblingDB('journalStorage').seedData.insertOne({idx: 101}, {writeConcern: {w: 'majority', j: true}})",
+            uri,
+            driver="mongodb",
+        )
+        assert _seed_count(psmdb_client, config.namespace) == "101"
+
+        backup = "journal-snapshot"
+        kubectl_bin(
+            "apply",
+            "-f",
+            "-",
+            input_data=json.dumps(
+                {
+                    "apiVersion": "psmdb.percona.com/v1",
+                    "kind": "PerconaServerMongoDBBackup",
+                    "metadata": {"name": backup, "finalizers": ["percona.com/delete-backup"]},
+                    "spec": {
+                        "type": "external",
+                        "clusterName": CLUSTER,
+                        "volumeSnapshotClass": snapshot_class,
+                    },
+                }
+            ),
+        )
+        _wait_cr_ready("psmdb-backup", backup)
+
+        psmdb_client.run_mongosh(
+            "db.getSiblingDB('journalStorage').seedData.insertMany("
+            "Array.from({length: 1000}, (_, i) => ({idx: 1000 + i})), {writeConcern: {w: 'majority', j: true}});"
+            "db.getSiblingDB('journalStorage').seedData.drop()",
+            uri,
+            driver="mongodb",
+        )
+        assert _seed_count(psmdb_client, config.namespace) == "0"
+
+        restore = f"restore-{backup}"
+        kubectl_bin(
+            "apply",
+            "-f",
+            "-",
+            input_data=json.dumps(
+                {
+                    "apiVersion": "psmdb.percona.com/v1",
+                    "kind": "PerconaServerMongoDBRestore",
+                    "metadata": {"name": restore},
+                    "spec": {"clusterName": CLUSTER, "backupName": backup},
+                }
+            ),
+        )
+        _wait_cr_ready("psmdb-restore", restore, max_attempts=180)
+        wait_for_running(f"{CLUSTER}-{RS}", 3)
+        wait_cluster_consistency(CLUSTER)
+
+        for pod in _pods():
+            init_logs = kubectl_bin("logs", pod, "-c", "journal-migration")
+            assert "journal migrated" in init_logs, (
+                f"{pod} did not move the restored journal to the journal volume: {init_logs}"
+            )
+            assert _mount_device(pod, JOURNAL_DIR) != _mount_device(pod, DATA_DIR), (
+                f"{pod} lost the journal volume after the snapshot restore"
+            )
+            count = _member_seed_count(psmdb_client, config.namespace, pod)
+            assert count == "101", (
+                f"{pod} has {count} documents after the snapshot restore, expected 101"
+            )
