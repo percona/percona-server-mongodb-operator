@@ -340,7 +340,7 @@ func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
 			Namespace: ns,
 		},
 		&corev1.Secret{
-			Name:      crName + "-pbm",
+			Name:      tls.CertificatePBMClient(cr).SecretName(),
 			Namespace: ns,
 		},
 		&corev1.ConfigMap{
