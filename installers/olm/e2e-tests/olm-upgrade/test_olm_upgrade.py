@@ -8,6 +8,7 @@ import time
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -363,8 +364,11 @@ def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> Non
         assert pod["metadata"]["uid"] == state.operator_pod_uid, (
             f"Operator pod was replaced: {name} is not the pod that became ready after upgrade"
         )
-    ready = [c["status"] for c in pod["status"].get("conditions", []) if c["type"] == "Ready"]
-    assert ready == ["True"], f"Operator pod {name} is not Ready: {pod['status']}"
+    ready = [c for c in pod["status"].get("conditions", []) if c["type"] == "Ready"]
+    assert [c["status"] for c in ready] == ["True"], (
+        f"Operator pod {name} is not Ready: {pod['status']}"
+    )
+    ready_since = datetime.fromisoformat(ready[0]["lastTransitionTime"])
 
     restarts = sum(c.get("restartCount", 0) for c in pod["status"]["containerStatuses"])
     if restarts:
@@ -386,13 +390,18 @@ def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> Non
         if obj["kind"] == "InstallPlan" and ev.get("reason") == "AppliedWithWarnings":
             warnings = ev.get("message", "").split("):", 1)[-1].split(", psmdb.")
             return all(DEPRECATION_WARNING.search(w) for w in warnings)
-        # Readiness probe noise of the operator pods being replaced, never the target pod.
-        return (
-            obj["kind"] == "Pod"
-            and obj["name"].startswith(f"{deployment}-")
-            and obj["name"] != name
-            and ev.get("reason") == "Unhealthy"
+        if obj["kind"] != "Pod" or ev.get("reason") != "Unhealthy":
+            return False
+        # Readiness probe noise of the operator pods being replaced.
+        if obj["name"] != name:
+            return bool(obj["name"].startswith(f"{deployment}-"))
+        # The probe has no initial delay, so the target pod can fail it before it listens.
+        last = (
+            ev.get("lastTimestamp")
+            or ev.get("series", {}).get("lastObservedTime")
+            or ev["eventTime"]
         )
+        return datetime.fromisoformat(last) <= ready_since
 
     new_warnings = [
         f"{ev['involvedObject']['kind']}/{ev['involvedObject']['name']}: "
