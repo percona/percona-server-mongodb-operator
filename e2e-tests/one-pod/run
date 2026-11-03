@@ -24,6 +24,36 @@ run_recovery_check() {
 	wait_cluster_consistency "${cluster/-rs0/}"
 }
 
+wait_for_pod_replaced() {
+	local pod=$1
+	local old_uid=$2
+	local retry=0
+
+	echo -n "waiting for pod ${pod} to be replaced"
+	until [[ "$(kubectl_bin get pod "${pod}" -o jsonpath='{.metadata.uid}' 2>/dev/null)" != "${old_uid}" ]]; do
+		let retry+=1
+		if [ $retry -ge 60 ]; then
+			echo "pod ${pod} was not replaced"
+			exit 1
+		fi
+		echo -n .
+		sleep 5
+	done
+	echo '.OK'
+}
+
+apply_mongod_secret() {
+	local cluster=$1
+	local secret_file=$2
+	local uid
+
+	uid=$(kubectl_bin get pod "${cluster}-0" -o jsonpath='{.metadata.uid}')
+	kubectl_bin apply -f "${secret_file}"
+	wait_for_pod_replaced "${cluster}-0" "${uid}"
+	wait_for_running "${cluster}" 1
+	wait_cluster_consistency "${cluster/-rs0/}"
+}
+
 main() {
 	create_infra $namespace
 
@@ -53,8 +83,7 @@ main() {
 	diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog.json $tmp_dir/parsed_systemLog.json
 
 	desc 'create secret and check custom config'
-	kubectl_bin apply -f "$test_dir/conf/mongod-secret.yml"
-	wait_cluster_consistency "${cluster/-rs0/}"
+	apply_mongod_secret "${cluster}" "$test_dir/conf/mongod-secret.yml"
 
 	desc 'check if statefulset created with expected config'
 	compare_kubectl "statefulset/$cluster" "-secret"
@@ -69,8 +98,7 @@ main() {
 	diff $test_dir/compare/serverCmdLineOpts_parsed_systemLog_secret.json $tmp_dir/parsed_systemLog_secret.json
 
 	desc 'create secret and check custom config'
-	kubectl_bin apply -f "$test_dir/conf/mongod-secret-2.yml"
-	wait_cluster_consistency "${cluster/-rs0/}"
+	apply_mongod_secret "${cluster}" "$test_dir/conf/mongod-secret-2.yml"
 
 	run_mongo \
 		'db.serverCmdLineOpts()' \
