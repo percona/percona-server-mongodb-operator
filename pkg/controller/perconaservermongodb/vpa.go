@@ -256,10 +256,10 @@ func (r *ReconcilePerconaServerMongoDB) setVPAMessage(
 	if s.Message != message {
 		log := logf.Log.WithName("VPA")
 		if message == "" {
-			log.Info("VPA is applying recommendations for this component again",
+			log.Info("applying recommendations for this component again",
 				"component", statusKey)
 		} else {
-			log.Info("VPA is not applying recommendations for this component",
+			log.Info("not applying recommendations for this component",
 				"component", statusKey, "reason", message)
 		}
 	}
