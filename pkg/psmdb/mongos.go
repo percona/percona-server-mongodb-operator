@@ -111,8 +111,21 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
+	hostAliases := cr.Spec.Sharding.Mongos.HostAliases
 	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
-		logCollectorCs, err := logcollector.Containers(cr, cr.Spec.Sharding.Mongos.GetPort(), config.MongosLogVolume())
+		mongoAddr := fmt.Sprintf("localhost:%d", cr.Spec.Sharding.Mongos.GetPort())
+		if cr.CompareVersion("1.24.0") >= 0 {
+			if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
+				mongoAddr = GetServiceMeshAddr(cr, "$(POD_NAME)", cr.Spec.Sharding.Mongos.GetPort())
+			} else {
+				// When servicePerPod is false, we should use the mongos service FQDN for TLS certificate verification.
+				// To allow logrotate to connect to localhost instead of a random pod, we should map this FQDN to 127.0.0.1
+				mongoAddr = GetServiceMeshAddr(cr, naming.MongosServiceName(cr), cr.Spec.Sharding.Mongos.GetPort())
+				host, _, _ := strings.Cut(mongoAddr, ":")
+				hostAliases = append([]corev1.HostAlias{{IP: "127.0.0.1", Hostnames: []string{host}}}, hostAliases...)
+			}
+		}
+		logCollectorCs, err := logcollector.Containers(cr, mongoAddr, config.MongosLogVolume())
 		if err != nil {
 			return corev1.PodTemplateSpec{}, errors.Wrap(err, "prepare logcollector containers for mongos")
 		}
@@ -135,7 +148,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		Labels:      ls,
 		Annotations: annotations,
 		Spec: corev1.PodSpec{
-			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
+			HostAliases:                   hostAliases,
 			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
 			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 			TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, cr.Spec.Sharding.Mongos.MultiAZ.TopologySpreadConstraints, ls),

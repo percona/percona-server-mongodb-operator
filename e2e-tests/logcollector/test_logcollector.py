@@ -52,7 +52,7 @@ def _check_pem_permissions(pod: str) -> None:
     )
 
 
-def _check_log_rotation(pod: str, tls_enabled: bool) -> None:
+def _check_log_rotation(pod: str, tls_enabled: bool) -> str:
     """Force rotation and check the MongoDB log, captured output, and expired files."""
     logger.info(f"Forcing log rotation on {pod}")
     for filename in ("mongod.log", "mongod.full.log"):
@@ -97,6 +97,7 @@ def _check_log_rotation(pod: str, tls_enabled: bool) -> None:
     _exec_logrotate(pod, "test", "!", "-e", expired_log)
     if tls_enabled:
         _check_pem_permissions(pod)
+    return marker
 
 
 def _check_log_rotation_failure(pod: str, tls_enabled: bool) -> None:
@@ -147,8 +148,18 @@ class TestLogCollector:
     @pytest.mark.dependency(depends=["TestLogCollector::test_create_cluster"])
     def test_tls_rotation(self, config: LogCollectorConfig) -> None:
         """Rotate logs on all replica set pods with TLS enabled"""
+        markers = {}
         for i in range(3):
-            _check_log_rotation(f"{config.cluster}-rs0-{i}", tls_enabled=True)
+            pod = f"{config.cluster}-rs0-{i}"
+            host = _exec_logrotate(pod, "printenv", "MONGODB_HOST").strip()
+            assert host == f"{pod}.{config.cluster}-rs0.{config.namespace}.svc.cluster.local"
+            markers[pod] = _check_log_rotation(pod, tls_enabled=True)
+
+        time.sleep(1)
+        for pod, marker in markers.items():
+            _check_log_rotation(pod, tls_enabled=True)
+            older_log = _exec_logrotate(pod, "gzip", "-cd", f"{LOG_DIR}/mongod.full.log.2.gz")
+            assert marker in older_log
 
     @pytest.mark.dependency(depends=["TestLogCollector::test_tls_rotation"])
     def test_tls_rotation_failure(self, config: LogCollectorConfig) -> None:

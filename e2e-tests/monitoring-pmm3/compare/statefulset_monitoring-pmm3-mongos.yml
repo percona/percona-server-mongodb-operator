@@ -182,8 +182,13 @@ spec:
           command:
             - /opt/percona/logcollector/entrypoint.sh
           env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
             - name: MONGODB_HOST
-              value: localhost
+              value: monitoring-pmm3-mongos.NAME_SPACE.svc.cluster.local
             - name: MONGODB_PORT
               value: "27019"
             - name: MONGODB_USER
@@ -340,6 +345,10 @@ spec:
             - mountPath: /tmp
               name: tmp
       dnsPolicy: ClusterFirst
+      hostAliases:
+        - hostnames:
+            - monitoring-pmm3-mongos.NAME_SPACE.svc.cluster.local
+          ip: 127.0.0.1
       initContainers:
         - command:
             - /init-entrypoint.sh

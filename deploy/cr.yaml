@@ -1092,11 +1092,12 @@ spec:
 #    logrotate:
 #      configuration: |
 #        /data/db/logs/mongod.full.log {
-#           daily
-#           maxsize 100M
-#           rotate 7
+#           hourly
+#           maxsize 500M
+#           rotate 14
 #           missingok
-#           nocompress
+#           compress
+#           delaycompress
 #           notifempty
 #           copytruncate
 #           sharedscripts
@@ -1125,7 +1126,7 @@ spec:
 #        }
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 * * *"
+#      schedule: "0 * * * *"
 #      # Add a liveness/readiness probe for the logrotate container.
 #      # When not set, the container has no probes.
 #      livenessProbe:
