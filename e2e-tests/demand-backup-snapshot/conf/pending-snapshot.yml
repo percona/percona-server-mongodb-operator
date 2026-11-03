@@ -1,0 +1,10 @@
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata:
+  name:
+  namespace:
+  finalizers:
+    - e2e.percona.com/hold-snapshot
+spec:
+  source:
+    volumeSnapshotContentName:
