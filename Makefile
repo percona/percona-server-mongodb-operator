@@ -103,6 +103,7 @@ py-fmt: uv ## Format and organize imports in e2e-tests
 	$(UV) run ruff check --select I --fix $(PY_DIRS)
 	$(UV) run ruff format $(PY_DIRS)
 
+# MYPYPATH: the OLM tests import the shared harness (lib.*) from e2e-tests/.
 py-check: uv ## Run ruff and mypy checks on e2e-tests
 	$(UV) run ruff check $(PY_DIRS)
 	$(UV) run mypy e2e-tests/
