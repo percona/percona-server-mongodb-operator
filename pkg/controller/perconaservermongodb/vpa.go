@@ -575,7 +575,8 @@ func capRequestsAtLimits(requests corev1.ResourceList, limits corev1.ResourceLis
 
 // ratioScaledLimits returns new limits by preserving the original limit/request ratio.
 // For each resource: newLimit = newRequest * (oldLimit / oldRequest).
-// Resources with no existing limit or a zero request are left unchanged.
+// Resources with no existing limit are left unchanged.
+// If no requsets were previously declared, we assume a 1:1 ratio.
 func ratioScaledLimits(orig corev1.ResourceRequirements, newRequests corev1.ResourceList) corev1.ResourceList {
 	if orig.Limits == nil {
 		return nil
@@ -584,8 +585,13 @@ func ratioScaledLimits(orig corev1.ResourceRequirements, newRequests corev1.Reso
 	for res, newReq := range newRequests {
 		oldReq, hasReq := orig.Requests[res]
 		oldLim, hasLim := orig.Limits[res]
-		if !hasReq || !hasLim || oldReq.IsZero() {
+		if !hasLim {
 			continue
+		}
+		// If no previous requests were specified, assume a 1:1 ratio,
+		// otherwise we could end up in a situation where requests > limits.
+		if !hasReq || oldReq.IsZero() {
+			oldReq = oldLim.DeepCopy()
 		}
 		ratio := float64(oldLim.MilliValue()) / float64(oldReq.MilliValue())
 		newLimMilli := int64(float64(newReq.MilliValue()) * ratio)

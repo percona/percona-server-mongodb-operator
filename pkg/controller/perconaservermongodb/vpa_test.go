@@ -266,13 +266,21 @@ func TestRatioScaledLimits(t *testing.T) {
 			expected:    rl("4", "8Gi"),
 		},
 		{
-			name: "resource with no original request keeps its original limit",
+			name: "resource with no original request scales 1:1 from its limit",
 			orig: corev1.ResourceRequirements{
 				Requests: rl("1", ""),
 				Limits:   rl("2", "4Gi"),
 			},
 			newRequests: rl("2", "2Gi"),
-			expected:    rl("4", "4Gi"),
+			expected:    rl("4", "2Gi"),
+		},
+		{
+			name: "no original requests at all scales every limit 1:1",
+			orig: corev1.ResourceRequirements{
+				Limits: rl("2", "4Gi"),
+			},
+			newRequests: rl("4", "8Gi"),
+			expected:    rl("4", "8Gi"),
 		},
 		{
 			name: "resource with no original limit is not added",
@@ -284,13 +292,13 @@ func TestRatioScaledLimits(t *testing.T) {
 			expected:    rl("4", ""),
 		},
 		{
-			name: "zero original request is skipped rather than dividing by zero",
+			name: "zero original request scales 1:1 rather than dividing by zero",
 			orig: corev1.ResourceRequirements{
 				Requests: rl("0", ""),
 				Limits:   rl("2", ""),
 			},
 			newRequests: rl("1", ""),
-			expected:    rl("2", ""),
+			expected:    rl("1", ""),
 		},
 		{
 			name: "new request for a resource absent from orig leaves limits untouched",
