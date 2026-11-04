@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"maps"
 	"testing"
 	"time"
 
@@ -17,11 +18,13 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -40,12 +43,13 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		expectCRStorage   string
 	}{
 		{
-			name:             "finishes resize when pvc exceeds requested size",
-			requested:        "1200Mi",
-			configured:       "1200Mi",
-			actual:           "6G",
-			resizeInProgress: true,
-			expectSTSDeleted: true,
+			name:              "finishes resize when pvc exceeds requested size",
+			requested:         "1200Mi",
+			configured:        "1200Mi",
+			actual:            "6G",
+			resizeInProgress:  true,
+			expectSTSDeleted:  true,
+			expectRestartedAt: true,
 		},
 		{
 			name:             "finishes resize when orphan pvc exceeds requested size",
@@ -102,84 +106,151 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			requested := resource.MustParse(tt.requested)
-			configured := resource.MustParse(tt.configured)
-			actual := resource.MustParse(tt.actual)
+	components := []string{
+		naming.ComponentMongod,
+		naming.ComponentNonVoting,
+		naming.ComponentHidden,
+		naming.ComponentConfigSrv,
+		naming.ComponentSearch,
+	}
+	for _, component := range components {
+		for _, tt := range tests {
+			t.Run(component+"/"+tt.name, func(t *testing.T) {
+				const restartedAt = "2026-01-01T00:00:00Z"
+				var (
+					cr             *api.PerconaServerMongoDB
+					sts            *appsv1.StatefulSet
+					pod            *corev1.Pod
+					r              *ReconcilePerconaServerMongoDB
+					deletionPolicy *metav1.DeletionPropagation
+				)
 
-			cr, err := readDefaultCR("some-cluster", "ns")
-			require.NoError(t, err)
-			require.NotEmpty(t, cr.Spec.Replsets)
+				t.Run("prepare cluster and storage resources", func(t *testing.T) {
+					requested := resource.MustParse(tt.requested)
+					configured := resource.MustParse(tt.configured)
+					actual := resource.MustParse(tt.actual)
 
-			rs := cr.Spec.Replsets[0]
-			rs.Size = 1
-			rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
-				corev1.ResourceStorage: requested,
-			}
-			cr.Spec.StorageScaling = &api.StorageScalingSpec{
-				EnableVolumeScaling: tt.volumeScaling,
-			}
+					var err error
+					cr, err = readDefaultCR("some-cluster", "ns")
+					require.NoError(t, err)
+					require.NotEmpty(t, cr.Spec.Replsets)
 
-			labels := naming.MongodLabels(cr, rs)
-			sts := newStatefulSet(cr.Namespace, naming.MongodStatefulSetName(cr, rs), labels, configured)
-			const restartedAt = "2026-01-01T00:00:00Z"
-			if tt.expectRestartedAt {
-				sts.Spec.Template.Annotations = map[string]string{
-					naming.AnnotationKubectlRestartedAt: restartedAt,
-				}
-			}
-			if tt.resizeInProgress {
-				sts.Annotations = map[string]string{
-					api.AnnotationPVCResizeInProgress: time.Now().Add(-time.Minute).Format(time.RFC3339),
-				}
-			}
+					rs := cr.Spec.Replsets[0]
+					rs.Size = 1
+					rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+						corev1.ResourceStorage: requested,
+					}
+					cr.Spec.StorageScaling = &api.StorageScalingSpec{
+						EnableVolumeScaling: tt.volumeScaling,
+					}
 
-			pod := newPod(cr.Namespace, sts.Name+"-0", labels)
-			pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, actual, actual)
-			objects := []runtime.Object{cr, sts, pod, pvc}
-			if tt.orphanPVC {
-				orphanPVC := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+sts.Name+"-1", labels, actual, actual)
-				objects = append(objects, orphanPVC)
-			}
+					labels := naming.MongodLabels(cr, rs)
+					stsName := naming.MongodStatefulSetName(cr, rs)
+					claimName := config.MongodDataVolClaimName
+					switch component {
+					case naming.ComponentNonVoting:
+						rs.NonVoting.VolumeSpec = rs.VolumeSpec.DeepCopy()
+						labels = naming.NonVotingLabels(cr, rs)
+					case naming.ComponentHidden:
+						rs.Hidden.VolumeSpec = rs.VolumeSpec.DeepCopy()
+						labels = naming.HiddenLabels(cr, rs)
+					case naming.ComponentConfigSrv:
+						cr.Spec.Sharding.ConfigsvrReplSet.Name = api.ConfigReplSetName
+						cr.Spec.Sharding.ConfigsvrReplSet.VolumeSpec = rs.VolumeSpec.DeepCopy()
+						labels = naming.MongodLabels(cr, cr.Spec.Sharding.ConfigsvrReplSet)
+						labels[naming.LabelKubernetesComponent] = naming.ComponentConfigSrv
+					case naming.ComponentSearch:
+						cr.Spec.Search = &api.SearchSpec{Enabled: true, Storage: rs.VolumeSpec.DeepCopy()}
+						labels = naming.SearchLabels(cr, rs)
+						stsName = naming.SearchStatefulSetName(cr, rs)
+						claimName = vectorsearch.DataVolumeName
+					}
+					sts = newStatefulSet(cr.Namespace, stsName, labels, configured)
+					sts.Spec.VolumeClaimTemplates[0].Name = claimName
+					sts.Labels = maps.Clone(labels)
+					sts.Labels["custom-label"] = "metadata-only"
+					sts.Spec.VolumeClaimTemplates = append([]corev1.PersistentVolumeClaim{{Name: "sidecar-data"}}, sts.Spec.VolumeClaimTemplates...)
+					if tt.expectRestartedAt {
+						sts.Spec.Template.Annotations = map[string]string{
+							naming.AnnotationKubectlRestartedAt: restartedAt,
+						}
+					}
+					if tt.resizeInProgress {
+						sts.Annotations = map[string]string{
+							api.AnnotationPVCResizeInProgress: time.Now().Add(-time.Minute).Format(time.RFC3339),
+						}
+					}
 
-			s := runtime.NewScheme()
-			require.NoError(t, clientgoscheme.AddToScheme(s))
-			require.NoError(t, apis.AddToScheme(s))
+					pod = newPod(cr.Namespace, sts.Name+"-0", labels)
+					pvc := newPVC(cr.Namespace, claimName+"-"+pod.Name, labels, actual, actual)
+					objects := []client.Object{cr, sts, pod, pvc}
+					if tt.orphanPVC {
+						orphanPVC := newPVC(cr.Namespace, claimName+"-"+sts.Name+"-1", labels, actual, actual)
+						objects = append(objects, orphanPVC)
+					}
 
-			r := &ReconcilePerconaServerMongoDB{
-				client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects...).Build(),
-				scheme: s,
-			}
+					r = buildFakeClient(objects...)
+					r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+						Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+							if _, ok := obj.(*appsv1.StatefulSet); ok {
+								options := &client.DeleteOptions{}
+								options.ApplyOptions(opts)
+								deletionPolicy = options.PropagationPolicy
+							}
+							return c.Delete(ctx, obj, opts...)
+						},
+					})
+				})
 
-			err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
-			if tt.expectErrContains != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectErrContains)
-			} else {
-				require.NoError(t, err)
-			}
+				t.Run("reconcile PVCs", func(t *testing.T) {
+					err := r.reconcilePVCs(t.Context(), cr, sts)
+					if tt.expectErrContains != "" {
+						require.Error(t, err)
+						assert.Contains(t, err.Error(), tt.expectErrContains)
+					} else {
+						require.NoError(t, err)
+					}
+				})
 
-			fetchedSTS := &appsv1.StatefulSet{}
-			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), fetchedSTS)
-			if tt.expectSTSDeleted {
-				assert.Error(t, err)
-				assert.True(t, client.IgnoreNotFound(err) == nil)
-			} else {
-				assert.NoError(t, err)
-			}
+				t.Run("verify StatefulSet and pod preservation", func(t *testing.T) {
+					fetchedSTS := &appsv1.StatefulSet{}
+					err := r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), fetchedSTS)
+					if tt.expectSTSDeleted {
+						assert.Error(t, err)
+						assert.True(t, client.IgnoreNotFound(err) == nil)
+						require.NotNil(t, deletionPolicy)
+						assert.Equal(t, metav1.DeletePropagationOrphan, *deletionPolicy)
+						require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(pod), new(corev1.Pod)))
+					} else {
+						assert.NoError(t, err)
+					}
+				})
 
-			fetchedCR := &api.PerconaServerMongoDB{}
-			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), fetchedCR)
-			require.NoError(t, err)
-			if tt.expectCRStorage != "" {
-				expected := resource.MustParse(tt.expectCRStorage)
-				assert.Equal(t, expected, fetchedCR.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage])
-			}
-			if tt.expectRestartedAt {
-				assert.Equal(t, restartedAt, fetchedCR.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)])
-			}
-		})
+				t.Run("verify cluster storage and preserved restart annotation", func(t *testing.T) {
+					fetchedCR := &api.PerconaServerMongoDB{}
+					err := r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), fetchedCR)
+					require.NoError(t, err)
+					if tt.expectCRStorage != "" {
+						expected := resource.MustParse(tt.expectCRStorage)
+						storage := fetchedCR.Spec.Replsets[0].VolumeSpec
+						switch component {
+						case naming.ComponentNonVoting:
+							storage = fetchedCR.Spec.Replsets[0].NonVoting.VolumeSpec
+						case naming.ComponentHidden:
+							storage = fetchedCR.Spec.Replsets[0].Hidden.VolumeSpec
+						case naming.ComponentConfigSrv:
+							storage = fetchedCR.Spec.Sharding.ConfigsvrReplSet.VolumeSpec
+						case naming.ComponentSearch:
+							storage = fetchedCR.Spec.Replsets[0].SearchStorage(fetchedCR)
+						}
+						assert.Equal(t, expected, storage.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage])
+					}
+					if tt.expectRestartedAt {
+						assert.Equal(t, restartedAt, fetchedCR.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)])
+					}
+				})
+			})
+		}
 	}
 }
 
@@ -268,7 +339,7 @@ func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
 				scheme: scheme,
 			}
 
-			err := r.reconcilePVCs(ctx, cr, sts, labels, cr.Spec.Replsets[0].VolumeSpec)
+			err := r.reconcilePVCs(ctx, cr, sts)
 			require.NoError(t, err)
 
 			gotSTS := new(appsv1.StatefulSet)
@@ -293,6 +364,7 @@ func newStatefulSet(namespace, name string, labels map[string]string, storage re
 		Namespace: namespace,
 		Labels:    labels,
 		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: labels},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					Name: config.MongodDataVolClaimName,

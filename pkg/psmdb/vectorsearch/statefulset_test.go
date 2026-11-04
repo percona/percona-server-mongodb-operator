@@ -753,11 +753,11 @@ func TestStatefulSet_Volumes_PVCTemplate(t *testing.T) {
 
 	require.Len(t, sts.Spec.VolumeClaimTemplates, 1)
 	pvc := sts.Spec.VolumeClaimTemplates[0]
-	assert.Equal(t, dataVolumeName, pvc.Name)
+	assert.Equal(t, DataVolumeName, pvc.Name)
 	assert.Equal(t, "default", pvc.Namespace)
 	assert.Equal(t, resource.MustParse("10Gi"), pvc.Spec.Resources.Requests[corev1.ResourceStorage])
 
-	assert.Nil(t, volumeByName(sts.Spec.Template.Spec.Volumes, dataVolumeName),
+	assert.Nil(t, volumeByName(sts.Spec.Template.Spec.Volumes, DataVolumeName),
 		"data volume must be a PVC template, not an inline pod volume")
 }
 

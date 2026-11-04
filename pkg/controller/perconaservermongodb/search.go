@@ -39,10 +39,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSearch(ctx context.Context, cr 
 	if err := r.createOrUpdateConfigMap(ctx, cr, cm); err != nil {
 		return errors.Wrapf(err, "reconcile mongot ConfigMap %s", cm.Name)
 	}
-	configHash, err := psmdbconfig.HashConfigMap(cm)
-	if err != nil {
-		return errors.Wrapf(err, "hash mongot ConfigMap %s", cm.Name)
-	}
 
 	svc := vectorsearch.Service(cr, rs)
 	if err := setControllerReference(cr, svc, r.scheme); err != nil {
@@ -52,28 +48,41 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSearch(ctx context.Context, cr 
 		return errors.Wrapf(err, "reconcile mongot Service %s", svc.Name)
 	}
 
+	_, err = r.reconcileStatefulSet(ctx, cr, rs, naming.SearchLabels(cr, rs))
+	return errors.Wrap(err, "reconcile mongot StatefulSet")
+}
+
+func (r *ReconcilePerconaServerMongoDB) getSearchStatefulSet(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (*appsv1.StatefulSet, error) {
+	cm, err := vectorsearch.ConfigMap(cr, rs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "build mongot ConfigMap for %s", rs.Name)
+	}
+	configHash, err := psmdbconfig.HashConfigMap(cm)
+	if err != nil {
+		return nil, errors.Wrapf(err, "hash mongot ConfigMap %s", cm.Name)
+	}
 	sslAnnotations, err := r.sslAnnotation(ctx, cr.DeepCopy() /* sslAnnotation mutates status conditions */)
 	if err != nil {
-		return errors.Wrap(err, "get ssl annotations")
+		return nil, errors.Wrap(err, "get ssl annotations")
 	}
 
 	sts := vectorsearch.StatefulSet(cr, rs, r.initImage, configHash, sslAnnotations)
-
-	s := new(appsv1.StatefulSet)
-	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), s); err == nil {
-		if _, ok := s.Annotations[api.AnnotationRestoreInProgress]; ok {
-			return nil
+	current := new(appsv1.StatefulSet)
+	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), current); err == nil {
+		sts.Annotations = current.Annotations
+		if value, ok := current.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt]; ok {
+			sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt] = value
 		}
+	} else if !k8serrors.IsNotFound(err) {
+		return nil, errors.Wrap(err, "get mongot StatefulSet")
 	}
-
+	if value, ok := cr.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)]; ok {
+		sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt] = value
+	}
 	if err := setControllerReference(cr, sts, r.scheme); err != nil {
-		return errors.Wrapf(err, "set owner ref for StatefulSet %s", sts.Name)
+		return nil, errors.Wrapf(err, "set owner ref for StatefulSet %s", sts.Name)
 	}
-	if err := r.createOrUpdate(ctx, sts); err != nil {
-		return errors.Wrapf(err, "reconcile mongot StatefulSet %s", sts.Name)
-	}
-
-	return nil
+	return sts, nil
 }
 
 // deleteSearch removes any mongot StatefulSet, Service, and ConfigMap

@@ -12,9 +12,9 @@ const (
 	metricsPort     int32 = 9946
 	metricsPortName       = "metrics"
 
-	// dataVolumeName is the name of the PVC template that holds mongot's
+	// DataVolumeName is the name of the PVC template that holds mongot's
 	// Lucene-style indexes.
-	dataVolumeName = "mongot-data"
+	DataVolumeName = "mongot-data"
 
 	// dataMountPath is where DataVolumeName is mounted in the container.
 	dataMountPath = "/data/mongot"

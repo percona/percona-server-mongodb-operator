@@ -6,8 +6,9 @@
 #   2. write documents holding vector embeddings
 #   3. create a vectorSearch index
 #   4. run a $vectorSearch query and assert the nearest neighbours
-#   5. take a physical backup
-#   6. restore the physical backup and re-verify data and search
+#   5. resize and autoscale search storage, then re-verify search
+#   6. take a physical backup
+#   7. restore the physical backup and re-verify data and search
 #
 # NOTE: Vector search (mongot) requires a MongoDB 8.3+ server, so this
 # test must be run with an 8.3+ IMAGE_MONGOD. The mongot container image
@@ -19,12 +20,10 @@ test_dir=$(realpath "$(dirname "$0")")
 . "${test_dir}/../functions"
 set_debug
 
-
 if [[ ! $IMAGE_MONGOD =~ 8\.3 ]]; then
 	echo "vector-search test only works with MongoDB 8.3. Skipping."
 	exit 0
 fi
-
 
 cluster="some-name"
 search_index="vector_search_index"
@@ -111,6 +110,103 @@ check_vector_search() {
 	echo "vector search returned expected nearest neighbours: OK"
 }
 
+wait_search_storage() {
+	local expected=$1
+	local previous_sts_uid=$2
+	local sts="${cluster}-rs0-search"
+	local pvc="mongot-data-${sts}-0"
+	local retry=0
+	local sts_uid
+
+	wait_for_auto_resize "${pvc}" "${expected}" 90 10
+	wait_sts_vct "${sts}" "mongot-data" "${expected}" 90 10
+
+	echo -n "Waiting for search StatefulSet ${sts} to finish resizing"
+	sts_uid=$(kubectl_bin get sts "${sts}" -o jsonpath='{.metadata.uid}' --ignore-not-found)
+	until [[ -n ${sts_uid} && ${sts_uid} != "${previous_sts_uid}" &&
+		$(kubectl_bin get pvc "${pvc}" -o jsonpath='{.spec.resources.requests.storage}') == "${expected}" &&
+		-z $(kubectl_bin get sts "${sts}" -o jsonpath='{.metadata.annotations.percona\.com/pvc-resize-in-progress}' --ignore-not-found) ]]; do
+		if [[ ${retry} -ge 90 ]]; then
+			echo
+			echo "Search StatefulSet ${sts} did not finish resizing to ${expected}, max retries exceeded"
+			kubectl_bin get pvc "${pvc}" -o yaml
+			kubectl_bin get sts "${sts}" -o yaml --ignore-not-found
+			exit 1
+		fi
+		echo -n "."
+		sleep 10
+		retry=$((retry + 1))
+		sts_uid=$(kubectl_bin get sts "${sts}" -o jsonpath='{.metadata.uid}' --ignore-not-found)
+	done
+
+	echo
+	echo "Search StatefulSet ${sts} finished resizing to ${expected}"
+}
+
+check_search_storage_scaling() {
+	local sts="${cluster}-rs0-search"
+	local pod="${sts}-0"
+	local pvc="mongot-data-${pod}"
+	local storage_class
+	storage_class=$(kubectl_bin get pvc "${pvc}" -o jsonpath='{.spec.storageClassName}')
+	if [[ -z ${storage_class} || $(kubectl_bin get sc "${storage_class}" -o jsonpath='{.allowVolumeExpansion}') != "true" ]]; then
+		echo "Skipping search storage scaling: StorageClass ${storage_class} does not allow expansion"
+		return 0
+	fi
+
+	local pod_uid sts_uid
+	pod_uid=$(kubectl_bin get pod "${pod}" -o jsonpath='{.metadata.uid}')
+	sts_uid=$(kubectl_bin get sts "${sts}" -o jsonpath='{.metadata.uid}')
+
+	desc 'expand shared search storage from 3Gi to 4Gi'
+	kubectl_bin patch psmdb "${cluster}" --type=merge -p '{"spec":{"storageScaling":{"enableVolumeScaling":true},"search":{"storage":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"4Gi"}}}}}}}'
+	wait_search_storage "4Gi" "${sts_uid}"
+	if [[ $(kubectl_bin get pod "${pod}" -o jsonpath='{.metadata.uid}') != "${pod_uid}" ]]; then
+		echo "Search pod ${pod} was restarted during storage scaling"
+		exit 1
+	fi
+	wait_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
+	check_vector_search "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	desc 'enable autoscaling with a replset search storage override'
+	kubectl_bin patch psmdb "${cluster}" --type=json -p '[{"op":"add","path":"/spec/replsets/0/search","value":{"storage":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"4Gi"}}}}}}]'
+	kubectl_bin patch psmdb "${cluster}" --type=merge -p '{"spec":{"storageScaling":{"autoscaling":{"enabled":true,"triggerThresholdPercent":50,"growthStep":"2Gi","maxSize":"6Gi"}}}}'
+	if ! kubectl_bin wait psmdb "${cluster}" --for="jsonpath={.status.storageAutoscaling.${pvc}.currentSize}" --timeout=300s; then
+		kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.storageAutoscaling}' | jq .
+		return 1
+	fi
+	sts_uid=$(kubectl_bin get sts "${sts}" -o jsonpath='{.metadata.uid}')
+
+	desc 'fill mongot storage past the autoscaling threshold'
+	kubectl_bin exec "${pod}" -c mongot -- dd if=/dev/zero of=/data/mongot/e2e-fillfile bs=1M count=2300
+	wait_search_storage "6Gi" "${sts_uid}"
+	kubectl_bin exec "${pod}" -c mongot -- rm /data/mongot/e2e-fillfile
+	check_autoscaling_status "${cluster}" 1 "${pvc}"
+	local last_error
+	last_error=$(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.storageAutoscaling.${pvc}.lastError}")
+	if [[ -n ${last_error} ]]; then
+		echo "Search storage autoscaling failed: ${last_error}"
+		exit 1
+	fi
+	if [[ $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.replsets[0].search.storage.persistentVolumeClaim.resources.requests.storage}') != "6Gi" ||
+	$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.search.storage.persistentVolumeClaim.resources.requests.storage}') != "4Gi" ]]; then
+		echo "Search storage autoscaling should update only the replset override to 6Gi and keep shared storage at 4Gi"
+		exit 1
+	fi
+	if [[ $(kubectl_bin get pod "${pod}" -o jsonpath='{.metadata.uid}') != "${pod_uid}" ]]; then
+		echo "Search pod ${pod} was restarted during storage scaling"
+		exit 1
+	fi
+
+	desc 'verify mongod volumes remain at 3Gi and search still works'
+	local ordinal
+	for ordinal in 0 1 2; do
+		check_pvc_size "mongod-data-${cluster}-rs0-${ordinal}" "3Gi"
+	done
+	wait_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
+	check_vector_search "myApp:myPass@${cluster}-rs0.${namespace}"
+}
+
 main() {
 	create_infra "${namespace}"
 	deploy_s3_storage
@@ -151,6 +247,8 @@ main() {
 	wait_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
 
 	check_vector_search "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	check_search_storage_scaling
 
 	desc 'wait for pbm to be ready'
 	sleep 60 # give time for resync to start
