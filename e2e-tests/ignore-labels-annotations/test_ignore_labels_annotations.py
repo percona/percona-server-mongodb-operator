@@ -53,7 +53,7 @@ def _headless_svc_annotation(headless_svc: str, key: str) -> str:
         f"service/{headless_svc}",
         "-o",
         f"jsonpath={{.metadata.annotations.{key}}}",
-        check=False,
+        check=True,
     )
     return out.strip()
 
