@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import hashlib
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -195,6 +197,126 @@ class TestDemandBackupSnapshot:
         _check_data(psmdb_client_tls, config.cluster, config.namespace, test_paths["test_dir"])
 
     @pytest.mark.dependency(depends=["TestDemandBackupSnapshot::test_write_data"])
+    def test_cancel_backup(self, config: DemandBackupSnapshotConfig, test_paths: Paths) -> None:
+        """Cancel a pending snapshot backup and retain its lease until cleanup finishes."""
+        backup_name = "backup-snapshot-canceled"
+        # Match naming.VolumeSnapshotName so the operator reuses our pending snapshot.
+        snapshot_hash = hashlib.md5(
+            f"{config.cluster}{backup_name}rs0".encode(), usedforsecurity=False
+        ).hexdigest()[:5]
+        pending_snapshot = f"{backup_name}-rs0-{snapshot_hash}"
+        pending_content = f"{config.namespace}-{pending_snapshot}"
+        lease_name = f"psmdb-{config.cluster}-backup-lock"
+
+        def release_pending_snapshot() -> None:
+            raw = kubectl_bin(
+                "get", "volumesnapshot", pending_snapshot, "--ignore-not-found", "-o", "json"
+            )
+            if not raw.strip():
+                return
+            metadata = json.loads(raw)["metadata"]
+            patch = {
+                "metadata": {
+                    "resourceVersion": metadata["resourceVersion"],
+                    "finalizers": [
+                        finalizer
+                        for finalizer in metadata.get("finalizers", [])
+                        if finalizer != "e2e.percona.com/hold-snapshot"
+                    ],
+                }
+            }
+            kubectl_bin(
+                "patch",
+                "volumesnapshot",
+                pending_snapshot,
+                "--type=merge",
+                "-p",
+                json.dumps(patch),
+            )
+
+        try:
+            content = yaml.safe_load(
+                Path(f"{test_paths['test_dir']}/conf/pending-snapshot-content.yml").read_text()
+            )
+            content["metadata"]["name"] = pending_content
+            content["spec"]["source"]["snapshotHandle"] = pending_content
+            content["spec"]["volumeSnapshotRef"].update(
+                name=pending_snapshot, namespace=config.namespace
+            )
+            kubectl_bin("create", "-f", "-", input_data=yaml.dump(content))
+
+            snapshot = yaml.safe_load(
+                Path(f"{test_paths['test_dir']}/conf/pending-snapshot.yml").read_text()
+            )
+            snapshot["metadata"].update(name=pending_snapshot, namespace=config.namespace)
+            snapshot["spec"]["source"]["volumeSnapshotContentName"] = pending_content
+            kubectl_bin("create", "-f", "-", input_data=yaml.dump(snapshot))
+
+            _run_snapshot_backup(test_paths["test_dir"], backup_name, config.cluster)
+            wait_backup(backup_name, "running")
+            snapshots = get_backup_snapshots(backup_name)
+            assert snapshots, "Expected snapshots to be recorded before cancellation"
+            assert pending_snapshot in {item["snapshotName"] for item in snapshots}, (
+                f"Backup did not reuse the pending snapshot {pending_snapshot}: {snapshots}"
+            )
+
+            kubectl_bin("annotate", "psmdb-backup", backup_name, "percona.com/cancel-backup=true")
+            wait_backup(backup_name, "canceling")
+            kubectl_bin(
+                "wait",
+                "--for=jsonpath={.metadata.deletionTimestamp}",
+                f"volumesnapshot/{pending_snapshot}",
+                "--timeout=120s",
+            )
+            kubectl_bin("get", "lease", lease_name)
+
+            retry(release_pending_snapshot)
+            wait_backup(backup_name, "canceled")
+            status = json.loads(kubectl_bin("get", "psmdb-backup", backup_name, "-o", "json"))[
+                "status"
+            ]
+            assert not status.get("error"), status
+            assert not status.get("snapshots"), status
+            pbm_backup = json.loads(
+                kubectl_bin(
+                    "exec",
+                    f"{config.cluster}-rs0-0",
+                    "-c",
+                    "backup-agent",
+                    "--",
+                    "pbm",
+                    "describe-backup",
+                    status["pbmName"],
+                    "-o",
+                    "json",
+                )
+            )
+            assert pbm_backup["status"] == "canceled", pbm_backup
+
+            for item in snapshots:
+                assert not kubectl_bin(
+                    "get",
+                    "volumesnapshot",
+                    item["snapshotName"],
+                    "--ignore-not-found",
+                    "-o",
+                    "name",
+                ).strip(), f"Snapshot {item['snapshotName']} still exists after cancellation"
+            kubectl_bin("wait", "--for=delete", f"lease/{lease_name}", "--timeout=60s")
+        finally:
+            try:
+                retry(release_pending_snapshot)
+            except Exception:
+                logger.exception("Failed to release the pending snapshot finalizer")
+            for resource, name in (
+                ("volumesnapshot", pending_snapshot),
+                ("volumesnapshotcontent", pending_content),
+            ):
+                kubectl_bin(
+                    "delete", resource, name, "--ignore-not-found", "--wait=false", check=False
+                )
+
+    @pytest.mark.dependency(depends=["TestDemandBackupSnapshot::test_cancel_backup"])
     def test_backup(self, config: DemandBackupSnapshotConfig, test_paths: Paths) -> None:
         """Take a snapshot backup, keyed by the MongoDB replset names"""
         _run_snapshot_backup(test_paths["test_dir"], config.backup, config.cluster)
