@@ -74,14 +74,11 @@ function check_telemetry_transfer() {
 	fi
 
 	local telemetry_cr_log_file="${telemetry_state}_telemetry.version-service-cr.log${OPERATOR_NS:+-cw}.json"
-	local upgrade_strategy=${cr_vs_channel##*-}
+	local image_prefix=${cr_vs_channel%'-recommended'}
 	desc 'telemetry was disabled in operator but not in CR'
-	if [[ ("${upgrade_strategy}" == 'recommended' || "${upgrade_strategy}" == 'latest') && "${telemetry_state}" == 'disabled' ]]; then
+	if [ "${cr_vs_channel}" == "${image_prefix}-recommended" -a "${telemetry_state}" == 'disabled' ]; then
 		# cr VS should have telemetry
-		diff \
-			<(sed 's/"apply": "recommended"/"apply": "'${upgrade_strategy}'"/' ${test_dir}/compare/${telemetry_cr_log_file}) \
-			<(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json \
-				<(sed 's/"apply": "recommended"/"apply": "'${upgrade_strategy}'"/' ${test_dir}/compare/${telemetry_cr_log_file}))
+		diff ${test_dir}/compare/${telemetry_cr_log_file} <(grep -f ${tmp_dir}/${telemetry_state}_telemetry.version-service-cr.log.json ${test_dir}/compare/${telemetry_cr_log_file})
 		# operator VS should not have telemetry
 		[[ -s ${tmp_dir}/disabled_telemetry.version-service.log.json ]] && exit 1
 	fi
@@ -135,13 +132,9 @@ kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS
 	| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 
 ACTUAL_MONGOD_VERSION=$(get_mongod_ver_from_image "${IMAGE_MONGOD}")
-MONGOD_UPGRADE_CHANNEL="${ACTUAL_MONGOD_VERSION:0:3}-recommended"
-if [ "${ACTUAL_MONGOD_VERSION:0:3}" == "8.3" ]; then
-	MONGOD_UPGRADE_CHANNEL="8.3-latest"
-fi
 
 wait_deployment 'percona-server-mongodb-operator'
-check_telemetry_transfer "http://version-service-cr:11000" "${MONGOD_UPGRADE_CHANNEL}" "disabled"
+check_telemetry_transfer "http://version-service-cr:11000" "${ACTUAL_MONGOD_VERSION:0:3}-recommended" "disabled"
 
 kubectl_bin get deployment/percona-server-mongodb-operator -o yaml ${OPERATOR_NS:+-n $OPERATOR_NS} \
 	| yq eval '(.spec.template.spec.containers[0].env[] | select(.name == "DISABLE_TELEMETRY").value) = "true"' \
@@ -153,7 +146,7 @@ kubectl_bin delete pod -l run=version-service ${OPERATOR_NS:+-n $OPERATOR_NS}
 check_telemetry_transfer "http://version-service-cr:11000" "disabled" "disabled"
 
 cases=("version-service-exact" "version-service-recommended" "version-service-latest" "version-service-major" "version-service-unreachable")
-expected_images=("percona/percona-server-mongodb:7.0.30-16" "percona/percona-server-mongodb:8.0.19-7" "percona/percona-server-mongodb:8.3.13-4" "percona/percona-server-mongodb:7.0.30-16" "$IMAGE_MONGOD")
+expected_images=("percona/percona-server-mongodb:7.0.30-16" "percona/percona-server-mongodb:8.3.13-4" "percona/percona-server-mongodb:8.3.13-4" "percona/percona-server-mongodb:7.0.30-16" "$IMAGE_MONGOD")
 
 for i in "${!cases[@]}"; do
 	desc "test ${cases[$i]}"
