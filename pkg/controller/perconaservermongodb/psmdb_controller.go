@@ -648,6 +648,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 	return clusterStatus, stderrors.Join(errs...)
 }
 
+var errShardingConditionNotInCache = errors.New("sharding condition is not in the cache yet")
+
 func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	if cr.Spec.Pause || !cr.Spec.Backup.Enabled {
 		return nil
@@ -714,7 +716,24 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 	condition.Status = getShardingStatus(cr)
 	condition.LastTransitionTime = metav1.NewTime(time.Now())
 
-	return nil
+	if err := r.writeStatus(ctx, cr); err != nil {
+		return errors.Wrap(err, "write status")
+	}
+
+	// Pods must not be created before the cache has the new condition.
+	// Otherwise the next reconcile sees the old one and pauses the cluster again.
+	return retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		return errors.Is(err, errShardingConditionNotInCache)
+	}, func() error {
+		c := &api.PerconaServerMongoDB{}
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
+			return errors.Wrap(err, "get cluster")
+		}
+		if cond := c.Status.FindCondition(api.AppStateSharding); cond == nil || cond.Status != condition.Status {
+			return errShardingConditionNotInCache
+		}
+		return nil
+	})
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePause(ctx context.Context, cr *api.PerconaServerMongoDB) error {
@@ -1743,6 +1762,9 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationSSLInternalHash]; ok {
 			annotation[naming.AnnotationSSLInternalHash] = v
 		}
+		if v, ok := sts.Spec.Template.Annotations[naming.AnnotationPBMTLSHash]; ok {
+			annotation[naming.AnnotationPBMTLSHash] = v
+		}
 	}
 
 	return annotation, nil
@@ -1801,6 +1823,27 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
 	annotation[naming.AnnotationSSLHash] = getHash(sslSecret)
+	if cr.CompareVersion("1.24.0") >= 0 && cr.TLSEnabled() && cr.Spec.Backup.Enabled {
+		name := tls.CertificatePBMClient(cr).SecretName()
+		secret, err := getSecret(name)
+		if k8serrors.IsNotFound(err) {
+			if isUserProvidedOnly {
+				logf.FromContext(ctx).Error(nil, "TLS secret not found, skipping annotation update since certManagementPolicy is userProvidedOnly", "secret", name)
+				cr.Status.AddCondition(api.ClusterCondition{
+					Status:  api.ConditionFalse,
+					Type:    api.ConditionTypeTLSSecretsReady,
+					Reason:  "TLSSecretNotFound",
+					Message: fmt.Sprintf("TLS secret %s is missing, certManagementPolicy is userProvidedOnly", name),
+				})
+				return r.currentSSLAnnotation(ctx, cr)
+			}
+			return nil, errTLSNotReady
+		}
+		if err != nil {
+			return nil, errors.Wrapf(err, "get secret/%s", name)
+		}
+		annotation[naming.AnnotationPBMTLSHash] = getHash(secret)
+	}
 
 	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
 	if err != nil {

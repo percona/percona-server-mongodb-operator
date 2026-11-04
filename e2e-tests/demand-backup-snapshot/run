@@ -1,0 +1,249 @@
+#!/bin/bash
+
+set -o errexit
+
+test_dir=$(realpath "$(dirname "$0")")
+. "${test_dir}/../functions"
+set_debug
+
+run_snapshot_backup() {
+	local backup_name=$1
+	local snapshot_class=$(get_volume_snapshot_class)
+
+	log "running snapshot backup $backup_name"
+	yq eval '.metadata.name = "'${backup_name}'" | .spec.volumeSnapshotClass = "'${snapshot_class}'"' \
+		"${test_dir}/conf/backup.yml" \
+		| kubectl_bin apply -f -
+}
+
+check_snapshot_backup_cancellation() (
+	set -o pipefail
+
+	local backup_name="backup-snapshot-canceled"
+	local pending_snapshot="${backup_name}-rs0"
+	local pending_content="${namespace}-${pending_snapshot}"
+	local lease_name="psmdb-${cluster}-backup-lock"
+
+	release_pending_snapshot() {
+		local patch
+		patch=$(kubectl_bin get volumesnapshot "${pending_snapshot}" --ignore-not-found -o json | jq -c '
+			{metadata: {
+				resourceVersion: .metadata.resourceVersion,
+				finalizers: [.metadata.finalizers[]? | select(. != "e2e.percona.com/hold-snapshot")]
+			}}
+		') || return
+		if [[ -n ${patch} ]]; then
+			kubectl_bin patch volumesnapshot "${pending_snapshot}" --type=merge -p "${patch}"
+		fi
+	}
+
+	cleanup_snapshot_cancellation() {
+		release_pending_snapshot || true
+		kubectl_bin delete volumesnapshot "${pending_snapshot}" --ignore-not-found --wait=false || true
+		kubectl_bin delete volumesnapshotcontent "${pending_content}" --ignore-not-found --wait=false || true
+	}
+	trap cleanup_snapshot_cancellation EXIT
+
+	# A test driver keeps the snapshot pending so the backup cannot finish.
+	# The test finalizer holds deletion so canceling and lease retention can be checked.
+	pending_content="${pending_content}" pending_snapshot="${pending_snapshot}" namespace="${namespace}" \
+		yq eval '
+			.metadata.name = strenv(pending_content) |
+			.spec.source.snapshotHandle = strenv(pending_content) |
+			.spec.volumeSnapshotRef.name = strenv(pending_snapshot) |
+			.spec.volumeSnapshotRef.namespace = strenv(namespace)
+		' "${test_dir}/conf/pending-snapshot-content.yml" \
+		| kubectl_bin create -f -
+	pending_content="${pending_content}" pending_snapshot="${pending_snapshot}" namespace="${namespace}" \
+		yq eval '
+			.metadata.name = strenv(pending_snapshot) |
+			.metadata.namespace = strenv(namespace) |
+			.spec.source.volumeSnapshotContentName = strenv(pending_content)
+		' "${test_dir}/conf/pending-snapshot.yml" \
+		| kubectl_bin create -f -
+
+	run_snapshot_backup "${backup_name}"
+	wait_backup "${backup_name}" running
+
+	local snapshots
+	snapshots=$(kubectl_bin get psmdb-backup "${backup_name}" -o jsonpath='{.status.snapshots[*].snapshotName}')
+	if [[ -z ${snapshots} ]]; then
+		echo "Expected snapshots to be recorded before cancellation"
+		kubectl_bin get psmdb-backup "${backup_name}" -o yaml
+		exit 1
+	fi
+
+	kubectl_bin annotate psmdb-backup "${backup_name}" percona.com/cancel-backup=true
+	wait_backup "${backup_name}" canceling
+	kubectl_bin wait --for=jsonpath='{.metadata.deletionTimestamp}' "volumesnapshot/${pending_snapshot}" --timeout=120s
+	kubectl_bin get lease "${lease_name}"
+
+	retry 5 1 release_pending_snapshot
+	wait_backup "${backup_name}" canceled
+
+	local backup pbm_name
+	backup=$(kubectl_bin get psmdb-backup "${backup_name}" -o json)
+	echo "${backup}" | jq -e '.status.completed != null and (.status.error // "") == "" and (.status.snapshots | length) == 0'
+	pbm_name=$(echo "${backup}" | jq -r '.status.pbmName')
+	kubectl_bin exec "${cluster}-rs0-0" -c backup-agent -- pbm describe-backup "${pbm_name}" -o json \
+		| jq -e '.status == "canceled"'
+
+	local snapshot
+	for snapshot in ${snapshots}; do
+		if [[ -n "$(kubectl_bin get volumesnapshot "${snapshot}" --ignore-not-found -o name)" ]]; then
+			echo "Snapshot ${snapshot} still exists after cancellation"
+			exit 1
+		fi
+	done
+	kubectl_bin wait --for=delete "lease/${lease_name}" --timeout=60s
+)
+
+run_snapshot_recovery_check() {
+	local backup_name=$1
+	local target_cluster=${2:-$cluster}
+
+	wait_restore "${backup_name}" "${target_cluster}" "ready" "0" "3000"
+
+	if [ "$(kubectl_bin get psmdb "${target_cluster}" -o jsonpath='{.metadata.annotations.percona\.com/resync-pbm}')" != "true" ]; then
+		echo "psmdb/${target_cluster} should be annotated with percona.com/resync-pbm after a snapshot restore"
+		exit 1
+	fi
+
+	log "Operator triggered PBM resync: OK"
+
+	wait_cluster_consistency "${target_cluster}"
+	wait_for_pbm_operations "${target_cluster}"
+
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0-0.${target_cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0-1.${target_cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+	compare_mongo_cmd "find" "myApp:myPass@${target_cluster}-rs0-2.${target_cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+
+	log "Data restored: OK"
+}
+
+run_snapshot_restore_backupsource() {
+	local backup_name=$1
+	local target_cluster=$2
+
+	local snapshots
+	snapshots=$(kubectl_bin get psmdb-backup "${backup_name}" -o jsonpath='{.status.snapshots}')
+
+	log "running cross-cluster snapshot restore to ${target_cluster} from backup ${backup_name}"
+
+	backup_name="$backup_name" target_cluster="$target_cluster" snapshots="$snapshots" \
+		yq eval '
+			.metadata.name = "restore-backupsource-" + strenv(backup_name) |
+			.spec.clusterName = strenv(target_cluster) |
+			.spec.backupSource.snapshots = env(snapshots)
+		' "${test_dir}/conf/restore-backupsource.yml" \
+		| kubectl_bin apply -f -
+}
+
+create_infra "${namespace}"
+deploy_s3_storage
+apply_s3_storage_secrets
+deploy_volume_snapshot_class
+
+cluster="some-name"
+
+desc 'Testing snapshot backup/restore on unencrypted cluster'
+
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}.yml"
+kubectl_bin apply -f "${conf_dir}/client_with_tls.yml"
+
+echo 'check if all pods started'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}"
+
+sleep 60 # give time for resync to start
+wait_for_pbm_operations "${cluster}"
+
+echo 'Writing test data'
+run_mongo_tls \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo_tls \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+
+desc 'Canceling a running snapshot backup and checking cleanup'
+check_snapshot_backup_cancellation
+
+echo 'Running snapshot backup after cancellation (unencrypted)'
+backup_name="backup-snapshot"
+run_snapshot_backup "${backup_name}"
+wait_backup "${backup_name}"
+
+echo 'Drop collection and restore from snapshot (unencrypted)'
+run_mongo_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+run_restore "${backup_name}"
+run_snapshot_recovery_check "${backup_name}"
+
+desc 'Testing cross-cluster snapshot restore to a new cluster'
+
+new_cluster="some-name-new"
+
+apply_cluster "${test_dir}/conf/${new_cluster}.yml"
+
+echo 'check if all pods started on new cluster'
+wait_for_running "${new_cluster}-rs0" 3
+wait_cluster_consistency "${new_cluster}"
+
+sleep 60 # give time for resync to start
+wait_for_pbm_operations "${new_cluster}"
+
+echo 'Restoring snapshot to new cluster using backupSource'
+run_snapshot_restore_backupsource "${backup_name}" "${new_cluster}"
+run_snapshot_recovery_check "backupsource-${backup_name}" "${new_cluster}"
+
+echo 'Cleaning up new cluster'
+kubectl_bin delete psmdb "${new_cluster}"
+kubectl_bin wait --for=delete psmdb/"${new_cluster}" --timeout=600s
+
+desc 'Testing snapshot backup/restore on encrypted cluster'
+
+kubectl_bin delete psmdb "${cluster}"
+kubectl_bin wait --for=delete psmdb/"${cluster}" --timeout=600s
+
+kubectl_bin apply -f "${test_dir}/conf/secrets.yml"
+apply_cluster "${test_dir}/conf/${cluster}-encrypted.yml"
+
+echo 'check if all pods started'
+wait_for_running "${cluster}-rs0" 3
+wait_cluster_consistency "${cluster}"
+
+sleep 60 # give time for resync to start
+wait_for_pbm_operations "${cluster}"
+
+echo 'Creating app user and writing test data (encrypted)'
+run_mongo_tls \
+	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \
+	"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
+sleep 1
+run_mongo_tls \
+	'use myApp\n db.test.insert({ x: 100500 })' \
+	"myApp:myPass@${cluster}-rs0.${namespace}"
+sleep 5
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-0.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-1.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0-2.${cluster}-rs0.${namespace}" "" "" "" "" "" "true"
+
+echo 'Running snapshot backup (encrypted)'
+backup_name_enc="backup-snapshot-encrypted"
+run_snapshot_backup "${backup_name_enc}"
+wait_backup "${backup_name_enc}"
+
+echo 'Drop collection and restore from snapshot (encrypted)'
+run_mongo_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+run_restore "${backup_name_enc}"
+run_snapshot_recovery_check "${backup_name_enc}"
+
+destroy "${namespace}"
+
+desc 'test passed'

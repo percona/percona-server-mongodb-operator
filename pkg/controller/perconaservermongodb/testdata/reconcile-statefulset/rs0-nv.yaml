@@ -194,6 +194,8 @@ spec:
           value: "5"
         - name: SHARDED
           value: "TRUE"
+        - name: PBM_AGENT_TLS_DIR
+          value: /etc/mongodb-pbm
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -218,6 +220,9 @@ spec:
           readOnly: true
         - mountPath: /data/db
           name: mongod-data
+        - mountPath: /etc/mongodb-pbm
+          name: pbm-tls
+          readOnly: true
       - args:
         - fluent-bit
         command:
@@ -333,6 +338,10 @@ spec:
       - name: users-secret-file
         secret:
           secretName: internal-reconcile-statefulset-cr-users
+      - name: pbm-tls
+        secret:
+          defaultMode: 288
+          secretName: reconcile-statefulset-cr-pbm
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:

@@ -85,6 +85,30 @@ func TestBackup_Status(t *testing.T) {
 		expectedStatus api.PerconaServerMongoDBBackupStatus
 		cluster        *api.PerconaServerMongoDB
 	}{
+		"backup canceled": {
+			setupMock: func(mockPBM *MockPBM) {
+				mockPBM.EXPECT().GetBackupMeta(gomock.Any(), "test-backup").Return(&pbmBackup.BackupMeta{
+					Name: "test-backup", Status: defs.StatusCancelled, LastTransitionTS: 1234567900,
+				}, nil)
+				mockPBM.EXPECT().Node(gomock.Any()).Return("test-node", nil)
+				mockPBM.EXPECT().GetBackupMeta(gomock.Any(), "test-backup").Return(&pbmBackup.BackupMeta{
+					Name: "test-backup", Replsets: []pbmBackup.BackupReplset{{Name: "rs0", Node: "node1"}},
+				}, nil)
+			},
+			inputCR: &api.PerconaServerMongoDBBackup{
+				Name: "test-backup",
+				Spec: api.PerconaServerMongoDBBackupSpec{Type: defs.LogicalBackup},
+				Status: api.PerconaServerMongoDBBackupStatus{
+					PBMname: "test-backup", State: api.BackupStateRunning, Error: "previous error",
+				},
+			},
+			expectedStatus: api.PerconaServerMongoDBBackupStatus{
+				State:          api.BackupStateCanceled,
+				Type:           defs.LogicalBackup,
+				LastTransition: &metav1.Time{Time: time.Unix(1234567900, 0)},
+				PBMPods:        map[string]string{"rs0": "node1"},
+			},
+		},
 		"backup metadata not found": {
 			setupMock: func(mockPBM *MockPBM) {
 				mockPBM.EXPECT().
@@ -408,6 +432,8 @@ func TestBackup_Status(t *testing.T) {
 			if tt.expectedStatus.CompletedAt != nil {
 				assert.NotNil(t, status.CompletedAt)
 				assert.Equal(t, tt.expectedStatus.CompletedAt.Time, status.CompletedAt.Time)
+			} else {
+				assert.Nil(t, status.CompletedAt)
 			}
 			if tt.expectedStatus.LastWriteAt != nil {
 				assert.NotNil(t, status.LastWriteAt)

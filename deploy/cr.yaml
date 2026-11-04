@@ -92,6 +92,7 @@ spec:
     encryptionKey: my-cluster-name-mongodb-encryption-key
 #    ssl: my-cluster-name-ssl
 #    sslInternal: my-cluster-name-ssl-internal
+#    sslPBM: my-cluster-name-pbm
 #    keyFile: my-cluster-name-mongodb-keyfile
 #    vault: my-cluster-name-vault
 #    ldapSecret: my-ldap-secret
@@ -340,8 +341,6 @@ spec:
         resources:
           requests:
             storage: 3Gi
-#    # Dedicated PVC for the WiredTiger journal (/data/db/journal). Requires a
-#    # persistentVolumeClaim data volume and the wiredTiger storage engine.
 #    journalStorage:
 #      persistentVolumeClaim:
 #        storageClassName: fast-ssd
@@ -416,8 +415,6 @@ spec:
           resources:
             requests:
               storage: 3Gi
-#      # Dedicated PVC for the WiredTiger journal (/data/db/journal). Requires a
-#      # persistentVolumeClaim data volume and the wiredTiger storage engine.
 #      journalStorage:
 #        persistentVolumeClaim:
 #          storageClassName: fast-ssd
@@ -492,8 +489,6 @@ spec:
           resources:
             requests:
               storage: 3Gi
-#      # Dedicated PVC for the WiredTiger journal (/data/db/journal). Requires a
-#      # persistentVolumeClaim data volume and the wiredTiger storage engine.
 #      journalStorage:
 #        persistentVolumeClaim:
 #          storageClassName: fast-ssd
@@ -693,8 +688,6 @@ spec:
           resources:
             requests:
               storage: 3Gi
-#      # Dedicated PVC for the WiredTiger journal (/data/db/journal). Requires a
-#      # persistentVolumeClaim data volume and the wiredTiger storage engine.
 #      journalStorage:
 #        persistentVolumeClaim:
 #          storageClassName: fast-ssd
@@ -1111,11 +1104,6 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
-#    # Store mongod logs on a dedicated PVC instead of the data volume.
-#    # Requires `enabled: true` above and crVersion 1.24.0.
-#    # Enabling it recreates the statefulsets; logs already on the data volume
-#    # are left there, hidden behind the new mount, so copy them out first if
-#    # you need them. Disabling it detaches the PVCs without deleting them.
 #    storage:
 #      persistentVolumeClaim:
 #        storageClassName: standard
