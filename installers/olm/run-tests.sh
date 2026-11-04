@@ -50,7 +50,7 @@ set_package() {
 
 check_tools() {
 	local command
-	for command in kubectl jq make uv; do
+	for command in kubectl oc jq make uv; do
 		command -v "$command" >/dev/null 2>&1 || die "$command is required"
 	done
 	kubectl api-resources --api-group=packages.operators.coreos.com -o name \

@@ -324,7 +324,8 @@ Validation uses:
 
 `make tests` runs the `e2e-tests/olm-upgrade` pytest test (in this directory)
 against the deployed development catalogs. Deploy them first with
-`make deploy/<type>`, and point `kubectl` at the OpenShift cluster. Build the catalog with
+`make deploy/<type>`, and point `kubectl` and `oc` at the OpenShift cluster (the
+shared harness creates the test project with `oc`; `uv` is also required). Build the catalog with
 `CATALOG_PREVIOUS_MINORS=2` to test upgrades from the two previous minor
 versions and all their patch releases.
 
@@ -383,15 +384,20 @@ helpers. To run one test by hand from the repository
 root:
 
 ```bash
-PYTHONPATH=e2e-tests:installers/olm/e2e-tests \
+SKIP_DELETE=0 PYTHONPATH=e2e-tests:installers/olm/e2e-tests \
   uv run pytest -p conftest installers/olm/e2e-tests/olm-upgrade/
 ```
 
-Before and after each run, the test deletes the operator CRDs, together with
-every `psmdb` resource in the cluster. OLM leaves CRDs behind, and a newer CRD
-blocks installing an older bundle. Use a dedicated cluster. Set `SKIP_DELETE=1`
-to keep the last run's resources for debugging; earlier runs are always cleaned
-up, since the next run deletes the CRDs anyway.
+The shared `conftest.py` defaults to `SKIP_DELETE=1`, so a manual run without
+`SKIP_DELETE=0` keeps its namespace, operator and CRDs. `make tests` cleans up
+after every run unless you set `SKIP_DELETE=1`.
+
+Before each run, the test deletes the operator CRDs, together with every `psmdb`
+resource in the cluster, and with `SKIP_DELETE=0` it deletes them again after
+the run. OLM leaves CRDs behind, and a newer CRD blocks installing an older
+bundle. Use a dedicated cluster. Run `make tests SKIP_DELETE=1` to keep the
+last run's resources for debugging; earlier runs are always cleaned up, since
+the next run deletes the CRDs anyway.
 
 ---
 
