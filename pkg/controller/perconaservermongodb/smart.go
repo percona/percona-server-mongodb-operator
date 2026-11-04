@@ -146,6 +146,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
+	if pod, ok := podBlockingClaimRollout(sfs, list.Items); ok {
+		log.Info("statefulset can't create missing pods until this pod has its volume claims, recreating it", "pod", pod.Name)
+
+		return r.recreateNWait(ctx, cr, sfs.Status.UpdateRevision, &pod, waitLimit)
+	}
+
 	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
 		// Members are reported only after the replset is reconciled (e.g. added
 		// as a shard). Until then, pods outside the replset have no users and
@@ -335,6 +341,23 @@ func podsMissingClaimVolumes(sfs *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	}
 
 	return false
+}
+
+func podBlockingClaimRollout(sfs *appsv1.StatefulSet, pods []corev1.Pod) (corev1.Pod, bool) {
+	if sfs.Spec.Replicas == nil || len(pods) >= int(*sfs.Spec.Replicas) {
+		return corev1.Pod{}, false
+	}
+
+	pods = slices.Clone(pods)
+	sortPodsByOrdinal(pods, func(i, j int) bool { return i < j })
+
+	for _, pod := range pods {
+		if podsMissingClaimVolumes(sfs, []corev1.Pod{pod}) {
+			return pod, true
+		}
+	}
+
+	return corev1.Pod{}, false
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
