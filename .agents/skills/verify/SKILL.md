@@ -40,8 +40,12 @@ the command and its result, the test name, or the file and line.
 
 Run the review skills that match the diff:
 
-- Go code: `review-go-style` and `review-architecture`;
-- anything under `e2e-tests/` or in `*_test.go`: `review-qa`.
+- Go code: `review-go-style` and `review-architecture`, plus `review-qa` for
+  changes under `pkg/`, which checks that each new branch, CR field or
+  behaviour has a unit or envtest test;
+- test code anywhere: a path with an `e2e-tests/` segment, `test_*.py`,
+  `*_test.go`, golden files, `e2e-tests/tests.yaml`, and the scripts and
+  `make` targets that run tests: `review-qa`.
 
 If your tool runs subagents, run them in parallel. Otherwise run each in a
 fresh session, so the review does not inherit this session's assumptions.

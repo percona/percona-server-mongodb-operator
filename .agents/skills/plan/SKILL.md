@@ -49,8 +49,9 @@ The plan contains:
 - the problem, in one to three sentences;
 - numbered acceptance criteria, each checkable by a test or a command;
 - the files and packages that change;
-- the test plan: unit tests for logic and rendering, e2e tests only for what
-  needs a real cluster (see `e2e-tests/AGENTS.md`);
+- the test plan: unit tests for logic and rendering, envtest for reconcile
+  behaviour, e2e tests only for what needs a real cluster (see
+  `e2e-tests/AGENTS.md`), and what the tests leave out;
 - compatibility: behaviour of existing clusters, the `crVersion` gate, the
   upgrade path, and the oldest and newest supported database and Kubernetes
   versions;

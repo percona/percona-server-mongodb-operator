@@ -6,6 +6,7 @@ Each case applies `replace` or `append` edits to tracked files, captures `git di
 writes it to <out_dir>/<case>/diff.patch and restores the files. The script refuses to
 run when a file it edits has local changes, and it stops when a `replace` anchor is not
 found exactly once, so a stale case fails instead of producing a different diff.
+Recorded cases, real diffs that escaped review, are copied from recorded/ as they are.
 """
 
 import pathlib
@@ -163,6 +164,12 @@ CASES: dict[str, list[Edit]] = {
     # Clean diffs. Nothing above Minor is expected.
     "C1-behaviour-test": [
         (
+            "replace",
+            ARBITER,
+            "from lib.kubectl import kubectl_bin, wait_for_running, wait_pod\n",
+            "from lib.kubectl import kubectl_bin, wait_for_cluster_state, wait_for_running, wait_pod\n",
+        ),
+        (
             "append",
             ARBITER,
             f'''
@@ -170,34 +177,80 @@ CASES: dict[str, list[Edit]] = {
     def test_arbiter_pod_restart(
         self, config: ArbiterConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
-        """Delete the arbiter pod and check it rejoins the replset without data loss"""
+        """Delete the arbiter pod: it is recreated, rejoins, and the operator reconciles"""
+        cr_name = config.cluster.removesuffix("-rs0")
         arbiter_pod = f"{{config.cluster}}-arbiter-0"
-        kubectl_bin(
-            "delete", "pod", arbiter_pod, "--grace-period=0", "--force", "-n", config.namespace
-        )
-        wait_pod(arbiter_pod)
-        wait_for_running(config.cluster, 2, False)
 
-        deadline = time.time() + 120
-        states = ""
-        while time.time() < deadline:
+        def member_state() -> str:
+            """The arbiter's state in rs.status(), "" while it is not a member"""
             states = psmdb_client.run_mongosh(
                 "rs.status().members.map(m => m.name + ' ' + m.stateStr).join('\\\\n')",
                 {CRED},
             )
-            arbiter_lines = [s for s in states.splitlines() if s.startswith(arbiter_pod)]
-            if arbiter_lines and arbiter_lines[0].endswith("ARBITER"):
+            lines = [s for s in states.splitlines() if s.startswith(arbiter_pod)]
+            return lines[0].partition(" ")[2] if lines else ""
+
+        def pod_uid() -> str:
+            return kubectl_bin("get", "pod", arbiter_pod, "-o", "jsonpath={{.metadata.uid}}").strip()
+
+        # Start from a settled cluster, so a failure below comes from the restart.
+        wait_for_cluster_state(cr_name, "ready")
+        state = member_state()
+        assert state == "ARBITER", f"arbiter not healthy before the restart: {{state!r}}"
+        uid_before = pod_uid()
+
+        # Forced, as in test_primary_failover: no PVC, so the replacement starts at once.
+        logger.info(f"Deleting {{arbiter_pod}}")
+        kubectl_bin(
+            "delete", "pod", arbiter_pod, "--grace-period=0", "--force", "-n", config.namespace
+        )
+        wait_pod(arbiter_pod)
+        assert pod_uid() != uid_before, f"{{arbiter_pod}} was not recreated (uid {{uid_before}})"
+
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            state = member_state()
+            if state == "ARBITER":
                 break
             time.sleep(5)
         else:
-            pytest.fail(f"arbiter did not rejoin as ARBITER within 120s, last seen: {{states}}")
+            pytest.fail(f"{{arbiter_pod}} not ARBITER within 120s, last seen: {{state!r}}")
+        logger.info(f"{{arbiter_pod}} rejoined as ARBITER")
 
-        for i in range(2):
-            psmdb_client.compare_mongo_cmd(
-                "find({{}}, {{ _id: 0 }}).toArray()",
-                f"myApp:myPass@{{config.cluster}}-{{i}}.{{config.cluster}}.{{config.namespace}}",
-                test_file=f"{{test_paths['test_dir']}}/compare/find-1.json",
-            )
+        # Prove the operator reconciles the cluster after the restart: bump the CR generation
+        # with a field no pod template uses (the version-service cron is idle with apply=disabled)
+        # and wait for the operator to observe it.
+        before = kubectl_bin("get", "psmdb", cr_name, "-o", "jsonpath={{.metadata.generation}}")
+        generation = kubectl_bin(
+            "patch",
+            "psmdb",
+            cr_name,
+            "--type=merge",
+            "-p",
+            '{{"spec":{{"upgradeOptions":{{"apply":"disabled","schedule":"0 4 * * *"}}}}}}',
+            "-o",
+            "jsonpath={{.metadata.generation}}",
+        ).strip()
+        assert int(generation) > int(before), f"generation not bumped: {{before}}, {{generation}}"
+        observed_path = "jsonpath={{.status.observedGeneration}}"
+        deadline = time.time() + 300
+        observed = ""
+        while time.time() < deadline:
+            observed = kubectl_bin(
+                "get", "psmdb", cr_name, "-o", observed_path, check=False
+            ).strip()
+            if observed == generation:
+                break
+            time.sleep(5)
+        else:
+            pytest.fail(f"generation {{generation}} not observed in 300s, last seen: {{observed!r}}")
+        wait_for_cluster_state(cr_name, "ready")
+
+        psmdb_client.compare_mongo_cmd(
+            "find({{}}, {{ _id: 0 }}).toArray()",
+            f"myApp:myPass@{{config.cluster}}.{{config.namespace}}",
+            test_file=f"{{test_paths['test_dir']}}/compare/find-1.json",
+        )
 ''',
         ),
     ],
@@ -313,6 +366,13 @@ func TestMongodStatefulSetName(t *testing.T) {
 }
 
 
+# Recorded cases: real diffs that escaped review, kept in recorded/ next to this script.
+RECORDED: dict[str, str] = {
+    "R1-olm-upgrade": "R1-olm-upgrade.patch",
+}
+HERE = pathlib.Path(__file__).resolve().parent
+
+
 def git(repo: pathlib.Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args], cwd=repo, check=True, capture_output=True, text=True
@@ -349,16 +409,24 @@ def main(argv: list[str]) -> int:
         sys.exit(__doc__)
     repo = pathlib.Path(argv[1]).resolve()
     out = pathlib.Path(argv[2]).resolve()
-    wanted = argv[3:] or list(CASES)
-    unknown = sorted(set(wanted) - set(CASES))
+    known = [*CASES, *RECORDED]
+    wanted = argv[3:] or known
+    unknown = sorted(set(wanted) - set(known))
     if unknown:
-        sys.exit(f"unknown cases: {', '.join(unknown)}; known: {', '.join(CASES)}")
-    files = sorted({edit[1] for case_id in wanted for edit in CASES[case_id]})
+        sys.exit(f"unknown cases: {', '.join(unknown)}; known: {', '.join(known)}")
+    files = sorted({edit[1] for case_id in wanted for edit in CASES.get(case_id, [])})
     if local := changed(repo, files):
         sys.exit(f"local changes in files the set edits, commit or revert them first:\n{local}")
 
     out.mkdir(parents=True, exist_ok=True)
     for case_id in wanted:
+        case_dir = out / case_id
+        case_dir.mkdir(exist_ok=True)
+        if case_id in RECORDED:
+            diff = (HERE / "recorded" / RECORDED[case_id]).read_text()
+            (case_dir / "diff.patch").write_text(diff)
+            print(f"{case_id}: {len(diff.splitlines())} diff lines, recorded")
+            continue
         touched: list[str] = []
         try:
             for edit in CASES[case_id]:
@@ -367,8 +435,6 @@ def main(argv: list[str]) -> int:
         finally:
             if touched:
                 git(repo, "checkout", "--", *touched)
-        case_dir = out / case_id
-        case_dir.mkdir(exist_ok=True)
         (case_dir / "diff.patch").write_text(diff)
         print(f"{case_id}: {len(diff.splitlines())} diff lines, files {sorted(set(touched))}")
 

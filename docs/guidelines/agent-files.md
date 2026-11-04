@@ -54,8 +54,9 @@ guidelines in `docs/guidelines/`, and the skills in `.agents/skills/`.
 ## Review set
 
 - `.agents/evals/review-set/` holds a generator for diffs with known defects
-  and clean diffs, and `expected.md` with the finding each diff must produce.
-  Its `README.md` says how to run and score it.
+  and clean diffs, recorded diffs that escaped review, and `expected.md` with
+  the findings each diff must produce. Its `README.md` says how to run and
+  score it.
 - Rerun the set when a guideline or a review skill changes. A missed defect,
   or a wrong Major or Critical finding on a clean diff, blocks the change.
 - Reviewers never read `expected.md`; the person running the set does.

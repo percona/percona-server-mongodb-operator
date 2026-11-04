@@ -10,9 +10,12 @@ it when a guideline or a review skill changes.
   tracked files, then restores them. It refuses to run when a file it edits
   has local changes, and it stops when an anchor string is missing, so a
   stale case fails instead of producing a different diff.
+- `recorded/` holds real diffs that escaped review, one patch per case, named
+  in `make_cases.py`. The generator copies them as they are.
 - `expected.md` lists, per case, the planted defect, the expected severity,
   the rule that names it, and the secondary findings the case is known to
-  contain. Reviewers do not read it.
+  contain. For a recorded case it lists every finding the review produced.
+  Reviewers do not read it.
 
 ## Run
 
@@ -31,7 +34,10 @@ it when a guideline or a review skill changes.
    > not read `.agents/evals/review-set/expected.md`. Report in the format
    > the review procedure gives.
 
-   If your tool runs subagents, run the cases in parallel.
+   If your tool runs subagents, run the cases in parallel. Parallel reviewers
+   share the checkout: tell each one to change nothing in it, to apply the
+   patch on a copy (a `git worktree`) when it builds or runs something, and
+   that no cluster is available.
 3. Score each review against `expected.md`.
 
 ## Score
@@ -39,6 +45,8 @@ it when a guideline or a review skill changes.
 - Defect case: pass when the planted defect is reported at the expected
   severity. One level off is partial. Missed is a fail.
 - Clean case: pass when nothing above Minor is reported.
+- Recorded case: score each listed finding as a planted defect. The case
+  passes when no Critical or Major finding is missed.
 - Noise: a Major or Critical finding that is wrong about the code or names
   no rule in the guideline. Noise is a fail.
 - A correct finding on something the case did not plant is a flaw in the
@@ -52,5 +60,8 @@ it when a guideline or a review skill changes.
   `append` edits. The anchor of a `replace` must occur once in the file.
 - Add the row to `expected.md`: the defect, the severity, the rule in the
   guideline that names it, and the secondary findings the case contains.
-- A bug that escaped review goes in as a case together with the rule that
-  catches it (`docs/guidelines/agent-files.md`, "When a bug escapes").
+- A bug that escaped review goes in as a recorded case together with the rule
+  that catches it (`docs/guidelines/agent-files.md`, "When a bug escapes"):
+  save the diff of the reviewed commit against its merge base as
+  `recorded/<case>.patch`, name the case in `make_cases.py`, and list the
+  findings in `expected.md` with the rule for each.
