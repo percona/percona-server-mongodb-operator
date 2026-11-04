@@ -419,6 +419,71 @@ func TestCreateCertificate(t *testing.T) {
 	})
 }
 
+func TestPBMClientCertificate(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		issuer     cmmeta.IssuerReference
+		wantIssuer cmmeta.IssuerReference
+	}{
+		{
+			name:       "default issuer",
+			issuer:     cmmeta.IssuerReference{Kind: cm.IssuerKind},
+			wantIssuer: cmmeta.IssuerReference{Name: "psmdb-mock-psmdb-issuer", Kind: cm.IssuerKind},
+		},
+		{
+			name:       "custom issuer",
+			issuer:     cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+			wantIssuer: cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+		},
+		{
+			name:       "custom cluster issuer",
+			issuer:     cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.ClusterIssuerKind, Group: "cert-manager.io"},
+			wantIssuer: cmmeta.IssuerReference{Name: "custom-issuer", Kind: cm.ClusterIssuerKind, Group: "cert-manager.io"},
+		},
+		{
+			name:       "external issuer",
+			issuer:     cmmeta.IssuerReference{Name: "external-issuer", Kind: "AWSPCAIssuer", Group: "awspca.cert-manager.io"},
+			wantIssuer: cmmeta.IssuerReference{Name: "external-issuer", Kind: "AWSPCAIssuer", Group: "awspca.cert-manager.io"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			cr := &api.PerconaServerMongoDB{
+				Name: "psmdb-mock", Namespace: "psmdb",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Secrets:   &api.SecretsSpec{SSL: "server-tls"},
+					TLS:       &api.TLSSpec{IssuerConf: tc.issuer},
+				},
+			}
+			cert := CertificatePBMClient(cr)
+			obj := cert.Object()
+			assert.Equal(t, "psmdb-mock-pbm", cert.Name())
+			assert.Equal(t, cert.Name(), obj.Spec.SecretName)
+			assert.Equal(t, "psmdb-mock-pbm", obj.Spec.CommonName)
+			assert.Equal(t, []string{"PBM"}, obj.Spec.Subject.Organizations)
+			server := CertificateTLS(cr, false).Object()
+			assert.NotEqual(t, server.Spec.Subject, obj.Spec.Subject)
+			assert.Equal(t, server.Spec.IssuerRef, obj.Spec.IssuerRef)
+			assert.Equal(t, []cm.KeyUsage{cm.UsageDigitalSignature, cm.UsageKeyEncipherment, cm.UsageClientAuth}, obj.Spec.Usages)
+			assert.Empty(t, obj.Spec.DNSNames)
+			assert.Equal(t, tc.wantIssuer, obj.Spec.IssuerRef)
+
+			r := buildFakeClient(cr)
+			_, err := r.ApplyCertificate(ctx, cr, cert)
+			require.NoError(t, err)
+			issued := &cm.Certificate{}
+			require.NoError(t, r.GetClient().Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: cert.Name()}, issued))
+			assert.Equal(t, obj.Spec, issued.Spec)
+
+			cr.Spec.Secrets.SSLPBM = "custom-pbm-tls"
+			assert.Equal(t, "psmdb-mock-pbm", cert.Name())
+			assert.Equal(t, "custom-pbm-tls", cert.SecretName())
+			assert.Equal(t, "custom-pbm-tls", cert.Object().Spec.SecretName)
+		})
+	}
+}
+
 func TestWaitForCerts(t *testing.T) {
 	t.Parallel()
 

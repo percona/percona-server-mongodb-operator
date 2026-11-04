@@ -584,6 +584,35 @@ def _delete_cert_manager() -> None:
         time.sleep(2)
 
 
+def _wait_for_cert_manager_webhook(timeout: int = 300) -> None:
+    """Wait until the webhook serves requests, i.e. cainjector has injected its CA bundle."""
+    issuer = """
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: webhook-check
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+"""
+    deadline = time.monotonic() + timeout
+    while True:
+        out = kubectl_bin(
+            "apply",
+            "--dry-run=server",
+            "-f",
+            "-",
+            input_data=issuer,
+            check=False,
+            return_stderr=True,
+        )
+        if "created (server dry run)" in out:
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"cert-manager webhook is not ready: {out}")
+        time.sleep(5)
+
+
 @pytest.fixture(scope="class")
 def destroy_cert_manager() -> Callable[[], None]:
     """Delete cert-manager so certificates are issued by the operator, not cert-manager."""
@@ -627,6 +656,7 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
                     "cert-manager",
                     "--timeout=300s",
                 )
+            _wait_for_cert_manager_webhook()
         except Exception:
             _delete_cert_manager()
             raise
