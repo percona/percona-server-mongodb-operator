@@ -257,7 +257,7 @@ def get_k8s_versions() -> tuple[str, str]:
 
 
 def detect_platform() -> str:
-    """Detect the Kubernetes platform, mirroring bash detect_k8s_env().
+    """Detect the Kubernetes platform.
 
     Returns one of: openshift, eks, gke, aks, kind, minikube, rancher, unknown.
     """
@@ -287,7 +287,7 @@ def detect_platform() -> str:
 
 
 def detect_arch() -> str:
-    """Detect target arch for scheduling: 'arm64' on arm64-only clusters, else '' (mirrors vars)."""
+    """Detect target arch for scheduling: 'arm64' on arm64-only clusters, else ''."""
     arches = kubectl_bin(
         "get",
         "nodes",

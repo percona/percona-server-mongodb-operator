@@ -5,60 +5,62 @@ set -o errexit
 
 dir=$(realpath "$(dirname "$0")")
 
-fail() {
+run() {
 	local test=$1
-	echo "test $test failed"
-	exit 1
+	make -C "$dir/.." e2e-test TEST="$test" || {
+		echo "test $test failed"
+		exit 1
+	}
 }
 
-"$dir/arbiter/run" || fail "arbiter"
-"$dir/cross-site-sharded/run" || fail "cross-site-sharded"
-"$dir/data-at-rest-encryption/run" || fail "data-at-rest-encryption"
-"$dir/data-sharded/run" || fail "data-sharded"
-"$dir/default-cr/run" || fail "default-cr"
-"$dir/demand-backup-eks-credentials/run" || fail "demand-backup-eks-credentials"
-"$dir/demand-backup-eks-credentials-irsa/run" || fail "demand-backup-eks-credentials-irsa"
-"$dir/demand-backup-sharded/run" || fail "demand-backup-sharded"
-"$dir/demand-backup/run" || fail "demand-backup"
-"$dir/demand-backup-physical-parallel/run" || fail "demand-backup-physical-parallel"
-"$dir/demand-backup-physical-aws/run" || fail "demand-backup-physical-aws"
-"$dir/demand-backup-physical-azure/run" || fail "demand-backup-physical-azure"
-"$dir/demand-backup-physical-gcp/run" || fail "demand-backup-physical-gcp"
-"$dir/demand-backup-physical-minio/run" || fail "demand-backup-physical-minio"
-"$dir/demand-backup-physical-sharded-parallel/run" || fail "demand-backup-physical-sharded-parallel"
-"$dir/demand-backup-physical-sharded-aws/run" || fail "demand-backup-physical-sharded-aws"
-"$dir/demand-backup-physical-sharded-azure/run" || fail "demand-backup-physical-sharded-azure"
-"$dir/demand-backup-physical-sharded-gcp/run" || fail "demand-backup-physical-sharded-gcp"
-"$dir/demand-backup-physical-sharded-minio/run" || fail "demand-backup-physical-sharded-minio"
-"$dir/expose-sharded/run" || fail "expose-sharded"
-"$dir/ignore-labels-annotations/run" || fail "ignore-labels-annotations"
-"$dir/init-deploy/run" || fail "init-deploy"
-"$dir/finalizer/run" || fail "finalizer"
-"$dir/limits/run" || fail "limits"
-"$dir/liveness/run" || fail "liveness"
-"$dir/multi-cluster-service/run" || fail "multi-cluster-service"
-"$dir/mongod-major-upgrade/run" || fail "mongod-major-upgrade"
-"$dir/mongod-major-upgrade-sharded/run" || fail "mongod-major-upgrade-sharded"
-"$dir/non-voting-and-hidden/run" || fail "non-voting-and-hidden"
-"$dir/one-pod/run" || fail "one-pod"
-"$dir/operator-self-healing-chaos/run" || fail "operator-self-healing-chaos"
-"$dir/pitr-sharded/run" || fail "pitr-sharded"
-"$dir/pitr/run" || fail "pitr"
-"$dir/recover-no-primary/run" || fail "recover-no-primary"
-"$dir/rs-shard-migration/run" || fail "rs-shard-migration"
-"$dir/scaling/run" || fail "scaling"
-"$dir/scheduled-backup/run" || fail "scheduled-backup"
-"$dir/security-context/run" || fail "security-context"
-"$dir/self-healing-chaos/run" || fail "self-healing-chaos"
-"$dir/service-per-pod/run" || fail "service-per-pod"
-"$dir/serviceless-external-nodes/run" || fail "serviceless-external-nodes"
-"$dir/smart-update/run" || fail "smart-update"
-"$dir/storage/run" || fail "storage"
-"$dir/upgrade-consistency/run" || fail "upgrade-consistency"
-"$dir/upgrade-consistency-sharded/run" || fail "upgrade-consistency-sharded"
-"$dir/upgrade-sharded/run" || fail "upgrade-sharded"
-"$dir/upgrade/run" || fail "upgrade"
-"$dir/users/run" || fail "users"
-"$dir/vector-search/run" || fail "vector-search"
-"$dir/vector-search-sharded/run" || fail "vector-search-sharded"
-"$dir/version-service/run" || fail "version-service"
+run arbiter
+run cross-site-sharded
+run data-at-rest-encryption
+run data-sharded
+run default-cr
+run demand-backup-eks-credentials
+run demand-backup-eks-credentials-irsa
+run demand-backup-sharded
+run demand-backup
+run demand-backup-physical-parallel
+run demand-backup-physical-aws
+run demand-backup-physical-azure
+run demand-backup-physical-gcp
+run demand-backup-physical-minio
+run demand-backup-physical-sharded-parallel
+run demand-backup-physical-sharded-aws
+run demand-backup-physical-sharded-azure
+run demand-backup-physical-sharded-gcp
+run demand-backup-physical-sharded-minio
+run expose-sharded
+run ignore-labels-annotations
+run init-deploy
+run finalizer
+run limits
+run liveness
+run multi-cluster-service
+run mongod-major-upgrade
+run mongod-major-upgrade-sharded
+run non-voting-and-hidden
+run one-pod
+run operator-self-healing-chaos
+run pitr-sharded
+run pitr
+run recover-no-primary
+run rs-shard-migration
+run scaling
+run scheduled-backup
+run security-context
+run self-healing-chaos
+run service-per-pod
+run serviceless-external-nodes
+run smart-update
+run storage
+run upgrade-consistency
+run upgrade-consistency-sharded
+run upgrade-sharded
+run upgrade
+run users
+run vector-search
+run vector-search-sharded
+run version-service

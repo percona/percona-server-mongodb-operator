@@ -19,6 +19,8 @@ import (
 )
 
 func TestGetRestoreCmd(t *testing.T) {
+	t.Parallel()
+
 	const (
 		restoreName = "2026-05-18T12:00:00Z"
 		backupName  = "my-backup"

@@ -17,6 +17,8 @@ import (
 )
 
 func TestIsResyncNeeded(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		currentCfg *config.Config
@@ -437,6 +439,8 @@ func TestIsResyncNeeded(t *testing.T) {
 }
 
 func TestHashPBMConfiguration(t *testing.T) {
+	t.Parallel()
+
 	t.Run("updating credentials changes hash", func(t *testing.T) {
 		cr := &psmdbv1.PerconaServerMongoDB{Spec: psmdbv1.PerconaServerMongoDBSpec{CRVersion: version.Version()}}
 		cfg := []config.Config{

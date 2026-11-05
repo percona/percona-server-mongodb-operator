@@ -26,6 +26,8 @@ func restoreScheme(t *testing.T) *runtime.Scheme {
 }
 
 func TestCheckClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "tgt"
