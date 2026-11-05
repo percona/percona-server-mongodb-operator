@@ -72,6 +72,8 @@ func containersReady(pod *corev1.Pod) {
 }
 
 func TestSearchStatus(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cr := searchTestCR()
 	rs := cr.Spec.Replsets[0]
@@ -261,6 +263,8 @@ func TestSearchStatus(t *testing.T) {
 }
 
 func TestSearchStatus_Paused(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	cr := searchTestCR()
 	cr.Spec.Pause = true

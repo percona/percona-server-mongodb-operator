@@ -24,6 +24,8 @@ import (
 )
 
 func TestGeneratePVCFromSnapshot(t *testing.T) {
+	t.Parallel()
+
 	storageClassName := "fast"
 	spec := corev1.PersistentVolumeClaimSpec{
 		AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -47,6 +49,8 @@ func TestGeneratePVCFromSnapshot(t *testing.T) {
 }
 
 func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
+	t.Parallel()
+
 	oldClassName := "old-class"
 	newClassName := "new-class"
 
@@ -77,6 +81,8 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 }
 
 func TestReconcileSnapshotNew(t *testing.T) {
+	t.Parallel()
+
 	podZero := &corev1.Pod{
 		Name:      "my-cluster-rs0-0",
 		Namespace: "default",
@@ -119,6 +125,8 @@ func TestReconcileSnapshotNew(t *testing.T) {
 }
 
 func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -486,6 +494,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -562,6 +572,8 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestRestorePVC(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -653,6 +665,8 @@ func TestRestorePVC(t *testing.T) {
 }
 
 func TestRolloutRestoredPVCs(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -826,6 +840,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 }
 
 func TestRolloutRestoredPVCsSharded(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	const ns = "default"
 
@@ -919,6 +935,8 @@ func TestRolloutRestoredPVCsSharded(t *testing.T) {
 }
 
 func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -985,6 +1003,8 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
@@ -1023,6 +1043,8 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 
 // Ensure the restore node address arg is built with DefaultMongoPort.
 func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -1078,6 +1100,8 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 }
 
 func TestDeleteDBConfigSecrets(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -1126,6 +1150,8 @@ func TestDeleteDBConfigSecrets(t *testing.T) {
 }
 
 func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
+	t.Parallel()
+
 	const ns = "default"
 
 	clusterName := "my-cluster"

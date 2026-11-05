@@ -177,13 +177,11 @@ String detectMongoVersion() {
             set -eu
             mongo_image=${IMAGE_MONGOD:-}
             if [ -z "$mongo_image" ]; then
-                assignment=$(sed -n '/^export IMAGE_MONGOD=/{p;q;}' e2e-tests/vars)
-                if [ -z "$assignment" ]; then
-                    echo "IMAGE_MONGOD assignment not found in e2e-tests/vars" >&2
+                mongo_image=$(sed -nE 's#.*"IMAGE_MONGOD": "([^"]+)".*#\\1#p' e2e-tests/conftest.py | head -n1)
+                if [ -z "$mongo_image" ]; then
+                    echo "IMAGE_MONGOD default not found in e2e-tests/conftest.py" >&2
                     exit 1
                 fi
-                eval "$assignment"
-                mongo_image=$IMAGE_MONGOD
             fi
 
             mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+[.][0-9]+)([.-].*)?$#\\2#p')

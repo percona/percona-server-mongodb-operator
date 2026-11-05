@@ -103,9 +103,7 @@ To schedule e2e workloads on nodes with a specific architecture, set `ARCH` when
 
 ```
 ARCH=arm64 ./e2e-tests/run
-ARCH=arm64 ./e2e-tests/init-deploy/run
-export ARCH=arm64
-./e2e-tests/init-deploy/run
+ARCH=arm64 make e2e-test TEST=init-deploy
 ```
 
 For GKE Arm nodes, this adds `kubernetes.io/arch: arm64` node selectors and the matching `kubernetes.io/arch=arm64:NoSchedule` toleration to test workloads. On GKE clusters where all current nodes are `arm64`, the tests enable this automatically.
@@ -124,15 +122,10 @@ HTML and JUnit reports are written to `e2e-tests/reports/` by default. Override 
 make e2e-test TEST=init-deploy REPORT_OPTS=
 ```
 
-You can still invoke bash scripts directly (their names should be self-explanatory):
+Test environment variables (images, platform, versions, flags) are defined only in `init_env` in `e2e-tests/conftest.py`, so tests must run through pytest. Invoking a test's `run` script directly (e.g. `./e2e-tests/smart-update/run`) is no longer supported and exits with an error. Override any default by exporting it before running:
 
 ```
-./e2e-tests/init-deploy/run
-./e2e-tests/arbiter/run
-./e2e-tests/limits/run
-./e2e-tests/scaling/run
-./e2e-tests/demand-backup/run
-....
+IMAGE_MONGOD=perconalab/percona-server-mongodb-operator:main-mongod8.3 make e2e-test TEST=init-deploy
 ```
 
 Test execution produces excessive output. It is recommended to redirect the output to the file and analyze it later:
@@ -220,7 +213,7 @@ You can use environment variables to override the default images used for testin
 * `IMAGE_PMM_CLIENT` - PMM client, `perconalab/pmm-client:3-dev-latest` by default
 * `IMAGE_PMM_SERVER` - PMM server, `perconalab/pmm-server:3-dev-latest` by default
 * `IMAGE_LOGCOLLECTOR` - log collector, `perconalab/fluentbit:main-logcollector` by default
-* `IMAGE_CLUSTERSYNC` - cluster sync, `percona/percona-clustersync-mongodb:0.9.0` by default
+* `IMAGE_CLUSTERSYNC` - cluster sync, `percona/percona-clustersync-mongodb:1.0.0` by default
 
 `REGISTRY_NAME` changes the registry prefix for `percona/*` and `perconalab/*`
 images. It defaults to `docker.io`.

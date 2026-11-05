@@ -23,6 +23,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
@@ -167,7 +168,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRequested(
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
+		return isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
@@ -342,7 +343,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					status.PBMname,
 					"-c", "/etc/pbm/pbm_config.yaml",
 					"--rs", "$(MONGODB_REPLSET)",
-					"--node", "$(POD_NAME).$(SERVICE_NAME)-$(MONGODB_REPLSET).$(NAMESPACE).svc.cluster.local:" + fmt.Sprintf("%d", psmdbv1.DefaultMongoPort),
+
+					// The result of GetAddr contains the literal "$(POD_NAME)" which will resolve to the actual pod name by the shell at runtime.
+					// It works because we already set a POD_NAME env variable in the pod spec during updateStatefulSetForPhysicalRestore.
+					"--node", psmdb.GetAddr(cluster, "$(POD_NAME)", rs.Name, rs.GetPort()),
 				}
 				if isEncrypted {
 					args = append(args, "--db-config", "/etc/pbm-db-config/db_config.yaml")
@@ -456,7 +460,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	allInfos := make([]replsetInfo, 0, len(replsets))
 	for _, rs := range replsets {
 		pvcs := make([]pvcInfo, 0)
-		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.Name)
+		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName())
 		if snapshot == nil {
 			return false, fmt.Errorf("no snapshots found for replset %s", rs.Name)
 		}
@@ -733,10 +737,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 	err := retry.OnError(anotherOpBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
+		return isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
-			strings.Contains(err.Error(), "container not found") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()

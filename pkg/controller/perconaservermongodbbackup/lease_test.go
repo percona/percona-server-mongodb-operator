@@ -30,6 +30,8 @@ func backupScheme(t *testing.T) *runtime.Scheme {
 }
 
 func TestCheckClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "tgt"
@@ -123,6 +125,8 @@ func TestCheckClusterSyncLease(t *testing.T) {
 }
 
 func TestTryAcquireLease(t *testing.T) {
+	t.Parallel()
+
 	const (
 		ns          = "ns"
 		clusterName = "tgt"
@@ -155,6 +159,17 @@ func TestTryAcquireLease(t *testing.T) {
 		},
 		"lease held by error backup: takes stale lease": {
 			holderBackup: backupWithState("backup-old", ns, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", clusterName, psmdbv1.BackupStateError),
+			seedLease:    true,
+			wantAcquired: true,
+			wantHolder:   naming.BackupHolderId(newBackup),
+		},
+		"lease held by canceling backup: waits": {
+			holderBackup: backupWithState("backup-old", ns, "old-uid", clusterName, psmdbv1.BackupStateCanceling),
+			seedLease:    true,
+			wantAcquired: false,
+		},
+		"lease held by canceled backup: takes stale lease": {
+			holderBackup: backupWithState("backup-old", ns, "old-uid", clusterName, psmdbv1.BackupStateCanceled),
 			seedLease:    true,
 			wantAcquired: true,
 			wantHolder:   naming.BackupHolderId(newBackup),

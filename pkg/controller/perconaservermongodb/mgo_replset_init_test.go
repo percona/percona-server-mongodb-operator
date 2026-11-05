@@ -27,6 +27,8 @@ import (
 )
 
 func TestMongoInitAdminUserEscaping(t *testing.T) {
+	t.Parallel()
+
 	const prefix = `db.getSiblingDB("admin").createUser(`
 
 	for _, tc := range []struct {
@@ -64,6 +66,8 @@ func TestMongoInitAdminUserEscaping(t *testing.T) {
 }
 
 func TestHandleReplsetInitPassesConfigWithoutShell(t *testing.T) {
+	t.Parallel()
+
 	const replsetName = "rs'$(echo name)"
 	const tagValue = "literal\"quote'$(echo tag)\nnext"
 
@@ -116,7 +120,7 @@ func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 		if p.userAdminErr != nil {
 			return nil, p.userAdminErr
 		}
-		return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+		return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 	}
 	p.clusterAdminConf = &mongo.DialConfig{Backoff: mongo.DefaultBackoff()}
 	for _, opt := range opts {
@@ -125,15 +129,15 @@ func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 	if p.clusterAdminErr != nil {
 		return nil, p.clusterAdminErr
 	}
-	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
 
 func (p *initMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
 
 func (p *initMongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(int), Client: mongoFake.NewClient()}, nil
+	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
 
 // replsetInitExecRecorder mocks the in-pod command execution performed by
@@ -494,4 +498,121 @@ func TestReconcileClusterRetriesOnlyInitializedReplsets(t *testing.T) {
 			assert.Equal(t, tt.retry, provider.clusterAdminConf.Backoff != nil)
 		})
 	}
+}
+
+// A logical restore swaps users and roles in admin, so recreating system roles
+// at the same time makes the restore fail with a duplicate key error.
+func TestReconcileClusterSkipsSystemUsersDuringRestore(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	ctx := context.Background()
+
+	tests := map[string]struct {
+		restoreState    api.RestoreState
+		wantSystemUsers bool
+	}{
+		"restore running": {
+			restoreState:    api.RestoreStateRunning,
+			wantSystemUsers: false,
+		},
+		"restore finished": {
+			restoreState:    api.RestoreStateReady,
+			wantSystemUsers: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			provider := &initMongoClientProvider{
+				userAdminErr: errors.New("userAdmin client requested"),
+			}
+			r, cr, rs := setupReplsetInitTest(t, provider, &replsetInitExecRecorder{})
+			cr.Status.Replsets[rs.Name] = api.ReplsetStatus{Initialized: true}
+
+			require.NoError(t, r.client.Create(ctx, &api.PerconaServerMongoDBRestore{
+				Name:      "restore",
+				Namespace: cr.Namespace,
+				Spec:      api.PerconaServerMongoDBRestoreSpec{ClusterName: cr.Name},
+				Status:    api.PerconaServerMongoDBRestoreStatus{State: tt.restoreState},
+			}))
+
+			_, _, err := r.reconcileCluster(ctx, cr, rs, nil)
+			if tt.wantSystemUsers {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "create system users")
+				return
+			}
+			if err != nil {
+				assert.NotContains(t, err.Error(), "create system users")
+			}
+		})
+	}
+}
+
+func TestReconcileCustomUsersSkipsDuringRestore(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	ctx := context.Background()
+
+	tests := map[string]struct {
+		restoreState    api.RestoreState
+		wantCustomUsers bool
+	}{
+		"restore running": {
+			restoreState:    api.RestoreStateRunning,
+			wantCustomUsers: false,
+		},
+		"restore finished": {
+			restoreState:    api.RestoreStateReady,
+			wantCustomUsers: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			provider := &initMongoClientProvider{
+				userAdminErr: errors.New("userAdmin client requested"),
+			}
+			r, cr, _ := setupReplsetInitTest(t, provider, &replsetInitExecRecorder{})
+			cr.Status.State = api.AppStateReady
+			cr.Spec.Users = []api.User{{Name: "user", DB: "admin"}}
+
+			require.NoError(t, r.client.Create(ctx, &api.PerconaServerMongoDBRestore{
+				Name:      "restore",
+				Namespace: cr.Namespace,
+				Spec:      api.PerconaServerMongoDBRestoreSpec{ClusterName: cr.Name},
+				Status:    api.PerconaServerMongoDBRestoreStatus{State: tt.restoreState},
+			}))
+
+			err := r.reconcileCustomUsers(ctx, cr)
+			if tt.wantCustomUsers {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "userAdmin client requested")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// A shard isn't added to the cluster until mongos is ready, and mongos isn't
+// created until smart update rolls the shard pods. Smart update needs members,
+// so they must not be dropped while waiting for mongos.
+func TestReconcileClusterKeepsMembersBeforeAddedAsShard(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	ctx := context.Background()
+
+	r, cr, rs := setupReplsetInitTest(t, &initMongoClientProvider{}, &replsetInitExecRecorder{})
+	cr.Spec.Sharding.Enabled = true
+	cr.Spec.Sharding.Mongos = &api.MongosSpec{Size: 1}
+	rs.ClusterRole = api.ClusterRoleShardSvr
+
+	podName := cr.Name + "-" + rs.Name + "-0"
+	members := map[string]api.ReplsetMemberStatus{
+		podName: {Name: podName, State: mongo.MemberStatePrimary},
+	}
+	cr.Status.Replsets[rs.Name] = api.ReplsetStatus{Initialized: true, Members: members}
+
+	state, got, err := r.reconcileCluster(ctx, cr, rs, nil)
+	require.NoError(t, err)
+	assert.Equal(t, api.AppStateInit, state)
+	assert.Equal(t, members, got)
 }
