@@ -35,6 +35,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		WithName("SmartUpdate").
 		WithValues("statefulset", sfs.Name, "replset", replset.Name)
 
+	// Every pod is about to be deleted, so no point rolling
+	if cr.Spec.Pause {
+		log.V(1).Info("cluster is paused, skipping smart update")
+		return nil
+	}
+
 	if replset.Size == 0 {
 		return nil
 	}
@@ -139,7 +145,15 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
-	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok && rsStatus.Members != nil {
+	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
+		// Members are reported only after the replset is reconciled (e.g. added
+		// as a shard). Until then, pods outside the replset have no users and
+		// can't be checked for primary.
+		if len(rsStatus.Members) == 0 {
+			log.Info("can't start/continue 'SmartUpdate': waiting for replset members")
+			return nil
+		}
+
 		for _, pod := range list.Items {
 			if _, ok := rsStatus.Members[pod.Name]; !ok {
 				log.Info("pod is not a member of replset, updating it", "pod", pod.Name, "members", rsStatus.Members)
@@ -469,6 +483,10 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	}
 
 	if !k8s.HasStatefulSetChanged(sts, &list) {
+		// Nothing to update first, mongod must not wait for mongos.
+		if err := r.unsetUpdateMongosFirst(ctx, cr); err != nil {
+			return errors.Wrap(err, "unset update mongos first")
+		}
 		return nil
 	}
 

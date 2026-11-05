@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -206,7 +207,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	err = retry.OnError(transientErrorBackoff, func(err error) bool {
 		return isTransientNetworkError(err) ||
-			strings.Contains(err.Error(), "container is not created or running") ||
+			isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()
@@ -411,6 +412,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		})
 		sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, cluster.Spec.Backup.VolumeMounts...)
 		sts.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/physical-restore-ps-entry.sh"}
+		if cluster.CompareVersion("1.24.0") >= 0 && cluster.TLSEnabled() {
+			if !slices.ContainsFunc(sts.Spec.Template.Spec.Volumes, func(v corev1.Volume) bool {
+				return v.Name == naming.PBMClientTLSVolumeName
+			}) {
+				sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, psmdb.PBMClientTLSVolume(cluster))
+			}
+			sts.Spec.Template.Spec.Containers[0].VolumeMounts = append(sts.Spec.Template.Spec.Containers[0].VolumeMounts, psmdb.PBMClientTLSVolumeMount())
+			sts.Spec.Template.Spec.Containers[0].Env = append(sts.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name: "PBM_AGENT_TLS_DIR", Value: naming.PBMClientTLSDirectory,
+			})
+		}
 
 		f := false
 		pbmEnvVars := []corev1.EnvVar{
@@ -1068,6 +1080,22 @@ func isTransientNetworkError(err error) bool {
 		"TLS handshake timeout",
 		"error dialing backend",
 		"unable to upgrade connection",
+	} {
+		if strings.Contains(err.Error(), s) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isContainerUnavailableError reports exec failures caused by the target
+// container not running, e.g. while pods restart at the end of a restore.
+func isContainerUnavailableError(err error) bool {
+	for _, s := range []string{
+		"container is not created or running",
+		"container not found",
+		"cannot exec in a stopped container",
 	} {
 		if strings.Contains(err.Error(), s) {
 			return true
