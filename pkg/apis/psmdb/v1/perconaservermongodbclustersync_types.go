@@ -12,6 +12,13 @@ type PerconaServerMongoDBClusterSyncSpec struct {
 	ClusterName string `json:"clusterName"`
 	Image       string `json:"image"`
 
+	// Size is the number of PCSM instances. Values above 1 form an
+	// active/standby group that elects a leader through a lease on the
+	// target cluster.
+	// +kubebuilder:default=1
+	// +kubebuilder:validation:Minimum=1
+	Size int32 `json:"size,omitempty"`
+
 	ImagePullPolicy  corev1.PullPolicy             `json:"imagePullPolicy,omitempty"`
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
@@ -27,6 +34,10 @@ type PerconaServerMongoDBClusterSyncSpec struct {
 
 	LivenessProbe  *corev1.Probe `json:"livenessProbe,omitempty"`
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+
+	// PodDisruptionBudget is only applied when size > 1; it defaults to
+	// maxUnavailable=1 so a drain cannot evict the whole group at once.
+	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
 	Source ClusterSyncSource `json:"source"`
 
@@ -112,6 +123,17 @@ type PerconaServerMongoDBClusterSyncStatus struct {
 	LagTimeSeconds int64  `json:"lagTimeSeconds,omitempty"`
 	Error          string `json:"error,omitempty"`
 
+	// Size and ReadyReplicas describe the PCSM group. ReadyReplicas below
+	// Size means the group is degraded but still replicating.
+	Size          int32 `json:"size,omitempty"`
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+
+	// ActiveInstance is the last pod observed holding the PCSM lease; it
+	// survives a transient loss of contact with the group. The controller
+	// seeds the next reconcile's PCSM client with it so the active
+	// instance is found without probing every pod.
+	ActiveInstance string `json:"activeInstance,omitempty"`
+
 	// StartedAt is set once the first time PCSM reports state=running;
 	// not updated on restart.
 	StartedAt *metav1.Time `json:"startedAt,omitempty"`
@@ -131,6 +153,8 @@ type PerconaServerMongoDBClusterSyncStatus struct {
 // +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=".spec.mode",description="User-requested lifecycle mode"
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=".status.state",description="Replication state"
 // +kubebuilder:printcolumn:name="Lag(s)",type=integer,JSONPath=".status.lagTimeSeconds",description="Replication lag in seconds"
+// +kubebuilder:printcolumn:name="Ready",type=integer,JSONPath=".status.readyReplicas",description="Ready PCSM instances"
+// +kubebuilder:printcolumn:name="Active",type=string,JSONPath=".status.activeInstance",description="Pod holding the PCSM lease"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp",description="Created time"
 type PerconaServerMongoDBClusterSync struct {
 	metav1.TypeMeta   `json:",inline"`

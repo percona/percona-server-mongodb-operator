@@ -23,6 +23,8 @@ import (
 )
 
 func TestMongoConfigURIFromReplsetAddrs(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		dnsMode         api.DNSMode
 		rsExposed       bool
@@ -162,6 +164,8 @@ func TestMongoConfigURIFromReplsetAddrs(t *testing.T) {
 }
 
 func TestMongoConfigReturnsServiceImportLookupError(t *testing.T) {
+	t.Parallel()
+
 	for _, dnsMode := range []api.DNSMode{api.DNSModeInternal, api.DNSModeExternal} {
 		t.Run(string(dnsMode), func(t *testing.T) {
 			cr := clientTestCluster()
@@ -203,6 +207,8 @@ func TestMongoConfigReturnsServiceImportLookupError(t *testing.T) {
 }
 
 func TestMongoConfigSkipsTerminatingPods(t *testing.T) {
+	t.Parallel()
+
 	cr := clientTestCluster()
 	rs := cr.Spec.Replsets[0]
 	rs.Size = 2
@@ -249,6 +255,8 @@ func TestMongoConfigSkipsTerminatingPods(t *testing.T) {
 }
 
 func TestMongosConfigURIFromMongosAddrs(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		servicePerPod   bool
 		exposeType      corev1.ServiceType

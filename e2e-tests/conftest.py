@@ -242,7 +242,7 @@ def init_env() -> list[str]:
         "IMAGE_PMM_CLIENT": "perconalab/pmm-client:3-dev-latest",
         "IMAGE_PMM_SERVER": "perconalab/pmm-server:3-dev-latest",
         "IMAGE_LOGCOLLECTOR": "perconalab/fluentbit:main-logcollector",
-        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:0.9.0",
+        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:1.0.0",
         "IMAGE_AWS_CLI": "docker.io/amazon/aws-cli:2.34.60",
         "CERT_MANAGER_VER": "1.21.0",
         "CHAOS_MESH_VER": "2.7.1",
@@ -584,6 +584,35 @@ def _delete_cert_manager() -> None:
         time.sleep(2)
 
 
+def _wait_for_cert_manager_webhook(timeout: int = 300) -> None:
+    """Wait until the webhook serves requests, i.e. cainjector has injected its CA bundle."""
+    issuer = """
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: webhook-check
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+"""
+    deadline = time.monotonic() + timeout
+    while True:
+        out = kubectl_bin(
+            "apply",
+            "--dry-run=server",
+            "-f",
+            "-",
+            input_data=issuer,
+            check=False,
+            return_stderr=True,
+        )
+        if "created (server dry run)" in out:
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"cert-manager webhook is not ready: {out}")
+        time.sleep(5)
+
+
 @pytest.fixture(scope="class")
 def destroy_cert_manager() -> Callable[[], None]:
     """Delete cert-manager so certificates are issued by the operator, not cert-manager."""
@@ -627,6 +656,7 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
                     "cert-manager",
                     "--timeout=300s",
                 )
+            _wait_for_cert_manager_webhook()
         except Exception:
             _delete_cert_manager()
             raise
@@ -750,6 +780,34 @@ def psmdb_client(test_paths: Paths) -> MongoManager:
     pod_name = result.strip()
     wait_pod(pod_name)
     return MongoManager(pod_name)
+
+
+@pytest.fixture(scope="class")
+def psmdb_client_tls(test_paths: Paths) -> MongoManager:
+    """Deploy the TLS client and get the pod name.
+
+    The deployment builds its client PEM from the some-name-ssl secret, so only
+    request this once the cluster owning that secret exists.
+    """
+    kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70-tls.yml")
+    kubectl_bin("rollout", "status", "deployment/psmdb-client", "--timeout=360s")
+
+    result = retry(
+        lambda: kubectl_bin(
+            "get",
+            "pods",
+            "--selector=name=psmdb-client",
+            "-o",
+            "jsonpath={range .items[*]}{.metadata.name}{end}",
+        ),
+        max_attempts=30,
+        delay=2,
+        condition=lambda result: result.strip() != "",
+    )
+
+    pod_name = result.strip()
+    wait_pod(pod_name)
+    return MongoManager(pod_name, tls=True)
 
 
 @pytest.fixture

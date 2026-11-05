@@ -69,6 +69,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		return nil
 	}
 
+	if _, ok := cr.GetPVCShrinkState(sts.Name); ok {
+		log.V(1).Info("PVC shrink in progress, skipping autoscaling")
+		return nil
+	}
+
 	container, mountPath, ok := volumeMount(sts, claimName)
 	if !ok {
 		log.V(1).Info("skipping storage autoscaling: no container mounts the volume",
