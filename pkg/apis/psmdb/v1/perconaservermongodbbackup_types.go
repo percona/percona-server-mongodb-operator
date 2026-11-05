@@ -39,6 +39,8 @@ const (
 	BackupStateRunning   BackupState = "running"
 	BackupStateError     BackupState = "error"
 	BackupStateReady     BackupState = "ready"
+	BackupStateCanceling BackupState = "canceling"
+	BackupStateCanceled  BackupState = "canceled"
 )
 
 type BackupWaitingReason string
