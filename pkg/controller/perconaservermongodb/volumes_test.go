@@ -159,9 +159,6 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 					rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
 						corev1.ResourceStorage: requested,
 					}
-					cr.Spec.StorageScaling = &api.StorageScalingSpec{
-						EnableVolumeScaling: tt.volumeScaling,
-					}
 
 					labels := naming.MongodLabels(cr, rs)
 					stsName := naming.MongodStatefulSetName(cr, rs)
