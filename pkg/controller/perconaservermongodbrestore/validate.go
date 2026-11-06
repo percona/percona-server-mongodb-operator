@@ -14,7 +14,8 @@ import (
 )
 
 var (
-	errWaitingPBM = errors.New("waiting for pbm-agent")
+	errWaitingPBM        = errors.New("waiting for pbm-agent")
+	errWaitingPBMVersion = errors.New("waiting for pbm-agent version")
 )
 
 func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB) error {
@@ -41,6 +42,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 	storage, err := r.getStorage(cr, cluster, bcp.Spec.StorageName)
 	if err != nil {
 		return errors.Wrap(err, "get storage")
+	}
+
+	if bcp.PBMBackupType() == defs.LogicalBackup && cluster.Spec.Backup.Enabled && cluster.Status.BackupVersion == "" {
+		return errWaitingPBMVersion
 	}
 
 	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
