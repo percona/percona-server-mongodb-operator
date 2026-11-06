@@ -6,6 +6,7 @@ import (
 	"maps"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -188,7 +189,7 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	res, err := r.readVPARecommendation(ctx, cr.Namespace, vpaName, container)
 	if err != nil {
 		log.Error(err, "failed to read VPA recommendation", "vpa", vpaName, "component", statusKey)
-		r.setVPAMessage(cr, statusKey, err.Error())
+		r.setVPAMessage(cr, log, statusKey, err.Error())
 		return nil, nil
 	}
 
@@ -198,7 +199,7 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	if lastApplied := cr.Status.VPAStatus[statusKey].Applied; lastApplied != nil &&
 		res.state == vpaStateObjectNotFound &&
 		cr.Spec.VPA.UpdateMode == api.VPAUpdateModeAuto {
-		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
+		r.setVPAMessage(cr, log, statusKey, fmt.Sprintf(
 			"VerticalPodAutoscaler %q not found; this component is still sized from the last "+
 				"applied recommendation and reconciliation is stopped. Recreate the object, or set "+
 				"spec.vpa.updateMode to Off to return to the declared resources",
@@ -207,7 +208,7 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	}
 
 	if res.state != vpaStateOK {
-		r.setVPAMessage(cr, statusKey, res.message(container))
+		r.setVPAMessage(cr, log, statusKey, res.message(container))
 		return nil, nil
 	}
 
@@ -215,7 +216,7 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	// is no adoption to rate-limit and status is the only output.
 	if cr.Spec.VPA.UpdateMode == api.VPAUpdateModeOff {
 		r.recordVPAStatus(cr, statusKey, res.rec)
-		r.setVPAMessage(cr, statusKey, fmt.Sprintf(
+		r.setVPAMessage(cr, log, statusKey, fmt.Sprintf(
 			"recommendation recorded only, spec.vpa.updateMode is %s", cr.Spec.VPA.UpdateMode))
 		return nil, nil
 	}
@@ -223,18 +224,18 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 	// A recommendation that has not moved needs no decision regarding the window
 	accepted := cr.Status.VPAStatus[statusKey].Recommended
 	if quantitiesEqual(accepted, res.rec) {
-		r.setVPAMessage(cr, statusKey, "")
+		r.setVPAMessage(cr, log, statusKey, "")
 		return accepted, nil
 	}
 
 	// New recommendations to be accepted only after the stabilization window has passed.
 	if !stabilizationWindowPassed(cr, statusKey, window) {
-		r.setVPAMessage(cr, statusKey, stabilizationMessage(cr, statusKey, res.rec, window))
+		r.setVPAMessage(cr, log, statusKey, stabilizationMessage(cr, statusKey, res.rec, window))
 		return accepted, nil
 	}
 
 	r.recordVPAStatus(cr, statusKey, res.rec)
-	r.setVPAMessage(cr, statusKey, "")
+	r.setVPAMessage(cr, log, statusKey, "")
 	return res.rec, nil
 }
 
@@ -246,6 +247,7 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 // quiet.
 func (r *ReconcilePerconaServerMongoDB) setVPAMessage(
 	cr *api.PerconaServerMongoDB,
+	log logr.Logger,
 	statusKey string,
 	message string,
 ) {
@@ -254,7 +256,6 @@ func (r *ReconcilePerconaServerMongoDB) setVPAMessage(
 	}
 	s := cr.Status.VPAStatus[statusKey]
 	if s.Message != message {
-		log := logf.Log.WithName("VPA")
 		if message == "" {
 			log.Info("applying recommendations for this component again",
 				"component", statusKey)
@@ -582,7 +583,7 @@ func capRequestsAtLimits(requests corev1.ResourceList, limits corev1.ResourceLis
 // ratioScaledLimits returns new limits by preserving the original limit/request ratio.
 // For each resource: newLimit = newRequest * (oldLimit / oldRequest).
 // Resources with no existing limit are left unchanged.
-// If no requsets were previously declared, we assume a 1:1 ratio.
+// If no requests were previously declared, we assume a 1:1 ratio.
 func ratioScaledLimits(orig corev1.ResourceRequirements, newRequests corev1.ResourceList) corev1.ResourceList {
 	if orig.Limits == nil {
 		return nil
