@@ -22,7 +22,7 @@ build_distribution_data() {
 		"operator IMAGE_OPERATOR" \
 		"backup IMAGE_BACKUP" \
 		"logcollector IMAGE_LOGCOLLECTOR" \
-		"mongod IMAGE_MONGOD80" \
+		"mongod IMAGE_MONGOD83" \
 		"pmm IMAGE_PMM_CLIENT" \
 		"clustersync IMAGE_CLUSTERSYNC"; do
 		set_release_image_ref ${image_ref} || return
@@ -41,7 +41,7 @@ build_distribution_data() {
 					operator: $operator,
 					backup: $backup,
 					logcollector: $logcollector,
-					"mongod8.0": $mongod,
+					"mongod8.3": $mongod,
 					pmm3: $pmm
 				}
 				+ (if $clustersync == "" then {} else {clustersync: $clustersync} end))
