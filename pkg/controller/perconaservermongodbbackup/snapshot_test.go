@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -727,4 +728,32 @@ func TestSnapshotBackups_Status(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDeleteVolumeSnapshotsIncludesJournal(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+	snapshot := func(name string) *volumesnapshotv1.VolumeSnapshot {
+		return &volumesnapshotv1.VolumeSnapshot{Name: name, Namespace: ns}
+	}
+	data, journal, other := snapshot("data-rs0"), snapshot("journal-rs0"), snapshot("other-backup")
+
+	cl := fake.NewClientBuilder().WithScheme(newSnapshotTestScheme(t)).WithObjects(data, journal, other).Build()
+	r := &ReconcilePerconaServerMongoDBBackup{client: cl}
+	cr := &api.PerconaServerMongoDBBackup{
+		Name:      "my-backup",
+		Namespace: ns,
+		Status: api.PerconaServerMongoDBBackupStatus{
+			Snapshots: api.SnapshotInfos{{ReplsetName: "rs0", SnapshotName: "data-rs0", JournalSnapshotName: "journal-rs0"}},
+		},
+	}
+
+	require.NoError(t, r.deleteVolumeSnapshots(t.Context(), cr))
+
+	for _, s := range []*volumesnapshotv1.VolumeSnapshot{data, journal} {
+		err := cl.Get(t.Context(), client.ObjectKeyFromObject(s), s)
+		assert.True(t, k8serrors.IsNotFound(err), "%s should be deleted", s.Name)
+	}
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(other), other), "unrelated snapshot must be kept")
 }
