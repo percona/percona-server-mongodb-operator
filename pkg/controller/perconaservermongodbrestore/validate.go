@@ -4,13 +4,17 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 var (
@@ -114,8 +118,43 @@ func (r *ReconcilePerconaServerMongoDBRestore) validateExternalBackup(
 		if err := r.validateSnapshotExistence(ctx, bcp); err != nil {
 			return errors.Wrap(err, "validate snapshot existence")
 		}
+		if err := r.validateJournalStorage(ctx, cluster, bcp); err != nil {
+			return errors.Wrap(err, "validate journal storage")
+		}
 	}
 
+	return nil
+}
+
+// validateJournalStorage rejects a journal snapshot that the target has no journal volume for.
+// Failing later would be past the point where PBM has already wiped the data directories.
+func (r *ReconcilePerconaServerMongoDBRestore) validateJournalStorage(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+	bcp *psmdbv1.PerconaServerMongoDBBackup,
+) error {
+	for _, rs := range cluster.GetAllReplsets() {
+		info := bcp.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName())
+		if info == nil || info.JournalSnapshotName == "" {
+			continue
+		}
+		statefulsets := []string{naming.MongodStatefulSetName(cluster, rs)}
+		if rs.NonVoting.Enabled {
+			statefulsets = append(statefulsets, naming.NonVotingStatefulSetName(cluster, rs))
+		}
+		if rs.Hidden.Enabled {
+			statefulsets = append(statefulsets, naming.HiddenStatefulSetName(cluster, rs))
+		}
+		for _, name := range statefulsets {
+			sfs := &appsv1.StatefulSet{}
+			if err := r.client.Get(ctx, types.NamespacedName{Namespace: cluster.Namespace, Name: name}, sfs); err != nil {
+				return errors.Wrapf(err, "get statefulset %s", name)
+			}
+			if !k8s.HasVolumeClaimTemplate(sfs, config.MongodJournalVolClaimName) {
+				return errors.Errorf("backup has a journal snapshot for replset %s but statefulset %s has no journalStorage", rs.Name, name)
+			}
+		}
+	}
 	return nil
 }
 
@@ -124,12 +163,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) validateSnapshotExistence(
 	bcp *psmdbv1.PerconaServerMongoDBBackup,
 ) error {
 	for _, info := range bcp.Status.Snapshots {
-		volumeSnapshot := &volumesnapshotv1.VolumeSnapshot{}
-		if err := r.client.Get(ctx, types.NamespacedName{
-			Namespace: bcp.Namespace,
-			Name:      info.SnapshotName,
-		}, volumeSnapshot); err != nil {
-			return errors.Wrapf(err, "get volume snapshot %s", info.SnapshotName)
+		for _, name := range info.Names() {
+			volumeSnapshot := &volumesnapshotv1.VolumeSnapshot{}
+			if err := r.client.Get(ctx, types.NamespacedName{
+				Namespace: bcp.Namespace,
+				Name:      name,
+			}, volumeSnapshot); err != nil {
+				return errors.Wrapf(err, "get volume snapshot %s", name)
+			}
 		}
 	}
 	return nil

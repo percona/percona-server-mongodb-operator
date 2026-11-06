@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -44,6 +45,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
+	for _, rs := range []*api.ReplsetSpec{defaultCR.Spec.Replsets[0], defaultCR.Spec.Sharding.ConfigsvrReplSet} {
+		rs.LogStorage = logStorageSpec("2Gi")
+		rs.NonVoting.LogStorage = logStorageSpec("2Gi")
+		rs.Hidden.LogStorage = logStorageSpec("2Gi")
+	}
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
@@ -87,70 +93,101 @@ func TestReconcileStatefulSet(t *testing.T) {
 		crUpdate       func(cr *api.PerconaServerMongoDB)
 		additionalObjs []client.Object
 
-		expectedSts *appsv1.StatefulSet
+		compareFile string
 	}{
 		{
 			name:        "rs0-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentMongod,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-mongod.yaml"),
+			compareFile: "reconcile-statefulset/rs0-mongod.yaml",
 		},
 		{
 			name:        "rs0-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentArbiter,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-arbiter.yaml"),
+			compareFile: "reconcile-statefulset/rs0-arbiter.yaml",
 		},
 		{
 			name:        "rs0-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentNonVoting,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-nv.yaml"),
+			compareFile: "reconcile-statefulset/rs0-nv.yaml",
 		},
 		{
 			name:        "rs0-hidden",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentHidden,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-hidden.yaml"),
+			compareFile: "reconcile-statefulset/rs0-hidden.yaml",
 		},
 		{
 			name:        "cfg-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentMongod,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-mongod.yaml"),
+			compareFile: "reconcile-statefulset/cfg-mongod.yaml",
 		},
 		{
 			name:        "cfg-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentArbiter,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-arbiter.yaml"),
+			compareFile: "reconcile-statefulset/cfg-arbiter.yaml",
 		},
 		{
 			name:        "cfg-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentNonVoting,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
+			compareFile: "reconcile-statefulset/cfg-nv.yaml",
 		},
 		{
 			name:        "cfg-hidden",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentHidden,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
+			compareFile: "reconcile-statefulset/cfg-hidden.yaml",
+		},
+		{
+			name:        "rs0-no-log-storage",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "rs0",
+			component:   naming.ComponentMongod,
+			compareFile: "reconcile-statefulset/rs0-no-log-storage.yaml",
+			crUpdate: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].LogStorage = nil
+			},
+		},
+		{
+			name:        "rs0-journal",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "rs0",
+			component:   naming.ComponentMongod,
+			compareFile: "reconcile-statefulset/rs0-journal.yaml",
+			crUpdate: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].JournalStorage = &api.StorageSpec{
+					PersistentVolumeClaim: &api.PVCSpec{
+						PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceStorage: resource.MustParse("5Gi"),
+								},
+							},
+						},
+					},
+				}
+			},
 		},
 		{
 			name:        "rs0-logrotate",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentMongod,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-logrotate.yaml"),
+			compareFile: "reconcile-statefulset/rs0-logrotate.yaml",
 			crUpdate: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.LogCollector.LogRotate = &api.LogRotateSpec{
 					Configuration: "test-config",
@@ -248,8 +285,30 @@ func TestReconcileStatefulSet(t *testing.T) {
 			sts.Kind = gvk.Kind
 			sts.APIVersion = gvk.GroupVersion().String()
 
-			compareSts(t, sts, tt.expectedSts)
+			if os.Getenv("UPDATE_COMPARE_FILES") == "1" {
+				updateSts(t, tt.compareFile, sts)
+			}
+
+			compareSts(t, sts, expectedSts(t, tt.compareFile))
 		})
+	}
+}
+
+func updateSts(t *testing.T, filename string, sts *appsv1.StatefulSet) {
+	t.Helper()
+
+	sts = sts.DeepCopy()
+	delete(sts.Annotations, "percona.com/last-config-hash")
+	delete(sts.Spec.Template.Annotations, naming.AnnotationSSLHash)
+	delete(sts.Spec.Template.Annotations, naming.AnnotationSSLInternalHash)
+
+	data, err := yaml.Marshal(sts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile("testdata/"+filename, data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

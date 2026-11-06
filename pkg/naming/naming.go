@@ -130,6 +130,10 @@ func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) 
 	return fmt.Sprintf("%s-%s-%s", bcp.Name, strings.ToLower(rsName), hash[:5])
 }
 
+func JournalVolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
+	return VolumeSnapshotName(bcp, rsName+"-journal")
+}
+
 func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) types.NamespacedName {
 	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
 }

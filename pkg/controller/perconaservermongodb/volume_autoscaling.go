@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -120,6 +121,21 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 	return nil
 }
 
+func podMountsPVC(pod *corev1.Pod, container, pvcName, mountPath string) bool {
+	i := slices.IndexFunc(pod.Spec.Volumes, func(v corev1.Volume) bool {
+		return v.PersistentVolumeClaim != nil && v.PersistentVolumeClaim.ClaimName == pvcName
+	})
+	if i < 0 {
+		return false
+	}
+	volume := pod.Spec.Volumes[i].Name
+	return slices.ContainsFunc(pod.Spec.Containers, func(c corev1.Container) bool {
+		return c.Name == container && slices.ContainsFunc(c.VolumeMounts, func(m corev1.VolumeMount) bool {
+			return m.Name == volume && m.MountPath == mountPath
+		})
+	})
+}
+
 // checkAndResizePVC checks a single PVC and triggers resize if needed
 func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	ctx context.Context,
@@ -132,9 +148,20 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 ) error {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
+	if pod.DeletionTimestamp != nil {
+		log.V(1).Info("skipping PVC metrics check: pod is terminating")
+		return nil
+	}
+
 	if !isContainerAndPodRunning(*pod, container) {
 		log.V(1).Info("skipping PVC metrics check: container and pod not running",
 			"phase", pod.Status.Phase, "container", container)
+		return nil
+	}
+
+	// during a claim rollout the PVC exists before the pod mounts it, df would report the data volume
+	if !podMountsPVC(pod, container, pvc.Name, mountPath) {
+		log.V(1).Info("skipping PVC metrics check: pod does not mount the PVC yet", "pod", pod.Name)
 		return nil
 	}
 

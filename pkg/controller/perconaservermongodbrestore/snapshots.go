@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
@@ -22,6 +23,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -386,6 +388,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 
 				sfs.Spec.Template.Spec.Containers[0].Args = args
 
+				// restore-finish recovers from the restored journal, so it has to be mounted
+				if k8s.HasVolumeClaimTemplate(&sfs, config.MongodJournalVolClaimName) && !slices.ContainsFunc(sfs.Spec.Template.Spec.Containers[0].VolumeMounts,
+					func(m corev1.VolumeMount) bool { return m.Name == config.MongodJournalVolClaimName }) {
+					sfs.Spec.Template.Spec.Containers[0].VolumeMounts = append(sfs.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+						Name:      config.MongodJournalVolClaimName,
+						MountPath: config.MongodContainerJournalDir,
+					})
+				}
+
 				sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
 				sfs.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
 
@@ -442,20 +453,56 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 		pvcs   []pvcInfo
 	}
 
-	getVolumeClaimTemplate := func(sfsName string) (corev1.PersistentVolumeClaimSpec, error) {
+	type claimTemplates struct {
+		data    corev1.PersistentVolumeClaimSpec
+		journal *corev1.PersistentVolumeClaimSpec
+	}
+
+	getVolumeClaimTemplates := func(sfsName string) (claimTemplates, error) {
 		sfs := appsv1.StatefulSet{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: sfsName, Namespace: cluster.Namespace}, &sfs); err != nil {
-			return corev1.PersistentVolumeClaimSpec{}, errors.Wrapf(err, "get statefulset %s", sfsName)
+			return claimTemplates{}, errors.Wrapf(err, "get statefulset %s", sfsName)
 		}
 		if len(sfs.Spec.VolumeClaimTemplates) == 0 {
-			return corev1.PersistentVolumeClaimSpec{}, errors.Errorf("no volume claim templates found for statefulset %s", sfsName)
+			return claimTemplates{}, errors.Errorf("no volume claim templates found for statefulset %s", sfsName)
 		}
+		vcts := claimTemplates{}
+		found := false
 		for _, vct := range sfs.Spec.VolumeClaimTemplates {
-			if vct.Name == config.MongodDataVolClaimName {
-				return vct.Spec, nil
+			switch vct.Name {
+			case config.MongodDataVolClaimName:
+				vcts.data = vct.Spec
+				found = true
+			case config.MongodJournalVolClaimName:
+				vcts.journal = &vct.Spec
 			}
 		}
-		return corev1.PersistentVolumeClaimSpec{}, errors.Errorf("volume claim template %s not found", config.MongodDataVolClaimName)
+		if !found {
+			return claimTemplates{}, errors.Errorf("volume claim template %s not found", config.MongodDataVolClaimName)
+		}
+		return vcts, nil
+	}
+
+	podPVCs := func(podName string, vcts claimTemplates, snapshot *psmdbv1.SnapshotInfo, labels map[string]string) ([]pvcInfo, error) {
+		pvcs := []pvcInfo{{
+			pvcName:             config.MongodDataVolClaimName + "-" + podName,
+			volumeClaimTemplate: vcts.data,
+			snapshotName:        snapshot.SnapshotName,
+			labels:              labels,
+		}}
+		switch {
+		case vcts.journal != nil:
+			// recreated even without a journal snapshot, the live journal must not be replayed on restored data
+			pvcs = append(pvcs, pvcInfo{
+				pvcName:             config.MongodJournalVolClaimName + "-" + podName,
+				volumeClaimTemplate: *vcts.journal,
+				snapshotName:        snapshot.JournalSnapshotName,
+				labels:              labels,
+			})
+		case snapshot.JournalSnapshotName != "":
+			return nil, errors.Errorf("backup has a journal snapshot for replset %s but %s has no journalStorage", snapshot.ReplsetName, podName)
+		}
+		return pvcs, nil
 	}
 
 	// Collect all PVCs that need to be reconciled.
@@ -466,51 +513,51 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 		if snapshot == nil {
 			return false, fmt.Errorf("no snapshots found for replset %s", rs.Name)
 		}
-		vct, err := getVolumeClaimTemplate(naming.MongodStatefulSetName(cluster, rs))
-		if err != nil {
-			return false, errors.Wrapf(err, "get volume claim template for statefulset %s", naming.MongodStatefulSetName(cluster, rs))
-		}
 
+		type component struct {
+			sts    string
+			size   int32
+			pod    func(int) string
+			labels map[string]string
+		}
 		labels := naming.PVCLabels(naming.ComponentMongod, rs.Name, cluster.Name)
 		if rs.ClusterRole == psmdbv1.ClusterRoleConfigSvr {
 			labels = naming.PVCLabels(psmdbv1.ConfigReplSetName, psmdbv1.ConfigReplSetName, cluster.Name)
 		}
-
-		for podIdx := int32(0); podIdx < rs.Size; podIdx++ {
-			pvcs = append(pvcs, pvcInfo{
-				pvcName:             config.MongodDataVolClaimName + "-" + rs.PodName(cluster, int(podIdx)),
-				volumeClaimTemplate: vct,
-				snapshotName:        snapshot.SnapshotName,
-				labels:              labels,
+		components := []component{{
+			sts:    naming.MongodStatefulSetName(cluster, rs),
+			size:   rs.Size,
+			pod:    func(i int) string { return rs.PodName(cluster, i) },
+			labels: labels,
+		}}
+		if rs.NonVoting.Enabled {
+			components = append(components, component{
+				sts:    naming.NonVotingStatefulSetName(cluster, rs),
+				size:   rs.NonVoting.Size,
+				pod:    func(i int) string { return naming.NonVotingPodName(cluster, rs, i) },
+				labels: naming.PVCLabels(naming.ComponentNonVoting, rs.Name, cluster.Name),
+			})
+		}
+		if rs.Hidden.Enabled {
+			components = append(components, component{
+				sts:    naming.HiddenStatefulSetName(cluster, rs),
+				size:   rs.Hidden.Size,
+				pod:    func(i int) string { return naming.HiddenPodName(cluster, rs, i) },
+				labels: naming.PVCLabels(naming.ComponentHidden, rs.Name, cluster.Name),
 			})
 		}
 
-		if rs.NonVoting.Enabled {
-			vct, err := getVolumeClaimTemplate(naming.NonVotingStatefulSetName(cluster, rs))
+		for _, c := range components {
+			vcts, err := getVolumeClaimTemplates(c.sts)
 			if err != nil {
-				return false, errors.Wrapf(err, "get volume claim template for statefulset %s", naming.NonVotingStatefulSetName(cluster, rs))
+				return false, errors.Wrapf(err, "get volume claim template for statefulset %s", c.sts)
 			}
-			for podIdx := int32(0); podIdx < rs.NonVoting.Size; podIdx++ {
-				pvcs = append(pvcs, pvcInfo{
-					pvcName:             config.MongodDataVolClaimName + "-" + naming.NonVotingPodName(cluster, rs, int(podIdx)),
-					volumeClaimTemplate: vct,
-					snapshotName:        snapshot.SnapshotName,
-					labels:              naming.PVCLabels(naming.ComponentNonVoting, rs.Name, cluster.Name),
-				})
-			}
-		}
-		if rs.Hidden.Enabled {
-			vct, err := getVolumeClaimTemplate(naming.HiddenStatefulSetName(cluster, rs))
-			if err != nil {
-				return false, errors.Wrapf(err, "get volume claim template for statefulset %s", naming.HiddenStatefulSetName(cluster, rs))
-			}
-			for podIdx := int32(0); podIdx < rs.Hidden.Size; podIdx++ {
-				pvcs = append(pvcs, pvcInfo{
-					pvcName:             config.MongodDataVolClaimName + "-" + naming.HiddenPodName(cluster, rs, int(podIdx)),
-					volumeClaimTemplate: vct,
-					snapshotName:        snapshot.SnapshotName,
-					labels:              naming.PVCLabels(naming.ComponentHidden, rs.Name, cluster.Name),
-				})
+			for podIdx := range int(c.size) {
+				claims, err := podPVCs(c.pod(podIdx), vcts, snapshot, c.labels)
+				if err != nil {
+					return false, err
+				}
+				pvcs = append(pvcs, claims...)
 			}
 		}
 		allInfos = append(allInfos, replsetInfo{rsName: rs.Name, pvcs: pvcs})
@@ -551,10 +598,12 @@ func generatePVCFromSnapshot(
 ) {
 	pvc.SetLabels(labels)
 	pvc.Spec = spec
-	pvc.Spec.DataSource = &corev1.TypedLocalObjectReference{
-		APIGroup: new(volumesnapshotv1.SchemeGroupVersion.Group),
-		Kind:     "VolumeSnapshot",
-		Name:     snapshotName,
+	if snapshotName != "" {
+		pvc.Spec.DataSource = &corev1.TypedLocalObjectReference{
+			APIGroup: new(volumesnapshotv1.SchemeGroupVersion.Group),
+			Kind:     "VolumeSnapshot",
+			Name:     snapshotName,
+		}
 	}
 	pvc.SetAnnotations(map[string]string{
 		naming.AnnotationRestoreName: restoreName,

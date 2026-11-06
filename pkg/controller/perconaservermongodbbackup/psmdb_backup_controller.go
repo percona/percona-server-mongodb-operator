@@ -876,16 +876,18 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 func (r *ReconcilePerconaServerMongoDBBackup) deleteVolumeSnapshots(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	log := logf.FromContext(ctx).WithName("deleteVolumeSnapshots").WithValues("backup", cr.Name, "namespace", cr.Namespace, "pbmName", cr.Status.PBMname)
 
-	for _, snapshot := range cr.Status.Snapshots {
-		snapshot := &volumesnapshotv1.VolumeSnapshot{
-			Name:      snapshot.SnapshotName,
-			Namespace: cr.Namespace,
+	for _, info := range cr.Status.Snapshots {
+		for _, name := range info.Names() {
+			snapshot := &volumesnapshotv1.VolumeSnapshot{
+				Name:      name,
+				Namespace: cr.Namespace,
+			}
+			err := r.client.Delete(ctx, snapshot)
+			if client.IgnoreNotFound(err) != nil {
+				return errors.Wrap(err, "delete volume snapshot")
+			}
+			log.Info("Deleted volume snapshot", "snapshot", snapshot.Name)
 		}
-		err := r.client.Delete(ctx, snapshot)
-		if client.IgnoreNotFound(err) != nil {
-			return errors.Wrap(err, "delete volume snapshot")
-		}
-		log.Info("Deleted volume snapshot", "snapshot", snapshot.Name)
 	}
 	return nil
 }

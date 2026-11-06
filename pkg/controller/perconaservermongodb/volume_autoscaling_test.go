@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -704,6 +705,16 @@ func TestTriggerResize(t *testing.T) {
 	}
 }
 
+// mountPVC mounts pvcName in the pod's first container, as the statefulset controller would.
+func mountPVC(pod *corev1.Pod, claimName, pvcName, mountPath string) {
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name:                  claimName,
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
+	})
+	pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+		corev1.VolumeMount{Name: claimName, MountPath: mountPath})
+}
+
 // mountingTemplate returns a pod template whose `container` mounts `claimName`
 // at `mountPath`, which is where the autoscaler reads the probe path from.
 func mountingTemplate(container, claimName, mountPath string) corev1.PodTemplateSpec {
@@ -797,7 +808,9 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 		containerName string
 		claimName     string
 		mountPath     string
+		setup         func(cr *api.PerconaServerMongoDB)
 		pvcSpec       func(cr *api.PerconaServerMongoDB) *api.PVCSpec
+		untouched     func(cr *api.PerconaServerMongoDB) []*api.PVCSpec
 	}{
 		"mongod": {
 			labels:        naming.MongodLabels,
@@ -823,6 +836,60 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			mountPath:     psmdbconfig.MongodContainerDataDir,
 			pvcSpec:       mongodPVC(func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.NonVoting.VolumeSpec }),
 		},
+		"journal": {
+			labels:        naming.MongodLabels,
+			stsName:       crName + "-" + rsName,
+			containerName: naming.ContainerMongod,
+			claimName:     psmdbconfig.MongodJournalVolClaimName,
+			mountPath:     psmdbconfig.MongodContainerJournalDir,
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = version.Version()
+				cr.Spec.Replsets[0].JournalStorage = &api.StorageSpec{
+					PersistentVolumeClaim: &api.PVCSpec{
+						PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceStorage: resource.MustParse("10Gi"),
+								},
+							},
+						},
+					},
+				}
+			},
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return cr.JournalStorage(cr.Spec.Replsets[0].JournalStorage)
+			},
+		},
+		"logs": {
+			labels:        naming.MongodLabels,
+			stsName:       crName + "-" + rsName,
+			containerName: naming.ContainerMongod,
+			claimName:     psmdbconfig.MongodLogVolClaimName,
+			mountPath:     psmdbconfig.MongodContainerDataLogsDir,
+			setup:         setAllLogStorage,
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return cr.LogStorage(cr.Spec.Replsets[0].LogStorage)
+			},
+			untouched: func(cr *api.PerconaServerMongoDB) []*api.PVCSpec {
+				rs := cr.Spec.Replsets[0]
+				return []*api.PVCSpec{cr.LogStorage(rs.NonVoting.LogStorage), cr.LogStorage(rs.Hidden.LogStorage)}
+			},
+		},
+		"hidden logs": {
+			labels:        naming.HiddenLabels,
+			stsName:       crName + "-" + rsName + "-hidden",
+			containerName: naming.ContainerHidden,
+			claimName:     psmdbconfig.MongodLogVolClaimName,
+			mountPath:     psmdbconfig.MongodContainerDataLogsDir,
+			setup:         setAllLogStorage,
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return cr.LogStorage(cr.Spec.Replsets[0].Hidden.LogStorage)
+			},
+			untouched: func(cr *api.PerconaServerMongoDB) []*api.PVCSpec {
+				rs := cr.Spec.Replsets[0]
+				return []*api.PVCSpec{cr.LogStorage(rs.LogStorage), cr.LogStorage(rs.NonVoting.LogStorage)}
+			},
+		},
 		"mongos": {
 			labels: func(cr *api.PerconaServerMongoDB, _ *api.ReplsetSpec) map[string]string {
 				return naming.MongosLabels(cr)
@@ -842,6 +909,9 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			ctx := t.Context()
 
 			cr := newCR()
+			if tt.setup != nil {
+				tt.setup(cr)
+			}
 			rs := cr.Spec.Replsets[0]
 			ls := tt.labels(cr, rs)
 
@@ -878,6 +948,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 				},
 			}
 
+			mountPVC(pod, tt.claimName, pvcName, tt.mountPath)
 			r := buildFakeClient(cr, sts, pvc, pod)
 
 			var execContainer string
@@ -906,8 +977,38 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 
 			newSize := pvcSpec.Resources.Requests[corev1.ResourceStorage]
 			assert.Equal(t, "12Gi", newSize.String(), "usage above threshold must grow the volume")
+
+			if tt.untouched != nil {
+				for _, other := range tt.untouched(cr) {
+					size := other.Resources.Requests[corev1.ResourceStorage]
+					assert.Equal(t, "10Gi", size.String(), "other components' log volumes must not grow")
+				}
+			}
 		})
 	}
+}
+
+// setAllLogStorage gives every replset component its own 10Gi log volume.
+func setAllLogStorage(cr *api.PerconaServerMongoDB) {
+	cr.Spec.CRVersion = version.Version()
+	cr.Spec.LogCollector = &api.LogCollectorSpec{Enabled: true}
+
+	spec := func() *api.StorageSpec {
+		return &api.StorageSpec{
+			PersistentVolumeClaim: &api.PVCSpec{
+				PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+					},
+				},
+			},
+		}
+	}
+
+	rs := cr.Spec.Replsets[0]
+	rs.LogStorage = spec()
+	rs.NonVoting.LogStorage = spec()
+	rs.Hidden.LogStorage = spec()
 }
 
 // TestResizeMongosPVCsWithoutLogPVC covers the clusters that have no mongos PVC
@@ -1119,6 +1220,8 @@ func fullPVCAndPod(
 			},
 		},
 	}
+
+	mountPVC(pod, psmdbconfig.MongodDataVolClaimName, pvc.Name, psmdbconfig.MongodContainerDataDir)
 
 	return pvc, pod
 }
@@ -1335,6 +1438,7 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 		},
 	}
 
+	mountPVC(pod, psmdbconfig.MongosLogVolClaimName, pvc.Name, customLogDir)
 	r := buildFakeClient(cr, sts, pvc, pod)
 
 	var execContainer string
@@ -1496,4 +1600,110 @@ func TestReconcileStorageAutoscalingPicksOwningContainer(t *testing.T) {
 
 	assert.Equal(t, naming.ContainerMongod, execContainer, "df must run in the container that owns the volume")
 	assert.Equal(t, []string{"df", "-B1", psmdbconfig.MongodContainerDataDir}, execCommand)
+}
+
+func TestCheckAndResizePVCSkipsTerminatingPod(t *testing.T) {
+	t.Parallel()
+
+	r := buildFakeClient()
+	r.clientcmd = &mockClientCmd{
+		execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+			t.Fatal("df must not run in a terminating pod")
+			return nil
+		},
+	}
+
+	pod := &corev1.Pod{
+		Name: "test-cluster-rs0-0", Namespace: "default",
+		DeletionTimestamp: new(metav1.Now()),
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: naming.ContainerMongod, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+	pvc := &corev1.PersistentVolumeClaim{Name: "mongod-data-test-cluster-rs0-0", Namespace: "default"}
+	cr := &api.PerconaServerMongoDB{Name: "test-cluster", Namespace: "default"}
+
+	require.NoError(t, r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
+		naming.ContainerMongod, psmdbconfig.MongodContainerDataDir))
+	assert.Empty(t, cr.Status.StorageAutoscaling)
+}
+
+func TestCheckAndResizePVCSkipsUnmountedPVC(t *testing.T) {
+	t.Parallel()
+
+	r := buildFakeClient()
+	r.clientcmd = &mockClientCmd{
+		execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+			t.Fatal("df would measure the data volume of a pod that does not mount the log PVC")
+			return nil
+		},
+	}
+
+	// the claim rollout created the log PVC before the pod was recreated with it
+	pod := &corev1.Pod{
+		Name: "test-cluster-rs0-0", Namespace: "default",
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: naming.ContainerMongod}}},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: naming.ContainerMongod, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+	mountPVC(pod, psmdbconfig.MongodDataVolClaimName, "mongod-data-test-cluster-rs0-0", psmdbconfig.MongodContainerDataDir)
+	pvc := &corev1.PersistentVolumeClaim{Name: "mongod-logs-test-cluster-rs0-0", Namespace: "default"}
+	cr := &api.PerconaServerMongoDB{Name: "test-cluster", Namespace: "default"}
+
+	require.NoError(t, r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
+		naming.ContainerMongod, psmdbconfig.MongodContainerDataLogsDir))
+	assert.Empty(t, cr.Status.StorageAutoscaling)
+}
+
+func TestPodMountsPVC(t *testing.T) {
+	t.Parallel()
+
+	const (
+		pvcName   = "mongod-logs-test-cluster-rs0-0"
+		mountPath = "/data/db/logs"
+	)
+	pod := func(container string, claimName, mount string) *corev1.Pod {
+		p := &corev1.Pod{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: container}}}}
+		if claimName != "" {
+			mountPVC(p, psmdbconfig.MongodLogVolClaimName, claimName, mount)
+		}
+		return p
+	}
+
+	tests := map[string]struct {
+		pod  *corev1.Pod
+		want bool
+	}{
+		"mounted": {
+			pod:  pod(naming.ContainerMongod, pvcName, mountPath),
+			want: true,
+		},
+		"no volume for the pvc": {
+			pod: pod(naming.ContainerMongod, "", ""),
+		},
+		"volume for another pvc": {
+			pod: pod(naming.ContainerMongod, "mongod-logs-other", mountPath),
+		},
+		"mounted elsewhere": {
+			pod: pod(naming.ContainerMongod, pvcName, "/sidecar/view"),
+		},
+		"mounted by another container": {
+			pod: pod("logs", pvcName, mountPath),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, podMountsPVC(tt.pod, naming.ContainerMongod, pvcName, mountPath))
+		})
+	}
 }

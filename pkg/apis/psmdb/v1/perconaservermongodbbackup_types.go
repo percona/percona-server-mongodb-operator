@@ -92,6 +92,16 @@ type SnapshotInfo struct {
 	ReplsetName string `json:"replsetName,omitempty"`
 	// SnapshotName is the name of the snapshot.
 	SnapshotName string `json:"snapshotName,omitempty"`
+	// JournalSnapshotName is the name of the journal volume snapshot, set when the node has journalStorage.
+	JournalSnapshotName string `json:"journalSnapshotName,omitempty"`
+}
+
+// Names returns the data and, if taken, journal snapshot names.
+func (s SnapshotInfo) Names() []string {
+	if s.JournalSnapshotName == "" {
+		return []string{s.SnapshotName}
+	}
+	return []string{s.SnapshotName, s.JournalSnapshotName}
 }
 
 func (s SnapshotInfos) GetSnapshotInfo(replsetName string) *SnapshotInfo {

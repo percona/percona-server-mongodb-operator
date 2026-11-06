@@ -664,6 +664,14 @@ type NonVotingSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
+	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
+
 	MultiAZ `json:",inline"`
 }
 
@@ -684,6 +692,14 @@ type HiddenSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
+
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
+	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -934,6 +950,14 @@ type ReplsetSpec struct {
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
 	VPA                      *ComponentVPASpec            `json:"vpa,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
+
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
+	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -1957,6 +1981,7 @@ const (
 	AnnotationResyncPBM                = "percona.com/resync-pbm"
 	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
+	AnnotationPVCResizeClaim           = "percona.com/pvc-resize-claim"
 	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
 )
 
@@ -2148,6 +2173,15 @@ type LogCollectorSpec struct {
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
+// StorageSpec defines a dedicated PVC for an auxiliary mongod volume.
+type StorageSpec struct {
+	// PersistentVolumeClaim specifies the PVC backing the volume. When set, the
+	// data is written to a dedicated volume instead of the mongod data volume.
+	//
+	// +kubebuilder:validation:XValidation:rule="has(self.resources) && has(self.resources.requests) && 'storage' in self.resources.requests",message="persistentVolumeClaim.resources.requests.storage must be set"
+	PersistentVolumeClaim *PVCSpec `json:"persistentVolumeClaim,omitempty"`
+}
+
 // LogRotateSpec defines the configuration for the logrotate container.
 type LogRotateSpec struct {
 	// Configuration allows overriding the default logrotate configuration.
@@ -2174,6 +2208,27 @@ type LogRotateSpec struct {
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
+}
+
+// LogStorage returns the PVC spec for mongod logs, or nil when logs stay on the
+// data volume. Nothing collects or rotates them with the log collector off, so
+// the volume follows it. The caller resolves storage from the component it is
+// building: replset, non-voting or hidden.
+func (cr *PerconaServerMongoDB) LogStorage(storage *StorageSpec) *PVCSpec {
+	if cr.CompareVersion("1.24.0") < 0 || !cr.IsLogCollectorEnabled() || storage == nil {
+		return nil
+	}
+	return storage.PersistentVolumeClaim
+}
+
+// JournalStorage returns the PVC spec for the WiredTiger journal, or nil when
+// the journal stays on the data volume. The caller resolves storage from the
+// component it is building: replset, non-voting or hidden.
+func (cr *PerconaServerMongoDB) JournalStorage(storage *StorageSpec) *PVCSpec {
+	if cr.CompareVersion("1.24.0") < 0 || storage == nil {
+		return nil
+	}
+	return storage.PersistentVolumeClaim
 }
 
 func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {

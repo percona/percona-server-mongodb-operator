@@ -8,7 +8,6 @@ import (
 	"io"
 	"maps"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1051,7 +1050,12 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 				mongodPodsMap[pod.Name] = true
 			}
 			for _, pvc := range mongodPVCs.Items {
-				if after, ok := strings.CutPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-"); ok {
+				for _, claimName := range []string{psmdbconfig.MongodDataVolClaimName, psmdbconfig.MongodLogVolClaimName, psmdbconfig.MongodJournalVolClaimName} {
+					after, ok := strings.CutPrefix(pvc.Name, claimName+"-")
+					if !ok {
+						continue
+					}
+
 					podName := after
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
@@ -1061,6 +1065,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
 						}
 					}
+					break
 				}
 			}
 		}
@@ -1554,9 +1559,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	if err == nil && cr.CompareVersion("1.23.1") >= 0 {
 		currentVCT = sts.Spec.VolumeClaimTemplates
-		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-			return vct.Name == psmdbconfig.MongosLogVolClaimName
-		})
+		hasLogVCT := k8sutils.HasVolumeClaimTemplate(sts, psmdbconfig.MongosLogVolClaimName)
 		wantLogVCT := cr.Spec.Sharding.Mongos.LogStorage() != nil
 		if hasLogVCT != wantLogVCT {
 			log.Info("Recreating mongos statefulset to change log storage")
