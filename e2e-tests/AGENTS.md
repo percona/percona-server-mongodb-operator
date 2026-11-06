@@ -97,6 +97,13 @@ check against that.
 
 ## OLM and OpenShift tests
 
+- `installers/olm/e2e-tests/` (the OLM tests) imports `lib/` and
+  `conftest.py` from here, loaded with `-p conftest`. When you rename or
+  remove a fixture or helper, update those tests too. `make py-check`
+  resolves every test's fixtures without a cluster (`make py-setup-plan`) and
+  type-checks both trees, so CI fails on a stale name; a behaviour change is
+  only caught by running the OLM tests on OpenShift (`make -C installers/olm
+  tests`).
 - Use fully qualified OLM resource names (`subscriptions.operators.coreos.com`,
   `installplans.operators.coreos.com`, ...). On OpenShift, `subscription` can
   resolve to Knative's Subscription.
@@ -117,5 +124,6 @@ check against that.
 - Applying the operator CRD makes an InstallPlan emit `AppliedWithWarnings` for the
   deprecated `psmdb.percona.com/v1-x-0` versions. Allow that event only when
   every warning in it is a deprecation notice.
-- Build the starting CR from the old bundle's `alm-examples`, so its
-  `crVersion` and images match the version being upgraded from.
+- Build the starting CR, and the backup and restore objects, from the
+  bundle's `alm-examples`, so `crVersion` and images match the version under
+  test.

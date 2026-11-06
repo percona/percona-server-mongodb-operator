@@ -12,11 +12,15 @@ update it with any change here.
 - `build-bundle.sh` builds and pushes bundle images.
 - `build-catalog.sh` downloads previous bundles from the OperatorHub GitHub
   repositories, builds catalog images and applies the CatalogSource.
-- `run-tests.sh` runs the upgrade test once per starting version in the
-  deployed dev catalog (`make tests`, `make tests/<type>`).
-- `e2e-tests/` holds the OLM pytest tests (`olm-upgrade/`) and their helpers
-  (`olm.py`). They reuse the shared harness from the root `e2e-tests/` and
-  follow [`e2e-tests/AGENTS.md`](../../e2e-tests/AGENTS.md).
+- `run-tests.sh` runs the OLM tests against the deployed dev catalog
+  (`make tests`, `make tests/<type>`, `OLM_TESTS` selects them):
+  `olm-backup-restore` once against the target, `olm-upgrade` once per
+  starting version.
+- `e2e-tests/` holds the OLM pytest tests (`olm-backup-restore/`,
+  `olm-upgrade/`) and their helpers (`olm.py`: install through OLM, objects
+  from a bundle's `alm-examples`, data and operator checks). They reuse the
+  shared harness from the root `e2e-tests/` and follow
+  [`e2e-tests/AGENTS.md`](../../e2e-tests/AGENTS.md).
 - `Makefile` wraps these; `make help` lists the targets.
 
 Vocabulary: a **bundle** is one operator version as an image, its main
