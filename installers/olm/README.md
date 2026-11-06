@@ -361,7 +361,11 @@ after the restore every member (direct connection to each pod) must return only
 the data as of the backup, and the cluster must accept writes again. For the
 physical restore it also waits for the `percona.com/resync-pbm` annotation, the
 StatefulSet rebuild and the PBM resync. The operator pod must not restart or
-log errors during the run.
+log errors during the run. Finally the logs of the operator and database pods,
+the backup and restore objects, the events and the cluster object are scanned
+for the storage credentials and for credential-shaped strings
+(`e2e-tests/lib/secret_scan.py`); a finding fails the test with the source,
+line and rule, with the match masked.
 
 ## olm-upgrade
 

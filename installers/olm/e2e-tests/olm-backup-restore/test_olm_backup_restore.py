@@ -12,6 +12,7 @@ import pytest
 from lib.backup import wait_backup, wait_physical_restore, wait_restore
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
+from lib.secret_scan import check_logs_for_secrets
 from lib.utils import Paths, env_bool
 from olm import (
     LOCAL_S3,
@@ -218,3 +219,11 @@ class TestOlmBackupRestore:
     ) -> None:
         """The operator was not replaced or restarted and logged no errors"""
         assert_operator_healthy(config.namespace, csv, state.operator_pod_uid)
+
+    @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_physical_restore"])
+    def test_no_credentials_in_logs(
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any]
+    ) -> None:
+        """No storage credential or credential-shaped string in the logs and objects"""
+        operator = operator_pod(config.namespace, csv)["metadata"]["name"]
+        check_logs_for_secrets(config.namespace, config.cluster, operator)
