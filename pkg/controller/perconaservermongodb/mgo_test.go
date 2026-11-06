@@ -399,7 +399,7 @@ func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
 
 			// AddNew adds one member per call; repeat to check the 51st stays excluded.
 			for range 2 {
-				_, _, err := r.updateConfigMembers(ctx, cli, cr, rs)
+				_, _, _, err := r.updateConfigMembers(ctx, cli, cr, rs)
 				require.NoError(t, err)
 				config, err := cli.ReadConfig(ctx)
 				require.NoError(t, err)
