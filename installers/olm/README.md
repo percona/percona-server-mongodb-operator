@@ -44,7 +44,9 @@ Downloaded tools:
 
 ## Variables
 
-Most workflows only require `VERSION`.
+Most workflows only require `VERSION`. It defaults to the branch name on a
+release branch (for example `release-1.25.0`), and otherwise to the operator
+version in `../../pkg/version/version.txt`.
 
 ```bash
 export VERSION=1.23.0
@@ -54,7 +56,7 @@ Useful optional variables:
 
 | Variable | Description | Example |
 | --- | --- | --- |
-| `CSV_VERSION` | CSV version. Defaults to the first `x.y.z` parsed from `VERSION`. | `1.23.0` |
+| `CSV_VERSION` | CSV version. Defaults to the `x.y.z` parsed from `VERSION`. | `1.23.0` |
 | `REGISTRY` | Registry used for operator, bundle, and catalog images. | `docker.io` |
 | `PROD_REPOSITORY` | Repository namespace used for production bundle images. | `percona` |
 | `DEV_REPOSITORY` | Repository namespace used for development bundle images and all catalog images. | `perconalab` |
@@ -63,7 +65,8 @@ Useful optional variables:
 | `BUNDLE_PLATFORM` | Platform used when building current bundle images locally. | `linux/amd64` |
 | `BUNDLE_PACKAGE_CHANNEL` | Package channel used for the generated current bundle. | `stable` |
 | `CONFIRM_PUSH` | Ask for confirmation before pushing bundle and catalog images. Set to `0` for non-interactive runs. | `1` |
-| `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. | `2` |
+| `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. Ignored when `CATALOG_PREVIOUS_MINORS` is set. | `2` |
+| `CATALOG_PREVIOUS_MINORS` | Include every previous OperatorHub version of the N newest minor lines older than the current one, all patches included, plus older patches of the current minor line, instead of a fixed number of versions. Versions newer than the current one are ignored. Empty by default. | `2` |
 | `CATALOG_PLATFORM` | Platform used when building previous OperatorHub bundle images and catalog images. | `linux/amd64` |
 | `CATALOG_BUILD_PUSH` | Build and push catalog images during deploy targets when enabled. | `1` |
 | `BUNDLE_SKIP_DIGEST_FAILURE` | Continue certified bundle generation when a non-required digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
@@ -162,6 +165,12 @@ docker.io/perconalab/percona-server-mongodb-operator:1.22.0-community-bundle-dev
 docker.io/perconalab/percona-server-mongodb-operator:1.21.2-community-bundle-dev-catalog
 ```
 
+To include whole minor lines instead, set `CATALOG_PREVIOUS_MINORS`. With
+`VERSION=1.24.0`, `CATALOG_PREVIOUS_MINORS=2` and previous GitHub versions
+`1.21.2`, `1.22.0`, `1.23.0` and `1.23.1`, the catalog gets `1.22.0`, `1.23.0`
+and `1.23.1`. The build stops when OperatorHub has fewer minor lines than
+requested.
+
 The certified catalog follows the same pattern:
 
 ```text
@@ -170,9 +179,10 @@ docker.io/perconalab/percona-server-mongodb-operator:1.22.0-certified-bundle-dev
 docker.io/perconalab/percona-server-mongodb-operator:1.21.2-certified-bundle-dev-catalog
 ```
 
-All bundles are rendered into their own versioned channel. `BUNDLE_PACKAGE_CHANNEL`
-sets the channel prefix (`stable` by default), so versions are rendered into
-channels such as `stable-v1.23`, `stable-v1.22`, and `stable-v1.21`.
+All bundles are rendered into one channel, as in the published catalogs.
+`BUNDLE_PACKAGE_CHANNEL` sets its name (`stable` by default). Each version
+skips every older one (`olm.skipRange` in community catalogs, `spec.skips` in
+certified ones), so OLM upgrades any older version straight to the newest.
 
 ```bash
 make catalog-build-push/community VERSION=1.23.0
@@ -307,6 +317,87 @@ Validation uses:
 
 - `validate-image.sh`
 - `validate-directory.sh`
+
+---
+
+# Upgrade tests
+
+`make tests` runs the `e2e-tests/olm-upgrade` pytest test (in this directory)
+against the deployed development catalogs. Deploy them first with
+`make deploy/<type>`, and point `kubectl` and `oc` at the OpenShift cluster (the
+shared harness creates the test project with `oc`; `uv` is also required). Build the catalog with
+`CATALOG_PREVIOUS_MINORS=2` to test upgrades from the two previous minor
+versions and all their patch releases.
+
+```bash
+make deploy/community CATALOG_PREVIOUS_MINORS=2
+make tests
+make tests/community
+make tests/certified
+```
+
+`make tests` runs `tests/community` and then `tests/certified`, one at a time
+(also under `make -j`), because each run deletes the cluster-wide operator CRDs.
+Each one first waits for the CatalogSource to be `READY` and to serve the
+package (`OLM_CATALOG_TIMEOUT`, 300 seconds), so it can run right after
+`make deploy/<type>`.
+
+The target is the head of the default channel, or of `OLM_TARGET_CHANNEL`. The
+test runs once for every bundle in the catalog older than the target. Each
+run installs that bundle with a Manual-approval Subscription (`startingCSV`) on
+the target's channel, deploys a replica set from the bundle's example CR and
+writes data. It then approves only the InstallPlan straight to the target and
+deletes any other pending one, such as one for a newer patch, so each starting
+version is upgraded directly, without changing the channel, as users do. In a
+catalog with a channel per minor version, the test moves the Subscription to
+the target's channel first. After the upgrade it checks that:
+
+- only the target CSV is left and the operator runs its image;
+- the operator pod stays Ready and is not replaced or restarted, and its logs
+  and the namespace's Warning events have no new errors, both right after the
+  upgrade and after a 3-minute soak;
+- the operator reconciled the cluster (`status.observedGeneration`), the cluster
+  stayed `ready`, and no DB pod was recreated or restarted;
+- the data written before the upgrade is readable on every member (direct
+  connection to each pod), and new writes succeed.
+
+For a dev catalog, the test checks that the head of the default channel is
+`OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
+the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
+check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
+
+`make tests` fails when the catalog holds fewer than two previous minor
+versions, not counting the target's own minor line. Set `OLM_MIN_MINORS` to
+change that number.
+
+Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
+starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`
+in the repository root.
+
+OLM tests live in `installers/olm/e2e-tests/` and are not part of the regular
+e2e suite: they need an OpenShift cluster with the catalogs deployed, and
+changes here do not trigger the PR e2e run (`installers/olm/**` is in
+`.e2eignore`). They reuse the shared pytest harness from the repository's
+`e2e-tests/` (`conftest.py` and `lib/`) unchanged, loaded with `-p conftest`;
+each test overrides `test_paths` for its location, and `olm.py` holds the OLM
+helpers. To run one test by hand from the repository
+root:
+
+```bash
+SKIP_DELETE=0 PYTHONPATH=e2e-tests:installers/olm/e2e-tests \
+  uv run pytest -p conftest installers/olm/e2e-tests/olm-upgrade/
+```
+
+The shared `conftest.py` defaults to `SKIP_DELETE=1`, so a manual run without
+`SKIP_DELETE=0` keeps its namespace, operator and CRDs. `make tests` cleans up
+after every run unless you set `SKIP_DELETE=1`.
+
+Before each run, the test deletes the operator CRDs, together with every `psmdb`
+resource in the cluster, and with `SKIP_DELETE=0` it deletes them again after
+the run. OLM leaves CRDs behind, and a newer CRD blocks installing an older
+bundle. Use a dedicated cluster. Run `make tests SKIP_DELETE=1` to keep the
+last run's resources for debugging; earlier runs are always cleaned up, since
+the next run deletes the CRDs anyway.
 
 ---
 
