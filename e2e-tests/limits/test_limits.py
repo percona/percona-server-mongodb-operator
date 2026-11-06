@@ -73,3 +73,5 @@ class TestLimits:
             return_stderr=True,
         )
         assert "volumeSpec: Required value" in result
+
+        pytest.fail("Intentional failure used to validate the GitHub PR test report")
