@@ -343,11 +343,11 @@ spec:
             storage: 3Gi
 #    journalStorage:
 #      persistentVolumeClaim:
-#        storageClassName: fast-ssd
+#        storageClassName: standard
 #        accessModes: [ "ReadWriteOnce" ]
 #        resources:
 #          requests:
-#            storage: 5Gi
+#            storage: 2Gi
 #    logStorage:
 #      persistentVolumeClaim:
 #        storageClassName: standard
@@ -424,11 +424,11 @@ spec:
               storage: 3Gi
 #      journalStorage:
 #        persistentVolumeClaim:
-#          storageClassName: fast-ssd
+#          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
 #          resources:
 #            requests:
-#              storage: 5Gi
+#              storage: 2Gi
 #      logStorage:
 #        persistentVolumeClaim:
 #          storageClassName: standard
@@ -505,11 +505,11 @@ spec:
               storage: 3Gi
 #      journalStorage:
 #        persistentVolumeClaim:
-#          storageClassName: fast-ssd
+#          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
 #          resources:
 #            requests:
-#              storage: 5Gi
+#              storage: 2Gi
 #      logStorage:
 #        persistentVolumeClaim:
 #          storageClassName: standard
@@ -711,11 +711,11 @@ spec:
               storage: 3Gi
 #      journalStorage:
 #        persistentVolumeClaim:
-#          storageClassName: fast-ssd
+#          storageClassName: standard
 #          accessModes: [ "ReadWriteOnce" ]
 #          resources:
 #            requests:
-#              storage: 5Gi
+#              storage: 2Gi
 #      logStorage:
 #        persistentVolumeClaim:
 #          storageClassName: standard
