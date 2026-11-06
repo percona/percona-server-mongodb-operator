@@ -156,6 +156,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 	journalStorage := replset.JournalStorage
+	logStorage := replset.LogStorage
 
 	// vpaKey is the status.vpaStatus key for this component, empty when VPA does
 	// not manage it (the arbiter has no VPA configuration).
@@ -168,6 +169,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		multiAZ = replset.Arbiter.MultiAZ
 		resources = replset.Arbiter.Resources
 		journalStorage = nil
+		logStorage = nil
 		vpaKey = ""
 	case naming.ComponentNonVoting:
 		containerName = naming.ContainerNonVoting
@@ -182,6 +184,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		readinessProbe = replset.NonVoting.ReadinessProbe
 		volumeSpec = replset.NonVoting.VolumeSpec
 		journalStorage = replset.NonVoting.JournalStorage
+		logStorage = replset.NonVoting.LogStorage
 	case naming.ComponentHidden:
 		containerName = naming.ContainerHidden
 		size = replset.Hidden.Size
@@ -195,13 +198,13 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		readinessProbe = replset.Hidden.ReadinessProbe
 		volumeSpec = replset.Hidden.VolumeSpec
 		journalStorage = replset.Hidden.JournalStorage
+		logStorage = replset.Hidden.LogStorage
 	}
 
-	isArbiter := ls[naming.LabelKubernetesComponent] == naming.ComponentArbiter
-
+	logPVC := cr.LogStorage(logStorage)
 	logVol := config.MongodLogVolume()
 	var mongodLogVol *config.LogVolume
-	if !isArbiter && cr.LogStorage() != nil {
+	if logPVC != nil {
 		logVol = config.MongodPVCLogVolume()
 		mongodLogVol = &logVol
 	}
@@ -488,8 +491,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 				auxiliaryPVC(cr, config.MongodJournalVolClaimName, journalPVC, customLabels))
 		}
 
-		if cr.LogStorage() != nil {
-			volumeClaimTemplates = append(volumeClaimTemplates, mongodLogPVC(cr, customLabels))
+		if logPVC != nil {
+			volumeClaimTemplates = append(volumeClaimTemplates,
+				auxiliaryPVC(cr, config.MongodLogVolClaimName, logPVC, customLabels))
 		}
 
 		if cr.CompareVersion("1.21.0") >= 0 {
@@ -890,10 +894,6 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
 	return pvc
-}
-
-func mongodLogPVC(cr *api.PerconaServerMongoDB, ls map[string]string) corev1.PersistentVolumeClaim {
-	return auxiliaryPVC(cr, config.MongodLogVolClaimName, cr.LogStorage(), ls)
 }
 
 func auxiliaryPVC(cr *api.PerconaServerMongoDB, name string, storage *api.PVCSpec, ls map[string]string) corev1.PersistentVolumeClaim {

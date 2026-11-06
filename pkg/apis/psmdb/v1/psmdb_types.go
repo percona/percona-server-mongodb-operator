@@ -664,12 +664,13 @@ type NonVotingSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 
-	// JournalStorage puts the WiredTiger journal on a dedicated PVC mounted at
-	// /data/db/journal. Enabling it on a running cluster rolls the members one at
-	// a time, copying each journal onto the new volume. Disabling it is rejected.
-	// Only the storage request can change afterwards; storageClassName and
-	// accessModes are immutable.
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it rolls members one at a time; disabling is rejected. Only the size can change later.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -692,12 +693,13 @@ type HiddenSpec struct {
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 
-	// JournalStorage puts the WiredTiger journal on a dedicated PVC mounted at
-	// /data/db/journal. Enabling it on a running cluster rolls the members one at
-	// a time, copying each journal onto the new volume. Disabling it is rejected.
-	// Only the storage request can change afterwards; storageClassName and
-	// accessModes are immutable.
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it rolls members one at a time; disabling is rejected. Only the size can change later.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -949,12 +951,13 @@ type ReplsetSpec struct {
 	VPA                      *ComponentVPASpec            `json:"vpa,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
 
-	// JournalStorage puts the WiredTiger journal on a dedicated PVC mounted at
-	// /data/db/journal. Enabling it on a running cluster rolls the members one at
-	// a time, copying each journal onto the new volume. Disabling it is rejected.
-	// Only the storage request can change afterwards; storageClassName and
-	// accessModes are immutable.
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it rolls members one at a time; disabling is rejected. Only the size can change later.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -2150,8 +2153,6 @@ func (cr *PerconaServerMongoDB) IsSearchEnabled() bool {
 
 // LogCollectorSpec defines the configuration for enabling and customizing
 // the log collection component that stores logs in a PVC.
-//
-// +kubebuilder:validation:XValidation:rule="!has(self.storage) || (has(self.enabled) && self.enabled)",message="storage requires the log collector to be enabled"
 type LogCollectorSpec struct {
 	Enabled                  bool                        `json:"enabled,omitempty"`
 	Image                    string                      `json:"image,omitempty"`
@@ -2170,9 +2171,6 @@ type LogCollectorSpec struct {
 	// ReadinessProbe sets a readiness probe for the logs (fluent-bit) container.
 	// When not set the container has no readiness probe.
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
-
-	// Storage configures where mongod logs are stored.
-	Storage *StorageSpec `json:"storage,omitempty"`
 }
 
 // StorageSpec defines a dedicated PVC for an auxiliary mongod volume.
@@ -2214,15 +2212,13 @@ func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 
 // LogStorage returns the PVC spec for mongod logs, or nil when logs stay on the
 // data volume. Nothing collects or rotates them with the log collector off, so
-// the volume follows it.
-func (cr *PerconaServerMongoDB) LogStorage() *PVCSpec {
-	if cr.CompareVersion("1.24.0") < 0 || !cr.IsLogCollectorEnabled() {
+// the volume follows it. The caller resolves storage from the component it is
+// building: replset, non-voting or hidden.
+func (cr *PerconaServerMongoDB) LogStorage(storage *StorageSpec) *PVCSpec {
+	if cr.CompareVersion("1.24.0") < 0 || !cr.IsLogCollectorEnabled() || storage == nil {
 		return nil
 	}
-	if cr.Spec.LogCollector.Storage == nil {
-		return nil
-	}
-	return cr.Spec.LogCollector.Storage.PersistentVolumeClaim
+	return storage.PersistentVolumeClaim
 }
 
 // JournalStorage returns the PVC spec for the WiredTiger journal, or nil when

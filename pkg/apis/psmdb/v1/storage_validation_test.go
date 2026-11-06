@@ -31,13 +31,14 @@ func emptyDirVolume() *VolumeSpec {
 	return &VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{}}
 }
 
-func TestValidateJournalStorage(t *testing.T) {
+func TestValidateStorage(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		crVersion string
-		rs        func() *ReplsetSpec
-		wantErr   error
+		crVersion    string
+		logCollector *LogCollectorSpec
+		rs           func() *ReplsetSpec
+		wantErr      error
 	}{
 		"no journal storage": {
 			rs: func() *ReplsetSpec {
@@ -114,42 +115,43 @@ func TestValidateJournalStorage(t *testing.T) {
 				}
 			},
 		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			cr := &PerconaServerMongoDB{Spec: PerconaServerMongoDBSpec{CRVersion: version.Version()}}
-			if tt.crVersion != "" {
-				cr.Spec.CRVersion = tt.crVersion
-			}
-
-			err := cr.validateJournalStorage(tt.rs())
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-				return
-			}
-			require.NoError(t, err)
-		})
-	}
-}
-
-func TestValidateLogStorage(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]struct {
-		crVersion    string
-		logCollector *LogCollectorSpec
-		wantErr      error
-	}{
-		"no log collector":         {},
-		"no storage":               {logCollector: &LogCollectorSpec{Enabled: true}},
-		"storage on current crVer": {logCollector: &LogCollectorSpec{Enabled: true, Storage: testStorageSpec()}},
-		"storage on old crVersion": {
+		"logs with the log collector enabled": {
+			logCollector: &LogCollectorSpec{Enabled: true},
+			rs: func() *ReplsetSpec {
+				return &ReplsetSpec{VolumeSpec: emptyDirVolume(), LogStorage: testStorageSpec()}
+			},
+		},
+		"logs without the log collector": {
+			rs: func() *ReplsetSpec {
+				return &ReplsetSpec{VolumeSpec: pvcVolume(), LogStorage: testStorageSpec()}
+			},
+			wantErr: errLogNoCollector,
+		},
+		"logs on an old crVersion": {
 			crVersion:    "1.23.0",
-			logCollector: &LogCollectorSpec{Enabled: true, Storage: testStorageSpec()},
-			wantErr:      errStorageCRVersion,
+			logCollector: &LogCollectorSpec{Enabled: true},
+			rs: func() *ReplsetSpec {
+				return &ReplsetSpec{VolumeSpec: pvcVolume(), LogStorage: testStorageSpec()}
+			},
+			wantErr: errStorageCRVersion,
+		},
+		"hidden logs with the log collector disabled": {
+			logCollector: &LogCollectorSpec{},
+			rs: func() *ReplsetSpec {
+				return &ReplsetSpec{
+					VolumeSpec: pvcVolume(),
+					Hidden:     HiddenSpec{Enabled: true, VolumeSpec: pvcVolume(), LogStorage: testStorageSpec()},
+				}
+			},
+			wantErr: errLogNoCollector,
+		},
+		"disabled hidden logs are ignored": {
+			rs: func() *ReplsetSpec {
+				return &ReplsetSpec{
+					VolumeSpec: pvcVolume(),
+					Hidden:     HiddenSpec{VolumeSpec: pvcVolume(), LogStorage: testStorageSpec()},
+				}
+			},
 		},
 	}
 
@@ -162,7 +164,7 @@ func TestValidateLogStorage(t *testing.T) {
 				cr.Spec.CRVersion = tt.crVersion
 			}
 
-			err := cr.validateLogStorage()
+			err := cr.validateStorage(tt.rs())
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 				return

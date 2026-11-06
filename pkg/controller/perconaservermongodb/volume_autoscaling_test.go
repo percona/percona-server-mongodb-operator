@@ -800,6 +800,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 		mountPath     string
 		setup         func(cr *api.PerconaServerMongoDB)
 		pvcSpec       func(cr *api.PerconaServerMongoDB) *api.PVCSpec
+		untouched     func(cr *api.PerconaServerMongoDB) []*api.PVCSpec
 	}{
 		"mongod": {
 			labels:        naming.MongodLabels,
@@ -847,6 +848,36 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			},
 			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
 				return cr.JournalStorage(cr.Spec.Replsets[0].JournalStorage)
+			},
+		},
+		"logs": {
+			labels:        naming.MongodLabels,
+			stsName:       crName + "-" + rsName,
+			containerName: naming.ContainerMongod,
+			claimName:     psmdbconfig.MongodLogVolClaimName,
+			mountPath:     psmdbconfig.MongodContainerDataLogsDir,
+			setup:         setAllLogStorage,
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return cr.LogStorage(cr.Spec.Replsets[0].LogStorage)
+			},
+			untouched: func(cr *api.PerconaServerMongoDB) []*api.PVCSpec {
+				rs := cr.Spec.Replsets[0]
+				return []*api.PVCSpec{cr.LogStorage(rs.NonVoting.LogStorage), cr.LogStorage(rs.Hidden.LogStorage)}
+			},
+		},
+		"hidden logs": {
+			labels:        naming.HiddenLabels,
+			stsName:       crName + "-" + rsName + "-hidden",
+			containerName: naming.ContainerHidden,
+			claimName:     psmdbconfig.MongodLogVolClaimName,
+			mountPath:     psmdbconfig.MongodContainerDataLogsDir,
+			setup:         setAllLogStorage,
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return cr.LogStorage(cr.Spec.Replsets[0].Hidden.LogStorage)
+			},
+			untouched: func(cr *api.PerconaServerMongoDB) []*api.PVCSpec {
+				rs := cr.Spec.Replsets[0]
+				return []*api.PVCSpec{cr.LogStorage(rs.LogStorage), cr.LogStorage(rs.NonVoting.LogStorage)}
 			},
 		},
 		"mongos": {
@@ -935,8 +966,38 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 
 			newSize := pvcSpec.Resources.Requests[corev1.ResourceStorage]
 			assert.Equal(t, "12Gi", newSize.String(), "usage above threshold must grow the volume")
+
+			if tt.untouched != nil {
+				for _, other := range tt.untouched(cr) {
+					size := other.Resources.Requests[corev1.ResourceStorage]
+					assert.Equal(t, "10Gi", size.String(), "other components' log volumes must not grow")
+				}
+			}
 		})
 	}
+}
+
+// setAllLogStorage gives every replset component its own 10Gi log volume.
+func setAllLogStorage(cr *api.PerconaServerMongoDB) {
+	cr.Spec.CRVersion = version.Version()
+	cr.Spec.LogCollector = &api.LogCollectorSpec{Enabled: true}
+
+	spec := func() *api.StorageSpec {
+		return &api.StorageSpec{
+			PersistentVolumeClaim: &api.PVCSpec{
+				PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+					},
+				},
+			},
+		}
+	}
+
+	rs := cr.Spec.Replsets[0]
+	rs.LogStorage = spec()
+	rs.NonVoting.LogStorage = spec()
+	rs.Hidden.LogStorage = spec()
 }
 
 // TestResizeMongosPVCsWithoutLogPVC covers the clusters that have no mongos PVC

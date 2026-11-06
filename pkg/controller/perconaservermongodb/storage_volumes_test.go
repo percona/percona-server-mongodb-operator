@@ -93,7 +93,7 @@ func TestRecreateStsForStorageDeleteErrors(t *testing.T) {
 
 			cr, err := readDefaultCR("some-cluster", ns)
 			require.NoError(t, err)
-			cr.Spec.LogCollector.Storage = logStorage("2Gi")
+			cr.Spec.Replsets[0].LogStorage = logStorageSpec("2Gi")
 
 			sts := logStorageSts("some-cluster-rs0", ns, naming.ComponentMongod, config.MongodDataVolClaimName)
 			r := buildFakeClient(cr, sts.DeepCopy())
@@ -153,7 +153,7 @@ func TestReconcileAuxiliaryPVCsSkips(t *testing.T) {
 
 			cr, err := readDefaultCR("some-cluster", ns)
 			require.NoError(t, err)
-			cr.Spec.LogCollector.Storage = logStorage("5Gi")
+			cr.Spec.Replsets[0].LogStorage = logStorageSpec("5Gi")
 			cr.Spec.StorageScaling = &api.StorageScalingSpec{EnableVolumeScaling: true}
 
 			ls := naming.MongodLabels(cr, cr.Spec.Replsets[0])
@@ -171,7 +171,7 @@ func TestReconcileAuxiliaryPVCsSkips(t *testing.T) {
 
 			r := buildFakeClient(cr, sts, pod, logPVC)
 
-			pvcSpec := cr.LogStorage()
+			pvcSpec := cr.LogStorage(cr.Spec.Replsets[0].LogStorage)
 			if tt.noSpec {
 				pvcSpec = nil
 			}

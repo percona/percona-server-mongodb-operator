@@ -37,7 +37,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 		return errors.Wrap(err, "resize volumes if needed")
 	}
 
-	if err := r.reconcileAuxiliaryPVCs(ctx, cr, sts, ls, config.MongodLogVolClaimName, cr.LogStorage()); err != nil {
+	if err := r.reconcileAuxiliaryPVCs(ctx, cr, sts, ls, config.MongodLogVolClaimName, logStorage(cr, sts)); err != nil {
 		return errors.Wrap(err, "reconcile log PVCs")
 	}
 
@@ -55,6 +55,17 @@ var (
 
 // journalStorage returns the journal PVC spec for the component sts belongs to.
 func journalStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
+	journal, _ := componentStorage(cr, sts)
+	return cr.JournalStorage(journal)
+}
+
+// logStorage returns the log PVC spec for the component sts belongs to.
+func logStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
+	_, logs := componentStorage(cr, sts)
+	return cr.LogStorage(logs)
+}
+
+func componentStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) (journal, logs *psmdbv1.StorageSpec) {
 	component := sts.Labels[naming.LabelKubernetesComponent]
 
 	var rs *psmdbv1.ReplsetSpec
@@ -64,22 +75,21 @@ func journalStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *
 	case naming.ComponentMongod, naming.ComponentNonVoting, naming.ComponentHidden:
 		rs = cr.Spec.Replset(sts.Labels[naming.LabelKubernetesReplset])
 	default:
-		return nil
+		return nil, nil
 	}
 
 	if rs == nil {
-		return nil
+		return nil, nil
 	}
 
-	storage := rs.JournalStorage
 	switch component {
 	case naming.ComponentNonVoting:
-		storage = rs.NonVoting.JournalStorage
+		return rs.NonVoting.JournalStorage, rs.NonVoting.LogStorage
 	case naming.ComponentHidden:
-		storage = rs.Hidden.JournalStorage
+		return rs.Hidden.JournalStorage, rs.Hidden.LogStorage
 	}
 
-	return cr.JournalStorage(storage)
+	return rs.JournalStorage, rs.LogStorage
 }
 
 // reconcileAuxiliaryPVCs keeps the PVCs of a non-data claim in sync with the CR.
@@ -538,7 +548,7 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 
 	switch claimName {
 	case config.MongodLogVolClaimName, config.MongodJournalVolClaimName:
-		pvcSpec := cr.LogStorage()
+		pvcSpec := logStorage(cr, sts)
 		if claimName == config.MongodJournalVolClaimName {
 			pvcSpec = journalStorage(cr, sts)
 		}

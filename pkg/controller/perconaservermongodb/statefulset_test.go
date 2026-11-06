@@ -45,16 +45,10 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
-	defaultCR.Spec.LogCollector.Storage = &api.StorageSpec{
-		PersistentVolumeClaim: &api.PVCSpec{
-			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse("2Gi"),
-					},
-				},
-			},
-		},
+	for _, rs := range []*api.ReplsetSpec{defaultCR.Spec.Replsets[0], defaultCR.Spec.Sharding.ConfigsvrReplSet} {
+		rs.LogStorage = logStorageSpec("2Gi")
+		rs.NonVoting.LogStorage = logStorageSpec("2Gi")
+		rs.Hidden.LogStorage = logStorageSpec("2Gi")
 	}
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
@@ -164,7 +158,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 			component:   naming.ComponentMongod,
 			compareFile: "reconcile-statefulset/rs0-no-log-storage.yaml",
 			crUpdate: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.LogCollector.Storage = nil
+				cr.Spec.Replsets[0].LogStorage = nil
 			},
 		},
 		{

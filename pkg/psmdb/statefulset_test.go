@@ -943,17 +943,16 @@ func TestLogStorageVersionGate(t *testing.T) {
 					CRVersion: tt.crVersion,
 					LogCollector: &api.LogCollectorSpec{
 						Enabled: !tt.disabled,
-						Storage: tt.storage,
 					},
 				},
 			}
 
-			assert.Equal(t, tt.want, cr.LogStorage() != nil)
+			assert.Equal(t, tt.want, cr.LogStorage(tt.storage) != nil)
 		})
 	}
 }
 
-func TestMongodLogPVC(t *testing.T) {
+func TestAuxiliaryPVC(t *testing.T) {
 	t.Parallel()
 
 	cr := &api.PerconaServerMongoDB{
@@ -963,13 +962,12 @@ func TestMongodLogPVC(t *testing.T) {
 			CRVersion: version.Version(),
 			LogCollector: &api.LogCollectorSpec{
 				Enabled: true,
-				Storage: logStorageSpec("2Gi"),
 			},
 		},
 	}
 
 	ls := map[string]string{"app.kubernetes.io/component": "mongod"}
-	pvc := mongodLogPVC(cr, ls)
+	pvc := auxiliaryPVC(cr, config.MongodLogVolClaimName, cr.LogStorage(logStorageSpec("2Gi")), ls)
 
 	assert.Equal(t, config.MongodLogVolClaimName, pvc.Name)
 	assert.Equal(t, "test-ns", pvc.Namespace)
@@ -1043,6 +1041,81 @@ func TestContainerLogVolumeMount(t *testing.T) {
 			}
 
 			assert.Contains(t, c.VolumeMounts, dataMount)
+		})
+	}
+}
+
+func TestStatefulSpecLogStoragePerComponent(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		setStorage func(rs *api.ReplsetSpec)
+		want       map[string]string
+	}{
+		"replset only": {
+			setStorage: func(rs *api.ReplsetSpec) { rs.LogStorage = logStorageSpec("2Gi") },
+			want:       map[string]string{naming.ComponentMongod: "2Gi"},
+		},
+		"hidden only": {
+			setStorage: func(rs *api.ReplsetSpec) { rs.Hidden.LogStorage = logStorageSpec("1Gi") },
+			want:       map[string]string{naming.ComponentHidden: "1Gi"},
+		},
+		"different size per component": {
+			setStorage: func(rs *api.ReplsetSpec) {
+				rs.LogStorage = logStorageSpec("2Gi")
+				rs.NonVoting.LogStorage = logStorageSpec("3Gi")
+				rs.Hidden.LogStorage = logStorageSpec("4Gi")
+			},
+			want: map[string]string{
+				naming.ComponentMongod:    "2Gi",
+				naming.ComponentNonVoting: "3Gi",
+				naming.ComponentHidden:    "4Gi",
+			},
+		},
+	}
+
+	labels := map[string]func(*api.PerconaServerMongoDB, *api.ReplsetSpec) map[string]string{
+		naming.ComponentMongod:    naming.MongodLabels,
+		naming.ComponentNonVoting: naming.NonVotingLabels,
+		naming.ComponentHidden:    naming.HiddenLabels,
+		naming.ComponentArbiter:   naming.ArbiterLabels,
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("test-cr", "test-ns")
+			require.NoError(t, err)
+			cr.Spec.LogCollector.Enabled = true
+			cr.Spec.Unsafe.ReplsetSize = true
+			cr.Spec.Backup.Enabled = false
+
+			rs := cr.Spec.Replsets[0]
+			rs.NonVoting.Enabled = true
+			rs.Hidden.Enabled = true
+			rs.Arbiter.Enabled = true
+			rs.Arbiter.Size = 1
+			tt.setStorage(rs)
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+
+			for component, ls := range labels {
+				spec, err := StatefulSpec(t.Context(), cr, rs, ls(cr, rs), cr.Spec.InitImage, StatefulConfigParams{}, StatefulSpecSecretParams{})
+				require.NoError(t, err, component)
+
+				idx := slices.IndexFunc(spec.VolumeClaimTemplates, func(pvc corev1.PersistentVolumeClaim) bool {
+					return pvc.Name == config.MongodLogVolClaimName
+				})
+
+				want, ok := tt.want[component]
+				if !ok {
+					assert.Equal(t, -1, idx, "%s must not get a log claim", component)
+					continue
+				}
+				require.NotEqual(t, -1, idx, "%s must get a log claim", component)
+				got := spec.VolumeClaimTemplates[idx].Spec.Resources.Requests[corev1.ResourceStorage]
+				assert.Equal(t, want, got.String(), component)
+			}
 		})
 	}
 }

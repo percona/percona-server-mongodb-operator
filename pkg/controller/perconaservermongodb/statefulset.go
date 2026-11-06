@@ -208,7 +208,7 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 		})
 	}
 
-	logChanged := hasVCT(psmdbconfig.MongodLogVolClaimName) != (cr.LogStorage() != nil)
+	logChanged := hasVCT(psmdbconfig.MongodLogVolClaimName) != (logStorage(cr, sfs) != nil)
 	journalChanged := hasVCT(psmdbconfig.MongodJournalVolClaimName) != (journalStorage(cr, sfs) != nil)
 	if !logChanged && !journalChanged {
 		return false, nil

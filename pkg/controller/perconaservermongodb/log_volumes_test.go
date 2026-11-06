@@ -19,7 +19,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
-func logStorage(size string) *api.StorageSpec {
+func logStorageSpec(size string) *api.StorageSpec {
 	return &api.StorageSpec{
 		PersistentVolumeClaim: &api.PVCSpec{
 			PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
@@ -68,6 +68,7 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 	tests := map[string]struct {
 		crVersion      string
 		storage        *api.StorageSpec
+		hiddenStorage  *api.StorageSpec
 		journalStorage bool
 		component      string
 		claims         []string
@@ -87,7 +88,7 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 			claims:         []string{config.MongodDataVolClaimName, config.MongodJournalVolClaimName},
 		},
 		"log storage added": {
-			storage:       logStorage("2Gi"),
+			storage:       logStorageSpec("2Gi"),
 			component:     naming.ComponentMongod,
 			claims:        []string{config.MongodDataVolClaimName},
 			wantRecreated: true,
@@ -98,7 +99,7 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 			wantRecreated: true,
 		},
 		"log storage unchanged": {
-			storage:       logStorage("2Gi"),
+			storage:       logStorageSpec("2Gi"),
 			component:     naming.ComponentMongod,
 			claims:        []string{config.MongodDataVolClaimName, config.MongodLogVolClaimName},
 			wantRecreated: false,
@@ -109,33 +110,39 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 			wantRecreated: false,
 		},
 		"arbiter is skipped": {
-			storage:       logStorage("2Gi"),
+			storage:       logStorageSpec("2Gi"),
 			component:     naming.ComponentArbiter,
 			claims:        nil,
 			wantRecreated: false,
 		},
 		"hidden gets the claim": {
-			storage:       logStorage("2Gi"),
+			storage:       logStorageSpec("2Gi"),
 			component:     naming.ComponentHidden,
 			claims:        []string{config.MongodDataVolClaimName},
 			wantRecreated: true,
 		},
+		"hidden storage leaves mongod alone": {
+			hiddenStorage: logStorageSpec("2Gi"),
+			component:     naming.ComponentMongod,
+			claims:        []string{config.MongodDataVolClaimName},
+			wantRecreated: false,
+		},
 		"ignored on 1.23.1": {
 			crVersion:     "1.23.1",
-			storage:       logStorage("2Gi"),
+			storage:       logStorageSpec("2Gi"),
 			component:     naming.ComponentMongod,
 			claims:        []string{config.MongodDataVolClaimName},
 			wantRecreated: false,
 		},
 		"statefulset does not exist yet": {
-			storage:       logStorage("2Gi"),
+			storage:       logStorageSpec("2Gi"),
 			component:     naming.ComponentMongod,
 			claims:        []string{config.MongodDataVolClaimName},
 			stsMissing:    true,
 			wantRecreated: false,
 		},
 		"waits for the old statefulset to be deleted": {
-			storage:       logStorage("2Gi"),
+			storage:       logStorageSpec("2Gi"),
 			component:     naming.ComponentMongod,
 			claims:        []string{config.MongodDataVolClaimName},
 			terminating:   true,
@@ -151,7 +158,13 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 			if tt.crVersion != "" {
 				cr.Spec.CRVersion = tt.crVersion
 			}
-			cr.Spec.LogCollector.Storage = tt.storage
+			rs := cr.Spec.Replsets[0]
+			rs.Hidden.LogStorage = tt.hiddenStorage
+			if tt.component == naming.ComponentHidden {
+				rs.Hidden.LogStorage = tt.storage
+			} else {
+				rs.LogStorage = tt.storage
+			}
 			if tt.journalStorage {
 				cr.Spec.Replsets[0].JournalStorage = journalSpec("5Gi")
 			}
@@ -235,7 +248,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 			cr, err := readDefaultCR("some-cluster", ns)
 			require.NoError(t, err)
 
-			cr.Spec.LogCollector.Storage = logStorage(tt.requested)
+			cr.Spec.Replsets[0].LogStorage = logStorageSpec(tt.requested)
 			if tt.autoscaling {
 				cr.Spec.StorageScaling = &api.StorageScalingSpec{EnableVolumeScaling: true}
 			}
@@ -252,7 +265,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 
 			r := buildFakeClient(cr, sts, pod, logPVC, dataPVC)
 
-			err = r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, cr.LogStorage())
+			err = r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, logStorage(cr, sts))
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 			} else {
@@ -271,7 +284,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 
 			updatedCR := new(api.PerconaServerMongoDB)
 			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), updatedCR))
-			gotSpec := updatedCR.LogStorage().Resources.Requests[corev1.ResourceStorage]
+			gotSpec := updatedCR.LogStorage(updatedCR.Spec.Replsets[0].LogStorage).Resources.Requests[corev1.ResourceStorage]
 			assert.Equal(t, tt.wantSpecSize, gotSpec.String(), "log storage request in the CR")
 		})
 	}
@@ -305,7 +318,7 @@ func TestReconcileLogPVCsDuringDataResize(t *testing.T) {
 
 			cr, err := readDefaultCR("some-cluster", ns)
 			require.NoError(t, err)
-			cr.Spec.LogCollector.Storage = logStorage("3Gi")
+			cr.Spec.Replsets[0].LogStorage = logStorageSpec("3Gi")
 
 			ls := naming.MongodLabels(cr, cr.Spec.Replsets[0])
 			sts := logStorageSts("some-cluster-rs0", ns, naming.ComponentMongod,
@@ -330,7 +343,7 @@ func TestReconcileLogPVCsDuringDataResize(t *testing.T) {
 			stale := sts.DeepCopy()
 			stale.Annotations = nil
 
-			require.NoError(t, r.reconcileAuxiliaryPVCs(t.Context(), cr, stale, ls, config.MongodLogVolClaimName, cr.LogStorage()))
+			require.NoError(t, r.reconcileAuxiliaryPVCs(t.Context(), cr, stale, ls, config.MongodLogVolClaimName, logStorage(cr, stale)))
 
 			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
 			if tt.wantStsExists {
@@ -338,6 +351,119 @@ func TestReconcileLogPVCsDuringDataResize(t *testing.T) {
 			} else {
 				assert.True(t, k8serrors.IsNotFound(err), "statefulset is deleted when the log resize completes")
 			}
+		})
+	}
+}
+
+func TestRevertLogVolumeTemplatePerComponent(t *testing.T) {
+	t.Parallel()
+
+	const ns = "log-storage"
+
+	tests := map[string]struct {
+		component     string
+		wantMongod    string
+		wantNonVoting string
+		wantHidden    string
+	}{
+		"mongod": {
+			component:     naming.ComponentMongod,
+			wantMongod:    "1Gi",
+			wantNonVoting: "3Gi",
+			wantHidden:    "3Gi",
+		},
+		"hidden": {
+			component:     naming.ComponentHidden,
+			wantMongod:    "3Gi",
+			wantNonVoting: "3Gi",
+			wantHidden:    "1Gi",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", ns)
+			require.NoError(t, err)
+
+			rs := cr.Spec.Replsets[0]
+			rs.LogStorage = logStorageSpec("3Gi")
+			rs.NonVoting.LogStorage = logStorageSpec("3Gi")
+			rs.Hidden.LogStorage = logStorageSpec("3Gi")
+
+			sts := logStorageSts("some-cluster-rs0", ns, tt.component, config.MongodDataVolClaimName, config.MongodLogVolClaimName)
+			r := buildFakeClient(cr)
+
+			require.NoError(t, r.revertVolumeTemplate(t.Context(), cr, sts, config.MongodLogVolClaimName, resource.MustParse("1Gi")))
+
+			got := new(api.PerconaServerMongoDB)
+			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), got))
+
+			size := func(s *api.StorageSpec) string {
+				q := s.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+				return q.String()
+			}
+			gotRS := got.Spec.Replsets[0]
+			assert.Equal(t, tt.wantMongod, size(gotRS.LogStorage), "mongod")
+			assert.Equal(t, tt.wantNonVoting, size(gotRS.NonVoting.LogStorage), "nonvoting")
+			assert.Equal(t, tt.wantHidden, size(gotRS.Hidden.LogStorage), "hidden")
+		})
+	}
+}
+
+func TestComponentStorage(t *testing.T) {
+	t.Parallel()
+
+	journal := map[string]*api.StorageSpec{}
+	logs := map[string]*api.StorageSpec{}
+	for _, c := range []string{"rs0", "rs0-nv", "rs0-hidden", "cfg"} {
+		journal[c] = journalSpec("1Gi")
+		logs[c] = logStorageSpec("1Gi")
+	}
+
+	cr := &api.PerconaServerMongoDB{
+		Spec: api.PerconaServerMongoDBSpec{
+			Replsets: []*api.ReplsetSpec{{
+				Name:           "rs0",
+				JournalStorage: journal["rs0"],
+				LogStorage:     logs["rs0"],
+				NonVoting:      api.NonVotingSpec{JournalStorage: journal["rs0-nv"], LogStorage: logs["rs0-nv"]},
+				Hidden:         api.HiddenSpec{JournalStorage: journal["rs0-hidden"], LogStorage: logs["rs0-hidden"]},
+			}},
+			Sharding: api.Sharding{
+				ConfigsvrReplSet: &api.ReplsetSpec{Name: "cfg", JournalStorage: journal["cfg"], LogStorage: logs["cfg"]},
+			},
+		},
+	}
+
+	tests := map[string]struct {
+		component string
+		replset   string
+		want      string
+	}{
+		"mongod":           {component: naming.ComponentMongod, replset: "rs0", want: "rs0"},
+		"nonvoting":        {component: naming.ComponentNonVoting, replset: "rs0", want: "rs0-nv"},
+		"hidden":           {component: naming.ComponentHidden, replset: "rs0", want: "rs0-hidden"},
+		"configsvr":        {component: naming.ComponentConfigSrv, replset: "cfg", want: "cfg"},
+		"arbiter":          {component: naming.ComponentArbiter, replset: "rs0"},
+		"mongos":           {component: naming.ComponentMongos},
+		"unknown replset":  {component: naming.ComponentMongod, replset: "rs9"},
+		"missing replsets": {component: naming.ComponentHidden},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			sts := &appsv1.StatefulSet{Labels: map[string]string{
+				naming.LabelKubernetesComponent: tt.component,
+				naming.LabelKubernetesReplset:   tt.replset,
+			}}
+
+			gotJournal, gotLogs := componentStorage(cr, sts)
+			assert.Same(t, journal[tt.want], gotJournal, "journal")
+			assert.Same(t, logs[tt.want], gotLogs, "logs")
 		})
 	}
 }

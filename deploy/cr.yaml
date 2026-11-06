@@ -348,6 +348,13 @@ spec:
 #        resources:
 #          requests:
 #            storage: 5Gi
+#    logStorage:
+#      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+#        resources:
+#          requests:
+#            storage: 2Gi
 
     hidden:
       enabled: false
@@ -422,6 +429,13 @@ spec:
 #          resources:
 #            requests:
 #              storage: 5Gi
+#      logStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
 
     nonvoting:
       enabled: false
@@ -496,6 +510,13 @@ spec:
 #          resources:
 #            requests:
 #              storage: 5Gi
+#      logStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
     arbiter:
       enabled: false
       size: 1
@@ -695,6 +716,13 @@ spec:
 #          resources:
 #            requests:
 #              storage: 5Gi
+#      logStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:
@@ -1104,13 +1132,6 @@ spec:
       requests:
         memory: 100M
         cpu: 200m
-#    storage:
-#      persistentVolumeClaim:
-#        storageClassName: standard
-#        accessModes: [ "ReadWriteOnce" ]
-#        resources:
-#          requests:
-#            storage: 2Gi
 #    # Add a liveness/readiness probe for the logs (fluent-bit) container.
 #    # When not set, the container has no probes.
 #    # NOTE: a tcpSocket/httpGet probe on port 2020 requires the fluent-bit

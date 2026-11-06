@@ -741,6 +741,11 @@ func (in *HiddenSpec) DeepCopyInto(out *HiddenSpec) {
 		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.LogStorage != nil {
+		in, out := &in.LogStorage, &out.LogStorage
+		*out = new(StorageSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	in.MultiAZ.DeepCopyInto(&out.MultiAZ)
 }
 
@@ -869,11 +874,6 @@ func (in *LogCollectorSpec) DeepCopyInto(out *LogCollectorSpec) {
 	if in.ReadinessProbe != nil {
 		in, out := &in.ReadinessProbe, &out.ReadinessProbe
 		*out = new(corev1.Probe)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.Storage != nil {
-		in, out := &in.Storage, &out.Storage
-		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
 	}
 }
@@ -1376,6 +1376,11 @@ func (in *NonVotingSpec) DeepCopyInto(out *NonVotingSpec) {
 	}
 	if in.JournalStorage != nil {
 		in, out := &in.JournalStorage, &out.JournalStorage
+		*out = new(StorageSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.LogStorage != nil {
+		in, out := &in.LogStorage, &out.LogStorage
 		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
 	}
@@ -2591,6 +2596,11 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 	}
 	if in.JournalStorage != nil {
 		in, out := &in.JournalStorage, &out.JournalStorage
+		*out = new(StorageSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.LogStorage != nil {
+		in, out := &in.LogStorage, &out.LogStorage
 		*out = new(StorageSpec)
 		(*in).DeepCopyInto(*out)
 	}
