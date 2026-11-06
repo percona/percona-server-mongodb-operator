@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
@@ -41,6 +42,11 @@ logger = logging.getLogger(__name__)
 
 # A logical restore of a few documents takes about a minute; a hang shows up early.
 LOGICAL_RESTORE_TIMEOUT = 900
+
+# A physical restore stops every mongod while PBM replaces the data files, so one
+# reconcile cannot reach the replica set and the operator reports it as a crash
+# before it rebuilds the StatefulSets. Seen once per restore on the first run.
+PHYSICAL_RESTORE_ERRORS = (re.compile(r"FULL CLUSTER CRASH.*ping mongo: server selection error"),)
 
 
 @dataclass(frozen=True)
@@ -217,8 +223,10 @@ class TestOlmBackupRestore:
     def test_operator_healthy(
         self, config: OlmBackupRestoreConfig, csv: dict[str, Any], state: State
     ) -> None:
-        """The operator was not replaced or restarted and logged no errors"""
-        assert_operator_healthy(config.namespace, csv, state.operator_pod_uid)
+        """The operator was not replaced or restarted and logged no unexpected errors"""
+        assert_operator_healthy(
+            config.namespace, csv, state.operator_pod_uid, PHYSICAL_RESTORE_ERRORS
+        )
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_physical_restore"])
     def test_no_credentials_in_logs(

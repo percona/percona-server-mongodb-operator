@@ -576,21 +576,27 @@ def operator_restarts(pod: dict[str, Any]) -> int:
     return sum(c.get("restartCount", 0) for c in pod["status"].get("containerStatuses", []))
 
 
-def operator_errors(namespace: str, pod_name: str) -> list[str]:
-    """Error lines of the operator log that no ALLOWED_OPERATOR_ERRORS entry covers."""
+def operator_errors(
+    namespace: str, pod_name: str, allowed: tuple[re.Pattern[str], ...] = ()
+) -> list[str]:
+    """Error lines of the operator log not covered by ALLOWED_OPERATOR_ERRORS or `allowed`."""
     return [
         line
         for line in kubectl_bin("logs", pod_name, "-n", namespace).splitlines()
         if OPERATOR_ERROR.search(line)
-        and not any(allowed.search(line) for allowed in ALLOWED_OPERATOR_ERRORS)
+        and not any(pattern.search(line) for pattern in (*ALLOWED_OPERATOR_ERRORS, *allowed))
     ]
 
 
 def assert_operator_healthy(
-    namespace: str, csv: dict[str, Any], expected_uid: str = ""
+    namespace: str,
+    csv: dict[str, Any],
+    expected_uid: str = "",
+    allowed_errors: tuple[re.Pattern[str], ...] = (),
 ) -> dict[str, Any]:
     """The operator pod is Ready, was not replaced or restarted, and logged no errors.
 
+    `allowed_errors` extends ALLOWED_OPERATOR_ERRORS for the caller's situation.
     Returns the pod.
     """
     pod = operator_pod(namespace, csv)
@@ -602,7 +608,7 @@ def assert_operator_healthy(
     if restarts := operator_restarts(pod):
         previous = kubectl_bin("logs", name, "-n", namespace, "--previous", check=False)
         raise AssertionError(f"Operator restarted {restarts} times. Previous logs:\n{previous}")
-    errors = operator_errors(namespace, name)
+    errors = operator_errors(namespace, name, allowed_errors)
     assert not errors, "Operator logged errors:\n" + "\n".join(errors)
     return pod
 
