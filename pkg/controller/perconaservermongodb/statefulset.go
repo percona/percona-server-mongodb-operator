@@ -26,22 +26,8 @@ var errConfigNotInCache = errors.New("config map is not in the cache yet")
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
 	log := logf.FromContext(ctx)
 
-	pdbspec := rs.PodDisruptionBudget
-	volumeSpec := rs.VolumeSpec
-
 	if rs.ClusterRole == api.ClusterRoleConfigSvr {
 		ls[naming.LabelKubernetesComponent] = naming.ComponentConfigSrv
-	}
-
-	switch ls[naming.LabelKubernetesComponent] {
-	case naming.ComponentArbiter:
-		pdbspec = rs.Arbiter.PodDisruptionBudget
-	case naming.ComponentNonVoting:
-		pdbspec = rs.NonVoting.PodDisruptionBudget
-		volumeSpec = rs.NonVoting.VolumeSpec
-	case naming.ComponentHidden:
-		pdbspec = rs.Hidden.PodDisruptionBudget
-		volumeSpec = rs.Hidden.VolumeSpec
 	}
 
 	sfs, err := r.getStatefulsetFromReplset(ctx, cr, rs, ls)
@@ -64,7 +50,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 			return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 		}
 
-		if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec); err != nil {
+		if err := r.reconcilePVCs(ctx, cr, sfs); err != nil {
 			return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 		}
 
@@ -72,15 +58,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
-	var pvcSpec *api.PVCSpec
-	if volumeSpec != nil {
-		pvcSpec = &volumeSpec.PersistentVolumeClaim
-	}
-	if err := r.reconcileStorageAutoscaling(ctx, cr, sfs, psmdbconfig.MongodDataVolClaimName, pvcSpec, ls); err != nil {
-		log.Error(err, "failed to reconcile storage autoscaling", "statefulset", sfs.Name)
-	}
-
-	if err := r.reconcilePVCs(ctx, cr, sfs, ls, volumeSpec); err != nil {
+	if err := r.reconcilePVCs(ctx, cr, sfs); err != nil {
 		return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
 	}
 
@@ -100,6 +78,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 	}
 
+	pdbspec := rs.PodDisruptionBudget
+
+	switch ls[naming.LabelKubernetesComponent] {
+	case naming.ComponentSearch:
+		return sfs, nil
+	case naming.ComponentArbiter:
+		pdbspec = rs.Arbiter.PodDisruptionBudget
+	case naming.ComponentNonVoting:
+		pdbspec = rs.NonVoting.PodDisruptionBudget
+	case naming.ComponentHidden:
+		pdbspec = rs.Hidden.PodDisruptionBudget
+	}
+
 	err = r.reconcilePDB(ctx, cr, pdbspec, ls, cr.Namespace, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "PodDisruptionBudget for %s", sfs.Name)
@@ -113,6 +104,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
+	if ls[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+		return r.getSearchStatefulSet(ctx, cr, rs)
+	}
+
 	sfsName := cr.Name + "-" + rs.Name
 	mongodCustomConfigName := naming.MongodCustomConfigName(cr, rs)
 	mongodConfiguration := string(rs.Configuration)

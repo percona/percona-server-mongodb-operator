@@ -3314,6 +3314,91 @@ check_backup_in_storage() {
 	esac
 }
 
+get_pvc_size() {
+	local pvc=$1
+	kubectl_bin get pvc "${pvc}" -o jsonpath='{.status.capacity.storage}'
+}
+
+check_pvc_size() {
+	local pvc=$1
+	local expected=$2
+	local size
+	size=$(get_pvc_size "${pvc}")
+
+	if [[ ${size} != "${expected}" ]]; then
+		echo "ERROR: PVC ${pvc} size is ${size}, expected ${expected}"
+		exit 1
+	fi
+
+	echo "PVC ${pvc} size is ${size}"
+}
+
+wait_for_auto_resize() {
+	local pvc=$1
+	local expected_size=$2
+	local max_retry=${3:-60}
+	local sleep_time=${4:-10}
+
+	if ! wait_pvc_resize "pvc/${pvc}" "${expected_size}" "${max_retry}" "${sleep_time}"; then
+		kubectl_bin get pvc "${pvc}" -o yaml
+		exit 1
+	fi
+}
+
+check_autoscaling_status() {
+	local cluster=$1
+	local expected_resize_count=$2
+	shift 2
+	local pvc_names=("$@")
+	local max_retry=30
+	local sleep_time=10
+	local pvc_name
+
+	echo "Checking autoscaling status for PVCs: ${pvc_names[*]}"
+	echo "Expected resize count per PVC: ${expected_resize_count}"
+
+	for pvc_name in "${pvc_names[@]}"; do
+		local retry=0
+		until [[ $(kubectl_bin get psmdb "${cluster}" -o jsonpath="{.status.storageAutoscaling.${pvc_name}.resizeCount}") == "${expected_resize_count}" ]]; do
+			if [[ $retry -ge $max_retry ]]; then
+				echo
+				echo "ERROR: PVC ${pvc_name} resize count did not reach ${expected_resize_count}, max retries exceeded"
+				kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.storageAutoscaling}' | jq .
+				exit 1
+			fi
+			echo -n "."
+			sleep "${sleep_time}"
+			retry=$((retry + 1))
+		done
+		echo
+	done
+}
+
+wait_sts_vct() {
+	local sts=$1
+	local claim=$2
+	local expected=$3
+	local max_retry=${4:-60}
+	local sleep_time=${5:-5}
+	local retry=0
+
+	echo -n "Waiting for statefulset/${sts} claim template ${claim} to be ${expected}"
+	until [[ $(kubectl_bin get sts "${sts}" -o jsonpath="{.spec.volumeClaimTemplates[?(@.metadata.name==\"${claim}\")].spec.resources.requests.storage}" --ignore-not-found) == "${expected}" ]]; do
+		if [[ ${retry} -ge ${max_retry} ]]; then
+			echo
+			echo "statefulset/${sts} claim template ${claim} was not updated to ${expected}, max retries exceeded"
+			kubectl_bin get sts "${sts}" -o yaml --ignore-not-found
+			exit 1
+		fi
+		echo -n "."
+		sleep "${sleep_time}"
+		retry=$((retry + 1))
+	done
+
+	echo
+	echo "statefulset/${sts} claim template ${claim} is ${expected}"
+}
+
 wait_all_pvc_resize() {
 	local expected_size=$1
 	local max_retry=${2:-120}

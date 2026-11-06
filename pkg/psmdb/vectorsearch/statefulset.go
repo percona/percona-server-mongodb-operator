@@ -49,7 +49,7 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 		annotations[naming.AnnotationSSLInternalHash] = hash
 	}
 
-	volumes, claimTemplates := podVolumes(cr, rs, spec)
+	volumes := podVolumes(cr, rs, spec)
 
 	return &appsv1.StatefulSet{
 		APIVersion: "apps/v1",
@@ -81,7 +81,7 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 					SchedulerName:    cr.Spec.SchedulerName,
 				},
 			},
-			VolumeClaimTemplates: claimTemplates,
+			VolumeClaimTemplates: VolumeClaimTemplates(cr, rs),
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
 			},
@@ -97,6 +97,8 @@ func getSearchSpec(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) *api.Searc
 	// Deep-copy before applying overrides so per-replset values don't leak
 	// into cr.Spec.Search and get picked up by other replsets.
 	spec := cr.Spec.Search.DeepCopy()
+	// Keep storage requests shared with the CR, as in mongod claim templates.
+	spec.Storage = rs.SearchStorage(cr)
 
 	if rs == nil || rs.Search == nil {
 		return spec
@@ -105,9 +107,6 @@ func getSearchSpec(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) *api.Searc
 	overrides := rs.Search
 	if overrides.Size != nil {
 		spec.Size = *overrides.Size
-	}
-	if overrides.Storage != nil {
-		spec.Storage = overrides.Storage
 	}
 	if overrides.Resources != nil {
 		spec.Resources = *overrides.Resources
@@ -182,7 +181,7 @@ func mongotContainer(cr *api.PerconaServerMongoDB, search *api.SearchSpec) corev
 			MountPath: config.BinMountPath,
 		},
 		{
-			Name:      dataVolumeName,
+			Name:      DataVolumeName,
 			MountPath: dataMountPath,
 		},
 		{
@@ -260,12 +259,21 @@ func mongotProbe(override *corev1.Probe) *corev1.Probe {
 	return out
 }
 
-// podVolumes returns the pod-level Volumes and the StatefulSet's
-// VolumeClaimTemplates. The mongot data PVC is templated when the
-// effective storage spec points at a PersistentVolumeClaim; otherwise
-// it falls back to the inline EmptyDir / HostPath source, matching how
-// pkg/psmdb handles mongod's data volume.
-func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.SearchSpec) ([]corev1.Volume, []corev1.PersistentVolumeClaim) {
+// VolumeClaimTemplates builds the mongot data claim from the effective search storage,
+// including any per-replset override. Inline storage does not require a claim template.
+func VolumeClaimTemplates(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) []corev1.PersistentVolumeClaim {
+	storage := rs.SearchStorage(cr)
+	if storage == nil || storage.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+		return nil
+	}
+	return []corev1.PersistentVolumeClaim{
+		persistentVolumeClaim(DataVolumeName, cr.Namespace, storage),
+	}
+}
+
+// podVolumes returns the pod-level volumes. PVC storage is provided by
+// VolumeClaimTemplates; other storage uses an inline EmptyDir or HostPath.
+func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.SearchSpec) []corev1.Volume {
 	volumes := []corev1.Volume{
 		{
 			Name:     config.BinVolumeName,
@@ -297,26 +305,23 @@ func podVolumes(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, search *api.S
 		})
 	}
 
-	var claims []corev1.PersistentVolumeClaim
 	switch {
 	case search.Storage != nil && search.Storage.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil:
-		claims = []corev1.PersistentVolumeClaim{
-			persistentVolumeClaim(dataVolumeName, cr.Namespace, search.Storage),
-		}
+		return volumes
 	case search.Storage != nil && (search.Storage.HostPath != nil || search.Storage.EmptyDir != nil):
 		volumes = append(volumes, corev1.Volume{
-			Name:     dataVolumeName,
+			Name:     DataVolumeName,
 			HostPath: search.Storage.HostPath,
 			EmptyDir: search.Storage.EmptyDir,
 		})
 	default:
 		volumes = append(volumes, corev1.Volume{
-			Name:     dataVolumeName,
+			Name:     DataVolumeName,
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		})
 	}
 
-	return volumes, claims
+	return volumes
 }
 
 func persistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.PersistentVolumeClaim {

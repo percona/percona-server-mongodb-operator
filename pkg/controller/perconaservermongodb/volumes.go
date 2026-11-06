@@ -25,16 +25,49 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
+	ls := sts.Spec.Selector.MatchLabels
+	if ls[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
+		return nil
+	}
+	rs := cr.Spec.Replset(ls[naming.LabelKubernetesReplset])
+	if rs == nil {
+		return errors.Errorf("replset %s not found in cr", ls[naming.LabelKubernetesReplset])
+	}
+	claimName := config.MongodDataVolClaimName
+	volumeSpec := rs.VolumeSpec
+	switch ls[naming.LabelKubernetesComponent] {
+	case naming.ComponentNonVoting:
+		volumeSpec = rs.NonVoting.VolumeSpec
+	case naming.ComponentHidden:
+		volumeSpec = rs.Hidden.VolumeSpec
+	case naming.ComponentSearch:
+		claimName = vectorsearch.DataVolumeName
+		volumeSpec = rs.SearchStorage(cr)
+	}
+	if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+		return nil
+	}
+
 	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim); err != nil {
+	if err := r.reconcileStorageAutoscaling(ctx, cr, sts, claimName, &volumeSpec.PersistentVolumeClaim, ls); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", sts.Name)
+	}
+
+	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, claimName, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "resize volumes if needed")
+	}
+
+	// revertVolumeTemplate may update the cluster's search storage without updating sts.
+	if ls[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+		sts.Spec.VolumeClaimTemplates = vectorsearch.VolumeClaimTemplates(cr, rs)
 	}
 
 	return nil
@@ -440,6 +473,29 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 
 		log.Info("Reverting volume template for replset", "replset", replset, "component", component, "originalSize", originalSize)
 		volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
+	case naming.ComponentSearch:
+		replset, ok := sts.Labels[naming.LabelKubernetesReplset]
+		if !ok {
+			return errors.New("missing replset label")
+		}
+		rs := cr.Spec.Replset(replset)
+		if rs == nil {
+			return errors.Errorf("replset %s not found in cr", replset)
+		}
+		storage := rs.SearchStorage(cr)
+		if storage == nil || storage.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil || storage.PersistentVolumeClaim.Resources.Requests == nil {
+			return errors.Errorf("missing search storage spec for %s", replset)
+		}
+		// We should copy clusters search storage into a replset storage so reverting this
+		// replset's size does not change storage settings for other replsets
+		if rs.Search == nil || rs.Search.Storage == nil {
+			if rs.Search == nil {
+				rs.Search = &psmdbv1.SearchReplsetOverride{}
+			}
+			rs.Search.Storage = storage.DeepCopy()
+			storage = rs.Search.Storage
+		}
+		storage.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
 	case naming.ComponentMongos:
 		pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
 		if pvcSpec == nil || pvcSpec.Resources.Requests == nil {

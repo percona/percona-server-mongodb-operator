@@ -19,6 +19,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -751,6 +752,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 		return &api.PerconaServerMongoDB{
 			Name: crName, Namespace: namespace,
 			Spec: api.PerconaServerMongoDBSpec{
+				Search: &api.SearchSpec{Enabled: true, Storage: volumeSpec()},
 				StorageScaling: &api.StorageScalingSpec{
 					EnableVolumeScaling: true,
 					Autoscaling: &api.AutoscalingSpec{
@@ -822,6 +824,16 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			claimName:     psmdbconfig.MongodDataVolClaimName,
 			mountPath:     psmdbconfig.MongodContainerDataDir,
 			pvcSpec:       mongodPVC(func(rs *api.ReplsetSpec) *api.VolumeSpec { return rs.NonVoting.VolumeSpec }),
+		},
+		"mongot": {
+			labels:        naming.SearchLabels,
+			stsName:       crName + "-" + rsName + "-" + naming.ComponentSearch,
+			containerName: naming.ContainerMongot,
+			claimName:     vectorsearch.DataVolumeName,
+			mountPath:     "/data/mongot",
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return &cr.Spec.Search.Storage.PersistentVolumeClaim
+			},
 		},
 		"mongos": {
 			labels: func(cr *api.PerconaServerMongoDB, _ *api.ReplsetSpec) map[string]string {
