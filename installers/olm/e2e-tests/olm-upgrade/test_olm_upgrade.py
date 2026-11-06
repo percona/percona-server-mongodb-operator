@@ -14,7 +14,6 @@ import pytest
 from lib.backup import wait_backup, wait_restore
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.secrets import apply_s3_storage_secrets
 from lib.utils import Paths, env_bool
 from olm import (
     LOCAL_S3,
@@ -171,7 +170,7 @@ def cleanup(config: OlmUpgradeConfig, test_paths: Paths) -> Generator[None]:
 @pytest.fixture(scope="class")
 def storage(config: OlmUpgradeConfig, test_paths: Paths, deploy_s3_storage: None) -> str:
     """SeaweedFS in the test namespace (after config created it) and its secret."""
-    apply_s3_storage_secrets(test_paths["conf_dir"])
+    kubectl_bin("apply", "-n", config.namespace, "-f", f"{test_paths['conf_dir']}/s3-secret.yml")
     return LOCAL_S3
 
 
@@ -452,7 +451,11 @@ class TestOlmUpgrade:
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_data_after_upgrade"])
     def test_restore_after_upgrade(
-        self, config: OlmUpgradeConfig, test_paths: Paths, psmdb_client: MongoManager
+        self,
+        config: OlmUpgradeConfig,
+        state: UpgradeState,
+        test_paths: Paths,
+        psmdb_client: MongoManager,
     ) -> None:
         """The target operator restores the backup taken before the upgrade"""
         compare = f"{test_paths['test_dir']}/compare"
@@ -463,3 +466,5 @@ class TestOlmUpgrade:
         check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-1.json")
         insert(psmdb_client, config.cluster, config.namespace, 100501)
         check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-2.json")
+        # The restore was the operator's last job; it must have survived it cleanly too.
+        _assert_operator_clean(config, state)

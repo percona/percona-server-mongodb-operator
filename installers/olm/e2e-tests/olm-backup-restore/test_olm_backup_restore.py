@@ -10,9 +10,8 @@ from typing import Any
 
 import pytest
 from lib.backup import wait_backup, wait_physical_restore, wait_restore
-from lib.kubectl import wait_for_running
+from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.secrets import apply_s3_storage_secrets
 from lib.utils import Paths, env_bool
 from olm import (
     LOCAL_S3,
@@ -48,6 +47,13 @@ class OlmBackupRestoreConfig:
     namespace: str
     cluster: str
     target: CatalogTarget
+
+
+@dataclass
+class State:
+    """What the install step saw, for the final operator check."""
+
+    operator_pod_uid: str = ""
 
 
 @pytest.fixture(scope="class")
@@ -90,8 +96,13 @@ def cleanup(config: OlmBackupRestoreConfig, test_paths: Paths) -> Generator[None
 @pytest.fixture(scope="class")
 def storage(config: OlmBackupRestoreConfig, test_paths: Paths, deploy_s3_storage: None) -> str:
     """SeaweedFS in the test namespace (after config created it) and its secret."""
-    apply_s3_storage_secrets(test_paths["conf_dir"])
+    kubectl_bin("apply", "-n", config.namespace, "-f", f"{test_paths['conf_dir']}/s3-secret.yml")
     return LOCAL_S3
+
+
+@pytest.fixture(scope="class")
+def state() -> State:
+    return State()
 
 
 @pytest.fixture(scope="class")
@@ -120,13 +131,16 @@ class TestOlmBackupRestore:
     """Install the target release from the catalog, back up and restore through it."""
 
     @pytest.mark.dependency()
-    def test_install_operator(self, config: OlmBackupRestoreConfig) -> None:
+    def test_install_operator(self, config: OlmBackupRestoreConfig, state: State) -> None:
         """Install the target CSV from its channel"""
         csv = install(
             config.namespace, config.target, config.target.target_channel, config.target.target_csv
         )
-        image = operator_pod(config.namespace, csv)["spec"]["containers"][0]["image"]
+        pod = operator_pod(config.namespace, csv)
+        image = pod["spec"]["containers"][0]["image"]
         assert image == csv_operator_image(csv), f"Operator runs {image}"
+        # A replacement pod would start with a fresh restart count and log.
+        state.operator_pod_uid = pod["metadata"]["uid"]
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_install_operator"])
     def test_deploy_cluster(
@@ -199,6 +213,8 @@ class TestOlmBackupRestore:
         check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-2.json")
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_physical_restore"])
-    def test_operator_healthy(self, config: OlmBackupRestoreConfig, csv: dict[str, Any]) -> None:
-        """The operator was not restarted and logged no errors during backups and restores"""
-        assert_operator_healthy(config.namespace, csv)
+    def test_operator_healthy(
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], state: State
+    ) -> None:
+        """The operator was not replaced or restarted and logged no errors"""
+        assert_operator_healthy(config.namespace, csv, state.operator_pod_uid)

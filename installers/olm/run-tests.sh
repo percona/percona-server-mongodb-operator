@@ -68,6 +68,7 @@ check_tools() {
 
 check_tests() {
 	local test
+	[[ -n ${OLM_TESTS// /} ]] || die "OLM_TESTS is empty"
 	for test in $OLM_TESTS; do
 		[[ -d "${SRC_DIR}/installers/olm/e2e-tests/${test}" ]] \
 			|| die "unknown test ${test} in OLM_TESTS (no installers/olm/e2e-tests/${test})"
@@ -124,9 +125,8 @@ pick_csvs() {
 			[[ -n $csv ]] && FROM_CSVS+=("$csv")
 		done < <(list_csvs | tail -n +2)
 	fi
-	[[ ${#FROM_CSVS[@]} -gt 0 ]] \
-		|| die "no starting CSVs for ${PACKAGE} in CatalogSource ${CATALOG_NAMESPACE}/${SOURCE}"
-	log "Starting CSVs: ${FROM_CSVS[*]}"
+	[[ ${#FROM_CSVS[@]} -gt 0 ]] && log "Starting CSVs: ${FROM_CSVS[*]}"
+	return 0
 }
 
 minor() {
@@ -155,6 +155,8 @@ plan_runs() {
 	RUNS=()
 	for test in $OLM_TESTS; do
 		if [[ $test == "olm-upgrade" ]]; then
+			[[ ${#FROM_CSVS[@]} -gt 0 ]] \
+				|| die "no starting CSVs for ${PACKAGE} in CatalogSource ${CATALOG_NAMESPACE}/${SOURCE}"
 			check_minor_coverage
 			for csv in "${FROM_CSVS[@]}"; do
 				RUNS+=("${test} ${csv}")

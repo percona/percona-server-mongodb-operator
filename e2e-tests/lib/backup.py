@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from .kubectl import kubectl_bin, wait_cluster_consistency
+from .utils import retry
 
 logger = logging.getLogger(__name__)
 
@@ -199,46 +200,83 @@ def wait_for_pbm_operations(cluster_name: str, timeout: int = 2700) -> None:
     raise TimeoutError(f"Timeout waiting for PBM operations on {cluster_name} to finish")
 
 
-def _psmdb_annotations(cluster_name: str) -> dict[str, str]:
-    raw = kubectl_bin("get", "psmdb", cluster_name, "-o", "json", check=False)
-    if not raw.strip():
-        return {}
-    annotations: dict[str, str] = json.loads(raw)["metadata"].get("annotations") or {}
-    return annotations
+RESYNC_ANNOTATIONS = {"percona.com/resync-pbm", "percona.com/resync-in-progress"}
+# Consecutive empty reads of the psmdb object that fail a wait (the object is gone or
+# the API is down); a single one is skipped.
+MAX_EMPTY_READS = 6
+
+
+def _psmdb(cluster_name: str) -> tuple[str, set[str], str]:
+    """(state, resync annotations present, kubectl stderr); state is "" on a failed read."""
+    out = kubectl_bin("get", "psmdb", cluster_name, "-o", "json", check=False, return_stderr=True)
+    try:
+        cr = json.loads(out)
+    except json.JSONDecodeError:
+        return "", set(), out.strip()
+    annotations = cr["metadata"].get("annotations") or {}
+    return str(cr.get("status", {}).get("state", "")), RESYNC_ANNOTATIONS & set(annotations), ""
 
 
 def wait_physical_restore(
-    restore_name: str, cluster_name: str, timeout: int = 1800, error_grace: int = 600
+    restore_name: str,
+    cluster_name: str,
+    timeout: int = 1800,
+    error_grace: int = 600,
+    resync_timeout: int = 600,
 ) -> None:
     """Wait for a physical restore and for the cluster rebuild it triggers.
 
     When the restore is `ready` the operator annotates the cluster with
     `percona.com/resync-pbm`, recreates the StatefulSets and, once the cluster is
     `ready` again, resyncs PBM under `percona.com/resync-in-progress`. The wait ends
-    when both annotations are gone and the cluster is `ready`. While volumes reattach
-    the cluster can report `error`; that fails only after `error_grace` seconds in a row.
+    when the cluster is `ready` and both annotations are gone. While volumes reattach
+    the cluster can report `error`; that fails only after `error_grace` seconds in a
+    row. A cluster that is `ready` but keeps a resync annotation for `resync_timeout`
+    seconds fails too: the operator does not retry a failed resync, its log says why.
     """
     wait_restore(restore_name, cluster_name, "ready", wait_consistency=False, timeout=timeout)
-    assert "percona.com/resync-pbm" in _psmdb_annotations(cluster_name), (
+    _, resyncing, stderr = retry(
+        lambda: _psmdb(cluster_name),
+        max_attempts=MAX_EMPTY_READS,
+        delay=5,
+        condition=lambda result: result[0] != "",
+    )
+    assert "percona.com/resync-pbm" in resyncing, (
         f"psmdb/{cluster_name} is not annotated with percona.com/resync-pbm after the physical "
-        f"restore {restore_name}"
+        f"restore {restore_name} (annotations: {sorted(resyncing)}; read error: {stderr or 'none'})"
     )
 
     logger.info(f"Waiting for {cluster_name} to be rebuilt and resynced after {restore_name}")
     deadline = time.monotonic() + timeout
     error_since: float | None = None
+    ready_since: float | None = None
+    empty_reads = 0
     state = ""
     while time.monotonic() < deadline:
-        state = kubectl_bin(
-            "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}", check=False
-        ).strip()
-        resyncing = {"percona.com/resync-pbm", "percona.com/resync-in-progress"} & set(
-            _psmdb_annotations(cluster_name)
-        )
+        state, resyncing, stderr = _psmdb(cluster_name)
+        if not state:
+            empty_reads += 1
+            assert empty_reads < MAX_EMPTY_READS, (
+                f"psmdb/{cluster_name} could not be read {empty_reads} times in a row after the "
+                f"physical restore {restore_name}: {stderr}"
+            )
+            time.sleep(10)
+            continue
+        empty_reads = 0
+
         if state == "ready" and not resyncing:
             logger.info(f"{cluster_name} is ready and PBM is resynced")
             wait_for_pbm_operations(cluster_name)
             return
+        if state == "ready":
+            ready_since = ready_since or time.monotonic()
+            assert time.monotonic() - ready_since < resync_timeout, (
+                f"{cluster_name} has been ready for {resync_timeout}s after the physical restore "
+                f"{restore_name} but still carries {sorted(resyncing)}: the PBM resync did not "
+                "finish, see the operator log"
+            )
+        else:
+            ready_since = None
         if state == "error":
             error_since = error_since or time.monotonic()
             if time.monotonic() - error_since >= error_grace:
@@ -256,5 +294,5 @@ def wait_physical_restore(
     raise TimeoutError(
         f"Timeout after {timeout}s waiting for {cluster_name} to be ready after the physical "
         f"restore {restore_name}. Last state: {state or 'unknown'}, "
-        f"annotations: {_psmdb_annotations(cluster_name)}"
+        f"resync annotations: {sorted(resyncing)}"
     )
