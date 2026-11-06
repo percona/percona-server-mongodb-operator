@@ -23,6 +23,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -386,7 +387,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				sfs.Spec.Template.Spec.Containers[0].Args = args
 
 				// restore-finish recovers from the restored journal, so it has to be mounted
-				if hasClaimTemplate(&sfs, config.MongodJournalVolClaimName) && !slices.ContainsFunc(sfs.Spec.Template.Spec.Containers[0].VolumeMounts,
+				if k8s.HasVolumeClaimTemplate(&sfs, config.MongodJournalVolClaimName) && !slices.ContainsFunc(sfs.Spec.Template.Spec.Containers[0].VolumeMounts,
 					func(m corev1.VolumeMount) bool { return m.Name == config.MongodJournalVolClaimName }) {
 					sfs.Spec.Template.Spec.Containers[0].VolumeMounts = append(sfs.Spec.Template.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
 						Name:      config.MongodJournalVolClaimName,
@@ -584,10 +585,6 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 		})
 	}
 	return done, nil
-}
-
-func hasClaimTemplate(sfs *appsv1.StatefulSet, name string) bool {
-	return slices.ContainsFunc(sfs.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool { return vct.Name == name })
 }
 
 func generatePVCFromSnapshot(

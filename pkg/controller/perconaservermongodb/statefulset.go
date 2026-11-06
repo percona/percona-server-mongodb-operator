@@ -18,6 +18,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -144,9 +145,7 @@ func (r *ReconcilePerconaServerMongoDB) validateJournalStorage(ctx context.Conte
 
 	var hasJournal bool
 	if err == nil {
-		hasJournal = slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-			return vct.Name == psmdbconfig.MongodJournalVolClaimName
-		})
+		hasJournal = k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodJournalVolClaimName)
 	} else {
 		// the journal moved off the data PVC, so retained journal PVCs still hold it
 		hasJournal, err = r.hasJournalPVCs(ctx, sfs)
@@ -191,11 +190,6 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 
 	current := new(appsv1.StatefulSet)
 	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current); err != nil {
-		if k8sErrors.IsNotFound(err) {
-			// sfs may carry the resourceVersion of a statefulset deleted after it was read
-			sfs.ResourceVersion = ""
-			sfs.UID = ""
-		}
 		return false, client.IgnoreNotFound(err)
 	}
 
@@ -204,14 +198,8 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 		return true, nil
 	}
 
-	hasVCT := func(claimName string) bool {
-		return slices.ContainsFunc(current.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-			return vct.Name == claimName
-		})
-	}
-
-	logChanged := hasVCT(psmdbconfig.MongodLogVolClaimName) != (logStorage(cr, sfs) != nil)
-	journalChanged := hasVCT(psmdbconfig.MongodJournalVolClaimName) != (journalStorage(cr, sfs) != nil)
+	logChanged := k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodLogVolClaimName) != (logStorage(cr, sfs) != nil)
+	journalChanged := k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodJournalVolClaimName) != (journalStorage(cr, sfs) != nil)
 	if !logChanged && !journalChanged {
 		return false, nil
 	}

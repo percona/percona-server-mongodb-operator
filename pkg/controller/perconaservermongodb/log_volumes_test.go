@@ -198,7 +198,6 @@ func TestRecreateStsForLogStorageIfNeeded(t *testing.T) {
 			switch {
 			case tt.stsMissing:
 				assert.True(t, k8serrors.IsNotFound(err), "statefulset must not be created here")
-				assert.Empty(t, desired.ResourceVersion, "resourceVersion must be cleared for create")
 			case tt.terminating:
 				require.NoError(t, err)
 				assert.Equal(t, before.ResourceVersion, after.ResourceVersion, "terminating statefulset must be left alone")

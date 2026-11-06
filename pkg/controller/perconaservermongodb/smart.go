@@ -309,7 +309,6 @@ func (r *ReconcilePerconaServerMongoDB) stepDownPrimary(ctx context.Context, cr 
 	return nil
 }
 
-// podsMissingClaimVolumes reports whether a pod lacks a volume for one of the claim templates.
 // smartUpdateBlocked reports whether a PVC shrink, backup or PBM job forbids restarting pods.
 func (r *ReconcilePerconaServerMongoDB) smartUpdateBlocked(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
 	log := logf.FromContext(ctx).WithName("SmartUpdate").WithValues("statefulset", sfs.Name)
@@ -346,6 +345,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdateBlocked(ctx context.Context, 
 	return false, nil
 }
 
+// podsMissingClaimVolumes reports whether a pod lacks a volume for one of the claim templates.
 func podsMissingClaimVolumes(sfs *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	for _, pod := range pods {
 		for _, vct := range sfs.Spec.VolumeClaimTemplates {

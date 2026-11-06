@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -64,6 +65,12 @@ func DeleteIfExists(ctx context.Context, c client.Client, obj client.Object) err
 		return errors.Wrapf(err, "failed to delete %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
 	}
 	return nil
+}
+
+func HasVolumeClaimTemplate(sfs *appsv1.StatefulSet, name string) bool {
+	return slices.ContainsFunc(sfs.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
+		return vct.Name == name
+	})
 }
 
 func HasStatefulSetChanged(sfs *appsv1.StatefulSet, podList *corev1.PodList) bool {

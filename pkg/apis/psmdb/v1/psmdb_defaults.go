@@ -412,12 +412,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 
 	for _, replset := range repls {
-		setDefaultAccessModes(cr.JournalStorage(replset.JournalStorage))
-		setDefaultAccessModes(cr.JournalStorage(replset.NonVoting.JournalStorage))
-		setDefaultAccessModes(cr.JournalStorage(replset.Hidden.JournalStorage))
-		setDefaultAccessModes(cr.LogStorage(replset.LogStorage))
-		setDefaultAccessModes(cr.LogStorage(replset.NonVoting.LogStorage))
-		setDefaultAccessModes(cr.LogStorage(replset.Hidden.LogStorage))
+		for _, c := range replset.storageComponents() {
+			setDefaultAccessModes(cr.JournalStorage(c.journal))
+			setDefaultAccessModes(cr.LogStorage(c.log))
+		}
 
 		if len(cr.Name+replset.Name) > clusterNameMaxLen {
 			return errors.Errorf("cluster name (%s) + replset name (%s) is too long, must be no more than %d characters", cr.Name, replset.Name, clusterNameMaxLen)
@@ -1370,20 +1368,25 @@ var (
 	errLogNoCollector   = errors.New("logStorage requires the log collector to be enabled")
 )
 
-func (cr *PerconaServerMongoDB) validateStorage(rs *ReplsetSpec) error {
-	components := []struct {
-		prefix  string
-		enabled bool
-		journal *StorageSpec
-		log     *StorageSpec
-		volume  *VolumeSpec
-	}{
+type storageComponent struct {
+	prefix  string
+	enabled bool
+	journal *StorageSpec
+	log     *StorageSpec
+	volume  *VolumeSpec
+}
+
+// storageComponents lists the members of rs that can have dedicated storage. The arbiter has none.
+func (rs *ReplsetSpec) storageComponents() []storageComponent {
+	return []storageComponent{
 		{enabled: true, journal: rs.JournalStorage, log: rs.LogStorage, volume: rs.VolumeSpec},
 		{prefix: "nonvoting.", enabled: rs.NonVoting.Enabled, journal: rs.NonVoting.JournalStorage, log: rs.NonVoting.LogStorage, volume: rs.NonVoting.VolumeSpec},
 		{prefix: "hidden.", enabled: rs.Hidden.Enabled, journal: rs.Hidden.JournalStorage, log: rs.Hidden.LogStorage, volume: rs.Hidden.VolumeSpec},
 	}
+}
 
-	for _, c := range components {
+func (cr *PerconaServerMongoDB) validateStorage(rs *ReplsetSpec) error {
+	for _, c := range rs.storageComponents() {
 		if !c.enabled {
 			continue
 		}

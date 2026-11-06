@@ -8,7 +8,6 @@ import (
 	"io"
 	"maps"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1560,9 +1559,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	if err == nil && cr.CompareVersion("1.23.1") >= 0 {
 		currentVCT = sts.Spec.VolumeClaimTemplates
-		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-			return vct.Name == psmdbconfig.MongosLogVolClaimName
-		})
+		hasLogVCT := k8sutils.HasVolumeClaimTemplate(sts, psmdbconfig.MongosLogVolClaimName)
 		wantLogVCT := cr.Spec.Sharding.Mongos.LogStorage() != nil
 		if hasLogVCT != wantLogVCT {
 			log.Info("Recreating mongos statefulset to change log storage")

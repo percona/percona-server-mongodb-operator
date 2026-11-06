@@ -23,6 +23,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -82,14 +83,7 @@ func componentStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet)
 		return nil, nil
 	}
 
-	switch component {
-	case naming.ComponentNonVoting:
-		return rs.NonVoting.JournalStorage, rs.NonVoting.LogStorage
-	case naming.ComponentHidden:
-		return rs.Hidden.JournalStorage, rs.Hidden.LogStorage
-	}
-
-	return rs.JournalStorage, rs.LogStorage
+	return psmdb.ComponentStorage(rs, component)
 }
 
 // reconcileAuxiliaryPVCs keeps the PVCs of a non-data claim in sync with the CR.

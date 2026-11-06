@@ -11,6 +11,7 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -149,7 +150,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) validateJournalStorage(
 			if err := r.client.Get(ctx, types.NamespacedName{Namespace: cluster.Namespace, Name: name}, sfs); err != nil {
 				return errors.Wrapf(err, "get statefulset %s", name)
 			}
-			if !hasClaimTemplate(sfs, config.MongodJournalVolClaimName) {
+			if !k8s.HasVolumeClaimTemplate(sfs, config.MongodJournalVolClaimName) {
 				return errors.Errorf("backup has a journal snapshot for replset %s but statefulset %s has no journalStorage", rs.Name, name)
 			}
 		}

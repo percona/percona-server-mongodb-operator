@@ -229,3 +229,24 @@ func TestApplyIfObjectDeletedBetweenReadAndUpdate(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyIfCreateDropsStaleIdentity(t *testing.T) {
+	t.Parallel()
+
+	cl := fake.NewClientBuilder().WithScheme(scheme.Scheme).Build()
+
+	// built from a statefulset that was deleted after it was read
+	desired := &appsv1.StatefulSet{
+		Name: "some-name-rs0", Namespace: "psmdb",
+		ResourceVersion: "999",
+		UID:             "old-uid",
+	}
+
+	status, err := ApplyIf(t.Context(), cl, desired, func(client.Object) bool { return true })
+	require.NoError(t, err)
+	assert.Equal(t, ApplyStatusCreated, status)
+
+	stored := &appsv1.StatefulSet{}
+	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(desired), stored))
+	assert.NotEqual(t, types.UID("old-uid"), stored.UID)
+}

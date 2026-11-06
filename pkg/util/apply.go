@@ -64,7 +64,7 @@ func ApplyIf(ctx context.Context, cl client.Client, obj client.Object, canWrite 
 	}
 
 	if k8serrors.IsNotFound(err) {
-		err := cl.Create(ctx, obj)
+		err := create(ctx, cl, obj)
 		if err == nil || !k8serrors.IsAlreadyExists(err) {
 			return ApplyStatusCreated, err
 		}
@@ -95,8 +95,7 @@ func ApplyIf(ctx context.Context, cl client.Client, obj client.Object, canWrite 
 		}
 
 		// The object was deleted between the read and the update.
-		obj.SetResourceVersion("")
-		if err := cl.Create(ctx, obj); err != nil {
+		if err := create(ctx, cl, obj); err != nil {
 			return "", errors.Wrap(err, "recreate object")
 		}
 
@@ -131,4 +130,11 @@ func getObjectHash(obj client.Object) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(data), nil
+}
+
+// create drops the identity obj may carry from an object that was deleted after it was read.
+func create(ctx context.Context, cl client.Client, obj client.Object) error {
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	return cl.Create(ctx, obj)
 }

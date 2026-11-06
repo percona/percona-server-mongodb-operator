@@ -155,8 +155,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
-	journalStorage := replset.JournalStorage
-	logStorage := replset.LogStorage
+	journalStorage, logStorage := ComponentStorage(replset, ls[naming.LabelKubernetesComponent])
 
 	// vpaKey is the status.vpaStatus key for this component, empty when VPA does
 	// not manage it (the arbiter has no VPA configuration).
@@ -168,8 +167,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		size = replset.Arbiter.Size
 		multiAZ = replset.Arbiter.MultiAZ
 		resources = replset.Arbiter.Resources
-		journalStorage = nil
-		logStorage = nil
 		vpaKey = ""
 	case naming.ComponentNonVoting:
 		containerName = naming.ContainerNonVoting
@@ -183,8 +180,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
 		volumeSpec = replset.NonVoting.VolumeSpec
-		journalStorage = replset.NonVoting.JournalStorage
-		logStorage = replset.NonVoting.LogStorage
 	case naming.ComponentHidden:
 		containerName = naming.ContainerHidden
 		size = replset.Hidden.Size
@@ -197,8 +192,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
 		volumeSpec = replset.Hidden.VolumeSpec
-		journalStorage = replset.Hidden.JournalStorage
-		logStorage = replset.Hidden.LogStorage
 	}
 
 	logPVC := cr.LogStorage(logStorage)
@@ -894,6 +887,19 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
 	return pvc
+}
+
+// ComponentStorage returns the journal and log storage of a replset component. The arbiter has none.
+func ComponentStorage(rs *api.ReplsetSpec, component string) (journal, logs *api.StorageSpec) {
+	switch component {
+	case naming.ComponentArbiter:
+		return nil, nil
+	case naming.ComponentNonVoting:
+		return rs.NonVoting.JournalStorage, rs.NonVoting.LogStorage
+	case naming.ComponentHidden:
+		return rs.Hidden.JournalStorage, rs.Hidden.LogStorage
+	}
+	return rs.JournalStorage, rs.LogStorage
 }
 
 func auxiliaryPVC(cr *api.PerconaServerMongoDB, name string, storage *api.PVCSpec, ls map[string]string) corev1.PersistentVolumeClaim {
