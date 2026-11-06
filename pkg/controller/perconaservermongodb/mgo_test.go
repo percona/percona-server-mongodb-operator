@@ -378,7 +378,7 @@ func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
 		require.NoError(t, err)
 		initialConfig.Members = append(initialConfig.Members, member)
 	}
-	initialConfig.Members.SetVotes(initialConfig.Members, false)
+	initialConfig.Members.UpdateVotes(ctx, initialConfig.Members, false, "")
 	externalNodes := []*api.ExternalNode{
 		{Host: "external-0.example.com", Port: 27017},
 		{Host: "external-1.example.com", Port: 27017},
