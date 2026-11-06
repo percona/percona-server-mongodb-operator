@@ -169,8 +169,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
 
 // vpaRecommendationFor reads one component's recommendation, always records the
 // outcome in status, and returns the recommendation the component should be sized
-// from, or nil when there is none: no recommendation was available, or updateMode
-// is Off.
+// from, or nil when the operator is not the one sizing this component: no
+// recommendation was available, spec.vpa.updateMode is Off, or the VPA object's
+// own updatePolicy.updateMode is not Off and the VPA updater applies it instead.
 //
 // The stabilization window gates only whether a new recommendation is adopted.
 // While it is open this returns the one already in status, so the caller still
@@ -226,6 +227,14 @@ func (r *ReconcilePerconaServerMongoDB) vpaRecommendationFor(
 		return nil, nil
 	}
 
+	// Do not apply if the VPA is applying
+	if res.updateMode != vpav1.UpdateModeOff {
+		r.recordVPAStatus(cr, statusKey, res.rec)
+		releaseVPAResources(cr, statusKey)
+		r.setVPAMessage(cr, log, statusKey, updaterOwnedMessage(vpaName, res.updateMode))
+		return nil, nil
+	}
+
 	// A recommendation that has not moved needs no decision regarding the window
 	accepted := cr.Status.VPAStatus[statusKey].Recommended
 	if quantitiesEqual(accepted, res.rec) {
@@ -270,6 +279,25 @@ func (r *ReconcilePerconaServerMongoDB) setVPAMessage(
 		}
 	}
 	s.Message = message
+	cr.Status.VPAStatus[statusKey] = s
+}
+
+func updaterOwnedMessage(vpaName string, mode vpav1.UpdateMode) string {
+	return fmt.Sprintf(
+		"VerticalPodAutoscaler %q has updatePolicy.updateMode=%s, so the VPA updater applies "+
+			"its recommendations itself and this component stays at its declared resources. "+
+			"Set that object's updatePolicy.updateMode to Off for the operator to apply them "+
+			"instead, or set spec.vpa.updateMode to Off to have the operator only record them",
+		vpaName, mode)
+}
+
+func releaseVPAResources(cr *api.PerconaServerMongoDB, statusKey string) {
+	s, ok := cr.Status.VPAStatus[statusKey]
+	if !ok || s.Applied == nil {
+		return
+	}
+	s.Applied = nil
+	s.LastAppliedAt = nil
 	cr.Status.VPAStatus[statusKey] = s
 }
 
@@ -372,9 +400,10 @@ const (
 // vpaReadResult carries the recommendation together with enough context to explain
 // its absence.
 type vpaReadResult struct {
-	rec     corev1.ResourceList
-	state   vpaReadState
-	vpaName string
+	rec        corev1.ResourceList
+	state      vpaReadState
+	vpaName    string
+	updateMode vpav1.UpdateMode
 	// containers lists the container names the object does carry, used to make
 	// the ContainerNotFound message actionable.
 	containers []string
@@ -400,6 +429,13 @@ func (res vpaReadResult) message(container string) string {
 	return ""
 }
 
+func vpaUpdateMode(vpa *vpav1.VerticalPodAutoscaler) vpav1.UpdateMode {
+	if vpa.Spec.UpdatePolicy == nil || vpa.Spec.UpdatePolicy.UpdateMode == nil {
+		return vpav1.UpdateModeRecreate
+	}
+	return *vpa.Spec.UpdatePolicy.UpdateMode
+}
+
 // readVPARecommendation fetches the VPA object and extracts the target recommendation
 // for the named container, reporting why when there is none.
 func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
@@ -408,8 +444,7 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 ) (vpaReadResult, error) {
 	res := vpaReadResult{vpaName: vpaName}
 
-	vpa := new(vpav1.VerticalPodAutoscaler)
-
+	vpa := &vpav1.VerticalPodAutoscaler{}
 	err := r.client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: vpaName}, vpa)
 	if err != nil {
 		if k8serrors.IsNotFound(err) || meta.IsNoMatchError(err) {
@@ -418,6 +453,8 @@ func (r *ReconcilePerconaServerMongoDB) readVPARecommendation(
 		}
 		return res, errors.Wrap(err, "get VPA object")
 	}
+
+	res.updateMode = vpaUpdateMode(vpa)
 
 	if vpa.Status.Recommendation == nil || len(vpa.Status.Recommendation.ContainerRecommendations) == 0 {
 		res.state = vpaStateNoRecommendation

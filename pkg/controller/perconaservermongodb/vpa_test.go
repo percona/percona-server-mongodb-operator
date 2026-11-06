@@ -703,9 +703,11 @@ func TestReadVPARecommendationToleratesMissingCRD(t *testing.T) {
 // vpaObject builds a VerticalPodAutoscaler with the given container recommendations.
 // A nil map omits status.recommendation entirely.
 func vpaObject(name string, recs map[string]corev1.ResourceList) *vpav1.VerticalPodAutoscaler {
+	off := vpav1.UpdateModeOff
 	obj := &vpav1.VerticalPodAutoscaler{
 		Name: name, Namespace: "ns",
 	}
+	obj.Spec.UpdatePolicy = &vpav1.PodUpdatePolicy{UpdateMode: &off}
 	if recs == nil {
 		return obj
 	}
