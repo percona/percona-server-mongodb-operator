@@ -379,6 +379,8 @@ spec:
                 type: string
               type:
                 type: string
+              waitingReason:
+                type: string
             type: object
         type: object
     served: true

@@ -338,6 +338,8 @@ spec:
                     type: string
                   type:
                     type: string
+                  waitingReason:
+                    type: string
                 type: object
               clusterName:
                 type: string
@@ -432,6 +434,8 @@ spec:
               pitrTarget:
                 type: string
               state:
+                type: string
+              waitingReason:
                 type: string
             type: object
         type: object
