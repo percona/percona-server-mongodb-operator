@@ -749,7 +749,8 @@ def deploy_s3_storage() -> Generator[None]:
         )
 
     logger.info(f"Creating S3 bucket: {bucket}")
-    aws_cli_s3(f"s3 mb s3://{bucket}", endpoint)
+    # the readiness probe covers the master port only, the S3 API can come up later
+    retry(lambda: aws_cli_s3(f"s3 mb s3://{bucket}", endpoint), max_attempts=6, delay=5, backoff=2)
 
     yield
 

@@ -665,11 +665,11 @@ type NonVotingSpec struct {
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 
 	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
-	// Enabling it rolls members one at a time; disabling is rejected. Only the size can change later.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
 
 	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
-	// Toggling it recreates the statefulset; data PVCs are kept.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
 	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
@@ -694,11 +694,11 @@ type HiddenSpec struct {
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
 
 	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
-	// Enabling it rolls members one at a time; disabling is rejected. Only the size can change later.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
 
 	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
-	// Toggling it recreates the statefulset; data PVCs are kept.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
 	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
@@ -952,11 +952,11 @@ type ReplsetSpec struct {
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
 
 	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
-	// Enabling it rolls members one at a time; disabling is rejected. Only the size can change later.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
 	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
 
 	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
-	// Toggling it recreates the statefulset; data PVCs are kept.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
 	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 }
 

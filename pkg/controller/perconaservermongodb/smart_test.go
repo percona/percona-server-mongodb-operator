@@ -262,9 +262,24 @@ func TestSmartUpdateUnblocksClaimRollout(t *testing.T) {
 
 	tests := map[string]struct {
 		pods        []corev1.Pod
+		objs        []client.Object
+		pvcShrink   bool
 		wantErrMsg  string
 		wantDeleted []string
 	}{
+		"running backup keeps the pod": {
+			pods: []corev1.Pod{claimRolloutPod(0, data), claimRolloutPod(1, data)},
+			objs: []client.Object{&api.PerconaServerMongoDBBackup{
+				Name:      "running",
+				Namespace: "some-namespace",
+				Spec:      api.PerconaServerMongoDBBackupSpec{ClusterName: "some-name"},
+				Status:    api.PerconaServerMongoDBBackupStatus{State: api.BackupStateRunning},
+			}},
+		},
+		"pvc shrink keeps the pod": {
+			pods:      []corev1.Pod{claimRolloutPod(0, data), claimRolloutPod(1, data)},
+			pvcShrink: true,
+		},
 		"statefulset short of a pod recreates the lowest pod missing the claim": {
 			pods:        []corev1.Pod{claimRolloutPod(0, data), claimRolloutPod(1, data)},
 			wantErrMsg:  "wait pod restart: reach pod wait limit",
@@ -293,8 +308,12 @@ func TestSmartUpdateUnblocksClaimRollout(t *testing.T) {
 				},
 			}
 
+			if tc.pvcShrink {
+				cr.Status.PVCShrink = map[string]api.PVCShrinkState{"some-name-rs0": {}}
+			}
+
 			sts := claimRolloutSts(int32(len(tc.pods)))
-			objs := []client.Object{cr, sts}
+			objs := append([]client.Object{cr, sts}, tc.objs...)
 			for i := range tc.pods {
 				objs = append(objs, &tc.pods[i])
 			}

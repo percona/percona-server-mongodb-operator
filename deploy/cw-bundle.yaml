@@ -366,6 +366,8 @@ spec:
               snapshots:
                 items:
                   properties:
+                    journalSnapshotName:
+                      type: string
                     replsetName:
                       type: string
                     snapshotName:
@@ -1829,6 +1831,8 @@ spec:
                   snapshots:
                     items:
                       properties:
+                        journalSnapshotName:
+                          type: string
                         replsetName:
                           type: string
                         snapshotName:

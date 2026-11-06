@@ -177,24 +177,28 @@ func TestCleanupCanceledSnapshots(t *testing.T) {
 	cr := &api.PerconaServerMongoDBBackup{
 		Name: "backup", Namespace: "ns",
 		Status: api.PerconaServerMongoDBBackupStatus{
-			Snapshots:    api.SnapshotInfos{{SnapshotName: "recorded-snapshot", ReplsetName: "old-rs"}},
+			Snapshots:    api.SnapshotInfos{{SnapshotName: "recorded-snapshot", JournalSnapshotName: "recorded-journal", ReplsetName: "old-rs"}},
 			ReplsetNames: []string{"rs0"},
 		},
 	}
 	recorded := &volumesnapshotv1.VolumeSnapshot{Name: "recorded-snapshot", Namespace: cr.Namespace}
+	recordedJournal := &volumesnapshotv1.VolumeSnapshot{Name: "recorded-journal", Namespace: cr.Namespace}
+	deterministicJournal := &volumesnapshotv1.VolumeSnapshot{Name: naming.JournalVolumeSnapshotName(cr, "rs0"), Namespace: cr.Namespace}
 	deterministic := &volumesnapshotv1.VolumeSnapshot{
 		Name: naming.VolumeSnapshotName(cr, "rs0"), Namespace: cr.Namespace,
 		Finalizers: []string{"test/delayed-deletion"},
 	}
 	unrelated := &volumesnapshotv1.VolumeSnapshot{Name: "other-backup", Namespace: cr.Namespace}
 	cl := fake.NewClientBuilder().WithScheme(newSnapshotTestScheme(t)).
-		WithObjects(recorded, deterministic, unrelated).Build()
+		WithObjects(recorded, recordedJournal, deterministic, deterministicJournal, unrelated).Build()
 
 	done, err := cleanupCanceledSnapshots(t.Context(), cl, cr)
 	require.NoError(t, err)
 	assert.False(t, done)
-	err = cl.Get(t.Context(), client.ObjectKeyFromObject(recorded), recorded)
-	assert.True(t, k8serrors.IsNotFound(err))
+	for _, s := range []*volumesnapshotv1.VolumeSnapshot{recorded, recordedJournal, deterministicJournal} {
+		err = cl.Get(t.Context(), client.ObjectKeyFromObject(s), s)
+		assert.True(t, k8serrors.IsNotFound(err), "%s should be deleted", s.Name)
+	}
 	require.NoError(t, cl.Get(t.Context(), client.ObjectKeyFromObject(deterministic), deterministic))
 	assert.NotNil(t, deterministic.DeletionTimestamp)
 

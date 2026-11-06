@@ -9,6 +9,8 @@ import (
 
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -93,12 +95,12 @@ func (b *snapshotBackups) Start(ctx context.Context, k8sclient client.Client, cl
 func (b *snapshotBackups) reconcileSnapshot(
 	ctx context.Context,
 	cl client.Client,
-	rsName string,
+	name string,
 	pvc string,
 	bcp *api.PerconaServerMongoDBBackup,
 ) (*volumesnapshotv1.VolumeSnapshot, error) {
 	volumeSnapshot := &volumesnapshotv1.VolumeSnapshot{
-		Name:      naming.VolumeSnapshotName(bcp, rsName),
+		Name:      name,
 		Namespace: bcp.GetNamespace(),
 	}
 	if err := cl.Get(ctx, client.ObjectKeyFromObject(volumeSnapshot), volumeSnapshot); err == nil {
@@ -151,29 +153,64 @@ func (b *snapshotBackups) reconcileSnapshots(
 
 		// ensure snapshot is created.
 		pvcName := config.MongodDataVolClaimName + "-" + podName
-		snapshot, err := b.reconcileSnapshot(ctx, cl, rs.Name, pvcName, bcp)
+		snapshot, err := b.reconcileSnapshot(ctx, cl, naming.VolumeSnapshotName(bcp, rs.Name), pvcName, bcp)
 		if err != nil {
 			return false, nil, errors.Wrap(err, "reconcile snapshot")
 		}
-
-		if snapshot.Status == nil || !ptr.Deref(snapshot.Status.ReadyToUse, false) {
-			done = false
+		ready, err := snapshotReady(snapshot)
+		if err != nil {
+			return false, nil, err
 		}
-
-		// If there is an error, return error.
-		// Note that some errors may be transient, but the controller will retry.
-		if snapshot.Status != nil && snapshot.Status.Error != nil && ptr.Deref(snapshot.Status.Error.Message, "") != "" {
-			return false, nil, errors.Errorf("snapshot error: %s", ptr.Deref(snapshot.Status.Error.Message, ""))
-		}
-		snapshots = append(snapshots, api.SnapshotInfo{
+		done = done && ready
+		info := api.SnapshotInfo{
 			ReplsetName:  rs.Name,
 			SnapshotName: snapshot.GetName(),
-		})
+		}
+
+		// the journal lives outside the data volume, without it the snapshot only holds the last checkpoint
+		journalPVC := config.MongodJournalVolClaimName + "-" + podName
+		hasJournal, err := pvcExists(ctx, cl, bcp.Namespace, journalPVC)
+		if err != nil {
+			return false, nil, errors.Wrap(err, "check journal pvc")
+		}
+		if hasJournal {
+			journal, err := b.reconcileSnapshot(ctx, cl, naming.JournalVolumeSnapshotName(bcp, rs.Name), journalPVC, bcp)
+			if err != nil {
+				return false, nil, errors.Wrap(err, "reconcile journal snapshot")
+			}
+			ready, err := snapshotReady(journal)
+			if err != nil {
+				return false, nil, err
+			}
+			done = done && ready
+			info.JournalSnapshotName = journal.GetName()
+		}
+		snapshots = append(snapshots, info)
 	}
 	slices.SortFunc(snapshots, func(a, b api.SnapshotInfo) int {
 		return strings.Compare(a.ReplsetName, b.ReplsetName)
 	})
 	return done, snapshots, nil
+}
+
+// snapshotReady reports whether the snapshot is ready to use.
+// Some errors may be transient, but the controller will retry.
+func snapshotReady(snapshot *volumesnapshotv1.VolumeSnapshot) (bool, error) {
+	if snapshot.Status == nil {
+		return false, nil
+	}
+	if snapshot.Status.Error != nil && ptr.Deref(snapshot.Status.Error.Message, "") != "" {
+		return false, errors.Errorf("snapshot error: %s", ptr.Deref(snapshot.Status.Error.Message, ""))
+	}
+	return ptr.Deref(snapshot.Status.ReadyToUse, false), nil
+}
+
+func pvcExists(ctx context.Context, cl client.Client, namespace, name string) (bool, error) {
+	err := cl.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &corev1.PersistentVolumeClaim{})
+	if k8serrors.IsNotFound(err) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (b *snapshotBackups) Status(ctx context.Context, cl client.Client, cluster *api.PerconaServerMongoDB, cr *api.PerconaServerMongoDBBackup) (api.PerconaServerMongoDBBackupStatus, error) {

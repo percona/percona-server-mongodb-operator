@@ -254,3 +254,60 @@ func TestRevertJournalVolumeTemplate(t *testing.T) {
 		})
 	}
 }
+
+func TestRecreateStsForStorageNeedsSmartUpdate(t *testing.T) {
+	t.Parallel()
+
+	const ns = "log-storage"
+
+	tests := map[string]struct {
+		strategy      appsv1.StatefulSetUpdateStrategyType
+		replicas      int32
+		wantRecreated bool
+		wantErr       error
+	}{
+		"smart update recreates": {
+			strategy:      api.SmartUpdateStatefulSetStrategyType,
+			replicas:      3,
+			wantRecreated: true,
+		},
+		"rolling update with pods is rejected": {
+			strategy: appsv1.RollingUpdateStatefulSetStrategyType,
+			replicas: 3,
+			wantErr:  errStorageChangeNeedsSmartUpdate,
+		},
+		"on delete with pods is rejected": {
+			strategy: appsv1.OnDeleteStatefulSetStrategyType,
+			replicas: 3,
+			wantErr:  errStorageChangeNeedsSmartUpdate,
+		},
+		"rolling update without pods recreates": {
+			strategy:      appsv1.RollingUpdateStatefulSetStrategyType,
+			wantRecreated: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", ns)
+			require.NoError(t, err)
+			cr.Spec.UpdateStrategy = tt.strategy
+			cr.Spec.Replsets[0].LogStorage = logStorageSpec("2Gi")
+
+			sts := logStorageSts("some-cluster-rs0", ns, naming.ComponentMongod, config.MongodDataVolClaimName)
+			sts.Status.Replicas = tt.replicas
+			r := buildFakeClient(cr, sts.DeepCopy())
+
+			recreated, err := r.recreateStsForStorageIfNeeded(t.Context(), cr, sts.DeepCopy())
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet)), "statefulset must be kept")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantRecreated, recreated)
+		})
+	}
+}

@@ -695,7 +695,7 @@ class TestJournalPVC:
     def test_11_snapshot_backup_and_restore(
         self, config: JournalPVCConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
-        """A snapshot restore replaces the live journal instead of replaying it on restored data."""
+        """A snapshot restore brings back the journal, so writes after the last checkpoint survive."""
         platform = os.environ.get("PLATFORM") or detect_platform()
         if platform not in SNAPSHOT_CLASS_FILES:
             pytest.skip(f"volume snapshots are not configured for platform {platform}")
@@ -733,6 +733,14 @@ class TestJournalPVC:
             ),
         )
         _wait_cr_ready("psmdb-backup", backup)
+        journal_snapshot = kubectl_bin(
+            "get",
+            "psmdb-backup",
+            backup,
+            "-o",
+            "jsonpath={.status.snapshots[0].journalSnapshotName}",
+        ).strip()
+        assert journal_snapshot, "the backup did not snapshot the journal volume"
 
         psmdb_client.run_mongosh(
             "db.getSiblingDB('journalStorage').seedData.insertMany("
@@ -762,9 +770,9 @@ class TestJournalPVC:
         wait_cluster_consistency(CLUSTER)
 
         for pod in _pods():
-            init_logs = kubectl_bin("logs", pod, "-c", "journal-migration")
-            assert "journal migrated" in init_logs, (
-                f"{pod} did not move the restored journal to the journal volume: {init_logs}"
+            source = _pvc_field(f"{JOURNAL_CLAIM}-{pod}", "{.spec.dataSource.name}")
+            assert source == journal_snapshot, (
+                f"{pod} journal PVC was restored from {source!r}, expected {journal_snapshot}"
             )
             assert _mount_device(pod, JOURNAL_DIR) != _mount_device(pod, DATA_DIR), (
                 f"{pod} lost the journal volume after the snapshot restore"

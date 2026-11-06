@@ -178,6 +178,8 @@ func (r *ReconcilePerconaServerMongoDB) hasJournalPVCs(ctx context.Context, sfs 
 	}), nil
 }
 
+var errStorageChangeNeedsSmartUpdate = errors.New("changing logStorage or journalStorage on running pods requires updateStrategy SmartUpdate")
+
 func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
 	if cr.CompareVersion("1.24.0") < 0 {
 		return false, nil
@@ -212,6 +214,11 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 	journalChanged := hasVCT(psmdbconfig.MongodJournalVolClaimName) != (journalStorage(cr, sfs) != nil)
 	if !logChanged && !journalChanged {
 		return false, nil
+	}
+
+	// only SmartUpdate recreates pods that miss a new claim, the statefulset controller can't add volumes to them
+	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType && current.Status.Replicas > 0 {
+		return false, errStorageChangeNeedsSmartUpdate
 	}
 
 	err := r.client.Delete(ctx, current,

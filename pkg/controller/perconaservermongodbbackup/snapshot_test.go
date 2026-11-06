@@ -10,6 +10,7 @@ import (
 	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 
 	pbmBackup "github.com/percona/percona-backup-mongodb/pbm/backup"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
@@ -29,6 +30,7 @@ func newSnapshotTestScheme(t *testing.T) *runtime.Scheme {
 	s := runtime.NewScheme()
 	require.NoError(t, api.SchemeBuilder.AddToScheme(s))
 	require.NoError(t, volumesnapshotv1.AddToScheme(s))
+	require.NoError(t, corev1.AddToScheme(s))
 	return s
 }
 
@@ -189,7 +191,7 @@ func TestSnapshotBackups_ReconcileSnapshot(t *testing.T) {
 				Build()
 
 			b := &snapshotBackups{}
-			snapshot, err := b.reconcileSnapshot(ctx, cl, tt.rsName, tt.pvc, bcp)
+			snapshot, err := b.reconcileSnapshot(ctx, cl, naming.VolumeSnapshotName(bcp, tt.rsName), tt.pvc, bcp)
 
 			if tt.wantErrMsg != "" {
 				require.EqualError(t, err, tt.wantErrMsg)
@@ -233,6 +235,22 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 				ReadyToUse: new(true),
 			},
 		}
+	}
+	journalSnapshot := func(rsName string, status *volumesnapshotv1.VolumeSnapshotStatus) *volumesnapshotv1.VolumeSnapshot {
+		return &volumesnapshotv1.VolumeSnapshot{
+			Name:      naming.JournalVolumeSnapshotName(bcp, rsName),
+			Namespace: namespace,
+			Status:    status,
+		}
+	}
+	journalPVC := &corev1.PersistentVolumeClaim{
+		Name:      "mongod-journal-pod-0",
+		Namespace: namespace,
+	}
+	copyReady := &pbmBackup.BackupMeta{
+		Replsets: []pbmBackup.BackupReplset{
+			{Name: "rs0", Node: "pod-0.rs0.svc", Status: defs.StatusCopyReady},
+		},
 	}
 
 	tests := map[string]struct {
@@ -316,6 +334,55 @@ func TestSnapshotBackups_ReconcileSnapshots(t *testing.T) {
 				},
 			},
 			wantErrMsg: "get pod name: unexpected node name format: .invalid-node",
+		},
+		"journal pvc is snapshotted with the data pvc": {
+			existingObjects: []client.Object{
+				readySnapshot("rs0"),
+				journalPVC,
+				journalSnapshot("rs0", &volumesnapshotv1.VolumeSnapshotStatus{ReadyToUse: new(true)}),
+			},
+			meta:     copyReady,
+			wantDone: true,
+			wantSnapshots: []api.SnapshotInfo{{
+				ReplsetName:         "rs0",
+				SnapshotName:        snapshotName("rs0"),
+				JournalSnapshotName: naming.JournalVolumeSnapshotName(bcp, "rs0"),
+			}},
+		},
+		"journal snapshot is created when missing": {
+			existingObjects: []client.Object{readySnapshot("rs0"), journalPVC},
+			meta:            copyReady,
+			wantDone:        false,
+			wantSnapshots: []api.SnapshotInfo{{
+				ReplsetName:         "rs0",
+				SnapshotName:        snapshotName("rs0"),
+				JournalSnapshotName: naming.JournalVolumeSnapshotName(bcp, "rs0"),
+			}},
+		},
+		"journal snapshot not ready blocks done": {
+			existingObjects: []client.Object{
+				readySnapshot("rs0"),
+				journalPVC,
+				journalSnapshot("rs0", &volumesnapshotv1.VolumeSnapshotStatus{ReadyToUse: new(false)}),
+			},
+			meta:     copyReady,
+			wantDone: false,
+			wantSnapshots: []api.SnapshotInfo{{
+				ReplsetName:         "rs0",
+				SnapshotName:        snapshotName("rs0"),
+				JournalSnapshotName: naming.JournalVolumeSnapshotName(bcp, "rs0"),
+			}},
+		},
+		"journal snapshot error returns error": {
+			existingObjects: []client.Object{
+				readySnapshot("rs0"),
+				journalPVC,
+				journalSnapshot("rs0", &volumesnapshotv1.VolumeSnapshotStatus{
+					Error: &volumesnapshotv1.VolumeSnapshotError{Message: new("quota exceeded")},
+				}),
+			},
+			meta:       copyReady,
+			wantErrMsg: "snapshot error: quota exceeded",
 		},
 		"multiple replsets with one not copy-ready": {
 			existingObjects: []client.Object{readySnapshot("rs0")},

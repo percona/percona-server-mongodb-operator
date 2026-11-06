@@ -147,6 +147,10 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	}
 
 	if pod, ok := podBlockingClaimRollout(sfs, list.Items); ok {
+		if blocked, err := r.smartUpdateBlocked(ctx, cr, sfs); err != nil || blocked {
+			return err
+		}
+
 		log.Info("statefulset can't create missing pods until this pod has its volume claims, recreating it", "pod", pod.Name)
 
 		return r.recreateNWait(ctx, cr, sfs.Status.UpdateRevision, &pod, waitLimit)
@@ -174,33 +178,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	if cr.IsPVCShrinkInProgress() {
-		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
-		return nil
-	}
-
-	isBackupRunning, err := r.isBackupRunning(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to check active backups")
-	}
-	if isBackupRunning {
-		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
-		return nil
-	}
-
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
-	if err != nil {
-		if cr.Status.State == api.AppStateError {
-			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
-		} else {
-			return errors.Wrap(err, "failed to check active jobs")
-		}
-	}
-
-	_, ok = sfs.Annotations[api.AnnotationRestoreInProgress]
-	if !ok && hasActiveJobs {
-		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
-		return nil
+	if blocked, err := r.smartUpdateBlocked(ctx, cr, sfs); err != nil || blocked {
+		return err
 	}
 
 	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
@@ -331,6 +310,42 @@ func (r *ReconcilePerconaServerMongoDB) stepDownPrimary(ctx context.Context, cr 
 }
 
 // podsMissingClaimVolumes reports whether a pod lacks a volume for one of the claim templates.
+// smartUpdateBlocked reports whether a PVC shrink, backup or PBM job forbids restarting pods.
+func (r *ReconcilePerconaServerMongoDB) smartUpdateBlocked(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
+	log := logf.FromContext(ctx).WithName("SmartUpdate").WithValues("statefulset", sfs.Name)
+
+	if cr.IsPVCShrinkInProgress() {
+		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
+		return true, nil
+	}
+
+	isBackupRunning, err := r.isBackupRunning(ctx, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to check active backups")
+	}
+	if isBackupRunning {
+		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
+		return true, nil
+	}
+
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	if err != nil {
+		if cr.Status.State == api.AppStateError {
+			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
+		} else {
+			return false, errors.Wrap(err, "failed to check active jobs")
+		}
+	}
+
+	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
+	if !ok && hasActiveJobs {
+		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func podsMissingClaimVolumes(sfs *appsv1.StatefulSet, pods []corev1.Pod) bool {
 	for _, pod := range pods {
 		for _, vct := range sfs.Spec.VolumeClaimTemplates {

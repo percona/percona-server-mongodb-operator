@@ -705,6 +705,16 @@ func TestTriggerResize(t *testing.T) {
 	}
 }
 
+// mountPVC mounts pvcName in the pod's first container, as the statefulset controller would.
+func mountPVC(pod *corev1.Pod, claimName, pvcName, mountPath string) {
+	pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{
+		Name:                  claimName,
+		PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName},
+	})
+	pod.Spec.Containers[0].VolumeMounts = append(pod.Spec.Containers[0].VolumeMounts,
+		corev1.VolumeMount{Name: claimName, MountPath: mountPath})
+}
+
 // mountingTemplate returns a pod template whose `container` mounts `claimName`
 // at `mountPath`, which is where the autoscaler reads the probe path from.
 func mountingTemplate(container, claimName, mountPath string) corev1.PodTemplateSpec {
@@ -938,6 +948,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 				},
 			}
 
+			mountPVC(pod, tt.claimName, pvcName, tt.mountPath)
 			r := buildFakeClient(cr, sts, pvc, pod)
 
 			var execContainer string
@@ -1210,6 +1221,8 @@ func fullPVCAndPod(
 		},
 	}
 
+	mountPVC(pod, psmdbconfig.MongodDataVolClaimName, pvc.Name, psmdbconfig.MongodContainerDataDir)
+
 	return pvc, pod
 }
 
@@ -1425,6 +1438,7 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 		},
 	}
 
+	mountPVC(pod, psmdbconfig.MongosLogVolClaimName, pvc.Name, customLogDir)
 	r := buildFakeClient(cr, sts, pvc, pod)
 
 	var execContainer string
@@ -1615,4 +1629,81 @@ func TestCheckAndResizePVCSkipsTerminatingPod(t *testing.T) {
 	require.NoError(t, r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
 		naming.ContainerMongod, psmdbconfig.MongodContainerDataDir))
 	assert.Empty(t, cr.Status.StorageAutoscaling)
+}
+
+func TestCheckAndResizePVCSkipsUnmountedPVC(t *testing.T) {
+	t.Parallel()
+
+	r := buildFakeClient()
+	r.clientcmd = &mockClientCmd{
+		execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+			t.Fatal("df would measure the data volume of a pod that does not mount the log PVC")
+			return nil
+		},
+	}
+
+	// the claim rollout created the log PVC before the pod was recreated with it
+	pod := &corev1.Pod{
+		Name: "test-cluster-rs0-0", Namespace: "default",
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: naming.ContainerMongod}}},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: naming.ContainerMongod, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+			},
+		},
+	}
+	mountPVC(pod, psmdbconfig.MongodDataVolClaimName, "mongod-data-test-cluster-rs0-0", psmdbconfig.MongodContainerDataDir)
+	pvc := &corev1.PersistentVolumeClaim{Name: "mongod-logs-test-cluster-rs0-0", Namespace: "default"}
+	cr := &api.PerconaServerMongoDB{Name: "test-cluster", Namespace: "default"}
+
+	require.NoError(t, r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
+		naming.ContainerMongod, psmdbconfig.MongodContainerDataLogsDir))
+	assert.Empty(t, cr.Status.StorageAutoscaling)
+}
+
+func TestPodMountsPVC(t *testing.T) {
+	t.Parallel()
+
+	const (
+		pvcName   = "mongod-logs-test-cluster-rs0-0"
+		mountPath = "/data/db/logs"
+	)
+	pod := func(container string, claimName, mount string) *corev1.Pod {
+		p := &corev1.Pod{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: container}}}}
+		if claimName != "" {
+			mountPVC(p, psmdbconfig.MongodLogVolClaimName, claimName, mount)
+		}
+		return p
+	}
+
+	tests := map[string]struct {
+		pod  *corev1.Pod
+		want bool
+	}{
+		"mounted": {
+			pod:  pod(naming.ContainerMongod, pvcName, mountPath),
+			want: true,
+		},
+		"no volume for the pvc": {
+			pod: pod(naming.ContainerMongod, "", ""),
+		},
+		"volume for another pvc": {
+			pod: pod(naming.ContainerMongod, "mongod-logs-other", mountPath),
+		},
+		"mounted elsewhere": {
+			pod: pod(naming.ContainerMongod, pvcName, "/sidecar/view"),
+		},
+		"mounted by another container": {
+			pod: pod("logs", pvcName, mountPath),
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, podMountsPVC(tt.pod, naming.ContainerMongod, pvcName, mountPath))
+		})
+	}
 }
