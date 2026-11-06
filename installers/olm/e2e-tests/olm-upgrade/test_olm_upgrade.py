@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
-import json
 import logging
 import os
-import re
 import time
 import uuid
 from collections.abc import Callable, Generator
@@ -13,47 +11,53 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
+from lib.backup import wait_backup, wait_restore
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.operator import check_crd_for_deletion, delete_crd_rbac
-from lib.secrets import get_user_data
-from lib.utils import Paths, env_bool, retry
+from lib.secrets import apply_s3_storage_secrets
+from lib.utils import Paths, env_bool
 from olm import (
+    LOCAL_S3,
     SUBSCRIPTION,
+    CatalogTarget,
+    apply,
     approve_until_installed,
+    assert_operator_healthy,
     channel_of_csv,
-    create_operator_group,
-    create_subscription,
-    csv_example,
+    check_members,
+    create_app_user,
     csv_names,
     csv_operator_image,
-    delete_olm_install,
+    delete_crds,
     delete_pending_plans,
+    event_count,
+    example_backup,
+    example_cluster,
+    example_restore,
     get_csv,
     get_json,
-    get_package_manifest,
+    insert,
+    install,
     installplan_phase,
     olm_available,
+    olm_test_paths,
+    operator_deployment,
+    operator_pod,
+    resolve_target,
     subscription_status,
-    wait_catalog_ready,
+    teardown,
+    version,
     wait_until,
+    warning_events,
 )
 
 logger = logging.getLogger(__name__)
-
-# Operator log lines matching these are expected while controllers settle after a restart.
-# Calibrate on real runs; keep each entry specific.
-ALLOWED_OPERATOR_ERRORS = [
-    re.compile(r"the object has been modified; please apply your changes to the latest version"),
-]
-OPERATOR_ERROR = re.compile(r"\tERROR\t|\"level\":\"error\"")
 
 # Warning events OLM emits while a CSV is being replaced.
 ALLOWED_CSV_WARNINGS = {"RequirementsNotMet", "InstallWaiting"}
 # InstallPlan "AppliedWithWarnings" is fine when every warning is an API deprecation notice:
 # the CRD still serves the old psmdb.percona.com/v1-x-0 versions.
-DEPRECATION_WARNING = re.compile(r"\S+ PerconaServerMongoDB is deprecated and will be removed in")
+DEPRECATION_WARNING = "PerconaServerMongoDB is deprecated and will be removed in"
 
 # A brief "initializing" while the new operator takes over is tolerated; pods must not change.
 ALLOWED_STATES = {"ready", "initializing"}
@@ -64,18 +68,18 @@ MAX_EMPTY_READS = 6
 # DISABLE_TELEMETRY leave idle: changing it bumps the CR generation without touching pods.
 RECONCILE_PROBE = '{"spec":{"upgradeOptions":{"schedule":"0 3 * * *"}}}'
 
+# Taken by the starting operator, restored by the target one.
+BACKUP = "backup-before-upgrade"
+RESTORE = "restore-after-upgrade"
+
 
 @dataclass(frozen=True)
 class OlmUpgradeConfig:
     namespace: str
     cluster: str
-    package: str
-    source: str
-    source_namespace: str
+    target: CatalogTarget
     from_channel: str
     from_csv: str
-    target_channel: str
-    target_csv: str
 
 
 @dataclass
@@ -90,23 +94,16 @@ class UpgradeState:
     operator_pod_uid: str = ""
 
 
-def _version(csv: str) -> tuple[int, ...]:
-    """1.22.0 from percona-server-mongodb-operator.v1.22.0 (also covers -certified names)."""
-    match = re.search(r"v?(\d+)\.(\d+)\.(\d+)$", csv)
-    assert match, f"Cannot parse a version from CSV name {csv}"
-    return tuple(int(part) for part in match.groups())
-
-
 def _default_from_csv(manifest: dict[str, Any], target_csv: str) -> str:
     """Newest CSV in the catalog older than the target."""
     older = [
         entry["name"]
         for channel in manifest["status"]["channels"]
         for entry in channel.get("entries", [])
-        if _version(entry["name"]) < _version(target_csv)
+        if version(entry["name"]) < version(target_csv)
     ]
     assert older, f"Catalog has no version older than {target_csv}"
-    return str(max(older, key=_version))
+    return str(max(older, key=version))
 
 
 def _from_channel(manifest: dict[str, Any], from_csv: str, target_channel: str) -> str:
@@ -120,73 +117,33 @@ def _from_channel(manifest: dict[str, Any], from_csv: str, target_channel: str) 
 @pytest.fixture(scope="class")
 def test_paths(request: pytest.FixtureRequest) -> Paths:
     """Overrides the shared fixture: this test lives in installers/olm/e2e-tests/."""
-    test_file = request.path
-    src_dir = test_file.parents[4]
-    return {
-        "test_file": str(test_file),
-        "test_dir": str(test_file.parent),
-        "conf_dir": str(src_dir / "e2e-tests" / "conf"),
-        "src_dir": str(src_dir),
-    }
-
-
-def _delete_crds(src_dir: str) -> None:
-    """OLM leaves CRDs behind when a CSV is deleted; a stale newer CRD blocks older installs."""
-    delete_crd_rbac(Path(src_dir))
-    check_crd_for_deletion(Path(src_dir) / "deploy" / "crd.yaml")
+    return olm_test_paths(request.path)
 
 
 @pytest.fixture(scope="class")
 def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmUpgradeConfig:
     """Resolve the upgrade path from the catalog, then create the test namespace.
 
-    OLM_BUNDLE_TYPE selects the dev catalog (community|certified, see installers/olm).
-    OLM_FROM_CSV / OLM_TARGET_CHANNEL pin the path; by default it is the head of the
-    newest previous channel -> the catalog's default channel.
-    The target must be OLM_TARGET_VERSION, which for a dev catalog defaults to
-    OPERATOR_VERSION (crVersion of deploy/cr.yaml), so a stale catalog fails fast.
+    OLM_FROM_CSV pins the starting CSV; by default it is the newest one older than the
+    target (see resolve_target for the catalog and target variables).
     """
     if not olm_available():
         pytest.skip("OLM is not available on this cluster")
 
-    bundle_type = os.environ.get("OLM_BUNDLE_TYPE", "community")
-    package = os.environ.get("OLM_PACKAGE") or (
-        "percona-server-mongodb-operator" + ("-certified" if bundle_type == "certified" else "")
+    target = resolve_target()
+    from_csv = os.environ.get("OLM_FROM_CSV") or _default_from_csv(
+        target.manifest, target.target_csv
     )
-    source = os.environ.get("OLM_CATALOG_SOURCE") or f"{bundle_type}-dev"
-    source_namespace = os.environ.get("OLM_CATALOG_NAMESPACE") or "openshift-marketplace"
-
-    wait_catalog_ready(source, source_namespace)
-    manifest = get_package_manifest(package, source, source_namespace)
-    target_channel = os.environ.get("OLM_TARGET_CHANNEL") or manifest["status"]["defaultChannel"]
-    target_csv = next(
-        channel["currentCSV"]
-        for channel in manifest["status"]["channels"]
-        if channel["name"] == target_channel
-    )
-    # Only dev catalogs (installers/olm, CATALOG_ENV=dev) are built from this checkout,
-    # and only their default channel must hold the version under test.
-    expected = os.environ.get("OLM_TARGET_VERSION") or (
-        os.environ.get("OPERATOR_VERSION", "")
-        if source.endswith("-dev") and not os.environ.get("OLM_TARGET_CHANNEL")
-        else ""
-    )
-    if expected:
-        assert _version(target_csv) == _version(expected), (
-            f"Catalog {source} upgrades to {target_csv}, but the version under test is "
-            f"{expected}. Rebuild the catalog (make deploy/<type>) or set OLM_TARGET_VERSION."
-        )
-    from_csv = os.environ.get("OLM_FROM_CSV") or _default_from_csv(manifest, target_csv)
-    from_channel = _from_channel(manifest, from_csv, target_channel)
-    assert _version(from_csv) < _version(target_csv), (
-        f"Starting CSV {from_csv} is not older than target {target_csv}"
+    from_channel = _from_channel(target.manifest, from_csv, target.target_channel)
+    assert version(from_csv) < version(target.target_csv), (
+        f"Starting CSV {from_csv} is not older than target {target.target_csv}"
     )
     logger.info(
-        f"Upgrade path: {from_csv} ({from_channel}) -> {target_csv} ({target_channel}) "
-        f"from {source_namespace}/{source}"
+        f"Upgrade path: {from_csv} ({from_channel}) -> {target.target_csv} "
+        f"({target.target_channel}) from {target.source_namespace}/{target.source}"
     )
 
-    _delete_crds(test_paths["src_dir"])
+    delete_crds(test_paths["src_dir"])
     namespace = create_namespace(f"olm-upgrade-{uuid.uuid4().hex[:8]}")
     # Lets the failure report collect resources from this namespace.
     Path(os.environ["PYTEST_NAMESPACE_FILE"]).write_text(namespace)
@@ -194,13 +151,9 @@ def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmUpgr
     return OlmUpgradeConfig(
         namespace=namespace,
         cluster="olm-upgrade",
-        package=package,
-        source=source,
-        source_namespace=source_namespace,
+        target=target,
         from_channel=from_channel,
         from_csv=from_csv,
-        target_channel=target_channel,
-        target_csv=target_csv,
     )
 
 
@@ -212,26 +165,19 @@ def cleanup(config: OlmUpgradeConfig, test_paths: Paths) -> Generator[None]:
     if env_bool("SKIP_DELETE"):
         logger.info("SKIP_DELETE is set. Skipping test environment cleanup")
         return
+    teardown(config.namespace, config.target.package, test_paths["src_dir"])
 
-    # Operator first, so OLM cannot reinstall anything; CRD deletion then strips
-    # the psmdb finalizers the operator is no longer there to handle.
-    delete_olm_install(config.namespace, config.package)
-    _delete_crds(test_paths["src_dir"])
-    kubectl_bin(
-        "delete", "namespace", config.namespace, "--ignore-not-found", "--wait=false", check=False
-    )
+
+@pytest.fixture(scope="class")
+def storage(config: OlmUpgradeConfig, test_paths: Paths, deploy_s3_storage: None) -> str:
+    """SeaweedFS in the test namespace (after config created it) and its secret."""
+    apply_s3_storage_secrets(test_paths["conf_dir"])
+    return LOCAL_S3
 
 
 @pytest.fixture(scope="class")
 def state() -> UpgradeState:
     return UpgradeState()
-
-
-def _cluster_uri(
-    config: OlmUpgradeConfig, user: str, password: str, pod: int | None = None
-) -> str:
-    host = f"{config.cluster}-rs0" + (f"-{pod}.{config.cluster}-rs0" if pod is not None else "")
-    return f"{user}:{password}@{host}.{config.namespace}"
 
 
 def _db_pods(config: OlmUpgradeConfig) -> dict[str, tuple[str, int]]:
@@ -262,15 +208,6 @@ def _sts_revisions(config: OlmUpgradeConfig) -> dict[str, tuple[str, str]]:
     }
 
 
-def _warning_events(namespace: str) -> dict[str, dict[str, Any]]:
-    events = get_json("events", "-n", namespace, "--field-selector=type=Warning")
-    return {ev["metadata"]["uid"]: ev for ev in events["items"]}
-
-
-def _event_count(event: dict[str, Any]) -> int:
-    return int(event.get("count") or event.get("series", {}).get("count") or 1)
-
-
 def _psmdb_state(config: OlmUpgradeConfig) -> str:
     return kubectl_bin(
         "get",
@@ -295,93 +232,15 @@ def _sample_state(config: OlmUpgradeConfig, state: UpgradeState) -> None:
         state.states.append("unreadable")
 
 
-def _check_members(
-    config: OlmUpgradeConfig, psmdb_client: MongoManager, expected_file: str
-) -> None:
-    """Read from every member over a direct connection.
-
-    A replicaSet URI (run_mongosh, compare_mongo_cmd) sends every read to the primary.
-    """
-    expected = json.loads(Path(expected_file).read_text())
-    query = "EJSON.stringify(db.getSiblingDB('myApp').test.find({}, { _id: 0 }).toArray())"
-    for i in range(3):
-        uri = (
-            f"mongodb://{_cluster_uri(config, 'myApp', 'myPass', i)}.svc.cluster.local/admin"
-            "?ssl=false&directConnection=true&readPreference=secondaryPreferred"
-        )
-
-        def read(uri: str = uri) -> Any:
-            out = kubectl_bin(
-                "exec",
-                psmdb_client.client,
-                "--",
-                "env",
-                "HOME=/tmp",
-                "mongosh",
-                uri,
-                "--quiet",
-                "--eval",
-                query,
-                check=False,
-            )
-            try:
-                return json.loads(out)
-            except json.JSONDecodeError:
-                return out
-
-        wait_until(
-            f"member {i} to return {expected}",
-            read,
-            lambda result: result == expected,
-            timeout=60,
-            interval=5,
-        )
-
-
-def _operator_pod(config: OlmUpgradeConfig, csv: dict[str, Any]) -> dict[str, Any]:
-    """The single pod of the CSV's operator Deployment, found by its own selector."""
-    deployment = csv["spec"]["install"]["spec"]["deployments"][0]
-    labels = deployment["spec"]["selector"]["matchLabels"]
-    selector = ",".join(f"{key}={value}" for key, value in labels.items())
-    pods = wait_until(
-        f"a single {deployment['name']} pod",
-        lambda: get_json("pods", "-n", config.namespace, "-l", selector)["items"],
-        lambda items: len(items) == 1,
-        timeout=300,
-    )
-    return dict(pods[0])
-
-
 def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> None:
     """The target operator never restarted; its log and the namespace events show no errors."""
-    target = get_csv(config.namespace, config.target_csv)
-    deployment = target["spec"]["install"]["spec"]["deployments"][0]["name"]
-    pod = _operator_pod(config, target)
-    name = pod["metadata"]["name"]
-
+    target = get_csv(config.namespace, config.target.target_csv)
+    deployment = operator_deployment(target)
     # A replacement pod starts with a fresh restart count and log, hiding what happened.
-    if state.operator_pod_uid:
-        assert pod["metadata"]["uid"] == state.operator_pod_uid, (
-            f"Operator pod was replaced: {name} is not the pod that became ready after upgrade"
-        )
-    ready = [c for c in pod["status"].get("conditions", []) if c["type"] == "Ready"]
-    assert [c["status"] for c in ready] == ["True"], (
-        f"Operator pod {name} is not Ready: {pod['status']}"
-    )
-    ready_since = datetime.fromisoformat(ready[0]["lastTransitionTime"])
-
-    restarts = sum(c.get("restartCount", 0) for c in pod["status"]["containerStatuses"])
-    if restarts:
-        previous = kubectl_bin("logs", name, "-n", config.namespace, "--previous", check=False)
-        pytest.fail(f"Operator restarted {restarts} times. Previous logs:\n{previous}")
-
-    errors = [
-        line
-        for line in kubectl_bin("logs", name, "-n", config.namespace).splitlines()
-        if OPERATOR_ERROR.search(line)
-        and not any(allowed.search(line) for allowed in ALLOWED_OPERATOR_ERRORS)
-    ]
-    assert not errors, "Operator logged errors after upgrade:\n" + "\n".join(errors)
+    pod = assert_operator_healthy(config.namespace, target, state.operator_pod_uid)
+    name = pod["metadata"]["name"]
+    ready = next(c for c in pod["status"]["conditions"] if c["type"] == "Ready")
+    ready_since = datetime.fromisoformat(ready["lastTransitionTime"])
 
     def allowed(ev: dict[str, Any]) -> bool:
         obj = ev["involvedObject"]
@@ -389,7 +248,7 @@ def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> Non
             return ev.get("reason") in ALLOWED_CSV_WARNINGS
         if obj["kind"] == "InstallPlan" and ev.get("reason") == "AppliedWithWarnings":
             warnings = ev.get("message", "").split("):", 1)[-1].split(", psmdb.")
-            return all(DEPRECATION_WARNING.search(w) for w in warnings)
+            return all(DEPRECATION_WARNING in w for w in warnings)
         if obj["kind"] != "Pod" or ev.get("reason") != "Unhealthy":
             return False
         # Readiness probe noise of the operator pods being replaced.
@@ -406,8 +265,8 @@ def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> Non
     new_warnings = [
         f"{ev['involvedObject']['kind']}/{ev['involvedObject']['name']}: "
         f"{ev.get('reason')}: {ev.get('message')}"
-        for uid, ev in _warning_events(config.namespace).items()
-        if _event_count(ev) > state.events.get(uid, 0) and not allowed(ev)
+        for uid, ev in warning_events(config.namespace).items()
+        if event_count(ev) > state.events.get(uid, 0) and not allowed(ev)
     ]
     assert not new_warnings, "Warning events during upgrade:\n" + "\n".join(new_warnings)
 
@@ -418,48 +277,15 @@ class TestOlmUpgrade:
     @pytest.mark.dependency()
     def test_install_previous_version(self, config: OlmUpgradeConfig) -> None:
         """Install the starting CSV from its channel"""
-        create_operator_group(config.namespace)
-        create_subscription(
-            config.namespace,
-            config.package,
-            config.source,
-            config.source_namespace,
-            config.from_channel,
-            config.from_csv,
-        )
-        approve_until_installed(
-            config.namespace,
-            config.package,
-            config.from_csv,
-            allowed_csvs=lambda csvs: config.from_csv in csvs,
-        )
-
-        csv = get_csv(config.namespace, config.from_csv)
-        image = _operator_pod(config, csv)["spec"]["containers"][0]["image"]
+        csv = install(config.namespace, config.target, config.from_channel, config.from_csv)
+        image = operator_pod(config.namespace, csv)["spec"]["containers"][0]["image"]
         assert image == csv_operator_image(csv), f"Operator runs {image}"
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_install_previous_version"])
-    def test_deploy_cluster(self, config: OlmUpgradeConfig) -> None:
-        """Deploy a replica set from the starting CSV's example CR"""
-        cr = csv_example(get_csv(config.namespace, config.from_csv), "PerconaServerMongoDB")
-        cr["metadata"] = {
-            "name": config.cluster,
-            "finalizers": cr["metadata"].get("finalizers", []),
-        }
-        spec = cr["spec"]
-        spec["upgradeOptions"] = {"apply": "disabled"}
-        spec.setdefault("secrets", {})["users"] = f"{config.cluster}-secrets"
-        for section in ("sharding", "backup", "pmm"):
-            spec.setdefault(section, {})["enabled"] = False
-        rs0 = spec["replsets"][0]
-        rs0["size"] = 3
-        rs0["affinity"] = {"antiAffinityTopologyKey": "none"}
-        for member in ("arbiter", "nonvoting", "hidden"):
-            if member in rs0:
-                rs0[member]["enabled"] = False
-        spec["replsets"] = [rs0]
-
-        kubectl_bin("apply", "-n", config.namespace, "-f", "-", input_data=yaml.dump(cr))
+    def test_deploy_cluster(self, config: OlmUpgradeConfig, storage: str) -> None:
+        """Deploy a replica set with backups from the starting CSV's example CR"""
+        csv = get_csv(config.namespace, config.from_csv)
+        apply(config.namespace, example_cluster(csv, config.cluster, storage))
         wait_for_running(f"{config.cluster}-rs0", 3)
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_deploy_cluster"])
@@ -467,47 +293,45 @@ class TestOlmUpgrade:
         self, config: OlmUpgradeConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
         """Write data and read it from every member"""
-        secret = f"{config.cluster}-secrets"
-        user_admin = _cluster_uri(
-            config,
-            get_user_data(secret, "MONGODB_USER_ADMIN_USER"),
-            get_user_data(secret, "MONGODB_USER_ADMIN_PASSWORD"),
+        create_app_user(psmdb_client, config.cluster, config.namespace)
+        insert(psmdb_client, config.cluster, config.namespace, 100500)
+        check_members(
+            psmdb_client,
+            config.cluster,
+            config.namespace,
+            f"{test_paths['test_dir']}/compare/find-1.json",
         )
-        psmdb_client.run_mongosh(
-            'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})',
-            user_admin,
-        )
-        retry(
-            lambda: psmdb_client.run_mongosh(
-                "db.getSiblingDB('myApp').test.insertOne({ x: 100500 })",
-                _cluster_uri(config, "myApp", "myPass"),
-            ),
-            condition=lambda result: "acknowledged: true" in result,
-        )
-        _check_members(config, psmdb_client, f"{test_paths['test_dir']}/compare/find-1.json")
 
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_write_data"])
+    def test_backup_before_upgrade(self, config: OlmUpgradeConfig, storage: str) -> None:
+        """Take a logical backup with the starting operator"""
+        csv = get_csv(config.namespace, config.from_csv)
+        apply(config.namespace, example_backup(csv, BACKUP, config.cluster, storage, "logical"))
+        wait_backup(BACKUP)
+
+    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_backup_before_upgrade"])
     def test_upgrade_operator(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
         """Upgrade to the target CSV in one hop"""
+        target = config.target
         state.pods = _db_pods(config)
         state.sts_revisions = _sts_revisions(config)
         state.events = {
-            uid: _event_count(ev) for uid, ev in _warning_events(config.namespace).items()
+            uid: event_count(ev) for uid, ev in warning_events(config.namespace).items()
         }
         assert len(state.pods) >= 3, f"Expected the DB pods before upgrade, got {state.pods}"
 
         # Published catalogs have one channel, so users upgrade without changing it. Only
         # a catalog with a channel per minor needs the Subscription moved to the target.
-        if config.from_channel != config.target_channel:
+        if config.from_channel != target.target_channel:
             kubectl_bin(
                 "patch",
                 SUBSCRIPTION,
-                config.package,
+                target.package,
                 "-n",
                 config.namespace,
                 "--type=merge",
                 "-p",
-                f'{{"spec":{{"channel":"{config.target_channel}"}}}}',
+                f'{{"spec":{{"channel":"{target.target_channel}"}}}}',
             )
 
         # Only the plan straight to the target. A Manual Subscription may still point at a
@@ -515,30 +339,30 @@ class TestOlmUpgrade:
         # resolves the target. Bundles skip every older version (olm.skipRange /
         # spec.skips), so one hop is enough.
         def to_target(csvs: list[str]) -> bool:
-            return csvs == [config.target_csv]
+            return csvs == [target.target_csv]
 
         delete_pending_plans(config.namespace, keep=to_target)
         plans = approve_until_installed(
             config.namespace,
-            config.package,
-            config.target_csv,
+            target.package,
+            target.target_csv,
             allowed_csvs=to_target,
             on_poll=lambda: _sample_state(config, state),
             delete_rejected=True,
         )
-        assert len(plans) == 1, f"Expected one InstallPlan to {config.target_csv}, got {plans}"
+        assert len(plans) == 1, f"Expected one InstallPlan to {target.target_csv}, got {plans}"
         phase = installplan_phase(config.namespace, plans[0])
         assert phase == "Complete", f"InstallPlan {plans[0]} phase is {phase}"
 
         wait_until(
-            f"only {config.target_csv} to be left",
+            f"only {target.target_csv} to be left",
             lambda: csv_names(config.namespace),
-            lambda names: names == [config.target_csv],
+            lambda names: names == [target.target_csv],
             timeout=300,
         )
         wait_until(
             "Subscription to reach AtLatestKnown",
-            lambda: subscription_status(config.namespace, config.package).get("state"),
+            lambda: subscription_status(config.namespace, target.package).get("state"),
             lambda sub_state: sub_state == "AtLatestKnown",
             timeout=300,
         )
@@ -546,17 +370,16 @@ class TestOlmUpgrade:
     @pytest.mark.dependency(depends=["TestOlmUpgrade::test_upgrade_operator"])
     def test_operator_ready(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
         """The target operator runs without restarts and logs/events have no errors"""
-        target = get_csv(config.namespace, config.target_csv)
-        deployment = target["spec"]["install"]["spec"]["deployments"][0]["name"]
+        target = get_csv(config.namespace, config.target.target_csv)
         kubectl_bin(
             "rollout",
             "status",
-            f"deployment/{deployment}",
+            f"deployment/{operator_deployment(target)}",
             "-n",
             config.namespace,
             "--timeout=300s",
         )
-        pod = _operator_pod(config, target)
+        pod = operator_pod(config.namespace, target)
         image = pod["spec"]["containers"][0]["image"]
         assert image == csv_operator_image(target), f"Operator runs {image} after upgrade"
         _assert_operator_clean(config, state)
@@ -622,9 +445,21 @@ class TestOlmUpgrade:
         self, config: OlmUpgradeConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
         """Data written before the upgrade is there and the cluster accepts writes"""
-        _check_members(config, psmdb_client, f"{test_paths['test_dir']}/compare/find-1.json")
-        psmdb_client.run_mongosh(
-            "db.getSiblingDB('myApp').test.insertOne({ x: 100501 })",
-            _cluster_uri(config, "myApp", "myPass"),
-        )
-        _check_members(config, psmdb_client, f"{test_paths['test_dir']}/compare/find-2.json")
+        compare = f"{test_paths['test_dir']}/compare"
+        check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-1.json")
+        insert(psmdb_client, config.cluster, config.namespace, 100501)
+        check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-2.json")
+
+    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_data_after_upgrade"])
+    def test_restore_after_upgrade(
+        self, config: OlmUpgradeConfig, test_paths: Paths, psmdb_client: MongoManager
+    ) -> None:
+        """The target operator restores the backup taken before the upgrade"""
+        compare = f"{test_paths['test_dir']}/compare"
+        csv = get_csv(config.namespace, config.target.target_csv)
+        apply(config.namespace, example_restore(csv, RESTORE, config.cluster, BACKUP))
+        wait_restore(RESTORE, config.cluster, timeout=900)
+        # Only the pre-upgrade document is back: the restore replaced the data.
+        check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-1.json")
+        insert(psmdb_client, config.cluster, config.namespace, 100501)
+        check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-2.json")

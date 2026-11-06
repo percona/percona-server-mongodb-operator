@@ -1,13 +1,21 @@
-"""Install and upgrade the operator through OLM (CatalogSource -> Subscription -> CSV)."""
+"""Helpers of the OLM tests: install through OLM (CatalogSource -> Subscription -> CSV),
+build objects from a bundle's alm-examples, read data back, check the operator pod."""
 
 import json
 import logging
+import os
+import re
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from lib.kubectl import kubectl_bin
-from lib.utils import retry
+from lib.mongo import MongoManager
+from lib.operator import check_crd_for_deletion, delete_crd_rbac
+from lib.secrets import get_user_data
+from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
 
@@ -293,3 +301,316 @@ def delete_olm_install(namespace: str, subscription: str) -> None:
     kubectl_bin(
         "delete", OPERATORGROUP, "--all", "-n", namespace, "--ignore-not-found", check=False
     )
+
+
+# Storage name and PBM-side settings of the SeaweedFS fixture (deploy_s3_storage in
+# e2e-tests/conftest.py); the credentials are e2e-tests/conf/s3-secret.yml.
+LOCAL_S3 = "local-s3"
+LOCAL_S3_STORAGE = {
+    "type": "s3",
+    "s3": {
+        "bucket": "operator-testing",
+        "credentialsSecret": "s3-secret",
+        "region": "us-east-1",
+        "endpointUrl": "http://s3-storage-all-in-one:8333/",
+        "insecureSkipTLSVerify": False,
+    },
+}
+
+APP_USER = "myApp"
+APP_PASSWORD = "myPass"
+RS0_SIZE = 3
+
+# Operator log lines matching these are expected while controllers settle after a restart.
+# Calibrate on real runs; keep each entry specific.
+ALLOWED_OPERATOR_ERRORS = [
+    re.compile(r"the object has been modified; please apply your changes to the latest version"),
+]
+OPERATOR_ERROR = re.compile(r"\tERROR\t|\"level\":\"error\"")
+
+
+def version(csv: str) -> tuple[int, ...]:
+    """1.22.0 from percona-server-mongodb-operator.v1.22.0 (also covers -certified names)."""
+    match = re.search(r"v?(\d+)\.(\d+)\.(\d+)$", csv)
+    assert match, f"Cannot parse a version from CSV name {csv}"
+    return tuple(int(part) for part in match.groups())
+
+
+@dataclass(frozen=True)
+class CatalogTarget:
+    """The dev catalog under test and the CSV at the head of its target channel."""
+
+    package: str
+    source: str
+    source_namespace: str
+    target_channel: str
+    target_csv: str
+    manifest: dict[str, Any]
+
+
+def resolve_target() -> CatalogTarget:
+    """Resolve the catalog and the target CSV from the OLM_* variables.
+
+    OLM_BUNDLE_TYPE selects the dev catalog (community|certified, see installers/olm);
+    OLM_PACKAGE, OLM_CATALOG_SOURCE and OLM_CATALOG_NAMESPACE override the derived
+    names. The target is the head of OLM_TARGET_CHANNEL (default: the catalog's default
+    channel). It must be OLM_TARGET_VERSION, which for a dev catalog defaults to
+    OPERATOR_VERSION (crVersion of deploy/cr.yaml), so a stale catalog fails fast.
+    """
+    bundle_type = os.environ.get("OLM_BUNDLE_TYPE", "community")
+    package = os.environ.get("OLM_PACKAGE") or (
+        "percona-server-mongodb-operator" + ("-certified" if bundle_type == "certified" else "")
+    )
+    source = os.environ.get("OLM_CATALOG_SOURCE") or f"{bundle_type}-dev"
+    source_namespace = os.environ.get("OLM_CATALOG_NAMESPACE") or "openshift-marketplace"
+
+    wait_catalog_ready(source, source_namespace)
+    manifest = get_package_manifest(package, source, source_namespace)
+    target_channel = os.environ.get("OLM_TARGET_CHANNEL") or manifest["status"]["defaultChannel"]
+    target_csv = next(
+        channel["currentCSV"]
+        for channel in manifest["status"]["channels"]
+        if channel["name"] == target_channel
+    )
+    # Only dev catalogs (installers/olm, CATALOG_ENV=dev) are built from this checkout,
+    # and only their default channel must hold the version under test.
+    expected = os.environ.get("OLM_TARGET_VERSION") or (
+        os.environ.get("OPERATOR_VERSION", "")
+        if source.endswith("-dev") and not os.environ.get("OLM_TARGET_CHANNEL")
+        else ""
+    )
+    if expected:
+        assert version(target_csv) == version(expected), (
+            f"Catalog {source} serves {target_csv}, but the version under test is "
+            f"{expected}. Rebuild the catalog (make deploy/<type>) or set OLM_TARGET_VERSION."
+        )
+    return CatalogTarget(package, source, source_namespace, target_channel, target_csv, manifest)
+
+
+def olm_test_paths(test_file: Path) -> Paths:
+    """test_paths for a test under installers/olm/e2e-tests/<name>/ (conf from e2e-tests/)."""
+    src_dir = test_file.parents[4]
+    return {
+        "test_file": str(test_file),
+        "test_dir": str(test_file.parent),
+        "conf_dir": str(src_dir / "e2e-tests" / "conf"),
+        "src_dir": str(src_dir),
+    }
+
+
+def delete_crds(src_dir: str) -> None:
+    """OLM leaves CRDs behind when a CSV is deleted; a stale newer CRD blocks older installs."""
+    delete_crd_rbac(Path(src_dir))
+    check_crd_for_deletion(Path(src_dir) / "deploy" / "crd.yaml")
+
+
+def teardown(namespace: str, package: str, src_dir: str) -> None:
+    """Remove the OLM install, the CRDs and the namespace, in that order.
+
+    Operator first, so OLM cannot reinstall anything; CRD deletion then strips the
+    psmdb finalizers the operator is no longer there to handle.
+    """
+    delete_olm_install(namespace, package)
+    delete_crds(src_dir)
+    kubectl_bin(
+        "delete", "namespace", namespace, "--ignore-not-found", "--wait=false", check=False
+    )
+
+
+def install(namespace: str, target: CatalogTarget, channel: str, csv: str) -> dict[str, Any]:
+    """Install `csv` from `channel` and return the installed CSV, once it is Succeeded."""
+    create_operator_group(namespace)
+    create_subscription(
+        namespace, target.package, target.source, target.source_namespace, channel, csv
+    )
+    approve_until_installed(namespace, target.package, csv, allowed_csvs=lambda csvs: csv in csvs)
+    return get_csv(namespace, csv)
+
+
+def example_cluster(csv: dict[str, Any], name: str, storage: str | None) -> dict[str, Any]:
+    """A 3-member rs0 from the CSV's example CR, with backups to `storage` or disabled.
+
+    The example matches the release's crVersion and images. Sharding, PMM, PITR and the
+    extra member types are off; automatic upgrades are off so images stay pinned.
+    """
+    cr = csv_example(csv, "PerconaServerMongoDB")
+    cr["metadata"] = {"name": name, "finalizers": cr["metadata"].get("finalizers", [])}
+    spec = cr["spec"]
+    spec["upgradeOptions"] = {"apply": "disabled"}
+    spec.setdefault("secrets", {})["users"] = f"{name}-secrets"
+    for section in ("sharding", "pmm"):
+        spec.setdefault(section, {})["enabled"] = False
+    backup = spec.setdefault("backup", {})
+    backup["enabled"] = storage is not None
+    backup["pitr"] = {"enabled": False}
+    backup.pop("tasks", None)
+    backup["storages"] = {storage: LOCAL_S3_STORAGE} if storage else {}
+    rs0 = spec["replsets"][0]
+    rs0["size"] = RS0_SIZE
+    rs0["affinity"] = {"antiAffinityTopologyKey": "none"}
+    for member in ("arbiter", "nonvoting", "hidden"):
+        if member in rs0:
+            rs0[member]["enabled"] = False
+    spec["replsets"] = [rs0]
+    return cr
+
+
+def example_backup(
+    csv: dict[str, Any], name: str, cluster: str, storage: str, backup_type: str
+) -> dict[str, Any]:
+    """A PerconaServerMongoDBBackup from the CSV's example."""
+    backup = csv_example(csv, "PerconaServerMongoDBBackup")
+    backup["metadata"] = {"name": name, "finalizers": backup["metadata"].get("finalizers", [])}
+    backup["spec"] = {"clusterName": cluster, "storageName": storage, "type": backup_type}
+    return backup
+
+
+def example_restore(csv: dict[str, Any], name: str, cluster: str, backup: str) -> dict[str, Any]:
+    """A PerconaServerMongoDBRestore from the CSV's example."""
+    restore = csv_example(csv, "PerconaServerMongoDBRestore")
+    restore["metadata"] = {"name": name}
+    restore["spec"] = {"clusterName": cluster, "backupName": backup}
+    return restore
+
+
+def apply(namespace: str, obj: dict[str, Any]) -> None:
+    logger.info(f"Applying {obj['kind']}/{obj['metadata']['name']}")
+    kubectl_bin("apply", "-n", namespace, "-f", "-", input_data=json.dumps(obj))
+
+
+def cluster_uri(
+    cluster: str, namespace: str, user: str, password: str, pod: int | None = None
+) -> str:
+    host = f"{cluster}-rs0" + (f"-{pod}.{cluster}-rs0" if pod is not None else "")
+    return f"{user}:{password}@{host}.{namespace}"
+
+
+def create_app_user(client: MongoManager, cluster: str, namespace: str) -> None:
+    secret = f"{cluster}-secrets"
+    client.run_mongosh(
+        f'db.createUser({{user:"{APP_USER}",pwd:"{APP_PASSWORD}",'
+        f'roles:[{{db:"{APP_USER}",role:"readWrite"}}]}})',
+        cluster_uri(
+            cluster,
+            namespace,
+            get_user_data(secret, "MONGODB_USER_ADMIN_USER"),
+            get_user_data(secret, "MONGODB_USER_ADMIN_PASSWORD"),
+        ),
+    )
+
+
+def insert(client: MongoManager, cluster: str, namespace: str, value: int) -> None:
+    """Insert {x: value} into myApp.test through the primary, retried until acknowledged."""
+    retry(
+        lambda: client.run_mongosh(
+            f"db.getSiblingDB('{APP_USER}').test.insertOne({{ x: {value} }})",
+            cluster_uri(cluster, namespace, APP_USER, APP_PASSWORD),
+        ),
+        condition=lambda result: "acknowledged: true" in result,
+    )
+
+
+def check_members(client: MongoManager, cluster: str, namespace: str, expected_file: str) -> None:
+    """Every rs0 member returns the documents of `expected_file`, over a direct connection.
+
+    A replicaSet URI (run_mongosh, compare_mongo_cmd) sends every read to the primary.
+    """
+    expected = json.loads(Path(expected_file).read_text())
+    query = (
+        f"EJSON.stringify(db.getSiblingDB('{APP_USER}').test.find({{}}, {{ _id: 0 }}).toArray())"
+    )
+    for i in range(RS0_SIZE):
+        uri = (
+            f"mongodb://{cluster_uri(cluster, namespace, APP_USER, APP_PASSWORD, i)}"
+            ".svc.cluster.local/admin?ssl=false&directConnection=true"
+            "&readPreference=secondaryPreferred"
+        )
+
+        def read(uri: str = uri) -> Any:
+            out = kubectl_bin(
+                "exec",
+                client.client,
+                "--",
+                "env",
+                "HOME=/tmp",
+                "mongosh",
+                uri,
+                "--quiet",
+                "--eval",
+                query,
+                check=False,
+            )
+            try:
+                return json.loads(out)
+            except json.JSONDecodeError:
+                return out
+
+        wait_until(
+            f"member {i} to return {expected}",
+            read,
+            lambda result: result == expected,
+            timeout=60,
+            interval=5,
+        )
+
+
+def operator_deployment(csv: dict[str, Any]) -> str:
+    return str(csv["spec"]["install"]["spec"]["deployments"][0]["name"])
+
+
+def operator_pod(namespace: str, csv: dict[str, Any]) -> dict[str, Any]:
+    """The single pod of the CSV's operator Deployment, found by its own selector."""
+    deployment = csv["spec"]["install"]["spec"]["deployments"][0]
+    labels = deployment["spec"]["selector"]["matchLabels"]
+    selector = ",".join(f"{key}={value}" for key, value in labels.items())
+    pods = wait_until(
+        f"a single {deployment['name']} pod",
+        lambda: get_json("pods", "-n", namespace, "-l", selector)["items"],
+        lambda items: len(items) == 1,
+        timeout=300,
+    )
+    return dict(pods[0])
+
+
+def operator_restarts(pod: dict[str, Any]) -> int:
+    return sum(c.get("restartCount", 0) for c in pod["status"].get("containerStatuses", []))
+
+
+def operator_errors(namespace: str, pod_name: str) -> list[str]:
+    """Error lines of the operator log that no ALLOWED_OPERATOR_ERRORS entry covers."""
+    return [
+        line
+        for line in kubectl_bin("logs", pod_name, "-n", namespace).splitlines()
+        if OPERATOR_ERROR.search(line)
+        and not any(allowed.search(line) for allowed in ALLOWED_OPERATOR_ERRORS)
+    ]
+
+
+def assert_operator_healthy(
+    namespace: str, csv: dict[str, Any], expected_uid: str = ""
+) -> dict[str, Any]:
+    """The operator pod is Ready, was not replaced or restarted, and logged no errors.
+
+    Returns the pod.
+    """
+    pod = operator_pod(namespace, csv)
+    name = pod["metadata"]["name"]
+    if expected_uid:
+        assert pod["metadata"]["uid"] == expected_uid, f"Operator pod was replaced by {name}"
+    ready = [c["status"] for c in pod["status"].get("conditions", []) if c["type"] == "Ready"]
+    assert ready == ["True"], f"Operator pod {name} is not Ready: {pod['status']}"
+    if restarts := operator_restarts(pod):
+        previous = kubectl_bin("logs", name, "-n", namespace, "--previous", check=False)
+        raise AssertionError(f"Operator restarted {restarts} times. Previous logs:\n{previous}")
+    errors = operator_errors(namespace, name)
+    assert not errors, "Operator logged errors:\n" + "\n".join(errors)
+    return pod
+
+
+def warning_events(namespace: str) -> dict[str, dict[str, Any]]:
+    events = get_json("events", "-n", namespace, "--field-selector=type=Warning")
+    return {ev["metadata"]["uid"]: ev for ev in events["items"]}
+
+
+def event_count(event: dict[str, Any]) -> int:
+    return int(event.get("count") or event.get("series", {}).get("count") or 1)
