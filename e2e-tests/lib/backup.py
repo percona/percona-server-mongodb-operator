@@ -197,3 +197,64 @@ def wait_for_pbm_operations(cluster_name: str, timeout: int = 2700) -> None:
         time.sleep(5)
 
     raise TimeoutError(f"Timeout waiting for PBM operations on {cluster_name} to finish")
+
+
+def _psmdb_annotations(cluster_name: str) -> dict[str, str]:
+    raw = kubectl_bin("get", "psmdb", cluster_name, "-o", "json", check=False)
+    if not raw.strip():
+        return {}
+    annotations: dict[str, str] = json.loads(raw)["metadata"].get("annotations") or {}
+    return annotations
+
+
+def wait_physical_restore(
+    restore_name: str, cluster_name: str, timeout: int = 1800, error_grace: int = 600
+) -> None:
+    """Wait for a physical restore and for the cluster rebuild it triggers.
+
+    When the restore is `ready` the operator annotates the cluster with
+    `percona.com/resync-pbm`, recreates the StatefulSets and, once the cluster is
+    `ready` again, resyncs PBM under `percona.com/resync-in-progress`. The wait ends
+    when both annotations are gone and the cluster is `ready`. While volumes reattach
+    the cluster can report `error`; that fails only after `error_grace` seconds in a row.
+    """
+    wait_restore(restore_name, cluster_name, "ready", wait_consistency=False, timeout=timeout)
+    assert "percona.com/resync-pbm" in _psmdb_annotations(cluster_name), (
+        f"psmdb/{cluster_name} is not annotated with percona.com/resync-pbm after the physical "
+        f"restore {restore_name}"
+    )
+
+    logger.info(f"Waiting for {cluster_name} to be rebuilt and resynced after {restore_name}")
+    deadline = time.monotonic() + timeout
+    error_since: float | None = None
+    state = ""
+    while time.monotonic() < deadline:
+        state = kubectl_bin(
+            "get", "psmdb", cluster_name, "-o", "jsonpath={.status.state}", check=False
+        ).strip()
+        resyncing = {"percona.com/resync-pbm", "percona.com/resync-in-progress"} & set(
+            _psmdb_annotations(cluster_name)
+        )
+        if state == "ready" and not resyncing:
+            logger.info(f"{cluster_name} is ready and PBM is resynced")
+            wait_for_pbm_operations(cluster_name)
+            return
+        if state == "error":
+            error_since = error_since or time.monotonic()
+            if time.monotonic() - error_since >= error_grace:
+                message = kubectl_bin(
+                    "get", "psmdb", cluster_name, "-o", "jsonpath={.status.message}", check=False
+                ).strip()
+                raise AssertionError(
+                    f"{cluster_name} has been in error state for {error_grace}s after the "
+                    f"physical restore {restore_name}: {message}"
+                )
+        else:
+            error_since = None
+        time.sleep(10)
+
+    raise TimeoutError(
+        f"Timeout after {timeout}s waiting for {cluster_name} to be ready after the physical "
+        f"restore {restore_name}. Last state: {state or 'unknown'}, "
+        f"annotations: {_psmdb_annotations(cluster_name)}"
+    )
