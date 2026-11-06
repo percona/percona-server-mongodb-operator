@@ -68,12 +68,26 @@ set_image_ref() {
 	local tag="$4"
 	local digest_var
 	local digest
+	local dev_image
 
 	digest_var="REDHAT_IMAGE_DIGEST_$(digest_key "${key}")"
 	digest="${!digest_var:-}"
 
 	if [[ -z "${digest}" ]]; then
 		digest="$(catalog_digest "${repository}" "${tag}")" || digest=""
+	fi
+
+	# A development bundle of an unreleased version has no certified images yet:
+	# use the development image of e2e-tests/release_versions, as community does.
+	if [[ -z ${digest} && ${BUNDLE_DEV_IMAGES:-0} == "1" ]]; then
+		dev_image="${!key:-}"
+		[[ -n ${dev_image} ]] || abort "${key} is required in ${release_versions_file}"
+		log "No Red Hat digest for ${repository}:${tag}; using the development image ${dev_image}"
+		case "${dev_image}" in
+			*.*/* | *:*/* | localhost/*) echo -n "${dev_image}" ;;
+			*) echo -n "docker.io/${dev_image}" ;;
+		esac
+		return
 	fi
 
 	if [[ -z "${digest}" ]]; then
@@ -136,7 +150,9 @@ add_related_image() {
 
 	validate_certified_tag "${key}" "${tag}" "${source_tag}"
 
-	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")"
+	# The substitution runs in a subshell, where abort cannot stop the generation;
+	# propagate its failure (bash 3.2 has no inherit_errexit).
+	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")" || return 1
 
 	log "Related image ${name}: ${image}"
 
@@ -183,6 +199,8 @@ build_redhat_related_images() {
 	local mongod83_tag
 	local logcollector_tag
 
+	# Each call returns 1 when a digest cannot be resolved; stop at the first one
+	# (bash 3.2 has no inherit_errexit, so errexit does not reach this subshell).
 	log "Building Red Hat related images from ${release_versions_file}"
 
 	[[ -f "${release_versions_file}" ]] \
@@ -208,14 +226,14 @@ build_redhat_related_images() {
 	mongod83_tag="$(image_tag "${IMAGE_MONGOD83}")"
 	logcollector_tag="$(image_tag "${IMAGE_LOGCOLLECTOR}")"
 
-	add_related_image "IMAGE_MONGOD83" "mongod8.3" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod83_tag}" "${mongod83_tag}"
-	add_related_image "IMAGE_MONGOD80" "mongod8.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod80_tag}" "${mongod80_tag}"
-	add_related_image "IMAGE_MONGOD70" "mongod7.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod70_tag}" "${mongod70_tag}"
-	add_related_image "IMAGE_BACKUP" "backup" "${redhat_containers_repository}" "${redhat_release}-backup"
-	add_related_image "IMAGE_PMM_CLIENT" "pmm3" "${redhat_containers_repository}" "${redhat_release}-pmm3"
-	add_related_image "IMAGE_CLUSTERSYNC" "clustersync" "${redhat_containers_repository}" "${redhat_release}-clustersync"
-	add_related_image "IMAGE_LOGCOLLECTOR" "logcollector" "${redhat_containers_repository}" "${redhat_release}-logcollector-${logcollector_tag}" "${logcollector_tag}"
-	add_related_image "IMAGE_OPERATOR" "operator" "${redhat_operator_repository}" "${redhat_operator_tag}"
+	add_related_image "IMAGE_MONGOD83" "mongod8.3" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod83_tag}" "${mongod83_tag}" || return 1
+	add_related_image "IMAGE_MONGOD80" "mongod8.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod80_tag}" "${mongod80_tag}" || return 1
+	add_related_image "IMAGE_MONGOD70" "mongod7.0" "${redhat_containers_repository}" "${redhat_release}-psmdb-${mongod70_tag}" "${mongod70_tag}" || return 1
+	add_related_image "IMAGE_BACKUP" "backup" "${redhat_containers_repository}" "${redhat_release}-backup" || return 1
+	add_related_image "IMAGE_PMM_CLIENT" "pmm3" "${redhat_containers_repository}" "${redhat_release}-pmm3" || return 1
+	add_related_image "IMAGE_CLUSTERSYNC" "clustersync" "${redhat_containers_repository}" "${redhat_release}-clustersync" || return 1
+	add_related_image "IMAGE_LOGCOLLECTOR" "logcollector" "${redhat_containers_repository}" "${redhat_release}-logcollector-${logcollector_tag}" "${logcollector_tag}" || return 1
+	add_related_image "IMAGE_OPERATOR" "operator" "${redhat_operator_repository}" "${redhat_operator_tag}" || return 1
 
 	report_missing_digests
 

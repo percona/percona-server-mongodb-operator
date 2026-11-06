@@ -70,6 +70,7 @@ Useful optional variables:
 | `CATALOG_PLATFORM` | Platform used when building previous OperatorHub bundle images and catalog images. | `linux/amd64` |
 | `CATALOG_BUILD_PUSH` | Build and push catalog images during deploy targets when enabled. | `1` |
 | `BUNDLE_SKIP_DIGEST_FAILURE` | Continue certified bundle generation when a non-required digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
+| `BUNDLE_DEV_IMAGES` | Set by the development targets (`bundle/<type>`, `deploy/<type>`): a certified image whose Red Hat digest cannot be resolved is replaced by the development image from `../../e2e-tests/release_versions`, so the example CR of an unreleased version is deployable. Production targets leave it unset. | `1` |
 
 OpenShift versions are resolved from `../../e2e-tests/release_versions` and used
 to render `com.redhat.openshift.versions`.
@@ -459,6 +460,12 @@ Bundle generation fails when:
 - a required image is missing;
 - a certified image tag does not match the expected pattern;
 - the required `clustersync` tag is not found in the Red Hat repository.
+
+Development targets set `BUNDLE_DEV_IMAGES=1`: an image whose digest cannot be
+resolved, which is every image of an unreleased version, is replaced by the
+development image from `../../e2e-tests/release_versions`, so the dev catalog's
+example CR deploys and the OLM tests can run against it. Production targets
+fail instead.
 
 When `BUNDLE_SKIP_DIGEST_FAILURE=1`, missing non-`clustersync` digests are rendered as
 `<DIGEST>` and reported in the build output. The `clustersync` tag is always
