@@ -508,6 +508,90 @@ func TestEffectiveBounds(t *testing.T) {
 	}
 }
 
+func TestVPABoundsValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		bounds  vpaBounds
+		wantErr string
+	}{
+		{
+			name:   "empty bounds are valid",
+			bounds: vpaBounds{},
+		},
+		{
+			name: "min below max for every resource is valid",
+			bounds: vpaBounds{
+				minAllowed: rl("100m", "256Mi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "min equal to max is valid, pinning the resource to one value",
+			bounds: vpaBounds{
+				minAllowed: rl("2", "4Gi"),
+				maxAllowed: rl("2", "4Gi"),
+			},
+		},
+		{
+			name: "equal values written in different units are still equal",
+			bounds: vpaBounds{
+				minAllowed: rl("1000m", "1Gi"),
+				maxAllowed: rl("1", "1024Mi"),
+			},
+		},
+		{
+			name: "cpu min above max is rejected",
+			bounds: vpaBounds{
+				minAllowed: rl("8", "256Mi"),
+				maxAllowed: rl("4", "16Gi"),
+			},
+			wantErr: "minAllowed for resource cpu is greater than maxAllowed",
+		},
+		{
+			name: "memory min above max is rejected",
+			bounds: vpaBounds{
+				minAllowed: rl("100m", "16Gi"),
+				maxAllowed: rl("8", "8Gi"),
+			},
+			wantErr: "minAllowed for resource memory is greater than maxAllowed",
+		},
+		{
+			name: "a min with no matching max is not compared",
+			bounds: vpaBounds{
+				minAllowed: rl("8", "16Gi"),
+				maxAllowed: nil,
+			},
+		},
+		{
+			name: "a max with no matching min is not compared",
+			bounds: vpaBounds{
+				minAllowed: nil,
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "only the resources present on both sides are compared",
+			bounds: vpaBounds{
+				// cpu would be inverted, but no cpu max is set to compare it against.
+				minAllowed: rl("8", "256Mi"),
+				maxAllowed: rl("", "16Gi"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.bounds.validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
 // vpaTestClient builds a real client whose RESTMapper either knows the
 // VerticalPodAutoscaler kind or does not, modelling a cluster with or without the
 // VPA CRD installed. The rest.Config points nowhere: these tests only exercise the

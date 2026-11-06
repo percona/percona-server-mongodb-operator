@@ -158,7 +158,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
 	if rec == nil {
 		return nil
 	}
-	r.commitVPAResources(ctx, cr, statusKey, declared, rec, effectiveBounds(cr.Spec.VPA, vpa))
+	bounds := effectiveBounds(cr.Spec.VPA, vpa)
+	if err := bounds.validate(); err != nil {
+		return err
+	}
+
+	r.commitVPAResources(ctx, cr, statusKey, declared, rec, bounds)
 	return nil
 }
 
@@ -293,6 +298,18 @@ func stabilizationMessage(
 type vpaBounds struct {
 	minAllowed corev1.ResourceList
 	maxAllowed corev1.ResourceList
+}
+
+func (bounds vpaBounds) validate() error {
+	// ensure that minAllowed is not greater than maxAllowed for any resource.
+	for name, min := range bounds.minAllowed {
+		if max, ok := bounds.maxAllowed[name]; ok {
+			if min.Cmp(max) > 0 {
+				return fmt.Errorf("minAllowed for resource %s is greater than maxAllowed", name)
+			}
+		}
+	}
+	return nil
 }
 
 func mergeResourceBounds(global, component corev1.ResourceList) corev1.ResourceList {
