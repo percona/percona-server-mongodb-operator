@@ -57,3 +57,35 @@ These are the checks CI runs on every PR. Run the ones that match your change.
 - Scripts must run on Linux CI and on macOS: GNU make 3.81, bash 3.2 and BSD
   `sed`/`awk` are what a Mac has by default. Test there or avoid GNU-only
   features.
+
+## Skills and guidelines
+
+Skills in `.agents/skills/` follow the [Agent Skills](https://agentskills.io)
+standard; Claude Code finds them through the symlinks in `.claude/skills/`.
+Guidelines in `docs/guidelines/` hold the rules each review skill applies.
+Content for agents lives only in these tool-neutral files and in `AGENTS.md`;
+tool-specific directories only point at them. The rules for maintaining them
+are in [`docs/guidelines/agent-files.md`](docs/guidelines/agent-files.md).
+The review set in `.agents/evals/review-set/` checks the review skills against
+diffs with known defects; rerun it when a guideline or a review skill changes.
+
+| Skill | Use it to |
+| ----- | --------- |
+| `plan` | turn a ticket into acceptance criteria and a plan, or a proposal |
+| `implement` | build the plan, tests first, one criterion at a time |
+| `verify` | run the checks, tests and reviews, and report what was verified |
+| `review-architecture` | review a diff against `docs/guidelines/architecture.md` |
+| `review-go-style` | review a diff against `docs/guidelines/go-style.md` |
+| `review-qa` | review tests against `docs/guidelines/qa.md` |
+
+## Commands
+
+- Run without asking: read-only commands (`git status`, `git diff`,
+  `kubectl get`, `kubectl describe`, `kubectl logs`), builds, unit tests,
+  generators and linters from the table above.
+- Confirm with the user first: anything that changes a cluster
+  (`kubectl apply`, `kubectl delete`, `make e2e-test`, `make deploy`), pushing
+  container images, and `git push`. Every push restarts the Jenkins e2e run
+  for the PR, so push in batches.
+- Never: delete resources on a cluster you did not create, force-push a
+  shared branch, or write credentials or kubeconfig files into the repo.

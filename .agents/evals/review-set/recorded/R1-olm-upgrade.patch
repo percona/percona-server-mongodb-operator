@@ -1,0 +1,1349 @@
+diff --git a/.github/workflows/e2e-py-check.yml b/.github/workflows/e2e-py-check.yml
+index 70470aba1..5306a38d0 100644
+--- a/.github/workflows/e2e-py-check.yml
++++ b/.github/workflows/e2e-py-check.yml
+@@ -4,6 +4,7 @@ on:
+   pull_request:
+     paths:
+       - 'e2e-tests/**/*.py'
++      - 'installers/olm/e2e-tests/**/*.py'
+       - 'pyproject.toml'
+       - 'uv.lock'
+ 
+@@ -30,7 +31,9 @@ jobs:
+         run: uv sync --locked
+ 
+       - name: Run ruff check
+-        run: uv run ruff check e2e-tests/
++        run: uv run ruff check e2e-tests/ installers/olm/e2e-tests/
+ 
+       - name: Run mypy
+-        run: uv run mypy e2e-tests/
+\ No newline at end of file
++        run: |
++          uv run mypy e2e-tests/
++          MYPYPATH=e2e-tests uv run mypy installers/olm/e2e-tests/
+\ No newline at end of file
+diff --git a/.gitignore b/.gitignore
+index 9b273305e..838a701e3 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -201,3 +201,4 @@ config/rbac/namespace/service_account.yaml
+ # Test Reports
+ e2e-tests/reports/
+ e2e-tests/**/__pycache__/
++installers/olm/e2e-tests/**/__pycache__/
+diff --git a/Makefile b/Makefile
+index a5e84fada..a3e37daae 100644
+--- a/Makefile
++++ b/Makefile
+@@ -97,13 +97,16 @@ py-deps: uv ## Install e2e-tests Python dependencies
+ py-update-deps: uv ## Update e2e-tests Python dependencies
+ 	$(UV) lock --upgrade
+ 
++PY_DIRS = e2e-tests/ installers/olm/e2e-tests/
++
+ py-fmt: uv ## Format and organize imports in e2e-tests
+-	$(UV) run ruff check --select I --fix e2e-tests/
+-	$(UV) run ruff format e2e-tests/
++	$(UV) run ruff check --select I --fix $(PY_DIRS)
++	$(UV) run ruff format $(PY_DIRS)
+ 
+ py-check: uv ## Run ruff and mypy checks on e2e-tests
+-	$(UV) run ruff check e2e-tests/
++	$(UV) run ruff check $(PY_DIRS)
+ 	$(UV) run mypy e2e-tests/
++	MYPYPATH=e2e-tests $(UV) run mypy installers/olm/e2e-tests/
+ 
+ # go-get-tool will 'go get' any package $2 and install it to $1.
+ PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+diff --git a/e2e-tests/conftest.py b/e2e-tests/conftest.py
+index 019186022..2bc11f045 100644
+--- a/e2e-tests/conftest.py
++++ b/e2e-tests/conftest.py
+@@ -272,8 +272,10 @@ def test_paths(request: pytest.FixtureRequest) -> Paths:
+     """Fixture to provide paths relative to the test file."""
+     test_file = request.path
+     test_dir = test_file.parent
+-    conf_dir = test_dir.parent / "conf"
+-    src_dir = test_dir.parent.parent
++    # Relative to this file, so tests outside e2e-tests/ (installers/olm/e2e-tests) work too
++    e2e_dir = Path(__file__).resolve().parent
++    conf_dir = e2e_dir / "conf"
++    src_dir = e2e_dir.parent
+ 
+     return {
+         "test_file": str(test_file),
+diff --git a/installers/olm/Makefile b/installers/olm/Makefile
+index 129317497..13cd3a1b3 100644
+--- a/installers/olm/Makefile
++++ b/installers/olm/Makefile
+@@ -13,8 +13,12 @@ NAME ?= percona-server-mongodb-operator
+ BUNDLE_TYPES := community certified
+ 
+ SED := $(shell which gsed || which sed)
+-VERSION ?= $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
+-CSV_VERSION ?= $(shell printf '%s\n' '$(VERSION)' | $(SED) -nE 's/.*([0-9]+)[.-]([0-9]+)[.-]([0-9]+).*/\1.\2.\3/p')
++parse_semver = $(shell printf '%s\n' '$(1)' | $(SED) -nE 's/.*([0-9]+)[.-]([0-9]+)[.-]([0-9]+).*/\1.\2.\3/p')
++GIT_BRANCH_NAME := $(shell git rev-parse --abbrev-ref HEAD | $(SED) -e 's^/^-^g; s^[.]^-^g;' | tr '[:upper:]' '[:lower:]')
++RELEASE_BRANCH_VERSION := $(shell printf '%s\n' '$(GIT_BRANCH_NAME)' | $(SED) -nE 's/^(release-)?v?([0-9]+)-([0-9]+)-([0-9]+)$$/\2.\3.\4/p')
++# The release branch version (release-1.25.0), otherwise the operator's own version.
++VERSION ?= $(if $(RELEASE_BRANCH_VERSION),$(GIT_BRANCH_NAME),$(shell cat ../../pkg/version/version.txt))
++CSV_VERSION ?= $(call parse_semver,$(VERSION))
+ RELEASE_VERSIONS ?= ../../e2e-tests/release_versions
+ 
+ CONFIRM_PUSH ?= 1
+@@ -28,6 +32,7 @@ BUNDLE_DEV_REPO ?= $(REGISTRY)/$(DEV_REPOSITORY)/$(NAME)
+ BUNDLE_PROD_REPO ?= $(REGISTRY)/$(PROD_REPOSITORY)/$(NAME)
+ 
+ CATALOG_BUNDLE_LIMIT ?= 2
++CATALOG_PREVIOUS_MINORS ?=
+ CATALOG_PLATFORM ?= linux/amd64
+ CATALOG_NAMESPACE ?= openshift-marketplace
+ CATALOG_BUILD_PUSH ?= 1
+@@ -163,6 +168,7 @@ $(BUNDLE_TYPES:%=catalog-build-push/%): catalog-build-push/%: tools check-versio
+ 	@if [[ "$(CATALOG_BUILD_PUSH)" == "true" || "$(CATALOG_BUILD_PUSH)" == "1" ]]; then \
+ 		BUNDLE_IMAGE_VERSION='$(BUNDLE_IMAGE_VERSION)' \
+ 		CATALOG_BUNDLE_LIMIT='$(CATALOG_BUNDLE_LIMIT)' \
++		CATALOG_PREVIOUS_MINORS='$(CATALOG_PREVIOUS_MINORS)' \
+ 		CATALOG_PLATFORM='$(CATALOG_PLATFORM)' \
+ 		CONTAINER='$(CONTAINER)' \
+ 		CONFIRM_PUSH='$(CONFIRM_PUSH)' \
+@@ -221,6 +227,7 @@ $(BUNDLE_TYPES:%=deploy-prod/%): deploy-prod/%: tools check-version check-csv-ve
+ 	@if [[ "$(CATALOG_BUILD_PUSH)" == "true" || "$(CATALOG_BUILD_PUSH)" == "1" ]]; then \
+ 		BUNDLE_IMAGE_VERSION='$(BUNDLE_IMAGE_VERSION)' \
+ 		CATALOG_BUNDLE_LIMIT='$(CATALOG_BUNDLE_LIMIT)' \
++		CATALOG_PREVIOUS_MINORS='$(CATALOG_PREVIOUS_MINORS)' \
+ 		CATALOG_PLATFORM='$(CATALOG_PLATFORM)' \
+ 		CONTAINER='$(CONTAINER)' \
+ 		CONFIRM_PUSH='$(CONFIRM_PUSH)' \
+@@ -309,6 +316,23 @@ validate-%-directory:
+ validate-%-image:
+ 	./validate-image.sh '$(CONTAINER)' 'bundles/$*'
+ 
++# ==============================================================================
++# Test Rules
++# ==============================================================================
++
++## Run the OLM upgrade e2e test against the deployed development catalogs
++.PHONY: tests $(BUNDLE_TYPES:%=tests/%)
++tests: ## Run OLM upgrade e2e tests against deployed catalogs (run deploy/<type> first)
++tests: $(BUNDLE_TYPES:%=tests/%)
++
++tests/community:
++tests/certified:
++
++$(BUNDLE_TYPES:%=tests/%): tests/%: tools
++	CATALOG_NAMESPACE='$(CATALOG_NAMESPACE)' \
++	NAME='$(NAME)' \
++	bash ./run-tests.sh '$*'
++
+ # ==============================================================================
+ # Utility Rules
+ # ==============================================================================
+diff --git a/installers/olm/README.md b/installers/olm/README.md
+index 1aa896b4d..858dd59b2 100644
+--- a/installers/olm/README.md
++++ b/installers/olm/README.md
+@@ -44,7 +44,9 @@ Downloaded tools:
+ 
+ ## Variables
+ 
+-Most workflows only require `VERSION`.
++Most workflows only require `VERSION`. It defaults to the branch name on a
++release branch (for example `release-1.25.0`), and otherwise to the operator
++version in `../../pkg/version/version.txt`.
+ 
+ ```bash
+ export VERSION=1.23.0
+@@ -54,7 +56,7 @@ Useful optional variables:
+ 
+ | Variable | Description | Example |
+ | --- | --- | --- |
+-| `CSV_VERSION` | CSV version. Defaults to the first `x.y.z` parsed from `VERSION`. | `1.23.0` |
++| `CSV_VERSION` | CSV version. Defaults to the `x.y.z` parsed from `VERSION`. | `1.23.0` |
+ | `REGISTRY` | Registry used for operator, bundle, and catalog images. | `docker.io` |
+ | `PROD_REPOSITORY` | Repository namespace used for production bundle images. | `percona` |
+ | `DEV_REPOSITORY` | Repository namespace used for development bundle images and all catalog images. | `perconalab` |
+@@ -63,7 +65,8 @@ Useful optional variables:
+ | `BUNDLE_PLATFORM` | Platform used when building current bundle images locally. | `linux/amd64` |
+ | `BUNDLE_PACKAGE_CHANNEL` | Package channel used for the generated current bundle. | `stable` |
+ | `CONFIRM_PUSH` | Ask for confirmation before pushing bundle and catalog images. Set to `0` for non-interactive runs. | `1` |
+-| `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. | `2` |
++| `CATALOG_BUNDLE_LIMIT` | Number of previous OperatorHub bundle versions to include in rendered catalogs, in addition to the current release bundle. Ignored when `CATALOG_PREVIOUS_MINORS` is set. | `2` |
++| `CATALOG_PREVIOUS_MINORS` | Include every previous OperatorHub version of the N newest minor lines older than the current one, all patches included, plus older patches of the current minor line, instead of a fixed number of versions. Versions newer than the current one are ignored. Empty by default. | `2` |
+ | `CATALOG_PLATFORM` | Platform used when building previous OperatorHub bundle images and catalog images. | `linux/amd64` |
+ | `CATALOG_BUILD_PUSH` | Build and push catalog images during deploy targets when enabled. | `1` |
+ | `BUNDLE_SKIP_DIGEST_FAILURE` | Continue certified bundle generation when a non-required digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
+@@ -162,6 +165,12 @@ docker.io/perconalab/percona-server-mongodb-operator:1.22.0-community-bundle-dev
+ docker.io/perconalab/percona-server-mongodb-operator:1.21.2-community-bundle-dev-catalog
+ ```
+ 
++To include whole minor lines instead, set `CATALOG_PREVIOUS_MINORS`. With
++`VERSION=1.24.0`, `CATALOG_PREVIOUS_MINORS=2` and previous GitHub versions
++`1.21.2`, `1.22.0`, `1.23.0` and `1.23.1`, the catalog gets `1.22.0`, `1.23.0`
++and `1.23.1`. The build stops when OperatorHub has fewer minor lines than
++requested.
++
+ The certified catalog follows the same pattern:
+ 
+ ```text
+@@ -310,6 +319,67 @@ Validation uses:
+ 
+ ---
+ 
++# Upgrade tests
++
++`make tests` runs the `e2e-tests/olm-upgrade` pytest test (in this directory)
++against the deployed development catalogs. Deploy them first with
++`make deploy/<type>`, and point `kubectl` at the OpenShift cluster. Build the catalog with
++`CATALOG_PREVIOUS_MINORS=2` to test upgrades from the two previous minor
++versions and all their patch releases.
++
++```bash
++make deploy/community CATALOG_PREVIOUS_MINORS=2
++make tests
++make tests/community
++make tests/certified
++```
++
++The test runs once for every bundle in the catalog except the newest one. Each
++run installs that bundle with a Manual-approval Subscription, deploys a replica
++set from the bundle's example CR and writes data. It then switches the
++Subscription to the default channel. It deletes any pending InstallPlan left
++from the old channel, such as one for a newer patch, and approves only the
++InstallPlan straight to the newest version, so each starting version is
++upgraded directly. After the upgrade it checks that:
++
++- only the target CSV is left and the operator runs its image;
++- the operator logs and the namespace's Warning events have no new errors;
++- the cluster stayed `ready`, and no DB pod was recreated or restarted;
++- the data written before the upgrade is readable, and new writes succeed.
++
++For a dev catalog, the test checks that the head of the default channel is
++`OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
++the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
++check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
++
++`make tests` fails when the catalog holds fewer than two previous minor
++versions, not counting the target's own minor line. Set `OLM_MIN_MINORS` to
++change that number.
++
++Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
++starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`
++in the repository root.
++
++OLM tests live in `installers/olm/e2e-tests/` and are not part of the regular
++e2e suite: they need an OpenShift cluster with the catalogs deployed, and
++changes here do not trigger the PR e2e run (`installers/olm/**` is in
++`.e2eignore`). They reuse the shared pytest harness from the repository's
++`e2e-tests/` (`conftest.py` and `lib/`), loaded with `-p conftest`;
++`olm.py` holds the OLM helpers. To run one test by hand from the repository
++root:
++
++```bash
++PYTHONPATH=e2e-tests:installers/olm/e2e-tests \
++  uv run pytest -p conftest installers/olm/e2e-tests/olm-upgrade/
++```
++
++Before and after each run, the test deletes the operator CRDs, together with
++every `psmdb` resource in the cluster. OLM leaves CRDs behind, and a newer CRD
++blocks installing an older bundle. Use a dedicated cluster. Set `SKIP_DELETE=1`
++to keep the last run's resources for debugging.
++
++---
++
+ # Certified Metadata
+ 
+ Certified bundles resolve image metadata and related image digests through
+diff --git a/installers/olm/build-catalog.sh b/installers/olm/build-catalog.sh
+index 986ad0462..4b9aafe1b 100755
+--- a/installers/olm/build-catalog.sh
++++ b/installers/olm/build-catalog.sh
+@@ -11,6 +11,7 @@ CONTAINER="${CONTAINER:-docker}"
+ CATALOG_PLATFORM="${CATALOG_PLATFORM:-linux/amd64,linux/arm64}"
+ CATALOG_RENDER_PLATFORM="${CATALOG_RENDER_PLATFORM:-${CATALOG_PLATFORM%%,*}}"
+ CATALOG_BUNDLE_LIMIT="${CATALOG_BUNDLE_LIMIT:-2}"
++CATALOG_PREVIOUS_MINORS="${CATALOG_PREVIOUS_MINORS:-}"
+ CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
+ CONFIRM_PUSH="${CONFIRM_PUSH:-1}"
+ NAME="${NAME:-percona-server-mongodb-operator}"
+@@ -185,7 +186,45 @@ find_previous_versions() {
+ 			$0 != current && !seen[$0]++ { print }
+ 		' |
+ 		sort -t. -k1,1n -k2,2n -k3,3n |
++		select_previous_versions
++}
++
++# Reads versions sorted ascending. With CATALOG_PREVIOUS_MINORS=N keeps every
++# version of the N newest minor lines older than the current one (all their
++# patches), plus older patches of the current minor line; otherwise the newest
++# CATALOG_BUNDLE_LIMIT versions.
++select_previous_versions() {
++	if [[ -z "$CATALOG_PREVIOUS_MINORS" ]]; then
+ 		tail -n "$CATALOG_BUNDLE_LIMIT"
++		return
++	fi
++
++	# Versions newer than the one being built are not upgrade sources.
++	awk -F. -v current="$BUNDLE_IMAGE_VERSION" -v minors="$CATALOG_PREVIOUS_MINORS" '
++		BEGIN { split(current, c, "."); current_line = c[1] "." c[2] }
++		$1 > c[1] + 0 || ($1 == c[1] + 0 && ($2 > c[2] + 0 || ($2 == c[2] + 0 && $3 > c[3] + 0))) { next }
++		{ versions[++n] = $0; lines[n] = $1 "." $2 }
++		END {
++			for (i = n; i >= 1; i--) {
++				if (lines[i] == current_line) {
++					keep[i] = 1
++					continue
++				}
++				if (lines[i] != last) {
++					count++
++					last = lines[i]
++				}
++				if (count > minors) break
++				keep[i] = 1
++			}
++			for (i = 1; i <= n; i++) if (keep[i]) print versions[i]
++		}
++	'
++}
++
++# Minor lines among the given versions, not counting the current version's line.
++count_previous_minor_lines() {
++	printf '%s\n' "$@" | cut -d. -f1,2 | grep -vxF "${BUNDLE_IMAGE_VERSION%.*}" | sort -u | grep -c .
+ }
+ 
+ confirm_build() {
+@@ -316,6 +355,8 @@ run_build() {
+ 	[[ -n "$BUNDLE_IMAGE_VERSION" ]] || die "BUNDLE_IMAGE_VERSION is required"
+ 	[[ "$CATALOG_BUNDLE_LIMIT" =~ ^[0-9]+$ ]] ||
+ 		die "CATALOG_BUNDLE_LIMIT must be a non-negative integer"
++	[[ -z "$CATALOG_PREVIOUS_MINORS" || "$CATALOG_PREVIOUS_MINORS" =~ ^[1-9][0-9]*$ ]] ||
++		die "CATALOG_PREVIOUS_MINORS must be a positive integer"
+ 
+ 	for command in curl tar jq yq opm "$CONTAINER"; do
+ 		require "$command"
+@@ -337,8 +378,17 @@ run_build() {
+ 		[[ -n "$version" ]] && OLD_VERSIONS+=("$version")
+ 	done < <(find_previous_versions)
+ 
+-	[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||
+-		die "expected ${CATALOG_BUNDLE_LIMIT} previous versions, found ${#OLD_VERSIONS[@]}"
++	# Checked first: an empty array is "unbound" under set -u in bash 3.2 (macOS).
++	[[ "${#OLD_VERSIONS[@]}" -gt 0 || ( -z "$CATALOG_PREVIOUS_MINORS" && "$CATALOG_BUNDLE_LIMIT" -eq 0 ) ]] ||
++		die "no previous versions found in ${GITHUB_REPO}/${OPERATOR_PATH}"
++
++	if [[ -n "$CATALOG_PREVIOUS_MINORS" ]]; then
++		[[ "$(count_previous_minor_lines "${OLD_VERSIONS[@]}")" -eq "$CATALOG_PREVIOUS_MINORS" ]] ||
++			die "expected ${CATALOG_PREVIOUS_MINORS} previous minor lines, found: ${OLD_VERSIONS[*]}"
++	else
++		[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||
++			die "expected ${CATALOG_BUNDLE_LIMIT} previous versions, found ${#OLD_VERSIONS[@]}"
++	fi
+ 
+ 	confirm_build
+ 
+diff --git a/installers/olm/e2e-tests/olm-upgrade/compare/find-1.json b/installers/olm/e2e-tests/olm-upgrade/compare/find-1.json
+new file mode 100644
+index 000000000..2d84f1ffe
+--- /dev/null
++++ b/installers/olm/e2e-tests/olm-upgrade/compare/find-1.json
+@@ -0,0 +1 @@
++[ { "x": 100500 } ]
+\ No newline at end of file
+diff --git a/installers/olm/e2e-tests/olm-upgrade/compare/find-2.json b/installers/olm/e2e-tests/olm-upgrade/compare/find-2.json
+new file mode 100644
+index 000000000..38993741e
+--- /dev/null
++++ b/installers/olm/e2e-tests/olm-upgrade/compare/find-2.json
+@@ -0,0 +1 @@
++[ { "x": 100500 }, { "x" : 100501 } ]
+\ No newline at end of file
+diff --git a/installers/olm/e2e-tests/olm-upgrade/test_olm_upgrade.py b/installers/olm/e2e-tests/olm-upgrade/test_olm_upgrade.py
+new file mode 100755
+index 000000000..ebd5dccbc
+--- /dev/null
++++ b/installers/olm/e2e-tests/olm-upgrade/test_olm_upgrade.py
+@@ -0,0 +1,546 @@
++#!/usr/bin/env python3
++
++import logging
++import os
++import re
++import time
++import uuid
++from collections.abc import Callable, Generator
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import Any
++
++import pytest
++import yaml
++from lib.kubectl import kubectl_bin, wait_for_running
++from lib.mongo import MongoManager
++from lib.operator import check_crd_for_deletion, delete_crd_rbac
++from lib.secrets import get_user_data
++from lib.utils import Paths, env_bool, retry
++from olm import (
++    SUBSCRIPTION,
++    approve_until_installed,
++    channel_of_csv,
++    create_operator_group,
++    create_subscription,
++    csv_example,
++    csv_names,
++    csv_operator_image,
++    delete_olm_install,
++    delete_pending_plans,
++    get_csv,
++    get_json,
++    get_package_manifest,
++    installplan_phase,
++    olm_available,
++    subscription_status,
++    wait_catalog_ready,
++    wait_until,
++)
++
++logger = logging.getLogger(__name__)
++
++# Operator log lines matching these are expected while controllers settle after a restart.
++# Calibrate on real runs; keep each entry specific.
++ALLOWED_OPERATOR_ERRORS = [
++    re.compile(r"the object has been modified; please apply your changes to the latest version"),
++]
++OPERATOR_ERROR = re.compile(r"\tERROR\t|\"level\":\"error\"")
++
++# Warning events OLM emits while a CSV is being replaced.
++ALLOWED_CSV_WARNINGS = {"RequirementsNotMet", "InstallWaiting"}
++# InstallPlan "AppliedWithWarnings" is fine when every warning is an API deprecation notice:
++# the CRD still serves the old psmdb.percona.com/v1-x-0 versions.
++DEPRECATION_WARNING = re.compile(r"\S+ PerconaServerMongoDB is deprecated and will be removed in")
++
++# A brief "initializing" while the new operator takes over is tolerated; pods must not change.
++ALLOWED_STATES = {"ready", "initializing"}
++SOAK_SECONDS = 180
++# Only read by the version-service cron, which upgradeOptions.apply=disabled and
++# DISABLE_TELEMETRY leave idle: changing it bumps the CR generation without touching pods.
++RECONCILE_PROBE = '{"spec":{"upgradeOptions":{"schedule":"0 3 * * *"}}}'
++
++
++@dataclass(frozen=True)
++class OlmUpgradeConfig:
++    namespace: str
++    cluster: str
++    package: str
++    source: str
++    source_namespace: str
++    from_channel: str
++    from_csv: str
++    target_channel: str
++    target_csv: str
++
++
++@dataclass
++class UpgradeState:
++    """Cluster snapshot taken before the upgrade, plus what was observed after it started."""
++
++    pods: dict[str, tuple[str, int]] = field(default_factory=dict)
++    sts_revisions: dict[str, tuple[str, str]] = field(default_factory=dict)
++    events: dict[str, int] = field(default_factory=dict)
++    states: list[str] = field(default_factory=list)
++
++
++def _version(csv: str) -> tuple[int, ...]:
++    """1.22.0 from percona-server-mongodb-operator.v1.22.0 (also covers -certified names)."""
++    match = re.search(r"v?(\d+)\.(\d+)\.(\d+)$", csv)
++    assert match, f"Cannot parse a version from CSV name {csv}"
++    return tuple(int(part) for part in match.groups())
++
++
++def _default_from_csv(manifest: dict[str, Any], target_channel: str) -> str:
++    """Head of the newest channel older than the target one."""
++    heads = [
++        channel["currentCSV"]
++        for channel in manifest["status"]["channels"]
++        if channel["name"] != target_channel
++    ]
++    assert heads, f"Catalog has no channel to upgrade from besides {target_channel}"
++    return str(max(heads, key=_version))
++
++
++def _delete_crds(src_dir: str) -> None:
++    """OLM leaves CRDs behind when a CSV is deleted; a stale newer CRD blocks older installs."""
++    delete_crd_rbac(Path(src_dir))
++    check_crd_for_deletion(Path(src_dir) / "deploy" / "crd.yaml")
++
++
++@pytest.fixture(scope="class")
++def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmUpgradeConfig:
++    """Resolve the upgrade path from the catalog, then create the test namespace.
++
++    OLM_BUNDLE_TYPE selects the dev catalog (community|certified, see installers/olm).
++    OLM_FROM_CSV / OLM_TARGET_CHANNEL pin the path; by default it is the head of the
++    newest previous channel -> the catalog's default channel.
++    The target must be OLM_TARGET_VERSION, which for a dev catalog defaults to
++    OPERATOR_VERSION (crVersion of deploy/cr.yaml), so a stale catalog fails fast.
++    """
++    if not olm_available():
++        pytest.skip("OLM is not available on this cluster")
++
++    bundle_type = os.environ.get("OLM_BUNDLE_TYPE", "community")
++    package = os.environ.get("OLM_PACKAGE") or (
++        "percona-server-mongodb-operator" + ("-certified" if bundle_type == "certified" else "")
++    )
++    source = os.environ.get("OLM_CATALOG_SOURCE") or f"{bundle_type}-dev"
++    source_namespace = os.environ.get("OLM_CATALOG_NAMESPACE") or "openshift-marketplace"
++
++    wait_catalog_ready(source, source_namespace)
++    manifest = get_package_manifest(package, source, source_namespace)
++    target_channel = os.environ.get("OLM_TARGET_CHANNEL") or manifest["status"]["defaultChannel"]
++    target_csv = next(
++        channel["currentCSV"]
++        for channel in manifest["status"]["channels"]
++        if channel["name"] == target_channel
++    )
++    # Only dev catalogs (installers/olm, CATALOG_ENV=dev) are built from this checkout,
++    # and only their default channel must hold the version under test.
++    expected = os.environ.get("OLM_TARGET_VERSION") or (
++        os.environ.get("OPERATOR_VERSION", "")
++        if source.endswith("-dev") and not os.environ.get("OLM_TARGET_CHANNEL")
++        else ""
++    )
++    if expected:
++        assert _version(target_csv) == _version(expected), (
++            f"Catalog {source} upgrades to {target_csv}, but the version under test is "
++            f"{expected}. Rebuild the catalog (make deploy/<type>) or set OLM_TARGET_VERSION."
++        )
++    from_csv = os.environ.get("OLM_FROM_CSV") or _default_from_csv(manifest, target_channel)
++    from_channel = channel_of_csv(manifest, from_csv)
++    assert _version(from_csv) < _version(target_csv), (
++        f"Starting CSV {from_csv} is not older than target {target_csv}"
++    )
++    logger.info(
++        f"Upgrade path: {from_csv} ({from_channel}) -> {target_csv} ({target_channel}) "
++        f"from {source_namespace}/{source}"
++    )
++
++    _delete_crds(test_paths["src_dir"])
++    namespace = create_namespace(f"olm-upgrade-{uuid.uuid4().hex[:8]}")
++    # Lets the failure report collect resources from this namespace.
++    Path(os.environ["PYTEST_NAMESPACE_FILE"]).write_text(namespace)
++
++    return OlmUpgradeConfig(
++        namespace=namespace,
++        cluster="olm-upgrade",
++        package=package,
++        source=source,
++        source_namespace=source_namespace,
++        from_channel=from_channel,
++        from_csv=from_csv,
++        target_channel=target_channel,
++        target_csv=target_csv,
++    )
++
++
++@pytest.fixture(scope="class", autouse=True)
++def cleanup(config: OlmUpgradeConfig, test_paths: Paths) -> Generator[None]:
++    yield
++
++    Path(os.environ["PYTEST_NAMESPACE_FILE"]).unlink(missing_ok=True)
++    if env_bool("SKIP_DELETE"):
++        logger.info("SKIP_DELETE is set. Skipping test environment cleanup")
++        return
++
++    # Operator first, so OLM cannot reinstall anything; CRD deletion then strips
++    # the psmdb finalizers the operator is no longer there to handle.
++    delete_olm_install(config.namespace, config.package)
++    _delete_crds(test_paths["src_dir"])
++    kubectl_bin(
++        "delete", "namespace", config.namespace, "--ignore-not-found", "--wait=false", check=False
++    )
++
++
++@pytest.fixture(scope="class")
++def state() -> UpgradeState:
++    return UpgradeState()
++
++
++def _cluster_uri(
++    config: OlmUpgradeConfig, user: str, password: str, pod: int | None = None
++) -> str:
++    host = f"{config.cluster}-rs0" + (f"-{pod}.{config.cluster}-rs0" if pod is not None else "")
++    return f"{user}:{password}@{host}.{config.namespace}"
++
++
++def _db_pods(config: OlmUpgradeConfig) -> dict[str, tuple[str, int]]:
++    """pod name -> (uid, total container restarts) for every pod of the cluster."""
++    pods = get_json(
++        "pods", "-n", config.namespace, "-l", f"app.kubernetes.io/instance={config.cluster}"
++    )
++    return {
++        pod["metadata"]["name"]: (
++            pod["metadata"]["uid"],
++            sum(c.get("restartCount", 0) for c in pod["status"].get("containerStatuses", [])),
++        )
++        for pod in pods["items"]
++    }
++
++
++def _sts_revisions(config: OlmUpgradeConfig) -> dict[str, tuple[str, str]]:
++    """StatefulSet name -> (currentRevision, updateRevision); a template change moves them."""
++    sts = get_json(
++        "statefulset", "-n", config.namespace, "-l", f"app.kubernetes.io/instance={config.cluster}"
++    )
++    return {
++        s["metadata"]["name"]: (
++            s["status"].get("currentRevision"),
++            s["status"].get("updateRevision"),
++        )
++        for s in sts["items"]
++    }
++
++
++def _warning_events(namespace: str) -> dict[str, dict[str, Any]]:
++    events = get_json("events", "-n", namespace, "--field-selector=type=Warning")
++    return {ev["metadata"]["uid"]: ev for ev in events["items"]}
++
++
++def _event_count(event: dict[str, Any]) -> int:
++    return int(event.get("count") or event.get("series", {}).get("count") or 1)
++
++
++def _psmdb_state(config: OlmUpgradeConfig) -> str:
++    return kubectl_bin(
++        "get",
++        "psmdb",
++        config.cluster,
++        "-n",
++        config.namespace,
++        "-o",
++        "jsonpath={.status.state}",
++        check=False,
++    ).strip()
++
++
++def _operator_pod(config: OlmUpgradeConfig, csv: dict[str, Any]) -> dict[str, Any]:
++    """The single pod of the CSV's operator Deployment, found by its own selector."""
++    deployment = csv["spec"]["install"]["spec"]["deployments"][0]
++    labels = deployment["spec"]["selector"]["matchLabels"]
++    selector = ",".join(f"{key}={value}" for key, value in labels.items())
++    pods = wait_until(
++        f"a single {deployment['name']} pod",
++        lambda: get_json("pods", "-n", config.namespace, "-l", selector)["items"],
++        lambda items: len(items) == 1,
++        timeout=300,
++    )
++    return dict(pods[0])
++
++
++def _assert_operator_clean(config: OlmUpgradeConfig, state: UpgradeState) -> None:
++    """The target operator never restarted; its log and the namespace events show no errors."""
++    target = get_csv(config.namespace, config.target_csv)
++    deployment = target["spec"]["install"]["spec"]["deployments"][0]["name"]
++    pod = _operator_pod(config, target)
++    name = pod["metadata"]["name"]
++
++    restarts = sum(c.get("restartCount", 0) for c in pod["status"]["containerStatuses"])
++    if restarts:
++        previous = kubectl_bin("logs", name, "-n", config.namespace, "--previous", check=False)
++        pytest.fail(f"Operator restarted {restarts} times. Previous logs:\n{previous}")
++
++    errors = [
++        line
++        for line in kubectl_bin("logs", name, "-n", config.namespace).splitlines()
++        if OPERATOR_ERROR.search(line)
++        and not any(allowed.search(line) for allowed in ALLOWED_OPERATOR_ERRORS)
++    ]
++    assert not errors, "Operator logged errors after upgrade:\n" + "\n".join(errors)
++
++    def allowed(ev: dict[str, Any]) -> bool:
++        obj = ev["involvedObject"]
++        if obj["kind"] == "ClusterServiceVersion":
++            return ev.get("reason") in ALLOWED_CSV_WARNINGS
++        if obj["kind"] == "InstallPlan" and ev.get("reason") == "AppliedWithWarnings":
++            warnings = ev.get("message", "").split("):", 1)[-1].split(", psmdb.")
++            return all(DEPRECATION_WARNING.search(w) for w in warnings)
++        # Readiness probe noise of the operator pods being replaced.
++        return (
++            obj["kind"] == "Pod"
++            and obj["name"].startswith(f"{deployment}-")
++            and ev.get("reason") == "Unhealthy"
++        )
++
++    new_warnings = [
++        f"{ev['involvedObject']['kind']}/{ev['involvedObject']['name']}: "
++        f"{ev.get('reason')}: {ev.get('message')}"
++        for uid, ev in _warning_events(config.namespace).items()
++        if _event_count(ev) > state.events.get(uid, 0) and not allowed(ev)
++    ]
++    assert not new_warnings, "Warning events during upgrade:\n" + "\n".join(new_warnings)
++
++
++class TestOlmUpgrade:
++    """Install the previous release from the catalog, upgrade it through OLM, check the DB."""
++
++    @pytest.mark.dependency()
++    def test_install_previous_version(self, config: OlmUpgradeConfig) -> None:
++        """Install the starting CSV from its channel"""
++        create_operator_group(config.namespace)
++        create_subscription(
++            config.namespace,
++            config.package,
++            config.source,
++            config.source_namespace,
++            config.from_channel,
++            config.from_csv,
++        )
++        approve_until_installed(
++            config.namespace,
++            config.package,
++            config.from_csv,
++            allowed_csvs=lambda csvs: config.from_csv in csvs,
++        )
++
++        csv = get_csv(config.namespace, config.from_csv)
++        image = _operator_pod(config, csv)["spec"]["containers"][0]["image"]
++        assert image == csv_operator_image(csv), f"Operator runs {image}"
++
++    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_install_previous_version"])
++    def test_deploy_cluster(self, config: OlmUpgradeConfig) -> None:
++        """Deploy a replica set from the starting CSV's example CR"""
++        cr = csv_example(get_csv(config.namespace, config.from_csv), "PerconaServerMongoDB")
++        cr["metadata"] = {
++            "name": config.cluster,
++            "finalizers": cr["metadata"].get("finalizers", []),
++        }
++        spec = cr["spec"]
++        spec["upgradeOptions"] = {"apply": "disabled"}
++        spec.setdefault("secrets", {})["users"] = f"{config.cluster}-secrets"
++        for section in ("sharding", "backup", "pmm"):
++            spec.setdefault(section, {})["enabled"] = False
++        rs0 = spec["replsets"][0]
++        rs0["size"] = 3
++        rs0["affinity"] = {"antiAffinityTopologyKey": "none"}
++        for member in ("arbiter", "nonvoting", "hidden"):
++            if member in rs0:
++                rs0[member]["enabled"] = False
++        spec["replsets"] = [rs0]
++
++        kubectl_bin("apply", "-n", config.namespace, "-f", "-", input_data=yaml.dump(cr))
++        wait_for_running(f"{config.cluster}-rs0", 3)
++
++    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_deploy_cluster"])
++    def test_write_data(
++        self, config: OlmUpgradeConfig, test_paths: Paths, psmdb_client: MongoManager
++    ) -> None:
++        """Write data and read it from every member"""
++        secret = f"{config.cluster}-secrets"
++        user_admin = _cluster_uri(
++            config,
++            get_user_data(secret, "MONGODB_USER_ADMIN_USER"),
++            get_user_data(secret, "MONGODB_USER_ADMIN_PASSWORD"),
++        )
++        psmdb_client.run_mongosh(
++            'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})',
++            user_admin,
++        )
++        retry(
++            lambda: psmdb_client.run_mongosh(
++                "db.getSiblingDB('myApp').test.insertOne({ x: 100500 })",
++                _cluster_uri(config, "myApp", "myPass"),
++            ),
++            condition=lambda result: "acknowledged: true" in result,
++        )
++        for i in range(3):
++            psmdb_client.compare_mongo_cmd(
++                "find({}, { _id: 0 }).toArray()",
++                _cluster_uri(config, "myApp", "myPass", i),
++                test_file=f"{test_paths['test_dir']}/compare/find-1.json",
++            )
++
++    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_write_data"])
++    def test_upgrade_operator(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
++        """Switch the Subscription to the target channel and upgrade in one hop"""
++        state.pods = _db_pods(config)
++        state.sts_revisions = _sts_revisions(config)
++        state.events = {
++            uid: _event_count(ev) for uid, ev in _warning_events(config.namespace).items()
++        }
++        assert len(state.pods) >= 3, f"Expected the DB pods before upgrade, got {state.pods}"
++
++        kubectl_bin(
++            "patch",
++            SUBSCRIPTION,
++            config.package,
++            "-n",
++            config.namespace,
++            "--type=merge",
++            "-p",
++            f'{{"spec":{{"channel":"{config.target_channel}"}}}}',
++        )
++
++        def sample_state() -> None:
++            if current := _psmdb_state(config):
++                state.states.append(current)
++
++        # Only the plan straight to the target. A Manual Subscription may still point at a
++        # plan for a newer patch of the old channel, created before the channel switch;
++        # delete it so OLM resolves the target. Bundles skip every older version
++        # (olm.skipRange / spec.skips), so one hop is enough.
++        def to_target(csvs: list[str]) -> bool:
++            return csvs == [config.target_csv]
++
++        delete_pending_plans(config.namespace, keep=to_target)
++        plans = approve_until_installed(
++            config.namespace,
++            config.package,
++            config.target_csv,
++            allowed_csvs=to_target,
++            on_poll=sample_state,
++            delete_rejected=True,
++        )
++        assert len(plans) == 1, f"Expected one InstallPlan to {config.target_csv}, got {plans}"
++        phase = installplan_phase(config.namespace, plans[0])
++        assert phase == "Complete", f"InstallPlan {plans[0]} phase is {phase}"
++
++        wait_until(
++            f"only {config.target_csv} to be left",
++            lambda: csv_names(config.namespace),
++            lambda names: names == [config.target_csv],
++            timeout=300,
++        )
++        wait_until(
++            "Subscription to reach AtLatestKnown",
++            lambda: subscription_status(config.namespace, config.package).get("state"),
++            lambda sub_state: sub_state == "AtLatestKnown",
++            timeout=300,
++        )
++
++    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_upgrade_operator"])
++    def test_operator_ready(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
++        """The target operator runs without restarts and logs/events have no errors"""
++        target = get_csv(config.namespace, config.target_csv)
++        deployment = target["spec"]["install"]["spec"]["deployments"][0]["name"]
++        kubectl_bin(
++            "rollout",
++            "status",
++            f"deployment/{deployment}",
++            "-n",
++            config.namespace,
++            "--timeout=300s",
++        )
++        image = _operator_pod(config, target)["spec"]["containers"][0]["image"]
++        assert image == csv_operator_image(target), f"Operator runs {image} after upgrade"
++        _assert_operator_clean(config, state)
++
++    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_operator_ready"])
++    def test_cluster_not_restarted(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
++        """The new operator reconciles the cluster without recreating or restarting DB pods"""
++        # Prove the new operator acts on the CR: an idle state would also look unchanged.
++        generation = int(
++            kubectl_bin(
++                "patch",
++                "psmdb",
++                config.cluster,
++                "-n",
++                config.namespace,
++                "--type=merge",
++                "-p",
++                RECONCILE_PROBE,
++                "-o",
++                "jsonpath={.metadata.generation}",
++            )
++        )
++        wait_until(
++            f"the operator to reconcile generation {generation}",
++            lambda: kubectl_bin(
++                "get",
++                "psmdb",
++                config.cluster,
++                "-n",
++                config.namespace,
++                "-o",
++                "jsonpath={.status.observedGeneration}",
++                check=False,
++            ).strip(),
++            lambda observed: observed == str(generation),
++            timeout=300,
++        )
++
++        # The new operator may only change the StatefulSets on a later reconcile,
++        # so keep watching for a while before comparing.
++        deadline = time.monotonic() + SOAK_SECONDS
++        while time.monotonic() < deadline:
++            if current := _psmdb_state(config):
++                state.states.append(current)
++            time.sleep(10)
++
++        logger.info(f"Cluster states seen during upgrade: {sorted(set(state.states))}")
++        unexpected = sorted(set(state.states) - ALLOWED_STATES)
++        assert not unexpected, f"Cluster reached {unexpected} during upgrade"
++        assert _psmdb_state(config) == "ready"
++
++        pods = _db_pods(config)
++        assert pods == state.pods, f"DB pods changed. Before: {state.pods}, after: {pods}"
++        revisions = _sts_revisions(config)
++        assert revisions == state.sts_revisions, (
++            f"StatefulSets changed. Before: {state.sts_revisions}, after: {revisions}"
++        )
++        # Errors or restarts of the operator while it reconciled during the soak.
++        _assert_operator_clean(config, state)
++
++    @pytest.mark.dependency(depends=["TestOlmUpgrade::test_cluster_not_restarted"])
++    def test_data_after_upgrade(
++        self, config: OlmUpgradeConfig, test_paths: Paths, psmdb_client: MongoManager
++    ) -> None:
++        """Data written before the upgrade is there and the cluster accepts writes"""
++        for i in range(3):
++            psmdb_client.compare_mongo_cmd(
++                "find({}, { _id: 0 }).toArray()",
++                _cluster_uri(config, "myApp", "myPass", i),
++                test_file=f"{test_paths['test_dir']}/compare/find-1.json",
++            )
++        psmdb_client.run_mongosh(
++            "db.getSiblingDB('myApp').test.insertOne({ x: 100501 })",
++            _cluster_uri(config, "myApp", "myPass"),
++        )
++        for i in range(3):
++            psmdb_client.compare_mongo_cmd(
++                "find({}, { _id: 0 }).toArray()",
++                _cluster_uri(config, "myApp", "myPass", i),
++                test_file=f"{test_paths['test_dir']}/compare/find-2.json",
++            )
+diff --git a/installers/olm/e2e-tests/olm.py b/installers/olm/e2e-tests/olm.py
+new file mode 100644
+index 000000000..649095a45
+--- /dev/null
++++ b/installers/olm/e2e-tests/olm.py
+@@ -0,0 +1,295 @@
++"""Install and upgrade the operator through OLM (CatalogSource -> Subscription -> CSV)."""
++
++import json
++import logging
++import time
++from collections.abc import Callable
++from typing import Any
++
++from lib.kubectl import kubectl_bin
++from lib.utils import retry
++
++logger = logging.getLogger(__name__)
++
++# Fully qualified: "subscription" alone can resolve to Knative's Subscription on OpenShift.
++CATALOGSOURCE = "catalogsources.operators.coreos.com"
++SUBSCRIPTION = "subscriptions.operators.coreos.com"
++INSTALLPLAN = "installplans.operators.coreos.com"
++CSV = "clusterserviceversions.operators.coreos.com"
++OPERATORGROUP = "operatorgroups.operators.coreos.com"
++
++
++def olm_available() -> bool:
++    """True when the cluster serves the OLM PackageManifest API (OpenShift or OLM installed)."""
++    out = kubectl_bin(
++        "api-resources", "--api-group=packages.operators.coreos.com", "-o", "name", check=False
++    )
++    return "packagemanifests" in out
++
++
++def get_json(*args: str) -> Any:
++    return json.loads(kubectl_bin("get", *args, "-o", "json"))
++
++
++def wait_until(
++    what: str,
++    fetch: Callable[[], Any],
++    done: Callable[[Any], bool],
++    timeout: int,
++    interval: int = 5,
++) -> Any:
++    """Poll fetch() until done(value), else raise TimeoutError with the last value seen."""
++    logger.info(f"Waiting for {what}")
++    deadline = time.monotonic() + timeout
++    value = None
++    while time.monotonic() < deadline:
++        value = fetch()
++        if done(value):
++            return value
++        time.sleep(interval)
++    raise TimeoutError(f"Timeout after {timeout}s waiting for {what}. Last value: {value}")
++
++
++def wait_catalog_ready(source: str, namespace: str, timeout: int = 300) -> None:
++    wait_until(
++        f"CatalogSource {namespace}/{source} to be READY",
++        lambda: kubectl_bin(
++            "get",
++            CATALOGSOURCE,
++            source,
++            "-n",
++            namespace,
++            "-o",
++            "jsonpath={.status.connectionState.lastObservedState}",
++            check=False,
++        ).strip(),
++        lambda state: state == "READY",
++        timeout,
++    )
++
++
++def get_package_manifest(package: str, source: str, namespace: str) -> dict[str, Any]:
++    """PackageManifest of `package` served by `source`.
++
++    Selected by the catalog label: the same package name is usually served by
++    several catalogs (community-operators, certified-operators, the dev ones).
++    Retried because PackageManifests can lag behind a freshly READY catalog.
++    """
++
++    def _fetch() -> dict[str, Any]:
++        items = get_json("packagemanifests", "-n", namespace, "-l", f"catalog={source}")["items"]
++        for item in items:
++            if item["metadata"]["name"] == package:
++                return dict(item)
++        raise LookupError(f"Package {package} not found in CatalogSource {namespace}/{source}")
++
++    return dict(retry(_fetch, max_attempts=12, delay=5))
++
++
++def channel_of_csv(manifest: dict[str, Any], csv: str) -> str:
++    for channel in manifest["status"]["channels"]:
++        if any(entry["name"] == csv for entry in channel.get("entries", [])):
++            return str(channel["name"])
++    raise LookupError(f"CSV {csv} is not in any channel of {manifest['metadata']['name']}")
++
++
++def create_operator_group(namespace: str) -> None:
++    """OwnNamespace OperatorGroup: the operator watches only its own namespace."""
++    kubectl_bin(
++        "apply",
++        "-n",
++        namespace,
++        "-f",
++        "-",
++        input_data=json.dumps(
++            {
++                "apiVersion": "operators.coreos.com/v1",
++                "kind": "OperatorGroup",
++                "metadata": {"name": namespace},
++                "spec": {"targetNamespaces": [namespace]},
++            }
++        ),
++    )
++
++
++def create_subscription(
++    namespace: str,
++    package: str,
++    source: str,
++    source_namespace: str,
++    channel: str,
++    starting_csv: str,
++) -> None:
++    """Subscribe with Manual approval so every install/upgrade step is test-driven."""
++    kubectl_bin(
++        "apply",
++        "-n",
++        namespace,
++        "-f",
++        "-",
++        input_data=json.dumps(
++            {
++                "apiVersion": "operators.coreos.com/v1alpha1",
++                "kind": "Subscription",
++                "metadata": {"name": package},
++                "spec": {
++                    "name": package,
++                    "source": source,
++                    "sourceNamespace": source_namespace,
++                    "channel": channel,
++                    "startingCSV": starting_csv,
++                    "installPlanApproval": "Manual",
++                    "config": {"env": [{"name": "DISABLE_TELEMETRY", "value": "true"}]},
++                },
++            }
++        ),
++    )
++
++
++def get_csv(namespace: str, name: str) -> dict[str, Any]:
++    return dict(get_json(CSV, name, "-n", namespace))
++
++
++def csv_names(namespace: str) -> list[str]:
++    return kubectl_bin(
++        "get", CSV, "-n", namespace, "-o", "jsonpath={.items[*].metadata.name}"
++    ).split()
++
++
++def csv_operator_image(csv: dict[str, Any]) -> str:
++    deployment = csv["spec"]["install"]["spec"]["deployments"][0]
++    return str(deployment["spec"]["template"]["spec"]["containers"][0]["image"])
++
++
++def csv_example(csv: dict[str, Any], kind: str) -> dict[str, Any]:
++    """The `kind` example from the CSV alm-examples (matches that release's crVersion/images)."""
++    for example in json.loads(csv["metadata"]["annotations"]["alm-examples"]):
++        if example.get("kind") == kind:
++            return dict(example)
++    raise LookupError(f"No {kind} in alm-examples of {csv['metadata']['name']}")
++
++
++def subscription_status(namespace: str, subscription: str) -> dict[str, Any]:
++    return dict(get_json(SUBSCRIPTION, subscription, "-n", namespace).get("status", {}))
++
++
++def installplan_phase(namespace: str, plan: str) -> str:
++    return kubectl_bin(
++        "get", INSTALLPLAN, plan, "-n", namespace, "-o", "jsonpath={.status.phase}"
++    ).strip()
++
++
++def approve_until_installed(
++    namespace: str,
++    subscription: str,
++    target_csv: str,
++    allowed_csvs: Callable[[list[str]], bool],
++    timeout: int = 900,
++    on_poll: Callable[[], None] | None = None,
++    delete_rejected: bool = False,
++) -> list[str]:
++    """Approve the Subscription's pending InstallPlans until target_csv is Succeeded.
++
++    allowed_csvs(csv_names) decides whether a pending plan may be approved, so an
++    install never jumps past the starting CSV. With delete_rejected, a pending plan
++    it rejects is deleted so OLM resolves again instead of waiting on it. on_poll
++    runs on every iteration (e.g. to sample DB health while the operator is
++    replaced). Fails fast when an approved InstallPlan or the installed CSV reports
++    Failed.
++
++    Returns the approved InstallPlan names, in order.
++    """
++    approved: list[str] = []
++    skipped: dict[str, list[str]] = {}
++    deadline = time.monotonic() + timeout
++    status: dict[str, Any] = {}
++    while time.monotonic() < deadline:
++        if on_poll:
++            on_poll()
++
++        status = subscription_status(namespace, subscription)
++        installed = status.get("installedCSV")
++        if installed:
++            # The Subscription can still name a CSV that OLM already deleted after replacing it.
++            raw = kubectl_bin("get", CSV, installed, "-n", namespace, "-o", "json", check=False)
++            csv_status = json.loads(raw).get("status", {}) if raw.strip() else {}
++            if installed == target_csv and csv_status.get("phase") == "Succeeded":
++                return approved
++            if csv_status.get("phase") == "Failed":
++                raise RuntimeError(f"CSV {installed} failed: {csv_status.get('message')}")
++
++        for plan in approved:
++            plan_status = _installplan(namespace, plan).get("status", {})
++            if plan_status.get("phase") == "Failed":
++                raise RuntimeError(
++                    f"InstallPlan {plan} failed: {plan_status.get('conditions', [])}"
++                )
++
++        # The reference can name a plan that was just deleted, until OLM resolves again.
++        plan = status.get("installPlanRef", {}).get("name")
++        spec = _installplan(namespace, plan).get("spec") if plan and plan not in approved else None
++        if spec and not spec.get("approved"):
++            csvs = spec.get("clusterServiceVersionNames", [])
++            if not allowed_csvs(csvs):
++                if plan not in skipped:
++                    logger.warning(f"Not approving InstallPlan {plan}: {csvs}")
++                    skipped[plan] = csvs
++                if delete_rejected:
++                    delete_pending_plans(namespace, keep=allowed_csvs)
++            else:
++                logger.info(f"Approving InstallPlan {plan}: {csvs}")
++                kubectl_bin(
++                    "patch",
++                    INSTALLPLAN,
++                    plan,
++                    "-n",
++                    namespace,
++                    "--type=merge",
++                    "-p",
++                    '{"spec":{"approved":true}}',
++                )
++                approved.append(plan)
++        time.sleep(5)
++
++    raise TimeoutError(
++        f"Timeout after {timeout}s waiting for {target_csv} to be installed. "
++        f"Subscription status: state={status.get('state')} "
++        f"installedCSV={status.get('installedCSV')} currentCSV={status.get('currentCSV')} "
++        f"conditions={status.get('conditions', [])} "
++        f"not approved InstallPlans={skipped}"
++    )
++
++
++def _installplan(namespace: str, name: str) -> dict[str, Any]:
++    """The InstallPlan, or {} when it no longer exists."""
++    raw = kubectl_bin("get", INSTALLPLAN, name, "-n", namespace, "-o", "json", check=False)
++    return dict(json.loads(raw)) if raw.strip() else {}
++
++
++def delete_pending_plans(namespace: str, keep: Callable[[list[str]], bool]) -> list[str]:
++    """Delete unapproved InstallPlans that keep(csv_names) rejects, so OLM resolves again.
++
++    A Manual Subscription keeps pointing at its pending plan; while that plan exists,
++    OLM does not offer a different upgrade.
++    """
++    deleted = []
++    for plan in get_json(INSTALLPLAN, "-n", namespace)["items"]:
++        csvs = plan["spec"].get("clusterServiceVersionNames", [])
++        if plan["spec"].get("approved") or keep(csvs):
++            continue
++        name = plan["metadata"]["name"]
++        logger.info(f"Deleting pending InstallPlan {name}: {csvs}")
++        kubectl_bin("delete", INSTALLPLAN, name, "-n", namespace, "--ignore-not-found")
++        deleted.append(name)
++    return deleted
++
++
++def delete_olm_install(namespace: str, subscription: str) -> None:
++    """Best-effort removal of the Subscription, its CSVs and the OperatorGroup."""
++    kubectl_bin(
++        "delete", SUBSCRIPTION, subscription, "-n", namespace, "--ignore-not-found", check=False
++    )
++    kubectl_bin("delete", CSV, "--all", "-n", namespace, "--ignore-not-found", check=False)
++    kubectl_bin(
++        "delete", OPERATORGROUP, "--all", "-n", namespace, "--ignore-not-found", check=False
++    )
+diff --git a/installers/olm/run-tests.sh b/installers/olm/run-tests.sh
+new file mode 100755
+index 000000000..add0eb0bf
+--- /dev/null
++++ b/installers/olm/run-tests.sh
+@@ -0,0 +1,129 @@
++#!/usr/bin/env bash
++
++set -euo pipefail
++
++BUNDLE_TYPE="${1:-}"
++
++CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
++CATALOG_ENV="${CATALOG_ENV:-dev}"
++NAME="${NAME:-percona-server-mongodb-operator}"
++OLM_TEST="${OLM_TEST:-olm-upgrade}"
++SRC_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
++
++usage() {
++	cat <<EOF
++Usage:
++  $0 <community|certified>
++
++Runs the installers/olm/e2e-tests/${OLM_TEST} test once per starting CSV:
++every bundle of the deployed ${CATALOG_ENV} catalog except the default channel
++head is upgraded to that head. It fails when fewer than OLM_MIN_MINORS (2)
++previous minor versions are covered. Deploy the catalog first (make deploy/<type>).
++
++Set OLM_FROM_CSVS to a space-separated list of CSV names to pick the
++starting points instead. Each run cleans up after itself (SKIP_DELETE=0) because
++the next one needs the operator CRDs gone; set SKIP_DELETE=1 to keep them.
++EOF
++}
++
++die() {
++	echo "[olm] ERROR: $*" >&2
++	exit 1
++}
++
++case "$BUNDLE_TYPE" in
++	community) PACKAGE="$NAME" ;;
++	certified) PACKAGE="${NAME}-certified" ;;
++	*)
++		usage
++		die "unsupported bundle type: ${BUNDLE_TYPE:-empty}"
++		;;
++esac
++
++for command in kubectl jq make uv; do
++	command -v "$command" >/dev/null 2>&1 || die "$command is required"
++done
++
++SOURCE="${BUNDLE_TYPE}-${CATALOG_ENV}"
++
++kubectl api-resources --api-group=packages.operators.coreos.com -o name |
++	grep -q '^packagemanifests' ||
++	die "OLM is not available on the current kubectl context"
++
++# The operator lives in the test namespace; a cluster-wide OPERATOR_NS would mislead the harness.
++unset OPERATOR_NS
++export SKIP_DELETE="${SKIP_DELETE:-0}"
++
++list_starting_csvs() {
++	kubectl get packagemanifests -n "$CATALOG_NAMESPACE" -l "catalog=${SOURCE}" -o json |
++		jq -r --arg package "$PACKAGE" '
++			.items[]
++			| select(.metadata.name == $package)
++			| .status as $status
++			| ($status.channels[] | select(.name == $status.defaultChannel) | .currentCSV) as $target
++			| $status.channels[].entries[].name
++			| select(. != $target)
++		' |
++		awk '!seen[$0]++'
++}
++
++# Minor line of the default channel head, the version every run upgrades to.
++get_target_minor() {
++	kubectl get packagemanifests -n "$CATALOG_NAMESPACE" -l "catalog=${SOURCE}" -o json |
++		jq -r --arg package "$PACKAGE" '
++			.items[]
++			| select(.metadata.name == $package)
++			| .status as $status
++			| $status.channels[] | select(.name == $status.defaultChannel) | .currentCSV
++		' |
++		sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p'
++}
++
++if [[ -n "${OLM_FROM_CSVS:-}" ]]; then
++	read -r -a FROM_CSVS <<<"$OLM_FROM_CSVS"
++else
++	FROM_CSVS=()
++	while IFS= read -r csv; do
++		[[ -n "$csv" ]] && FROM_CSVS+=("$csv")
++	done < <(list_starting_csvs)
++fi
++
++[[ "${#FROM_CSVS[@]}" -gt 0 ]] ||
++	die "no starting CSVs for ${PACKAGE} in CatalogSource ${CATALOG_NAMESPACE}/${SOURCE}"
++
++echo "[olm] Starting CSVs: ${FROM_CSVS[*]}"
++# Patches of the newest minor line (e.g. 1.24.0 for 1.24.1) are tested but not counted.
++NEWEST_MINOR="$(printf '%s\n' "${FROM_CSVS[@]}" | sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p' | sort -V | tail -n 1)"
++MINORS="$(printf '%s\n' "${FROM_CSVS[@]}" | sed -nE 's/.*v([0-9]+\.[0-9]+)\.[0-9]+$/\1/p' | sort -uV | xargs)"
++echo "[olm] Minor versions covered: ${MINORS}"
++if [[ -z "${OLM_FROM_CSVS:-}" ]]; then
++	MIN_MINORS="${OLM_MIN_MINORS:-2}"
++	PREVIOUS_MINORS=$(($(wc -w <<<"$MINORS")))
++	[[ "$(get_target_minor)" == "$NEWEST_MINOR" ]] && PREVIOUS_MINORS=$((PREVIOUS_MINORS - 1))
++	[[ "$PREVIOUS_MINORS" -ge "$MIN_MINORS" ]] ||
++		die "the catalog covers ${PREVIOUS_MINORS} previous minor versions, ${MIN_MINORS} required: build it with CATALOG_PREVIOUS_MINORS=${MIN_MINORS} (or set OLM_MIN_MINORS / OLM_FROM_CSVS)"
++fi
++
++mkdir -p "${SRC_DIR}/e2e-tests/reports" "${SRC_DIR}/e2e-tests/logs"
++FAILED=()
++for csv in "${FROM_CSVS[@]}"; do
++	echo "[olm] Testing upgrade ${csv} -> ${SOURCE} default channel"
++	report="${SRC_DIR}/e2e-tests/reports/${OLM_TEST}-${csv}"
++	# The shared pytest harness (conftest.py, lib/) lives in e2e-tests; load it as a plugin.
++	if ! (cd "$SRC_DIR" &&
++		OLM_BUNDLE_TYPE="$BUNDLE_TYPE" \
++			OLM_PACKAGE="$PACKAGE" \
++			OLM_CATALOG_SOURCE="$SOURCE" \
++			OLM_CATALOG_NAMESPACE="$CATALOG_NAMESPACE" \
++			OLM_FROM_CSV="$csv" \
++			PYTHONPATH="e2e-tests:installers/olm/e2e-tests" \
++			uv run pytest -p conftest "installers/olm/e2e-tests/${OLM_TEST}/" \
++			--html="${report}.html" --junitxml="${report}.xml"); then
++		FAILED+=("$csv")
++	fi
++done
++
++if [[ "${#FAILED[@]}" -gt 0 ]]; then
++	die "upgrade failed from: ${FAILED[*]}"
++fi
++echo "[olm] All upgrades passed: ${FROM_CSVS[*]}"

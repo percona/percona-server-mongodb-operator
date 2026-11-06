@@ -2,3 +2,7 @@
 /e2e-tests/ @jvpasinatto @eleo007 @valmiranogueira
 Jenkinsfile @jvpasinatto @eleo007 @valmiranogueira
 
+AGENTS.md @hors @egegunes @pooknull @nmarukovich @gkech @mayankshah1607 @oksana-grishchenko @jvpasinatto @eleo007 @valmiranogueira @roman-lekh
+/.agents/ @hors @egegunes @pooknull @nmarukovich @gkech @mayankshah1607 @oksana-grishchenko @jvpasinatto @eleo007 @valmiranogueira @roman-lekh
+/.claude/ @hors @egegunes @pooknull @nmarukovich @gkech @mayankshah1607 @oksana-grishchenko @jvpasinatto @eleo007 @valmiranogueira @roman-lekh
+/docs/guidelines/ @hors @egegunes @pooknull @nmarukovich @gkech @mayankshah1607 @oksana-grishchenko @jvpasinatto @eleo007 @valmiranogueira @roman-lekh
