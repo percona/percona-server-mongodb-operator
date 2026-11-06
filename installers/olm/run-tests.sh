@@ -7,23 +7,29 @@ BUNDLE_TYPE="${1:-}"
 CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
 CATALOG_ENV="${CATALOG_ENV:-dev}"
 NAME="${NAME:-percona-server-mongodb-operator}"
-OLM_TEST="${OLM_TEST:-olm-upgrade}"
+OLM_TESTS="${OLM_TESTS:-olm-backup-restore olm-upgrade}"
 SRC_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 usage() {
-	cat <<EOF
+	cat <<EOT
 Usage:
   $0 <community|certified>
 
-Runs the installers/olm/e2e-tests/${OLM_TEST} test once per starting CSV:
-every bundle of the deployed ${CATALOG_ENV} catalog older than the target (the
-head of OLM_TARGET_CHANNEL, or of the default channel) is upgraded to it. It fails when fewer than OLM_MIN_MINORS (2)
-previous minor versions are covered. Deploy the catalog first (make deploy/<type>).
+Runs the OLM tests in installers/olm/e2e-tests/ against the deployed
+${CATALOG_ENV} catalog. Deploy it first (make deploy/<type>). OLM_TESTS
+(default: "${OLM_TESTS}") selects the tests:
 
-Set OLM_FROM_CSVS to a space-separated list of CSV names to pick the
-starting points instead. Each run cleans up after itself because the next one
-needs the operator CRDs gone; set SKIP_DELETE=1 to keep the last run's resources.
-EOF
+  olm-backup-restore  once, against the target: the head of OLM_TARGET_CHANNEL,
+                      or of the default channel;
+  olm-upgrade         once per starting CSV: every bundle of the catalog older
+                      than the target is upgraded to it. Fails when fewer than
+                      OLM_MIN_MINORS (2) previous minor versions are covered.
+                      OLM_FROM_CSVS (space-separated CSV names) picks the
+                      starting points instead.
+
+Each run cleans up after itself because the next one needs the operator CRDs
+gone; set SKIP_DELETE=1 to keep the last run's resources.
+EOT
 }
 
 log() {
@@ -50,13 +56,24 @@ set_package() {
 
 check_tools() {
 	local command
-	for command in kubectl oc jq make uv; do
+	# helm: the tests install the SeaweedFS backup storage from its chart.
+	for command in kubectl oc helm jq make uv; do
 		command -v "$command" >/dev/null 2>&1 || die "$command is required"
 	done
 	kubectl api-resources --api-group=packages.operators.coreos.com -o name \
 		| grep -q '^packagemanifests' \
 		|| die "OLM is not available on the current kubectl context"
 	log "Using kubectl context $(kubectl config current-context)"
+}
+
+check_tests() {
+	local test
+	[[ -n ${OLM_TESTS// /} ]] || die "OLM_TESTS is empty"
+	for test in $OLM_TESTS; do
+		[[ -d "${SRC_DIR}/installers/olm/e2e-tests/${test}" ]] \
+			|| die "unknown test ${test} in OLM_TESTS (no installers/olm/e2e-tests/${test})"
+	done
+	log "Tests: ${OLM_TESTS}"
 }
 
 # Waits for the CatalogSource and its package, so a run right after deploy/<type> works.
@@ -108,9 +125,8 @@ pick_csvs() {
 			[[ -n $csv ]] && FROM_CSVS+=("$csv")
 		done < <(list_csvs | tail -n +2)
 	fi
-	[[ ${#FROM_CSVS[@]} -gt 0 ]] \
-		|| die "no starting CSVs for ${PACKAGE} in CatalogSource ${CATALOG_NAMESPACE}/${SOURCE}"
-	log "Starting CSVs: ${FROM_CSVS[*]}"
+	[[ ${#FROM_CSVS[@]} -gt 0 ]] && log "Starting CSVs: ${FROM_CSVS[*]}"
+	return 0
 }
 
 minor() {
@@ -132,24 +148,46 @@ check_minor_coverage() {
 		|| die "the catalog covers ${previous} previous minor versions, ${required} required: build it with CATALOG_PREVIOUS_MINORS=${required} (or set OLM_MIN_MINORS / OLM_FROM_CSVS)"
 }
 
-# Runs the test once from the given CSV; returns non-zero when it fails.
-run_upgrade() {
-	local csv="$1" skip_delete="$2" report="${SRC_DIR}/e2e-tests/reports/${OLM_TEST}-$1" start=$SECONDS
-	log "Testing upgrade ${csv} -> ${TARGET_CSV}"
+# Plans the runs as "<test> <csv>" lines: olm-backup-restore once with the target,
+# olm-upgrade once per starting CSV, in OLM_TESTS order.
+plan_runs() {
+	local test csv
+	RUNS=()
+	for test in $OLM_TESTS; do
+		if [[ $test == "olm-upgrade" ]]; then
+			[[ ${#FROM_CSVS[@]} -gt 0 ]] \
+				|| die "no starting CSVs for ${PACKAGE} in CatalogSource ${CATALOG_NAMESPACE}/${SOURCE}"
+			check_minor_coverage
+			for csv in "${FROM_CSVS[@]}"; do
+				RUNS+=("${test} ${csv}")
+			done
+		else
+			RUNS+=("${test} ${TARGET_CSV}")
+		fi
+	done
+}
+
+# Runs one test; for olm-upgrade the CSV is the starting point, otherwise the target.
+# Returns non-zero when the test fails.
+run_test() {
+	local test="$1" csv="$2" skip_delete="$3"
+	local report="${SRC_DIR}/e2e-tests/reports/${test}-${csv}" start=$SECONDS from_csv=""
+	[[ $test == "olm-upgrade" ]] && from_csv="$csv"
+	log "Running ${test} with ${csv} (target ${TARGET_CSV})"
 	# The shared pytest harness (conftest.py, lib/) lives in e2e-tests; load it as a plugin.
 	if (cd "$SRC_DIR" \
 		&& OLM_BUNDLE_TYPE="$BUNDLE_TYPE" \
 			OLM_PACKAGE="$PACKAGE" \
 			OLM_CATALOG_SOURCE="$SOURCE" \
 			OLM_CATALOG_NAMESPACE="$CATALOG_NAMESPACE" \
-			OLM_FROM_CSV="$csv" \
+			OLM_FROM_CSV="$from_csv" \
 			SKIP_DELETE="$skip_delete" \
 			PYTHONPATH="e2e-tests:installers/olm/e2e-tests" \
-			uv run pytest -p conftest "installers/olm/e2e-tests/${OLM_TEST}/" \
+			uv run pytest -p conftest "installers/olm/e2e-tests/${test}/" \
 			--html="${report}.html" --junitxml="${report}.xml"); then
-		log "PASSED ${csv} -> ${TARGET_CSV} in $((SECONDS - start))s, report ${report}.html"
+		log "PASSED ${test} ${csv} in $((SECONDS - start))s, report ${report}.html"
 	else
-		log "FAILED ${csv} -> ${TARGET_CSV} in $((SECONDS - start))s, report ${report}.html"
+		log "FAILED ${test} ${csv} in $((SECONDS - start))s, report ${report}.html"
 		return 1
 	fi
 }
@@ -157,27 +195,29 @@ run_upgrade() {
 main() {
 	set_package
 	check_tools
+	check_tests
 	# The operator lives in the test namespace; a cluster-wide OPERATOR_NS would mislead the harness.
 	unset OPERATOR_NS
 
 	wait_for_catalog
 	pick_csvs
-	check_minor_coverage
+	plan_runs
 
 	mkdir -p "${SRC_DIR}/e2e-tests/reports" "${SRC_DIR}/e2e-tests/logs"
 	# Only the last run may keep its resources: the next run deletes the shared CRDs anyway.
-	local csv skip_delete last="${FROM_CSVS[${#FROM_CSVS[@]} - 1]}" failed=()
-	for csv in "${FROM_CSVS[@]}"; do
+	local run skip_delete last="${RUNS[${#RUNS[@]} - 1]}" failed=()
+	for run in "${RUNS[@]}"; do
 		skip_delete=0
-		[[ $csv == "$last" ]] && skip_delete="${SKIP_DELETE:-0}"
-		run_upgrade "$csv" "$skip_delete" || failed+=("$csv")
+		[[ $run == "$last" ]] && skip_delete="${SKIP_DELETE:-0}"
+		# shellcheck disable=SC2086 # the run is "<test> <csv>", two words by construction.
+		run_test $run "$skip_delete" || failed+=("$run")
 	done
 
-	log "Summary: $((${#FROM_CSVS[@]} - ${#failed[@]}))/${#FROM_CSVS[@]} upgrades to ${TARGET_CSV} passed"
+	log "Summary: $((${#RUNS[@]} - ${#failed[@]}))/${#RUNS[@]} runs passed (target ${TARGET_CSV})"
 	if [[ ${#failed[@]} -gt 0 ]]; then
-		die "upgrade failed from: ${failed[*]}"
+		die "failed: $(printf '%s, ' "${failed[@]}" | sed 's/, $//')"
 	fi
-	log "All upgrades passed: ${FROM_CSVS[*]}"
+	log "All runs passed"
 }
 
 main

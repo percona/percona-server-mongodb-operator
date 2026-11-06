@@ -58,7 +58,7 @@ RESET := $(shell tput sgr0)
 
 export VERSION CSV_VERSION BUNDLE_IMAGE_VERSION BUNDLE_PACKAGE_CHANNEL
 export PACKAGE_NAME_OVERRIDE CSV_NAME_OVERRIDE
-export BUNDLE_PLATFORM CONFIRM_PUSH BUNDLE_SKIP_DIGEST_FAILURE
+export BUNDLE_PLATFORM CONFIRM_PUSH BUNDLE_SKIP_DIGEST_FAILURE BUNDLE_DEV_IMAGES
 
 # ==============================================================================
 # Validation and Tool Helpers
@@ -153,6 +153,7 @@ $(BUNDLE_TYPES:%=bundle/%): bundle/%: check-version check-csv-version
 	csv_name="$${package}.v$(CSV_VERSION)"; \
 	$(MAKE) generate-bundle \
 		BUNDLE_TYPE='$*' \
+		BUNDLE_DEV_IMAGES=1 \
 		PACKAGE_NAME_OVERRIDE="$${package}" \
 		CSV_NAME_OVERRIDE="$${csv_name}"
 
@@ -320,9 +321,9 @@ validate-%-image:
 # Test Rules
 # ==============================================================================
 
-## Run the OLM upgrade e2e test against the deployed development catalogs
+## Run the OLM e2e tests against the deployed development catalogs
 .PHONY: tests $(BUNDLE_TYPES:%=tests/%)
-tests: ## Run OLM upgrade e2e tests against deployed catalogs (run deploy/<type> first)
+tests: ## Run the OLM e2e tests against deployed catalogs (run deploy/<type> first)
 # One type at a time, also under make -j: each run deletes the cluster-wide operator CRDs.
 tests:
 	@for type in $(BUNDLE_TYPES); do $(MAKE) --no-print-directory "tests/$$type" || exit 1; done
