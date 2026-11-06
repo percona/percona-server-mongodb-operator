@@ -158,7 +158,7 @@ func TestContainers(t *testing.T) {
 				cr.Spec.CRVersion = tt.crVersion
 			}
 
-			containers, err := Containers(cr, 27017, config.MongodLogVolume())
+			containers, err := Containers(cr, "$(POD_NAME).my-cluster-rs0.default.svc.cluster.local:27017", config.MongodLogVolume())
 
 			if tt.expectedContainers != nil {
 				var gotNames []string
@@ -266,7 +266,7 @@ func TestContainersProbes(t *testing.T) {
 			cr := newCR()
 			tt.setup(cr)
 
-			containers, err := Containers(cr, 27017, config.MongodLogVolume())
+			containers, err := Containers(cr, "$(POD_NAME).my-cluster-rs0.default.svc.cluster.local:27017", config.MongodLogVolume())
 			assert.NoError(t, err)
 
 			logs := getContainer(t, containers, "logs")
@@ -338,7 +338,7 @@ func expectedContainers(
 		Args:            []string{"logrotate"},
 		Command:         []string{"/opt/percona/logcollector/entrypoint.sh"},
 		Env: []corev1.EnvVar{
-			{Name: "MONGODB_HOST", Value: "localhost"},
+			{Name: "MONGODB_HOST", Value: "$(POD_NAME).my-cluster-rs0.default.svc.cluster.local"},
 			{Name: "MONGODB_PORT", Value: "27017"},
 			{
 				Name: "MONGODB_USER",
@@ -368,6 +368,7 @@ func expectedContainers(
 	}
 
 	if tlsEnabled != nil {
+		logRotateC.Env = append([]corev1.EnvVar{{Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}}}}, logRotateC.Env...)
 		tlsValue := "false"
 		if *tlsEnabled {
 			tlsValue = "true"

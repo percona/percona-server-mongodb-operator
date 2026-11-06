@@ -1,10 +1,11 @@
 package logrotate
 
 import (
-	"errors"
 	"fmt"
+	"net"
 	"strconv"
 
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -26,9 +27,14 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogVolume) (*corev1.Container, error) {
+func Container(cr *api.PerconaServerMongoDB, mongoAddr string, logVol config.LogVolume) (*corev1.Container, error) {
 	if cr.Spec.LogCollector == nil {
 		return nil, errors.New("logcollector can't be nil")
+	}
+
+	host, port, err := net.SplitHostPort(mongoAddr)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse mongo address")
 	}
 
 	usersSecretName := api.UserSecretName(cr)
@@ -36,11 +42,11 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogV
 	envs := []corev1.EnvVar{
 		{
 			Name:  "MONGODB_HOST",
-			Value: "localhost",
+			Value: host,
 		},
 		{
 			Name:  "MONGODB_PORT",
-			Value: strconv.Itoa(int(mongoPort)),
+			Value: port,
 		},
 		{
 			Name: "MONGODB_USER",
@@ -87,6 +93,12 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogV
 		},
 	}
 	if cr.CompareVersion("1.24.0") >= 0 {
+		container.Env = append([]corev1.EnvVar{{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
+			},
+		}}, container.Env...)
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  "MONGODB_TLS_ENABLED",
 			Value: strconv.FormatBool(cr.TLSEnabled()),

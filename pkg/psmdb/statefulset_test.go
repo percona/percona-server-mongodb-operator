@@ -2,6 +2,7 @@ package psmdb
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"slices"
 	"testing"
@@ -16,6 +17,60 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+func TestLogrotateMemberAddress(t *testing.T) {
+	const (
+		expectedHost = "cluster-rs0-0.cluster-rs0.ns.svc.example"
+		expectedPort = "28017"
+	)
+
+	for _, dnsMode := range []api.DNSMode{
+		api.DNSModeInternal,
+		api.DNSModeExternal,
+		api.DNSModeServiceMesh,
+	} {
+		t.Run(string(dnsMode), func(t *testing.T) {
+			cr, err := readDefaultCR("cluster", "ns")
+			require.NoError(t, err)
+			cr.Spec.ClusterServiceDNSSuffix = "svc.example"
+			cr.Spec.ClusterServiceDNSMode = dnsMode
+			cr.Spec.Backup.Enabled = false
+			cr.Spec.LogCollector.Enabled = true
+			cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(false)}
+			cr.Spec.Replsets[0].Configuration = "net:\n  port: 28017\n"
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+
+			replset := cr.Spec.Replsets[0]
+			spec, err := StatefulSpec(t.Context(), cr, replset, naming.MongodLabels(cr, replset), cr.Spec.InitImage,
+				StatefulConfigParams{}, StatefulSpecSecretParams{})
+			require.NoError(t, err)
+
+			index := slices.IndexFunc(spec.Template.Spec.Containers, func(container corev1.Container) bool {
+				return container.Name == "logrotate"
+			})
+			require.NotEqual(t, -1, index, "logrotate container must be present")
+			logrotate := spec.Template.Spec.Containers[index]
+
+			require.Equal(t, "POD_NAME", logrotate.Env[0].Name)
+			require.Equal(t, "metadata.name", logrotate.Env[0].ValueFrom.FieldRef.FieldPath)
+			require.Contains(t, logrotate.Env, corev1.EnvVar{
+				Name:  "MONGODB_HOST",
+				Value: "$(POD_NAME).cluster-rs0.ns.svc.example",
+			})
+			require.Contains(t, logrotate.Env, corev1.EnvVar{
+				Name:  "MONGODB_PORT",
+				Value: expectedPort,
+			})
+
+			operatorCert := x509.Certificate{DNSNames: tls.GetCertificateSans(cr)}
+			require.NoError(t, operatorCert.VerifyHostname(expectedHost))
+
+			customCert := x509.Certificate{DNSNames: []string{expectedHost}}
+			require.NoError(t, customCert.VerifyHostname(expectedHost))
+			require.Error(t, customCert.VerifyHostname("localhost"))
+		})
+	}
+}
 
 func TestCollectStorageCABundles(t *testing.T) {
 	t.Parallel()

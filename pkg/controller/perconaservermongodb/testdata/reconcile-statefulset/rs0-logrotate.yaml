@@ -253,8 +253,12 @@ spec:
         command: [ "/opt/percona/logcollector/entrypoint.sh" ]
         args: [ "logrotate" ]
         env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
           - name: MONGODB_HOST
-            value: localhost
+            value: $(POD_NAME).reconcile-statefulset-cr-rs0.reconcile-statefulset.svc.cluster.local
           - name: MONGODB_PORT
             value: "27017"
           - name: MONGODB_USER
