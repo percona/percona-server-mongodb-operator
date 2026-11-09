@@ -162,7 +162,7 @@ CASES: dict[str, list[Edit]] = {
         ),
     ],
     # Clean diffs. Nothing above Minor is expected.
-    "C1-behaviour-test": [
+    "C1-behavior-test": [
         (
             "replace",
             ARBITER,

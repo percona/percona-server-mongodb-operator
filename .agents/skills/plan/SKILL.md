@@ -25,7 +25,7 @@ message. If both are missing, ask for one.
 Write an enhancement proposal when the change does any of the following:
 
 - adds, removes or changes a field in the CR spec or status;
-- changes backup, restore, upgrade, TLS or user management behaviour;
+- changes backup, restore, upgrade, TLS or user management behavior;
 - touches more than one controller;
 - needs a decision reviewers should see before the code.
 
@@ -50,9 +50,9 @@ The plan contains:
 - numbered acceptance criteria, each checkable by a test or a command;
 - the files and packages that change;
 - the test plan: unit tests for logic and rendering, envtest for reconcile
-  behaviour, e2e tests only for what needs a real cluster (see
+  behavior, e2e tests only for what needs a real cluster (see
   `e2e-tests/AGENTS.md`), and what the tests leave out;
-- compatibility: behaviour of existing clusters, the `crVersion` gate, the
+- compatibility: behavior of existing clusters, the `crVersion` gate, the
   upgrade path, and the oldest and newest supported database and Kubernetes
   versions;
 - decisions taken and open questions.

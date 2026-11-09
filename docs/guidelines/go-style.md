@@ -87,7 +87,7 @@ The review skill `review-go-style` applies this file.
   `t.Run`, and `t.Parallel()` when the cases share no state.
 - Ginkgo, Gomega and envtest are used only by the two controller suites
   (`perconaservermongodb/suite_test.go`,
-  `perconaservermongodbrestore/suite_test.go`). Reconcile behaviour goes
+  `perconaservermongodbrestore/suite_test.go`). Reconcile behavior goes
   there; everything else is a plain test.
 - Fake clients come from `fake.NewClientBuilder().WithScheme(...)
   .WithObjects(...).WithStatusSubresource(...)`. Packages have a helper for

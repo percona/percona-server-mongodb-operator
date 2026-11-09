@@ -14,7 +14,7 @@ Scope: the diff of the current branch against `main`, or the files or PR the
 user names. Test code is any path with an `e2e-tests/` segment, `test_*.py`,
 `*_test.go`, golden files, `e2e-tests/tests.yaml`, and the scripts and `make`
 targets that run tests. For Go code under `pkg/` without test changes, check
-that each new branch, CR field or behaviour has a unit or envtest test
+that each new branch, CR field or behavior has a unit or envtest test
 (`qa.md`, "What a test must prove").
 
 For a diff of more than a few hundred lines, go through the checklist items

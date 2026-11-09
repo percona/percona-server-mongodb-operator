@@ -119,9 +119,9 @@ Rules:
   `manifests` in `.github/workflows/reviewdog.yml`).
 - Defaults and cross-field validation go into `CheckNSetDefaults` or a
   `validate*` function it calls, not into the reconciler.
-- Gate new behaviour with `cr.CompareVersion("<version>") >= 0`, using the
+- Gate new behavior with `cr.CompareVersion("<version>") >= 0`, using the
   version that ships it (`pkg/version/version.txt`). Clusters keep their old
-  behaviour until the user raises `crVersion`.
+  behavior until the user raises `crVersion`.
 - Document the field as a commented example in `deploy/cr.yaml`. The Helm
   chart (`percona-helm-charts`) and the user docs (`k8spsmdb-docs`) live in
   their own repos; the PR checklist asks for both.
@@ -132,10 +132,10 @@ Rules:
 
 ## Compatibility
 
-- An operator upgrade must not change a running cluster: new behaviour is
+- An operator upgrade must not change a running cluster: new behavior is
   gated by `crVersion`, new fields have defaults, status changes are
   additive.
-- New validation is new behaviour. A check that rejects a spec the previous
+- New validation is new behavior. A check that rejects a spec the previous
   operator version accepted is gated by `crVersion`, even when the spec was
   already wrong: a CR that fails `CheckNSetDefaults` also stops its backups,
   restores and cluster sync. The 1.16.0 safety checks (`checkSafeDefaults` in
@@ -149,7 +149,7 @@ Rules:
 ## Proposals
 
 A change that adds or changes CR fields, changes backup, restore, upgrade or
-TLS behaviour, or touches more than one controller gets a proposal in
+TLS behavior, or touches more than one controller gets a proposal in
 `docs/enhancements/<TICKET>-<slug>/proposal.md`, from
 `docs/enhancements/TEMPLATE.md`. The template asks for decisions, constraints
 and rationale, not file paths.

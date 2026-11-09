@@ -26,7 +26,7 @@ that match the changed files. If CR types or RBAC changed, run
 - Go: `make test`. Run the changed packages first, then the full target.
 - e2e: needed when the change touches reconcile logic, CR fields, images,
   backups, restores or upgrades. Pick the test under `e2e-tests/` that covers
-  the behaviour and run it as `e2e-tests/AGENTS.md` describes. Before
+  the behavior and run it as `e2e-tests/AGENTS.md` describes. Before
   running, check that `kubectl config current-context` points at a cluster
   you own. If no cluster is available, write that in the report; never skip
   silently.
@@ -42,7 +42,7 @@ Run the review skills that match the diff:
 
 - Go code: `review-go-style` and `review-architecture`, plus `review-qa` for
   changes under `pkg/`, which checks that each new branch, CR field or
-  behaviour has a unit or envtest test;
+  behavior has a unit or envtest test;
 - test code anywhere: a path with an `e2e-tests/` segment, `test_*.py`,
   `*_test.go`, golden files, `e2e-tests/tests.yaml`, and the scripts and
   `make` targets that run tests: `review-qa`.

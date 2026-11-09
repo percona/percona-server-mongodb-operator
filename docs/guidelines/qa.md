@@ -14,7 +14,7 @@ both.
 - A test fails when the operator is broken and passes on a healthy cluster.
   Check every assertion against both.
 - Logic and rendering are unit tested (`pkg/**/*_test.go`, envtest for
-  reconcile behaviour). An e2e step that only checks rendering is a finding:
+  reconcile behavior). An e2e step that only checks rendering is a finding:
   move it to a unit test.
 - After a restore, failover or upgrade the test reads data back. Pod status
   alone proves nothing.
@@ -82,7 +82,7 @@ when missing, unless marked otherwise.
 - A read from a dependency waits for it first, with a ceiling: a
   CatalogSource is `READY` before its PackageManifests are listed, a
   Deployment is available before its pod is read.
-- The runner honours every variable the test honours (`SKIP_DELETE`,
+- The runner honors every variable the test honors (`SKIP_DELETE`,
   `IMAGE_*`, the OLM channel and CSV variables) and resolves it the same way.
   Otherwise the runner and the test run different cases.
 - Runs that share cluster-scoped objects (CRDs, the current kubectl
