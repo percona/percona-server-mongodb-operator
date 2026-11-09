@@ -21,7 +21,7 @@ require (
 	github.com/hashicorp/vault/api v1.23.0
 	github.com/hashicorp/vault/api/auth/kubernetes v0.12.0
 	github.com/kubernetes-csi/external-snapshotter/client/v8 v8.7.0
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/percona/percona-backup-mongodb v1.8.1-0.20261014170341-e7f0a0f3210a
 	github.com/pkg/errors v0.9.1
