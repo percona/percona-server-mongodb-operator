@@ -52,6 +52,12 @@ These are the checks CI runs on every PR. Run the ones that match your change.
   `K8SPSMDB-1753: Add OLM bundle upgrade e2e test`.
 - Fill in `.github/pull_request_template.md`; say which checklist items do not
   apply instead of deleting them.
+- Write the PR description for a reviewer who has not seen the plan. Problem
+  and Cause take one to three sentences each; Solution is at most five
+  one-line bullets saying what the PR adds or changes, followed by one line on
+  how it was tested. Put run commands, detailed results, what the tests leave
+  out and follow-ups in a collapsed `<details>` block. Acceptance criteria,
+  file lists and design decisions stay in the ticket or a proposal.
 - Never commit credentials. Test secrets come from `e2e-tests/conf/`, and
   `e2e-tests/conf/cloud-secret.yml` is gitignored.
 - Scripts must run on Linux CI and on macOS: GNU make 3.81, bash 3.2 and BSD

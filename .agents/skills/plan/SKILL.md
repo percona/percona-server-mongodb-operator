@@ -33,8 +33,10 @@ Create it as `docs/enhancements/<TICKET>-<slug>/proposal.md` from
 `docs/enhancements/TEMPLATE.md`. Its Open Questions section holds what is
 still unresolved.
 
-Otherwise plan in the PR: the plan fills the Problem, Cause and Solution
-fields of `.github/pull_request_template.md`.
+Otherwise plan in the PR. The plan itself stays with the user (the ticket,
+or where the user keeps notes); only its short form goes into the Problem,
+Cause and Solution fields of `.github/pull_request_template.md`, as the root
+`AGENTS.md` describes.
 
 ## 3. Ask instead of guessing
 
