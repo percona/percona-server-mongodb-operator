@@ -7,7 +7,7 @@ BUNDLE_TYPE="${1:-}"
 CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
 CATALOG_ENV="${CATALOG_ENV:-dev}"
 NAME="${NAME:-percona-server-mongodb-operator}"
-OLM_TESTS="${OLM_TESTS:-olm-backup-restore olm-upgrade}"
+OLM_TESTS="${OLM_TESTS:-olm-default-install olm-backup-restore olm-upgrade}"
 SRC_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 
 usage() {
@@ -19,8 +19,9 @@ Runs the OLM tests in installers/olm/e2e-tests/ against the deployed
 ${CATALOG_ENV} catalog. Deploy it first (make deploy/<type>). OLM_TESTS
 (default: "${OLM_TESTS}") selects the tests:
 
-  olm-backup-restore  once, against the target: the head of OLM_TARGET_CHANNEL,
+  olm-default-install once, against the target: the head of OLM_TARGET_CHANNEL,
                       or of the default channel;
+  olm-backup-restore  once, against the target;
   olm-upgrade         once per starting CSV: every bundle of the catalog older
                       than the target is upgraded to it. Fails when fewer than
                       OLM_MIN_MINORS (2) previous minor versions are covered.
@@ -148,8 +149,8 @@ check_minor_coverage() {
 		|| die "the catalog covers ${previous} previous minor versions, ${required} required: build it with CATALOG_PREVIOUS_MINORS=${required} (or set OLM_MIN_MINORS / OLM_FROM_CSVS)"
 }
 
-# Plans the runs as "<test> <csv>" lines: olm-backup-restore once with the target,
-# olm-upgrade once per starting CSV, in OLM_TESTS order.
+# Plans the runs as "<test> <csv>" lines: olm-upgrade once per starting CSV, every
+# other test once with the target, in OLM_TESTS order.
 plan_runs() {
 	local test csv
 	RUNS=()

@@ -342,14 +342,28 @@ make tests/certified
 Each one first waits for the CatalogSource to be `READY` and to serve the
 package (`OLM_CATALOG_TIMEOUT`, 300 seconds), so it can run right after
 `make deploy/<type>`. The target is the head of the default channel, or of
-`OLM_TARGET_CHANNEL`. `OLM_TESTS` (default `olm-backup-restore olm-upgrade`)
-selects the tests. Reports are written to `e2e-tests/reports/<test>-<csv>.*`
-in the repository root.
+`OLM_TARGET_CHANNEL`. `OLM_TESTS` (default
+`olm-default-install olm-backup-restore olm-upgrade`) selects the tests.
+Reports are written to `e2e-tests/reports/<test>-<csv>.*` in the repository
+root.
 
-For a dev catalog, both tests check that the head of the default channel is
-`OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fail early when
+For a dev catalog, every test checks that the head of the default channel is
+`OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
 the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
 check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
+
+## olm-default-install
+
+Runs once per bundle type. It installs the target CSV with a Manual-approval
+Subscription and applies the first `alm-examples` entry of the CSV unchanged:
+the PerconaServerMongoDB that the OpenShift console prefills when a user clicks
+Create. Today that is a sharded cluster (`rs0`, `cfg` and `mongos`, three pods
+each, with hostname anti-affinity, so it needs three worker nodes) with backups
+enabled and no storage. The test fails fast when the cluster reports `error`,
+and otherwise waits up to 15 minutes for `ready` with every component ready.
+It then writes a document through the mongos Service and reads it back. Once
+the cluster is ready, no DB pod may be replaced or restarted and no Warning
+event may come up, and the operator pod must not restart or log errors.
 
 ## olm-backup-restore
 

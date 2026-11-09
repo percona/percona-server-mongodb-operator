@@ -14,12 +14,13 @@ update it with any change here.
   repositories, builds catalog images and applies the CatalogSource.
 - `run-tests.sh` runs the OLM tests against the deployed dev catalog
   (`make tests`, `make tests/<type>`, `OLM_TESTS` selects them):
-  `olm-backup-restore` once against the target, `olm-upgrade` once per
-  starting version.
-- `e2e-tests/` holds the OLM pytest tests (`olm-backup-restore/`,
-  `olm-upgrade/`) and their helpers (`olm.py`: install through OLM, objects
-  from a bundle's `alm-examples`, data and operator checks). They reuse the
-  shared harness from the root `e2e-tests/` and follow
+  `olm-default-install` and `olm-backup-restore` once against the target,
+  `olm-upgrade` once per starting version.
+- `e2e-tests/` holds the OLM pytest tests (`olm-default-install/`,
+  `olm-backup-restore/`, `olm-upgrade/`) and their helpers (`olm.py`:
+  install through OLM, objects from a bundle's `alm-examples`, data and
+  operator checks). They reuse the shared harness from the root `e2e-tests/`
+  and follow
   [`e2e-tests/AGENTS.md`](../../e2e-tests/AGENTS.md).
 - `Makefile` wraps these; `make help` lists the targets.
 
@@ -47,3 +48,6 @@ catalog through a **Subscription** and **InstallPlans**.
 - On macOS, `opm` needs `~/.config/containers/policy.json` to pull bundles;
   Linux ships it in `/etc/containers/policy.json`.
 - Run `make validate` after changing bundle generation.
+- `olm-default-install` applies the first `alm-examples` entry, built from
+  `deploy/cr.yaml`, unchanged. Do not change it in the test: a failure there
+  means the example users create from the console does not deploy cleanly.
