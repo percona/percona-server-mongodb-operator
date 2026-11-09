@@ -54,6 +54,11 @@ branch (step 6 of the procedure in `docs/guidelines/README.md`); when your
 tool makes the copies, check where they start. Fix Critical and Major
 findings before the PR.
 
+Note the commit the reviews ran on (`git rev-parse HEAD`). A commit added
+after it, a fix included, is reviewed before the PR is opened or updated:
+run the matching skills on `git diff <reviewed>..HEAD` and note the new head.
+The reviews must cover the commit you push.
+
 ## 5. Report
 
 ```
@@ -63,6 +68,7 @@ Acceptance criteria:
   1. <criterion>: done | partly | not done. Evidence: <...>
 Not verified: <item>: <reason>
 Review findings: <n> fixed, <n> open (<list>)
+Reviewed at: <commit>; unreviewed commits: none | <list>
 ```
 
 If a bug later turns out to be something this skill should have caught, apply

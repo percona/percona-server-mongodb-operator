@@ -27,6 +27,34 @@ Real diffs that escaped review, kept in `recorded/`. Each table lists the
 findings the review of that diff produced; the case passes when no Critical or
 Major finding is missed.
 
+### R2-secret-scan (review-qa)
+
+The credentials scan of pull request #2695, added after that PR's QA review
+and never reviewed before the PR was opened (commit `357ddd57d` against its
+parent `e3ca99503`, on branch `K8SPSMDB-1901-olm-backup-restore`; the patch
+applies only on `e3ca99503`): `e2e-tests/lib/secret_scan.py`, its unit tests,
+a `make py-unit` target, a scan step at the end of the OLM backup and restore
+test, README lines. Copilot reported findings 1 to 3 on the PR.
+
+| # | Finding | Expected | Rule |
+| - | ------- | -------- | ---- |
+| 1 | Every read in the scan uses `kubectl_bin(..., check=False)` and treats `""` as "nothing there", and nothing asserts that a Secret value or a log was collected: a failed Secret read or an empty pod list makes the step pass with no findings | Critical (Major accepted) | qa.md: an empty read is unknown; an unasserted result is Critical when the step is the one under test |
+| 2 | `secret_values` writes every line of a multi-line value to the same key, so one arbitrary line survives, and its base64 needle is of the stripped line, not the Secret's stored value: a leaked line of a service-account key is not found | Major | qa.md: a test fails when the operator is broken; logic is unit tested |
+| 3 | The only scan runs after the physical restore, which recreates the replset pods: the pbm-agent and mongod logs of both logical operations and the physical backup are gone, and `--previous` does not reach a replaced pod | Major | qa.md: a test fails when the operator is broken |
+| 4 | `make py-check` runs the new unit tests through `py-unit`, but `.github/workflows/e2e-py-check.yml` repeats the commands inline without them: the unit tests never run in CI | Major | qa.md: a test runs in CI |
+| 5 | The scan step depends on `test_physical_restore`, so it is skipped when a backup or restore fails, where a credential in an error message is most likely | Major (Minor accepted) | qa.md: a test fails when the operator is broken |
+| 6 | `mask` prints the first four characters of a real secret to CI output (the author asked for this format) | Minor | |
+| 7 | `aws_secret_access_key`, `AccountKey=` and `"private_key":` match the key name without a value, so a log line naming the key is reported and invites a broad allowlist | Minor | qa.md: keep allowlists narrow |
+| 8 | `test_limits` asserts constants against their own literals | Suggestion | qa.md: an assertion must be able to fail |
+| 9 | `make py-unit` and unit tests next to `lib/` helpers are not mentioned in the AGENTS.md files | Suggestion | |
+
+Known secondary finding: Minor, on a failure the harness attaches the raw
+operator log and events to the report, so the module docstring's claim that
+CI output cannot leak a matched value is wrong (Copilot; the scan adds no new
+exposure).
+
+First run (review-qa at `eef4657ad`, blind): findings 1 to 9, no noise.
+
 ### R1-olm-upgrade (review-qa)
 
 The OLM upgrade e2e test of pull request #2662 as first reviewed (commit

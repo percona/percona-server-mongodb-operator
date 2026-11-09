@@ -369,6 +369,7 @@ func TestMongodStatefulSetName(t *testing.T) {
 # Recorded cases: real diffs that escaped review, kept in recorded/ next to this script.
 RECORDED: dict[str, str] = {
     "R1-olm-upgrade": "R1-olm-upgrade.patch",
+    "R2-secret-scan": "R2-secret-scan.patch",
 }
 HERE = pathlib.Path(__file__).resolve().parent
 

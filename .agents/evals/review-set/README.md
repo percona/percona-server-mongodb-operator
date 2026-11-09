@@ -34,6 +34,10 @@ it when a guideline or a review skill changes.
    > not read `.agents/evals/review-set/expected.md`. Report in the format
    > the review procedure gives.
 
+   A recorded case that does not apply on `main` names its base commit in
+   `expected.md`; tell the reviewer to apply the patch on a copy at that
+   commit.
+
    If your tool runs subagents, run the cases in parallel. Parallel reviewers
    share the checkout: tell each one to change nothing in it, to apply the
    patch on a copy (a `git worktree`) when it builds or runs something, and
