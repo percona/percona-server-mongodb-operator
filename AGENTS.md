@@ -58,6 +58,9 @@ These are the checks CI runs on every PR. Run the ones that match your change.
   how it was tested. Put run commands, detailed results, what the tests leave
   out and follow-ups in a collapsed `<details>` block. Acceptance criteria,
   file lists and design decisions stay in the ticket or a proposal.
+- A PR that only adds or changes tests starts with a table of those tests and
+  what each checks, above the template; Problem, Cause and Solution then stay
+  to a sentence or two each.
 - Never commit credentials. Test secrets come from `e2e-tests/conf/`, and
   `e2e-tests/conf/cloud-secret.yml` is gitignored.
 - Scripts must run on Linux CI and on macOS: GNU make 3.81, bash 3.2 and BSD
