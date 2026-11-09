@@ -34,10 +34,12 @@ Every review skill follows these steps.
    needs work. Findings numbered, highest severity first. Positives: what the
    change does well. Action items: a checklist, Critical and Major first.
 6. **Verification.** You may build the code and run tests to confirm a
-   finding, on the branch or on a copy. Use an existing test when one covers
-   the case. When proving a finding needs a new test, keep it in the code
-   base: add it to the branch and name it in the report. Do not add a test
-   that duplicates an existing one.
+   finding, on the branch or on a copy. A copy is a git worktree at the head
+   of the branch under review; some tools make their copies from `main`, so
+   check with `git log -1` before you trust a result. Use an existing test
+   when one covers the case. When proving a finding needs a new test, keep it
+   in the code base: add it to the branch and name it in the report. Do not
+   add a test that duplicates an existing one.
 7. **Limits.** Do not repeat what the linters and `make test` report; CI runs
    them. Do not review generated files except to check that they were
    regenerated. When you cannot verify something, say so instead of guessing.

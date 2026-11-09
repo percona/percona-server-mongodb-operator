@@ -49,7 +49,10 @@ Run the review skills that match the diff:
 
 If your tool runs subagents, run them in parallel. Otherwise run each in a
 fresh session, so the review does not inherit this session's assumptions.
-Fix Critical and Major findings before the PR.
+A reviewer that builds or runs code needs its own copy at the head of this
+branch (step 6 of the procedure in `docs/guidelines/README.md`); when your
+tool makes the copies, check where they start. Fix Critical and Major
+findings before the PR.
 
 ## 5. Report
 

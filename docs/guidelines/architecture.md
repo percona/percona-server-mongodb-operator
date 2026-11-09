@@ -135,6 +135,11 @@ Rules:
 - An operator upgrade must not change a running cluster: new behaviour is
   gated by `crVersion`, new fields have defaults, status changes are
   additive.
+- New validation is new behaviour. A check that rejects a spec the previous
+  operator version accepted is gated by `crVersion`, even when the spec was
+  already wrong: a CR that fails `CheckNSetDefaults` also stops its backups,
+  restores and cluster sync. The 1.16.0 safety checks (`checkSafeDefaults` in
+  `pkg/apis/psmdb/v1/psmdb_defaults.go`) are the pattern.
 - `e2e-tests/release_versions` lists the platform and image versions CI
   uses; the upgrade e2e tests (`upgrade`, `upgrade-sharded`,
   `upgrade-consistency*`) cover the previous operator version.
