@@ -198,8 +198,11 @@ class TestOlmBackupRestore:
     def test_physical_backup(
         self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str
     ) -> None:
-        """A physical backup reaches ready"""
+        """A physical backup reaches ready, with no credential in the logs so far"""
         _backup(config, csv, storage, "physical")
+        # The physical restore replaces the replset pods and their logs.
+        operator = operator_pod(config.namespace, csv)["metadata"]["name"]
+        check_logs_for_secrets(config.namespace, config.cluster, operator)
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_physical_backup"])
     def test_physical_restore(

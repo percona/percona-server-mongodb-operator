@@ -8,8 +8,9 @@ Two scans run over the collected text. The exact scan reads the values of the
 storage Secrets (raw and base64) and looks for them verbatim. The pattern scan
 looks for well-known credential shapes (AWS keys, Azure account keys, GCP service
 account keys, private key blocks, MongoDB URIs with a password). A finding reports
-the source, the line number and the rule; the matched text is masked, so the CI
-output cannot leak it either.
+the source, the line number and the rule; the scan's own assertion message masks
+the matched text. The failure report the harness attaches (operator logs, events)
+is not redacted.
 """
 
 import base64
@@ -78,24 +79,36 @@ def mask(value: str) -> str:
 
 
 def secret_values(namespace: str, secret_names: tuple[str, ...]) -> dict[str, str]:
-    """Credential values to search for, keyed by "<secret>/<key>[ (base64)]".
+    """Credential values to search for, keyed by "<secret>/<key>#<line>" and
+    "<secret>/<key> (base64)".
 
-    Every data value of the given Secrets, line by line (a service account key is a
-    JSON document), raw and base64-encoded (a dumped Secret leaks the latter). Short
-    and allowlisted values are left out.
+    Every distinct line of every data value of the given Secrets (a service account
+    key is a JSON document), plus the value as stored in the Secret's `data` (a
+    dumped Secret leaks that). Missing Secrets are skipped; any other read error
+    raises. Short and allowlisted values are left out.
     """
     values: dict[str, str] = {}
     for secret in secret_names:
-        raw = kubectl_bin("get", "secret", secret, "-n", namespace, "-o", "json", check=False)
+        raw = kubectl_bin(
+            "get", "secret", secret, "-n", namespace, "-o", "json", "--ignore-not-found"
+        )
         if not raw.strip():
             continue
         for key, encoded in (json.loads(raw).get("data") or {}).items():
-            decoded = base64.b64decode(encoded).decode(errors="replace")
-            for value in {line.strip() for line in decoded.splitlines()}:
-                if len(value) < MIN_VALUE_LENGTH or value in ALLOWED_VALUES:
-                    continue
-                values[f"{secret}/{key}"] = value
-                values[f"{secret}/{key} (base64)"] = base64.b64encode(value.encode()).decode()
+            values.update(data_values(f"{secret}/{key}", encoded))
+    return values
+
+
+def data_values(name: str, encoded: str) -> dict[str, str]:
+    """Search values for one Secret data entry: its distinct lines and its base64."""
+    decoded = base64.b64decode(encoded).decode(errors="replace")
+    values: dict[str, str] = {}
+    if len(decoded.strip()) >= MIN_VALUE_LENGTH and decoded.strip() not in ALLOWED_VALUES:
+        values[f"{name} (base64)"] = encoded
+    lines = dict.fromkeys(line.strip() for line in decoded.splitlines())
+    for number, line in enumerate(lines, start=1):
+        if len(line) >= MIN_VALUE_LENGTH and line not in ALLOWED_VALUES:
+            values[f"{name}#{number}"] = line
     return values
 
 
@@ -125,13 +138,11 @@ def _pod_logs(namespace: str, pod: str) -> dict[str, str]:
         namespace,
         "-o",
         "jsonpath={.spec.initContainers[*].name} {.spec.containers[*].name}",
-        check=False,
     ).split()
     logs = {}
     for container in containers:
-        logs[f"pod/{pod}/{container}"] = kubectl_bin(
-            "logs", pod, "-n", namespace, "-c", container, check=False
-        )
+        logs[f"pod/{pod}/{container}"] = kubectl_bin("logs", pod, "-n", namespace, "-c", container)
+        # Absent unless the container restarted.
         previous = kubectl_bin(
             "logs", pod, "-n", namespace, "-c", container, "--previous", check=False
         )
@@ -144,7 +155,7 @@ def _names(namespace: str, resource: str, selector: str = "") -> list[str]:
     args = ["get", resource, "-n", namespace, "-o", "name"]
     if selector:
         args += ["-l", selector]
-    return [name.split("/", 1)[1] for name in kubectl_bin(*args, check=False).split()]
+    return [name.split("/", 1)[1] for name in kubectl_bin(*args).split()]
 
 
 def collect_sources(namespace: str, cluster: str, operator_pod: str) -> dict[str, str]:
@@ -158,11 +169,9 @@ def collect_sources(namespace: str, cluster: str, operator_pod: str) -> dict[str
     for pod in dict.fromkeys(pods):
         sources.update(_pod_logs(namespace, pod))
     for resource in ("psmdb-backup", "psmdb-restore", "events"):
-        sources[resource] = kubectl_bin(
-            "get", resource, "-n", namespace, "-o", "yaml", check=False
-        )
+        sources[resource] = kubectl_bin("get", resource, "-n", namespace, "-o", "yaml")
     sources[f"psmdb/{cluster}"] = kubectl_bin(
-        "get", "psmdb", cluster, "-n", namespace, "-o", "yaml", check=False
+        "get", "psmdb", cluster, "-n", namespace, "-o", "yaml"
     )
     return sources
 
@@ -177,9 +186,12 @@ def check_logs_for_secrets(
 
     Scans the operator pod, every pod of `cluster` (all containers, previous logs
     included), the pods of Jobs in the namespace, the psmdb-backup and psmdb-restore
-    objects, the events and the psmdb object. The report masks every match.
+    objects, the events and the psmdb object. The report masks every match. Logs
+    of the pods that run a physical restore are not covered, because the operator
+    replaces those pods when the restore completes; call this before one too.
     """
     values = secret_values(namespace, secret_names)
+    assert values, f"No credential values to scan for: none of {secret_names} in {namespace}"
     sources = collect_sources(namespace, cluster, operator_pod)
     findings = [
         finding for source, text in sources.items() for finding in scan_text(source, text, values)
