@@ -43,10 +43,20 @@ const (
 	BackupStateCanceled  BackupState = "canceled"
 )
 
+type BackupWaitingReason string
+
+const (
+	BackupWaitingReasonConcurrentJob BackupWaitingReason = "ConcurrentJob"
+	BackupWaitingReasonClusterSync   BackupWaitingReason = "ClusterSync"
+	BackupWaitingReasonBackupLease   BackupWaitingReason = "BackupLease"
+)
+
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
 	Type         defs.BackupType              `json:"type,omitempty"`
 	State        BackupState                  `json:"state,omitempty"`
+	// WaitingReason identifies the blocker while State is waiting.
+	WaitingReason BackupWaitingReason          `json:"waitingReason,omitempty"`
 	Destination  string                       `json:"destination,omitempty"`
 	StorageName  string                       `json:"storageName,omitempty"`
 	S3           *BackupStorageS3Spec         `json:"s3,omitempty"`

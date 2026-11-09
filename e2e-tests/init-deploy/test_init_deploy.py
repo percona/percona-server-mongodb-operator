@@ -31,7 +31,7 @@ def config(create_infra: Callable[[str], str]) -> InitDeployConfig:
         namespace=create_infra("init-deploy"),
         cluster="some-name-rs0",
         cluster2="another-name-rs0",
-        max_conn=20,
+        max_conn=24,
     )
 
 
