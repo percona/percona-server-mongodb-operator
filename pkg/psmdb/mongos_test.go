@@ -1,11 +1,9 @@
 package psmdb
 
 import (
-	"crypto/x509"
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -17,101 +15,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
-
-func TestMongosLogrotateAddress(t *testing.T) {
-	type testCase struct {
-		name             string
-		servicePerPod    bool
-		collectorEnabled bool
-		expectedHost     string
-		expectedLoopback []corev1.HostAlias
-	}
-
-	for _, tc := range []testCase{
-		{
-			name:             "shared service resolves to localhost",
-			collectorEnabled: true,
-			expectedHost:     "cluster-mongos.ns.svc.example",
-			expectedLoopback: []corev1.HostAlias{{IP: "127.0.0.1", Hostnames: []string{"cluster-mongos.ns.svc.example"}}},
-		},
-		{
-			name:             "per pod services resolve to localhost",
-			servicePerPod:    true,
-			collectorEnabled: true,
-			expectedHost:     "$(POD_NAME).ns.svc.example",
-			expectedLoopback: []corev1.HostAlias{{IP: "127.0.0.1", Hostnames: []string{
-				"cluster-mongos-0.ns.svc.example",
-				"cluster-mongos-1.ns.svc.example",
-				"cluster-mongos-2.ns.svc.example",
-			}}},
-		},
-		{
-			name: "disabled collector leaves host aliases unchanged",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			cr, err := readDefaultCR("cluster", "ns")
-			require.NoError(t, err)
-			cr.Spec.ClusterServiceDNSSuffix = "svc.example"
-			cr.Spec.LogCollector = &api.LogCollectorSpec{Enabled: tc.collectorEnabled, Image: "logs"}
-			cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(false)}
-			cr.Spec.Sharding.Mongos.Configuration = "net:\n  port: 28017\n"
-			cr.Spec.Sharding.Mongos.Expose.ServicePerPod = tc.servicePerPod
-			cr.Spec.Sharding.Mongos.Size = 3
-			customAliases := []corev1.HostAlias{{IP: "192.0.2.1", Hostnames: []string{"custom.example"}}}
-			cr.Spec.Sharding.Mongos.HostAliases = customAliases
-			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
-
-			template, err := MongosTemplateSpec(cr, cr.Spec.InitImage, logr.Discard(), StatefulConfigParams{}, []string{"cfg:27017"}, true)
-			require.NoError(t, err)
-			expectedAliases := append(tc.expectedLoopback, customAliases...)
-			require.Equal(t, expectedAliases, template.Spec.HostAliases)
-			require.Equal(t, customAliases, cr.Spec.Sharding.Mongos.HostAliases, "building the template must not modify the CR")
-
-			index := slices.IndexFunc(template.Spec.Containers, func(container corev1.Container) bool {
-				return container.Name == "logrotate"
-			})
-			if !tc.collectorEnabled {
-				require.Equal(t, -1, index)
-				return
-			}
-			require.NotEqual(t, -1, index, "logrotate container must be present")
-			logrotate := template.Spec.Containers[index]
-
-			require.Contains(t, logrotate.Env, corev1.EnvVar{Name: "MONGODB_HOST", Value: tc.expectedHost})
-			require.Contains(t, logrotate.Env, corev1.EnvVar{Name: "MONGODB_PORT", Value: "28017"})
-			require.Contains(t, logrotate.Env, corev1.EnvVar{Name: "MONGODB_TLS_ENABLED", Value: "true"})
-			require.False(t, slices.ContainsFunc(logrotate.Env, func(variable corev1.EnvVar) bool {
-				return variable.Name == "MONGODB_TLS_INSECURE"
-			}), "strict TLS must not set MONGODB_TLS_INSECURE")
-			require.Contains(t, logrotate.VolumeMounts, corev1.VolumeMount{Name: "ssl", MountPath: config.SSLDir, ReadOnly: true})
-
-			cert := x509.Certificate{DNSNames: tls.GetCertificateSans(cr)}
-			if !tc.servicePerPod {
-				require.NoError(t, cert.VerifyHostname(tc.expectedHost))
-				return
-			}
-
-			require.Equal(t, "POD_NAME", logrotate.Env[0].Name)
-			require.Equal(t, "metadata.name", logrotate.Env[0].ValueFrom.FieldRef.FieldPath)
-			for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
-				podName := naming.MongosPerPodServiceName(cr, i)
-				podHost := strings.ReplaceAll(tc.expectedHost, "$(POD_NAME)", podName)
-				svcSpec := MongosServiceSpec(cr, podName)
-				require.Equal(t, podName, svcSpec.Selector["statefulset.kubernetes.io/pod-name"])
-				require.NoError(t, cert.VerifyHostname(podHost))
-
-				customCert := x509.Certificate{DNSNames: []string{podHost}}
-				require.NoError(t, customCert.VerifyHostname(podHost))
-			}
-		})
-	}
-}
 
 func TestMongosService(t *testing.T) {
 	t.Parallel()

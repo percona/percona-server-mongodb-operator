@@ -111,30 +111,8 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
 
-	hostAliases := cr.Spec.Sharding.Mongos.HostAliases
 	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
 		mongoAddr := fmt.Sprintf("localhost:%d", cr.Spec.Sharding.Mongos.GetPort())
-		if cr.CompareVersion("1.24.0") >= 0 {
-			// We should use mongos service FQDNs for TLS certificate verification.
-			// Without servicePerPod, operator maps the mongos service FQDN to 127.0.0.1 to target the local mongos.
-			// With servicePerPod, operator maps per-pod service FQDNs to 127.0.0.1 to reach the local mongos even when the pod is unready.
-			var hosts []string
-			if cr.Spec.Sharding.Mongos.Expose.ServicePerPod {
-				mongoAddr = GetServiceMeshAddr(cr, "$(POD_NAME)", cr.Spec.Sharding.Mongos.GetPort())
-				for i := 0; i < int(cr.Spec.Sharding.Mongos.Size); i++ {
-					addr := GetServiceMeshAddr(cr, naming.MongosPerPodServiceName(cr, i), cr.Spec.Sharding.Mongos.GetPort())
-					host, _, _ := strings.Cut(addr, ":")
-					hosts = append(hosts, host)
-				}
-			} else {
-				mongoAddr = GetServiceMeshAddr(cr, naming.MongosServiceName(cr), cr.Spec.Sharding.Mongos.GetPort())
-				host, _, _ := strings.Cut(mongoAddr, ":")
-				hosts = append(hosts, host)
-			}
-			if len(hosts) > 0 {
-				hostAliases = append([]corev1.HostAlias{{IP: "127.0.0.1", Hostnames: hosts}}, hostAliases...)
-			}
-		}
 		logCollectorCs, err := logcollector.Containers(cr, mongoAddr, config.MongosLogVolume())
 		if err != nil {
 			return corev1.PodTemplateSpec{}, errors.Wrap(err, "prepare logcollector containers for mongos")
@@ -158,7 +136,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		Labels:      ls,
 		Annotations: annotations,
 		Spec: corev1.PodSpec{
-			HostAliases:                   hostAliases,
+			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
 			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
 			TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, cr.Spec.Sharding.Mongos.MultiAZ.TopologySpreadConstraints, ls),
