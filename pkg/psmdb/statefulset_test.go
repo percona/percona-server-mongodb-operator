@@ -2,7 +2,6 @@ package psmdb
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"slices"
 	"testing"
@@ -18,9 +17,9 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-func TestLogrotateMemberAddress(t *testing.T) {
+func TestLogrotateLocalAddress(t *testing.T) {
 	const (
-		expectedHost = "cluster-rs0-0.cluster-rs0.ns.svc.example"
+		expectedHost = "localhost"
 		expectedPort = "28017"
 	)
 
@@ -51,23 +50,14 @@ func TestLogrotateMemberAddress(t *testing.T) {
 			require.NotEqual(t, -1, index, "logrotate container must be present")
 			logrotate := spec.Template.Spec.Containers[index]
 
-			require.Equal(t, "POD_NAME", logrotate.Env[0].Name)
-			require.Equal(t, "metadata.name", logrotate.Env[0].ValueFrom.FieldRef.FieldPath)
 			require.Contains(t, logrotate.Env, corev1.EnvVar{
 				Name:  "MONGODB_HOST",
-				Value: "$(POD_NAME).cluster-rs0.ns.svc.example",
+				Value: expectedHost,
 			})
 			require.Contains(t, logrotate.Env, corev1.EnvVar{
 				Name:  "MONGODB_PORT",
 				Value: expectedPort,
 			})
-
-			operatorCert := x509.Certificate{DNSNames: tls.GetCertificateSans(cr)}
-			require.NoError(t, operatorCert.VerifyHostname(expectedHost))
-
-			customCert := x509.Certificate{DNSNames: []string{expectedHost}}
-			require.NoError(t, customCert.VerifyHostname(expectedHost))
-			require.Error(t, customCert.VerifyHostname("localhost"))
 		})
 	}
 }

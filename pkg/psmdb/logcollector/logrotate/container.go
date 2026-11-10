@@ -93,12 +93,6 @@ func Container(cr *api.PerconaServerMongoDB, mongoAddr string, logVol config.Log
 		},
 	}
 	if cr.CompareVersion("1.24.0") >= 0 {
-		container.Env = append([]corev1.EnvVar{{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"},
-			},
-		}}, container.Env...)
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  "MONGODB_TLS_ENABLED",
 			Value: strconv.FormatBool(cr.TLSEnabled()),

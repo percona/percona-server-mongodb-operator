@@ -3,7 +3,6 @@ package psmdb
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"testing"
 
 	"github.com/go-logr/logr"
