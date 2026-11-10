@@ -6,7 +6,7 @@ import re
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -53,6 +53,8 @@ PHYSICAL_RESTORE_CRASH = re.compile(r"FULL CLUSTER CRASH.*ping mongo: server sel
 # Seen once per restore; a few more reconciles can run while the mongods are down,
 # but not more than one per member.
 PHYSICAL_RESTORE_CRASH_MAX = RS0_SIZE
+# The window is measured on this machine and the line time on the operator's node.
+CLOCK_SKEW = timedelta(seconds=60)
 
 
 @dataclass(frozen=True)
@@ -249,8 +251,12 @@ class TestOlmBackupRestore:
     ) -> None:
         """The operator was not replaced or restarted and logged no unexpected errors"""
         assert state.physical_restore, "The physical restore step did not record its time"
+        start, end = state.physical_restore
         crash = ErrorWindow(
-            PHYSICAL_RESTORE_CRASH, *state.physical_restore, PHYSICAL_RESTORE_CRASH_MAX
+            PHYSICAL_RESTORE_CRASH,
+            start - CLOCK_SKEW,
+            end + CLOCK_SKEW,
+            PHYSICAL_RESTORE_CRASH_MAX,
         )
         assert_operator_healthy(config.namespace, csv, state.operator_pod_uid, (crash,))
 
