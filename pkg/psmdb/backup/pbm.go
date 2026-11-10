@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -42,6 +43,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	psmdbtls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 const (
@@ -90,6 +92,7 @@ type PBM interface {
 	SendCmd(ctx context.Context, cmd ctrl.Cmd) error
 	Close(ctx context.Context) error
 	HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error)
+	HasBackupLock(ctx context.Context, opID string) (bool, error)
 	ValidateBackup(ctx context.Context, cfg *config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error
 
 	ResyncMainStorage(ctx context.Context) error
@@ -100,6 +103,7 @@ type PBM interface {
 	GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
 	GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error)
 	FinishBackup(ctx context.Context, bcpName string) error
+	CancelBackup(ctx context.Context, bcpName string) error
 
 	DeleteBackup(ctx context.Context, name string) error
 	DeleteBackupMeta(ctx context.Context, name string) error
@@ -179,6 +183,16 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
+
+	if cr.CompareVersion("1.24.0") >= 0 {
+		pbmCert := psmdbtls.CertificatePBMClient(cr)
+		pbmSecret, err := getSecret(ctx, k8sclient, cr.Namespace, pbmCert.SecretName())
+		if err != nil {
+			return "", errors.Wrap(err, "get PBM client TLS secret")
+		}
+		tlsKey = pbmSecret.Data["tls.key"]
+		tlsCert = pbmSecret.Data["tls.crt"]
+	}
 	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
 	tlsPem := append(tlsKey, tlsCert...)
 
@@ -195,11 +209,10 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 		return "", errors.Wrapf(err, "error checking and writing CA certificate to file %s", tlsPemFile)
 	}
 
-	murl += fmt.Sprintf(
-		"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true&tlsInsecure=true",
-		tlsPemFile,
-		caCertFile,
-	)
+	murl += fmt.Sprintf("?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s", tlsPemFile, caCertFile)
+	if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
+		murl += "&tlsInsecure=true"
+	}
 
 	return murl, nil
 }
@@ -1121,6 +1134,20 @@ func NotJobLock(j Job) LockHeaderPredicate {
 }
 
 func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error) {
+	return b.hasLocks(ctx, false, predicates...)
+}
+
+func (b *pbmC) hasActiveLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error) {
+	return b.hasLocks(ctx, true, predicates...)
+}
+
+func (b *pbmC) HasBackupLock(ctx context.Context, opID string) (bool, error) {
+	return b.hasActiveLocks(ctx, func(h lock.LockHeader) bool {
+		return h.Type == ctrl.CmdBackup && (opID == "" || h.OPID == opID)
+	})
+}
+
+func (b *pbmC) hasLocks(ctx context.Context, activeOnly bool, predicates ...LockHeaderPredicate) (bool, error) {
 	locks, err := lock.GetLocks(ctx, b.Client, &lock.LockHeader{})
 	if err != nil {
 		return false, errors.Wrap(err, "get lock data")
@@ -1132,6 +1159,13 @@ func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) 
 	}
 
 	locks = append(locks, opLocks...)
+	var clusterTime bson.Timestamp
+	if activeOnly && len(locks) > 0 {
+		clusterTime, err = topo.GetClusterTime(ctx, b.Client)
+		if err != nil {
+			return false, errors.Wrap(err, "get cluster time for backup locks")
+		}
+	}
 
 	allowedByAllPredicates := func(l lock.LockHeader) bool {
 		for _, allow := range predicates {
@@ -1143,6 +1177,9 @@ func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) 
 	}
 
 	for _, l := range locks {
+		if activeOnly && l.Heartbeat.T+defs.StaleFrameSec < clusterTime.T {
+			continue
+		}
 		if allowedByAllPredicates(l.LockHeader) {
 			return true, nil
 		}
@@ -1309,6 +1346,40 @@ func (b *pbmC) FinishBackup(ctx context.Context, bcpName string) error {
 	}
 
 	return backup.ChangeBackupState(b.Client, bcpName, defs.StatusCopyDone, "")
+}
+
+func (b *pbmC) CancelBackup(ctx context.Context, name string) error {
+	meta, err := b.GetBackupMeta(ctx, name)
+	if errors.Is(err, pbmErrors.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "get backup metadata before cancellation")
+	}
+	if meta == nil || meta.Name != name || meta.OPID == "" ||
+		!meta.Status.IsRunning() {
+		return nil
+	}
+
+	matched := false
+	otherBackup, err := b.hasActiveLocks(ctx, func(h lock.LockHeader) bool {
+		if h.Type != ctrl.CmdBackup {
+			return false
+		}
+		if h.OPID == meta.OPID {
+			matched = true
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return errors.Wrap(err, "check backup locks before cancellation")
+	}
+	if otherBackup || !matched {
+		return nil
+	}
+
+	return errors.Wrap(b.SendCmd(ctx, ctrl.Cmd{Cmd: ctrl.CmdCancelBackup}), "send backup cancellation")
 }
 
 // deleteBackup deletes backup with the given name from the current storage and pbm database

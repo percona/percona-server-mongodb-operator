@@ -31,7 +31,8 @@ spec:
   serviceName: some-name-rs0
   template:
     metadata:
-      annotations: {}
+      annotations:
+        percona.com/restore-in-progress: "true"
       labels:
         app.kubernetes.io/component: mongod
         app.kubernetes.io/instance: some-name
@@ -49,7 +50,6 @@ spec:
             - --replSet=rs0
             - --storageEngine=wiredTiger
             - --relaxPermChecks
-            - --sslAllowInvalidCertificates
             - --clusterAuthMode=x509
             - --tlsMode=preferTLS
             - --enableEncryption
@@ -67,6 +67,8 @@ spec:
               value: "27017"
             - name: MONGODB_REPLSET
               value: rs0
+            - name: PBM_AGENT_TLS_DIR
+              value: /etc/mongodb-pbm
             - name: PBM_AGENT_MONGODB_USERNAME
               valueFrom:
                 secretKeyRef:
@@ -93,7 +95,7 @@ spec:
                   apiVersion: v1
                   fieldPath: metadata.name
             - name: PBM_MONGODB_URI
-              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
+              value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt
           envFrom:
             - secretRef:
                 name: internal-some-name-users
@@ -176,6 +178,9 @@ spec:
             - mountPath: /etc/pbm/
               name: pbm-config
               readOnly: true
+            - mountPath: /etc/mongodb-pbm
+              name: pbm-tls
+              readOnly: true
           workingDir: /data/db
       dnsPolicy: ClusterFirst
       initContainers:
@@ -242,6 +247,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-tls
+          secret:
+            defaultMode: 288
+            secretName: some-name-pbm
         - name: pbm-config
           secret:
             defaultMode: 420

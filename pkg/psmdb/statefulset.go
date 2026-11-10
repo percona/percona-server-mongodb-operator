@@ -13,6 +13,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -22,6 +23,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/pmm"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 // NewStatefulSet returns a StatefulSet object configured for a name
@@ -154,17 +156,23 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
+	// vpaKey is the status.vpaStatus key for this component, empty when VPA does
+	// not manage it (the arbiter has no VPA configuration).
+	vpaKey := replset.Name
+
 	switch ls[naming.LabelKubernetesComponent] {
 	case naming.ComponentArbiter:
 		containerName = naming.ContainerArbiter
 		size = replset.Arbiter.Size
 		multiAZ = replset.Arbiter.MultiAZ
 		resources = replset.Arbiter.Resources
+		vpaKey = ""
 	case naming.ComponentNonVoting:
 		containerName = naming.ContainerNonVoting
 		size = replset.NonVoting.Size
 		multiAZ = replset.NonVoting.MultiAZ
 		resources = replset.NonVoting.Resources
+		vpaKey = naming.VPAStatusKey(replset.Name, naming.ComponentNonVoting)
 		podSecurityContext = replset.NonVoting.PodSecurityContext
 		containerSecurityContext = replset.NonVoting.ContainerSecurityContext
 		configName = naming.NonVotingConfigMapName(cr, replset)
@@ -176,12 +184,20 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		size = replset.Hidden.Size
 		multiAZ = replset.Hidden.MultiAZ
 		resources = replset.Hidden.Resources
+		vpaKey = naming.VPAStatusKey(replset.Name, naming.ComponentHidden)
 		podSecurityContext = replset.Hidden.PodSecurityContext
 		containerSecurityContext = replset.Hidden.ContainerSecurityContext
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
 		volumeSpec = replset.Hidden.VolumeSpec
+	}
+
+	// Resources come from what the operator committed for this component when VPA
+	// is managing it, and from the declared spec otherwise. The operator never
+	// writes resources back into spec.
+	if vpaKey != "" {
+		resources = cr.VPAResources(vpaKey, resources)
 	}
 
 	customLabels := make(map[string]string, len(ls))
@@ -396,6 +412,9 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 
 		if cr.Spec.Backup.Enabled {
+			if cr.CompareVersion("1.24.0") >= 0 && cr.TLSEnabled() {
+				volumes = append(volumes, PBMClientTLSVolume(cr))
+			}
 			rsName := replset.Name
 			if name, err := replset.CustomReplsetName(); err == nil {
 				rsName = name
@@ -635,10 +654,14 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	if cr.Spec.Sharding.Enabled {
 		c.Env = append(c.Env, corev1.EnvVar{Name: "SHARDED", Value: "TRUE"})
 	}
+	if cr.CompareVersion("1.24.0") >= 0 && tlsEnabled {
+		c.VolumeMounts = append(c.VolumeMounts, PBMClientTLSVolumeMount())
+		c.Env = append(c.Env, corev1.EnvVar{Name: "PBM_AGENT_TLS_DIR", Value: naming.PBMClientTLSDirectory})
+	}
 
 	mongoDBURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@$(POD_NAME)"
 	if cr.CompareVersion("1.20.0") >= 0 {
-		mongoDBURI = BuildMongoDBURI(ctx, tlsEnabled, sslSecret)
+		mongoDBURI = BuildMongoDBURI(ctx, cr, tlsEnabled, sslSecret)
 	}
 
 	c.Env = append(c.Env, []corev1.EnvVar{
@@ -681,6 +704,20 @@ func backupAgentContainer(ctx context.Context, cr *api.PerconaServerMongoDB, rep
 	}
 
 	return c
+}
+
+func PBMClientTLSVolume(cr *api.PerconaServerMongoDB) corev1.Volume {
+	return corev1.Volume{
+		Name: naming.PBMClientTLSVolumeName,
+		Secret: &corev1.SecretVolumeSource{
+			SecretName:  tls.CertificatePBMClient(cr).SecretName(),
+			DefaultMode: &secretFileMode,
+		},
+	}
+}
+
+func PBMClientTLSVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{Name: naming.PBMClientTLSVolumeName, MountPath: naming.PBMClientTLSDirectory, ReadOnly: true}
 }
 
 func AWSSDKChecksumEnvVars() []corev1.EnvVar {
@@ -751,15 +788,15 @@ func OCIResourcePrincipalEnvVars(cr *api.PerconaServerMongoDB) []corev1.EnvVar {
 	}
 }
 
-func BuildMongoDBURI(ctx context.Context, tlsEnabled bool, sslSecret *corev1.Secret) string {
+func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabled bool, sslSecret *corev1.Secret) string {
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
-			uri += fmt.Sprintf(
-				"/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt&tlsInsecure=true",
-				config.SSLDir,
-			)
+			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt", config.SSLDir)
+			if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
+				uri += "&tlsInsecure=true"
+			}
 		}
 	}
 	return uri

@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -26,6 +27,8 @@ import (
 )
 
 func TestReconcilePersistentVolumes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		requested         string
@@ -33,6 +36,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		actual            string
 		resizeInProgress  bool
 		volumeScaling     bool
+		volumeShrink      bool
 		orphanPVC         bool
 		expectSTSDeleted  bool
 		expectRestartedAt bool
@@ -94,6 +98,15 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			expectCRStorage:   "2Gi",
 		},
 		{
+			name:              "rejects shrink for single-member replica set",
+			requested:         "1200Mi",
+			configured:        "6G",
+			actual:            "6G",
+			volumeShrink:      true,
+			expectErrContains: "single-member replica set has no sync source",
+			expectCRStorage:   "6G",
+		},
+		{
 			name:             "deletes statefulset when pvc already matches increased request but template is stale",
 			requested:        "2Gi",
 			configured:       "1200Mi",
@@ -119,6 +132,10 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			}
 			cr.Spec.StorageScaling = &api.StorageScalingSpec{
 				EnableVolumeScaling: tt.volumeScaling,
+				EnableVolumeShrink:  tt.volumeShrink,
+			}
+			if tt.volumeShrink {
+				cr.Status.State = api.AppStateReady
 			}
 
 			labels := naming.MongodLabels(cr, rs)
@@ -184,6 +201,8 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 }
 
 func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
+	t.Parallel()
+
 	const (
 		namespace      = "test-ns"
 		clusterName    = "test-cluster"
@@ -338,8 +357,7 @@ func newPVC(namespace, name string, labels map[string]string, requested, capacit
 }
 
 func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
-	err := apis.AddToScheme(clientgoscheme.Scheme)
-	require.NoError(t, err)
+	t.Parallel()
 
 	const (
 		ns      = "test-ns"
@@ -451,7 +469,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 			}
 
 			fakeClient := fake.NewClientBuilder().
-				WithScheme(clientgoscheme.Scheme).
+				WithScheme(testScheme()).
 				WithObjects(cr, sts, pvc, pod).
 				WithStatusSubresource(pvc).
 				Build()
@@ -466,7 +484,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 
 			r := &ReconcilePerconaServerMongoDB{
 				client: fakeClient,
-				scheme: clientgoscheme.Scheme,
+				scheme: testScheme(),
 			}
 
 			volumeSpec := &api.VolumeSpec{
@@ -508,8 +526,355 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 	}
 }
 
+func TestMaxPVCCapacity(t *testing.T) {
+	labels := map[string]string{"app": "test"}
+	sts := newStatefulSet("ns", "my-sts", labels, resource.MustParse("10Gi"))
+
+	tests := []struct {
+		name     string
+		pvcs     []corev1.PersistentVolumeClaim
+		expected string
+	}{
+		{
+			name:     "no PVCs returns zero",
+			pvcs:     nil,
+			expected: "0",
+		},
+		{
+			name: "single matching PVC",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+			},
+			expected: "10Gi",
+		},
+		{
+			name: "returns largest capacity among matching PVCs",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-1", labels, resource.MustParse("10Gi"), resource.MustParse("15Gi")),
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-2", labels, resource.MustParse("10Gi"), resource.MustParse("12Gi")),
+			},
+			expected: "15Gi",
+		},
+		{
+			name: "skips non-matching PVCs",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-0", labels, resource.MustParse("5Gi"), resource.MustParse("5Gi")),
+				*newPVC("ns", config.MongodDataVolClaimName+"-other-sts-0", labels, resource.MustParse("20Gi"), resource.MustParse("20Gi")),
+			},
+			expected: "5Gi",
+		},
+		{
+			name: "skips PVCs with nil capacity",
+			pvcs: []corev1.PersistentVolumeClaim{
+				{
+					Name: config.MongodDataVolClaimName + "-my-sts-0", Namespace: "ns", Labels: labels,
+					Status: corev1.PersistentVolumeClaimStatus{},
+				},
+				*newPVC("ns", config.MongodDataVolClaimName+"-my-sts-1", labels, resource.MustParse("8Gi"), resource.MustParse("8Gi")),
+			},
+			expected: "8Gi",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maxPVCCapacity(tt.pvcs, config.MongodDataVolClaimName, sts)
+			expected := resource.MustParse(tt.expected)
+			assert.True(t, got.Equal(expected), "got %s, expected %s", got.String(), expected.String())
+		})
+	}
+}
+
+func TestIsPVCExpansionInProgress(t *testing.T) {
+	labels := map[string]string{"app": "test"}
+	sts := newStatefulSet("ns", "my-sts", labels, resource.MustParse("10Gi"))
+	claimName := config.MongodDataVolClaimName
+
+	tests := []struct {
+		name       string
+		pvcs       []corev1.PersistentVolumeClaim
+		expanding  bool
+		expectName string
+	}{
+		{
+			name:      "no PVCs returns false",
+			pvcs:      nil,
+			expanding: false,
+		},
+		{
+			name: "fully expanded PVC returns false",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+			},
+			expanding: false,
+		},
+		{
+			name: "spec.requests > status.capacity detected",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+				*newPVC("ns", claimName+"-my-sts-1", labels, resource.MustParse("15Gi"), resource.MustParse("10Gi")),
+			},
+			expanding:  true,
+			expectName: claimName + "-my-sts-1",
+		},
+		{
+			name: "FileSystemResizePending condition detected",
+			pvcs: func() []corev1.PersistentVolumeClaim {
+				pvc := newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi"))
+				pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+						Status: corev1.ConditionTrue,
+					},
+				}
+				return []corev1.PersistentVolumeClaim{*pvc}
+			}(),
+			expanding:  true,
+			expectName: claimName + "-my-sts-0",
+		},
+		{
+			name: "Resizing condition detected",
+			pvcs: func() []corev1.PersistentVolumeClaim {
+				pvc := newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi"))
+				pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:   corev1.PersistentVolumeClaimResizing,
+						Status: corev1.ConditionTrue,
+					},
+				}
+				return []corev1.PersistentVolumeClaim{*pvc}
+			}(),
+			expanding:  true,
+			expectName: claimName + "-my-sts-0",
+		},
+		{
+			name: "condition with status false is ignored",
+			pvcs: func() []corev1.PersistentVolumeClaim {
+				pvc := newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi"))
+				pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+						Status: corev1.ConditionFalse,
+					},
+				}
+				return []corev1.PersistentVolumeClaim{*pvc}
+			}(),
+			expanding: false,
+		},
+		{
+			name: "skips non-matching PVCs",
+			pvcs: []corev1.PersistentVolumeClaim{
+				*newPVC("ns", claimName+"-other-sts-0", labels, resource.MustParse("20Gi"), resource.MustParse("10Gi")),
+				*newPVC("ns", claimName+"-my-sts-0", labels, resource.MustParse("10Gi"), resource.MustParse("10Gi")),
+			},
+			expanding: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			name, expanding := isPVCExpansionInProgress(tt.pvcs, claimName, sts)
+			assert.Equal(t, tt.expanding, expanding)
+			if tt.expanding {
+				assert.Equal(t, tt.expectName, name)
+			}
+		})
+	}
+}
+
+func TestShrinkStatusBlocksReconciliation(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+	requested := resource.MustParse("5Gi")
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: requested,
+	}
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+
+	labels := naming.MongodLabels(cr, rs)
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("10Gi"))
+
+	cr.Status.PVCShrink = map[string]api.PVCShrinkState{
+		stsName: {
+			TargetSize:    "5Gi",
+			StartedAt:     time.Now().Format(time.RFC3339),
+			Phase:         "secondaries",
+			ProcessedPods: []string{},
+			PrimaryPod:    stsName + "-0",
+		},
+	}
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, requested, resource.MustParse("10Gi"))
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	if err != nil {
+		assert.NotContains(t, err.Error(), "requested storage")
+	}
+}
+
+func TestShrinkRejectsSingleMember(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 1
+	requested := resource.MustParse("5Gi")
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: requested,
+	}
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+	cr.Status.State = api.AppStateReady
+
+	labels := naming.MongodLabels(cr, rs)
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("10Gi"))
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, requested, resource.MustParse("10Gi"))
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "single-member replica set has no sync source")
+}
+
+func TestShrinkPreflightRevertsVCTWhenBlocked(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+	requested := resource.MustParse("5Gi")
+	actual := resource.MustParse("10Gi")
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+		corev1.ResourceStorage: requested,
+	}
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+	cr.Status.State = api.AppStateError
+
+	labels := naming.MongodLabels(cr, rs)
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, requested)
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, requested, actual)
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	require.NoError(t, err, "blocked shrink should return nil, not error")
+
+	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+	assert.Equal(t, actual.String(), vctSize.String(), "VCT should be reverted to actual PVC size when shrink is blocked")
+}
+
+func TestShrinkMongosShrinkEntryPath(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+
+	cr.Spec.Sharding.Enabled = true
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{
+		EnableVolumeShrink: true,
+	}
+	cr.Status.State = api.AppStateError
+
+	requested := resource.MustParse("2Gi")
+	actual := resource.MustParse("3Gi")
+
+	labels := naming.MongosLabels(cr)
+	stsName := naming.MongosStatefulSetName(cr)
+
+	sts := &appsv1.StatefulSet{
+		Name:      stsName,
+		Namespace: cr.Namespace,
+		Labels:    labels,
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					Name: config.MongosLogVolClaimName,
+					Spec: corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceStorage: actual,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pod := newPod(cr.Namespace, stsName+"-0", labels)
+	pvc := newPVC(cr.Namespace, config.MongosLogVolClaimName+"-"+pod.Name, labels, requested, actual)
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	r := &ReconcilePerconaServerMongoDB{
+		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme: s,
+	}
+
+	pvcSpec := api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: requested,
+				},
+			},
+		},
+	}
+
+	err = r.resizeVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongosLogVolClaimName, pvcSpec)
+	require.NoError(t, err, "blocked mongos shrink should return nil")
+
+	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+	assert.Equal(t, actual.String(), vctSize.String(),
+		"mongos VCT should be reverted to actual PVC size when shrink is blocked")
+}
+
 func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
-	require.NoError(t, apis.AddToScheme(clientgoscheme.Scheme))
+	t.Parallel()
 
 	const (
 		ns      = "test-ns"
@@ -623,7 +988,7 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 			}
 
 			cl := fake.NewClientBuilder().
-				WithScheme(clientgoscheme.Scheme).
+				WithScheme(testScheme()).
 				WithObjects(cr, sts, pvc, pod, event).
 				WithStatusSubresource(pvc).
 				WithIndex(&eventsv1.Event{}, "regarding.name", func(o client.Object) []string {
@@ -633,7 +998,7 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 
 			r := &ReconcilePerconaServerMongoDB{
 				client: cl,
-				scheme: clientgoscheme.Scheme,
+				scheme: testScheme(),
 			}
 
 			err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim)
@@ -658,4 +1023,229 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 			assert.Zero(t, wantSize.Cmp(gotSize), "want %s, got %s", wantSize.String(), gotSize.String())
 		})
 	}
+}
+
+func TestShrinkStepdownRetry(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+
+	labels := naming.MongodLabels(cr, rs)
+	labels[naming.LabelKubernetesReplset] = rs.Name
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("5Gi"))
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	pvcSpec := api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("5Gi"),
+				},
+			},
+		},
+	}
+
+	sc := shrinkContext{
+		cr:            cr,
+		sts:           sts,
+		ls:            labels,
+		claimName:     config.MongodDataVolClaimName,
+		pvcSpec:       pvcSpec,
+		component:     naming.ComponentMongod,
+		replset:       rs,
+		isRSComponent: true,
+		needsStepdown: true,
+	}
+
+	t.Run("isPodPrimary failure causes soft retry", func(t *testing.T) {
+		primaryPod := newPod(cr.Namespace, stsName+"-0", labels)
+
+		r := &ReconcilePerconaServerMongoDB{
+			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build(),
+			scheme: s,
+		}
+
+		state := api.PVCShrinkState{
+			Phase:      "stepdown",
+			PrimaryPod: primaryPod.Name,
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		err := r.shrinkStepdown(t.Context(), sc, state)
+		require.NoError(t, err, "isPodPrimary error should return nil for soft retry")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase, "phase should remain stepdown so next reconcile retries")
+	})
+
+	t.Run("pod not found advances to primary phase", func(t *testing.T) {
+		r := &ReconcilePerconaServerMongoDB{
+			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr).Build(),
+			scheme: s,
+		}
+
+		state := api.PVCShrinkState{
+			Phase:      "stepdown",
+			PrimaryPod: stsName + "-0",
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		err := r.shrinkStepdown(t.Context(), sc, state)
+		require.NoError(t, err)
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "primary", got.Phase, "missing pod should advance to primary phase")
+	})
+
+	t.Run("needsStepdown false skips to primary phase", func(t *testing.T) {
+		noStepdownSC := sc
+		noStepdownSC.needsStepdown = false
+
+		r := &ReconcilePerconaServerMongoDB{
+			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr).Build(),
+			scheme: s,
+		}
+
+		state := api.PVCShrinkState{
+			Phase:      "stepdown",
+			PrimaryPod: stsName + "-0",
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		err := r.shrinkStepdown(t.Context(), noStepdownSC, state)
+		require.NoError(t, err)
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "primary", got.Phase, "non-stepdown component should skip to primary phase")
+	})
+}
+
+// TestResizeVolumesIfNeeded_IgnoresPVCsWithoutPods covers a replset that was
+// scaled down with autoscaling on. The PVC of the member that went away is kept
+// unless the delete-psmdb-pvc finalizer is set, and nothing ever resizes it
+// because it has no pod. Counting it when working out the size the volumes
+// actually have would leave the operator believing a resize is still owed: it
+// re-annotates the statefulset, finds every PVC it can resize already at the
+// requested size, deletes the statefulset to pick up the template, and starts
+// over, which shows up as the cluster flapping between ready and error.
+func TestResizeVolumesIfNeeded_IgnoresPVCsWithoutPods(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns      = "test-ns"
+		stsName = "my-cluster-rs0"
+	)
+
+	// rs0 went from 3 members to 2 and the surviving volumes have grown to 3Gi
+	requested := resource.MustParse("3Gi")
+	grown := resource.MustParse("3Gi")
+	leftBehind := resource.MustParse("1Gi")
+
+	ls := map[string]string{"app": "test"}
+
+	sts := &appsv1.StatefulSet{
+		Name:      stsName,
+		Namespace: ns,
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					Name: config.MongodDataVolClaimName,
+					Spec: corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	newPVC := func(index int, capacity resource.Quantity) *corev1.PersistentVolumeClaim {
+		return &corev1.PersistentVolumeClaim{
+			Name:      fmt.Sprintf("%s-%s-%d", config.MongodDataVolClaimName, stsName, index),
+			Namespace: ns,
+			Labels:    ls,
+			Spec: corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: capacity.DeepCopy()},
+				},
+			},
+			Status: corev1.PersistentVolumeClaimStatus{
+				Capacity: corev1.ResourceList{corev1.ResourceStorage: capacity.DeepCopy()},
+			},
+		}
+	}
+
+	newPod := func(index int) *corev1.Pod {
+		return &corev1.Pod{
+			Name:      fmt.Sprintf("%s-%d", stsName, index),
+			Namespace: ns,
+			Labels:    ls,
+		}
+	}
+
+	pvcs := []*corev1.PersistentVolumeClaim{
+		newPVC(0, grown),
+		newPVC(1, grown),
+		newPVC(2, leftBehind), // the member that was scaled away
+	}
+
+	cr := &api.PerconaServerMongoDB{
+		Name:      "my-cluster",
+		Namespace: ns,
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			StorageScaling: &api.StorageScalingSpec{
+				EnableVolumeScaling: true,
+			},
+		},
+	}
+
+	objs := []client.Object{cr, sts, newPod(0), newPod(1)}
+	for _, pvc := range pvcs {
+		objs = append(objs, pvc)
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(objs...).
+		WithStatusSubresource(pvcs[0], pvcs[1], pvcs[2]).
+		Build()
+
+	for _, pvc := range pvcs {
+		require.NoError(t, fakeClient.Status().Update(t.Context(), pvc))
+	}
+
+	r := &ReconcilePerconaServerMongoDB{client: fakeClient, scheme: testScheme()}
+
+	pvcSpec := api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+			},
+		},
+	}
+
+	require.NoError(t, r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, pvcSpec))
+
+	updatedSTS := &appsv1.StatefulSet{}
+	require.NoError(t, fakeClient.Get(t.Context(), types.NamespacedName{Name: stsName, Namespace: ns}, updatedSTS))
+	assert.Empty(t, updatedSTS.Annotations[api.AnnotationPVCResizeInProgress],
+		"the volumes in use are already at the requested size, so no resize should start")
+
+	kept := &corev1.PersistentVolumeClaim{}
+	require.NoError(t, fakeClient.Get(t.Context(),
+		types.NamespacedName{Name: pvcs[2].Name, Namespace: ns}, kept))
+	size := kept.Spec.Resources.Requests[corev1.ResourceStorage]
+	assert.Equal(t, "1Gi", size.String(), "a PVC with no pod must be left alone")
 }

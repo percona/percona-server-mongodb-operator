@@ -17,10 +17,13 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
+	t.Parallel()
+
 	nonRoot := true
 	allowPrivEsc := false
 	initSC := &corev1.SecurityContext{
@@ -36,6 +39,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		clusterInitSC       *corev1.SecurityContext
 		wantPbmInitSC       *corev1.SecurityContext
 		wantAWSChecksumEnvs bool
+		wantTLSInsecure     bool
 	}{
 		{
 			name:                "latest_version_with_InitContainerSecurityContext",
@@ -72,6 +76,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			clusterInitSC:       initSC,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
+			wantTLSInsecure:     true,
 		},
 		{
 			name:                "1_22_without_InitContainerSecurityContext",
@@ -81,6 +86,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			clusterInitSC:       nil,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
+			wantTLSInsecure:     true,
 		},
 	}
 
@@ -102,6 +108,10 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 								MountPath: "/extra",
 							},
 						},
+					},
+					TLS: &psmdbv1.TLSSpec{
+						Mode:                     psmdbv1.TLSModePrefer,
+						AllowInvalidCertificates: new(tt.wantTLSInsecure),
 					},
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Secrets: &psmdbv1.SecretsSpec{
@@ -142,13 +152,16 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				},
 			}
 
+			caCert, tlsCert, tlsKey, err := tls.Issue(tls.GetCertificateSans(cluster))
+			require.NoError(t, err)
+
 			secretTLS := &corev1.Secret{
 				Name:      cluster.Spec.Secrets.SSL,
 				Namespace: cluster.Namespace,
 				Data: map[string][]byte{
-					"ca.crt":  {},
-					"tls.crt": {},
-					"tls.key": {},
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
 				},
 			}
 
@@ -158,7 +171,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				Namespace: sts.Namespace,
 			}
 
-			err := r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
+			err = r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
 			assert.NoError(t, err)
 
 			updatedSTS := &appsv1.StatefulSet{}
@@ -198,7 +211,10 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				}))
 
 			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
-			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
+			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+			if tt.wantTLSInsecure {
+				expectedURI += "&tlsInsecure=true"
+			}
 
 			assert.Equal(t, "PBM_MONGODB_URI", lastEnvVar.Name)
 			assert.Equal(t, expectedURI, lastEnvVar.Value)
@@ -229,6 +245,8 @@ func regularS3Storage() map[string]psmdbv1.BackupStorageSpec {
 }
 
 func TestUpdateKnownFields(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		a    map[string]any
@@ -319,6 +337,8 @@ func TestUpdateKnownFields(t *testing.T) {
 }
 
 func TestUpdateKnownFieldsDoesNotMutateInputs(t *testing.T) {
+	t.Parallel()
+
 	a := map[string]any{
 		"storage": map[string]any{
 			"s3": map[string]any{"bucket": "old-bucket"},
@@ -338,6 +358,8 @@ func TestUpdateKnownFieldsDoesNotMutateInputs(t *testing.T) {
 }
 
 func TestIsTransientNetworkError(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		err  error
 		want bool
@@ -383,7 +405,39 @@ func TestIsTransientNetworkError(t *testing.T) {
 	}
 }
 
+func TestIsContainerUnavailableError(t *testing.T) {
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"container not created": {
+			err:  errors.New("container is not created or running"),
+			want: true,
+		},
+		"container not found": {
+			err:  errors.New("container not found (\"mongod\")"),
+			want: true,
+		},
+		"container stopped": {
+			err:  errors.New(`describe restore stderr:  stdout: : Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "5611bd31": OCI runtime exec failed: exec failed: cannot exec in a stopped container`),
+			want: true,
+		},
+		"pbm error": {
+			err:  errors.New("describe restore stderr: Error: get restore meta: not found stdout: "),
+			want: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isContainerUnavailableError(tt.err))
+		})
+	}
+}
+
 func TestCheckStatefulSetForPhysicalRestore(t *testing.T) {
+	t.Parallel()
+
 	const ns = "some-ns"
 
 	cluster := &psmdbv1.PerconaServerMongoDB{

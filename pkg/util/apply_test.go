@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,6 +18,8 @@ import (
 )
 
 func TestGetObjectHashClusterIssuer(t *testing.T) {
+	t.Parallel()
+
 	spec := cm.IssuerSpec{
 		CA: &cm.CAIssuer{SecretName: "psmdb-ca-cert"},
 	}
@@ -44,7 +47,10 @@ func TestGetObjectHashClusterIssuer(t *testing.T) {
 }
 
 func TestApplyIfSkipsUnownedObject(t *testing.T) {
-	s := scheme.Scheme
+	t.Parallel()
+
+	s := runtime.NewScheme()
+	require.NoError(t, scheme.AddToScheme(s))
 	s.AddKnownTypes(cm.SchemeGroupVersion, new(cm.ClusterIssuer))
 
 	userIssuer := &cm.ClusterIssuer{

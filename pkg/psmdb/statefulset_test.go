@@ -13,10 +13,13 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestCollectStorageCABundles(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		cr       *api.PerconaServerMongoDB
@@ -203,6 +206,8 @@ func TestCollectStorageCABundles(t *testing.T) {
 }
 
 func TestGetCAVolumeMounts(t *testing.T) {
+	t.Parallel()
+
 	mounts := GetCAVolumeMounts()
 
 	tests := []struct {
@@ -241,6 +246,8 @@ func TestGetCAVolumeMounts(t *testing.T) {
 }
 
 func TestGetCAVolumes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		cas  []api.SecretKeySelector
@@ -292,6 +299,8 @@ func TestGetCAVolumes(t *testing.T) {
 }
 
 func TestShouldSetAWSSDKChecksumEnvVars(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		cr   *api.PerconaServerMongoDB
@@ -385,6 +394,8 @@ func TestShouldSetAWSSDKChecksumEnvVars(t *testing.T) {
 }
 
 func TestBackupAgentContainerAWSSDKChecksumEnvVars(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		cr   *api.PerconaServerMongoDB
@@ -467,6 +478,8 @@ func backupChecksumTestCR(pbmVersion string, storages ...api.BackupStorageSpec) 
 }
 
 func TestBackupAgentContainerProbes(t *testing.T) {
+	t.Parallel()
+
 	liveness := &corev1.Probe{
 		InitialDelaySeconds: 15,
 		PeriodSeconds:       7,
@@ -542,6 +555,8 @@ func rorfsSecurityContext(enabled bool) *corev1.SecurityContext {
 }
 
 func TestReadOnlyRootFilesystemEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		sc   *corev1.SecurityContext
@@ -561,6 +576,8 @@ func TestReadOnlyRootFilesystemEnabled(t *testing.T) {
 }
 
 func TestNeedsTmpVolume(t *testing.T) {
+	t.Parallel()
+
 	newCR := func(setup func(cr *api.PerconaServerMongoDB)) *api.PerconaServerMongoDB {
 		cr := &api.PerconaServerMongoDB{
 			Spec: api.PerconaServerMongoDBSpec{
@@ -625,6 +642,8 @@ func TestNeedsTmpVolume(t *testing.T) {
 }
 
 func TestContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
+	t.Parallel()
+
 	allowInvalidCerts := true
 	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
 
@@ -680,6 +699,8 @@ func TestContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 }
 
 func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
+	t.Parallel()
+
 	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
 
 	newCR := func() *api.PerconaServerMongoDB {
@@ -746,6 +767,8 @@ func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 }
 
 func TestAddPMMTmpVolume(t *testing.T) {
+	t.Parallel()
+
 	tmpMount := corev1.VolumeMount{Name: tmpVolumeName, MountPath: tmpMountPath}
 	tmpVolume := corev1.Volume{
 		Name:     tmpVolumeName,
@@ -824,4 +847,56 @@ func TestAddPMMTmpVolume(t *testing.T) {
 		volumes := AddPMMTmpVolume(cr, pmmC, []corev1.Volume{tmpVolume})
 		assert.Equal(t, 1, len(volumes))
 	})
+}
+
+func TestBuildMongoDBURI(t *testing.T) {
+	const baseURI = "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
+	const tlsOpts = "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+
+	tests := map[string]struct {
+		tlsEnabled   bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			expectedURI: baseURI,
+		},
+		"tls enabled": {
+			tlsEnabled:   true,
+			allowInvalid: false,
+			expectedURI:  baseURI + tlsOpts,
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			allowInvalid: true,
+			expectedURI:  baseURI + tlsOpts + "&tlsInsecure=true",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Name:      "cluster",
+				Namespace: "ns",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+
+			sslSecret := new(corev1.Secret)
+			sans := tls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+			require.NoError(t, err)
+			sslSecret.Data = map[string][]byte{
+				"ca.crt":  caCert,
+				"tls.crt": tlsCert,
+				"tls.key": tlsKey,
+			}
+
+			assert.Equal(t, tt.expectedURI, BuildMongoDBURI(t.Context(), cr, tt.tlsEnabled, sslSecret))
+		})
+	}
 }

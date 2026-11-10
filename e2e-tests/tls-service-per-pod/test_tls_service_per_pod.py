@@ -70,6 +70,18 @@ def _pod_uids(cluster: str) -> dict[str, str]:
     return dict(line.split("=", 1) for line in out.split() if "=" in line)
 
 
+def _pod_creation_times(cluster: str, selector: str) -> list[str]:
+    out = kubectl_bin(
+        "get",
+        "pods",
+        "-l",
+        f"app.kubernetes.io/instance={cluster},{selector}",
+        "-o",
+        "jsonpath={.items[*].metadata.creationTimestamp}",
+    )
+    return out.split()
+
+
 def _cert_sans(cluster: str) -> set[str]:
     crt = kubectl_bin(
         "get", "secret", f"{cluster}-ssl", "-o", r"jsonpath={.data.tls\.crt}"
@@ -219,7 +231,13 @@ class TestTLSServicePerPod:
         assert _ssl_hash(f"{cluster}-mongos") != state["hash_before"], (
             "certificate was not re-issued for the new SANs"
         )
-        wait_cluster_consistency(cluster)
+        wait_cluster_consistency(cluster, timeout=600)
+
+        mongos_created = _pod_creation_times(cluster, "app.kubernetes.io/component=mongos")
+        cfg_created = _pod_creation_times(cluster, "app.kubernetes.io/replset=cfg")
+        assert max(mongos_created) <= min(cfg_created), (
+            f"cfg was updated before mongos: mongos={mongos_created} cfg={cfg_created}"
+        )
 
     @pytest.mark.dependency(depends=["TestTLSServicePerPod::test_enable_service_per_pod"])
     def test_tls_connection_to_per_pod_services(

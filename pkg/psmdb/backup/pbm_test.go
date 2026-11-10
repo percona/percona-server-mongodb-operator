@@ -2,13 +2,17 @@ package backup
 
 import (
 	"context"
+	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
@@ -26,10 +30,123 @@ import (
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	psmdbtls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
+func TestGetMongoURIClientCertificate(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		Name: "pbm-uri-test", Namespace: "pbm-uri-test",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{SSL: "server-tls"},
+			TLS:       &api.TLSSpec{AllowInvalidCertificates: new(false)},
+		},
+	}
+	_, clientCert, clientKey, err := psmdbtls.Issue(nil)
+	require.NoError(t, err)
+
+	users := &corev1.Secret{
+		Name: api.UserSecretName(cr), Namespace: cr.Namespace,
+		Data: map[string][]byte{
+			"MONGODB_BACKUP_USER":     []byte("backup"),
+			"MONGODB_BACKUP_PASSWORD": []byte("password"),
+		},
+	}
+	server := &corev1.Secret{
+		Name: cr.Spec.Secrets.SSL, Namespace: cr.Namespace,
+		Data: map[string][]byte{
+			"tls.key": []byte("server-key\n"),
+			"tls.crt": []byte("server-cert\n"),
+			"ca.crt":  []byte("server-ca\n"),
+		},
+	}
+	clientCertName := psmdbtls.CertificatePBMClient(cr).Name()
+	clientTLS := &corev1.Secret{
+		Name:        clientCertName,
+		Namespace:   cr.Namespace,
+		Annotations: map[string]string{cm.CertificateNameKey: clientCertName},
+		Data:        map[string][]byte{"tls.key": clientKey, "tls.crt": clientCert},
+	}
+
+	readTLSFiles := func(t *testing.T, secrets ...client.Object) ([]byte, []byte, error) {
+		t.Helper()
+		objects := []client.Object{users, server}
+		objects = append(objects, secrets...)
+		uri, err := getMongoUri(t.Context(), buildFakeClient(t, objects...), cr, []string{"localhost:27017"}, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		u, err := url.Parse(uri)
+		require.NoError(t, err)
+		tlsFile := u.Query().Get("tlsCertificateKeyFile")
+		caFile := u.Query().Get("tlsCAFile")
+		t.Cleanup(func() {
+			_ = os.Remove(tlsFile)
+			_ = os.Remove(caFile)
+		})
+		pem, err := os.ReadFile(tlsFile)
+		require.NoError(t, err)
+		ca, err := os.ReadFile(caFile)
+		require.NoError(t, err)
+		return pem, ca, nil
+	}
+
+	t.Run("missing client certificate fails", func(t *testing.T) {
+		_, _, err := readTLSFiles(t)
+		require.ErrorContains(t, err, "get PBM client TLS secret")
+	})
+	t.Run("issued client certificate uses dedicated identity", func(t *testing.T) {
+		pem, ca, err := readTLSFiles(t, clientTLS)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("custom client secret name", func(t *testing.T) {
+		cr.Spec.Secrets.SSLPBM = "custom-pbm-tls"
+		t.Cleanup(func() { cr.Spec.Secrets.SSLPBM = "" })
+		custom := clientTLS.DeepCopy()
+		custom.Name = cr.Spec.Secrets.SSLPBM
+		pem, ca, err := readTLSFiles(t, custom)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("rotated client certificate refreshes local identity", func(t *testing.T) {
+		_, _, err := readTLSFiles(t, clientTLS)
+		require.NoError(t, err)
+		_, cert, key, err := psmdbtls.Issue(nil)
+		require.NoError(t, err)
+		rotated := clientTLS.DeepCopy()
+		rotated.Data = map[string][]byte{"tls.key": key, "tls.crt": cert}
+		pem, ca, err := readTLSFiles(t, rotated)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), key...), cert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("client certificate without metadata uses dedicated identity", func(t *testing.T) {
+		unannotated := clientTLS.DeepCopy()
+		unannotated.Annotations = nil
+		pem, ca, err := readTLSFiles(t, unannotated)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("manually issued client certificate uses dedicated identity", func(t *testing.T) {
+		manual := clientTLS.DeepCopy()
+		manual.Annotations = nil
+		cr.UID = "cluster-uid"
+		manual.OwnerReferences = []metav1.OwnerReference{{APIVersion: api.SchemeGroupVersion.String(), Kind: "PerconaServerMongoDB", Name: cr.Name, UID: cr.UID, Controller: new(true)}}
+		pem, ca, err := readTLSFiles(t, manual)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+}
+
 func TestPBMConfigPriority(t *testing.T) {
+	t.Parallel()
+
 	secret := &corev1.Secret{
 		APIVersion: "/v1",
 		Kind:       "Secret",
@@ -77,6 +194,8 @@ func TestPBMConfigPriority(t *testing.T) {
 }
 
 func TestApplyCustomPBMConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := expectedCR(t)
 	cr.Status.BackupVersion = pbmVersion.Current().Version
 
@@ -157,6 +276,8 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 }
 
 func TestPBMStorageConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -864,6 +985,8 @@ func TestPBMStorageConfig(t *testing.T) {
 }
 
 func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -913,6 +1036,8 @@ func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 }
 
 func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -944,15 +1069,20 @@ func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
 	require.EqualError(t, err, "oss storage requires PBM 2.12.0 or newer")
 }
 
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	if err := scheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
+
+	return s
+})
+
 func buildFakeClient(t *testing.T, objs ...client.Object) client.WithWatch {
 	t.Helper()
 
-	s := scheme.Scheme
-	if err := scheme.AddToScheme(s); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-
-	return fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
+	return fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(objs...).Build()
 }
 
 func expectedCR(t *testing.T) *api.PerconaServerMongoDB {
@@ -969,4 +1099,80 @@ func expectedCR(t *testing.T) *api.PerconaServerMongoDB {
 	}
 
 	return cr
+}
+
+func TestGetMongoUri(t *testing.T) {
+	tests := map[string]struct {
+		tlsEnabled   bool
+		allowInvalid bool
+		expectedURI  string
+	}{
+		"tls disabled": {
+			tlsEnabled:  false,
+			expectedURI: "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/",
+		},
+		"tls enabled": {
+			tlsEnabled:   true,
+			allowInvalid: false,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt",
+		},
+		"allow invalid certificates": {
+			tlsEnabled:   true,
+			allowInvalid: true,
+			expectedURI:  "mongodb://backup:backup%40pass@cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017/?tls=true&tlsCertificateKeyFile=/tmp/ns-cluster-tls.pem&tlsCAFile=/tmp/ns-cluster-ca.crt&tlsInsecure=true",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Name:      "cluster",
+				Namespace: "ns",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Secrets:   &api.SecretsSpec{SSL: "cluster-ssl"},
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
+				},
+			}
+			usersSecret := &corev1.Secret{
+				Name:      api.UserSecretName(cr),
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"MONGODB_BACKUP_USER":     []byte("backup"),
+					"MONGODB_BACKUP_PASSWORD": []byte("backup@pass"),
+				},
+			}
+			sans := psmdbtls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := psmdbtls.Issue(sans)
+			require.NoError(t, err)
+
+			sslSecret := &corev1.Secret{
+				Name:      "cluster-ssl",
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"ca.crt":  caCert,
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				},
+			}
+			clientSecret := &corev1.Secret{
+				Name:      psmdbtls.CertificatePBMClient(cr).SecretName(),
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				},
+			}
+			cl := buildFakeClient(t, usersSecret, sslSecret, clientSecret)
+			t.Cleanup(func() {
+				_ = os.Remove("/tmp/ns-cluster-tls.pem")
+				_ = os.Remove("/tmp/ns-cluster-ca.crt")
+			})
+
+			uri, err := getMongoUri(t.Context(), cl, cr, []string{"cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017"}, tt.tlsEnabled)
+			require.NoError(t, err)
+			require.Equal(t, tt.expectedURI, uri)
+		})
+	}
 }

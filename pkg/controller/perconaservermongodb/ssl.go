@@ -14,6 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -68,6 +69,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 	}
 
 	if errSecret == nil && isCustomSecret {
+		if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
+			name := tls.CertificatePBMClient(cr).SecretName()
+			_, err := r.getSecret(ctx, cr, name)
+			if k8serrors.IsNotFound(err) {
+				return errors.Errorf("PBM client TLS secret %s is required when custom SSL secret %s is provided and backups are enabled", name, api.SSLSecretName(cr))
+			}
+			if err != nil {
+				return errors.Wrap(err, "get PBM client TLS secret")
+			}
+		}
 		// We shouldn't do anything if the user has created a custom ssl secret.
 		// We should also allow the use of operator without internal ssl secret, so we only check for non-internal secret here.
 		return nil
@@ -116,14 +127,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 		return errors.Wrap(err, "check cert-manager")
 	}
 	if !ok {
-		if errSecret == nil && errInternalSecret == nil {
-			if r.needsManualSSLUpdate(ctx, cr, secretObj) {
-				return r.updateSSLManually(ctx, cr)
+		var errPBMSecret error
+		if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
+			_, errPBMSecret = r.getSecret(ctx, cr, tls.CertificatePBMClient(cr).SecretName())
+			if client.IgnoreNotFound(errPBMSecret) != nil {
+				return errors.Wrap(errPBMSecret, "get PBM client TLS secret")
 			}
-			return nil
 		}
-		if err := r.createSSLManually(ctx, cr); err != nil {
-			return errors.Wrap(err, "create ssl manually")
+		if errSecret != nil || errInternalSecret != nil || errPBMSecret != nil {
+			if err := r.createSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "create ssl manually")
+			}
+		}
+		if r.needsManualSSLUpdate(ctx, cr, secretObj) || r.needsManualSSLUpdate(ctx, cr, secretInternalObj) {
+			if err := r.updateSSLManually(ctx, cr); err != nil {
+				return errors.Wrap(err, "update ssl manually")
+			}
 		}
 		return nil
 	}
@@ -183,6 +202,43 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 	return true, nil
 }
 
+// updateMongosFirstIfTLSOutdated makes the smart update roll mongos before mongod if mongos pods
+// run an older certificate than the one sfs rolls out. With hostname verification on, the operator
+// can't reach mongos through hostnames missing from that certificate (e.g. per-pod services right after
+// servicePerPod is enabled), while the smart update of the cfg replset needs mongos to stop the balancer.
+// The hashes are taken from sfs rather than the TLS secret, so a stale cached secret can't hide the change.
+func (r *ReconcilePerconaServerMongoDB) updateMongosFirstIfTLSOutdated(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) error {
+	if !mongosNeedsLatestTLS(cr) {
+		return nil
+	}
+
+	pods, err := r.getMongosPods(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "get mongos pods")
+	}
+
+	for _, pod := range pods.Items {
+		for _, k := range []string{naming.AnnotationSSLHash, naming.AnnotationSSLInternalHash} {
+			if pod.Annotations[k] == sfs.Spec.Template.Annotations[k] {
+				continue
+			}
+
+			logf.FromContext(ctx).Info("mongos runs an outdated TLS certificate, updating mongos first", "pod", pod.Name, "statefulset", sfs.Name)
+			return r.setUpdateMongosFirst(ctx, cr)
+		}
+	}
+
+	return nil
+}
+
+func mongosNeedsLatestTLS(cr *api.PerconaServerMongoDB) bool {
+	return cr.Spec.Sharding.Enabled &&
+		cr.Spec.Sharding.Mongos.Size > 0 &&
+		cr.TLSEnabled() &&
+		cr.Spec.UpdateStrategy == api.SmartUpdateStatefulSetStrategyType &&
+		!ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates)
+}
+
 func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx).WithName("createSSLByCertManager")
 
@@ -209,6 +265,13 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 			secretNames := []string{
 				api.SSLInternalSecretName(cr),
 				api.SSLSecretName(cr),
+			}
+			managePBMCert, err := r.shouldManagePBMCert(ctx, cr)
+			if err != nil {
+				return err
+			}
+			if managePBMCert {
+				secretNames = append(secretNames, tls.CertificatePBMClient(cr).SecretName())
 			}
 			// We should be sure that old CA is merged.
 			// mergeNewCA will delete old secrets if they are not needed.
@@ -267,7 +330,9 @@ func (r *ReconcilePerconaServerMongoDB) createSSLByCertManager(ctx context.Conte
 				}
 
 				log.Info("CA is not up to date. Recreating secret", "secret", secret.Name)
-				if err := r.client.Delete(ctx, secret); err != nil {
+				// The cache can be behind the API server, so a secret that is
+				// already gone is the state this path wants.
+				if err := r.client.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
 					return err
 				}
 			}
@@ -305,12 +370,39 @@ func (r *ReconcilePerconaServerMongoDB) getSecretInNamespace(ctx context.Context
 	return secret, nil
 }
 
+func (r *ReconcilePerconaServerMongoDB) shouldManagePBMCert(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	if !cr.Spec.Backup.Enabled || cr.CompareVersion("1.24.0") < 0 {
+		return false, nil
+	}
+
+	secret, err := r.getSecret(ctx, cr, tls.CertificatePBMClient(cr).SecretName())
+	if k8serrors.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, errors.Wrap(err, "get PBM client TLS secret")
+	}
+
+	isCustomSecret, err := tls.IsSecretCreatedByUser(ctx, r.client, cr, secret)
+	if err != nil {
+		return false, errors.Wrap(err, "check PBM client TLS secret ownership")
+	}
+	return !isCustomSecret, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
 
 	secrets := []string{
 		api.SSLSecretName(cr),
 		api.SSLInternalSecretName(cr),
+	}
+	managePBMCert, err := r.shouldManagePBMCert(ctx, cr)
+	if err != nil {
+		return err
+	}
+	if managePBMCert {
+		secrets = append(secrets, tls.CertificatePBMClient(cr).SecretName())
 	}
 	log.Info("Creating old secrets")
 	for _, name := range secrets {
@@ -331,7 +423,7 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 			newSecret.Labels = nil
 		}
 
-		if err := r.client.Create(ctx, newSecret); err != nil {
+		if err := r.client.Create(ctx, newSecret); err != nil && !k8serrors.IsAlreadyExists(err) {
 			return errors.Wrap(err, "create secret")
 		}
 	}
@@ -352,27 +444,33 @@ func (r *ReconcilePerconaServerMongoDB) updateCertManagerCerts(ctx context.Conte
 // mergeNewCA overwrites current ssl secrets with the old ones, but merges ca.crt from the current secret
 func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.PerconaServerMongoDB) error {
 	log := logf.FromContext(ctx)
+	secretNames := []string{api.SSLInternalSecretName(cr), api.SSLSecretName(cr)}
+	managePBMCert, err := r.shouldManagePBMCert(ctx, cr)
+	if err != nil {
+		return err
+	}
+	if managePBMCert {
+		secretNames = append(secretNames, tls.CertificatePBMClient(cr).SecretName())
+	}
+	oldSecretNames := make([]string, 0, len(secretNames))
+	for _, name := range secretNames {
+		oldSecretNames = append(oldSecretNames, name+"-old")
+	}
 	c := tls.NewCertManagerController(r.client, r.scheme, false)
-	// In versions 1.14.0 and below, these secrets contained different ca.crt
-	oldCA, err := c.GetMergedCA(ctx, cr, []string{
-		api.SSLInternalSecretName(cr) + "-old",
-		api.SSLSecretName(cr) + "-old",
-	})
+	oldCA, err := c.GetMergedCA(ctx, cr, oldSecretNames)
 	if err != nil {
 		return errors.Wrap(err, "get old ca")
 	}
 	if len(oldCA) == 0 {
 		return nil
 	}
-
-	secretNames := []string{
-		api.SSLInternalSecretName(cr),
-		api.SSLSecretName(cr),
-	}
-
 	newCA, err := c.GetMergedCA(ctx, cr, secretNames)
 	if err != nil {
 		return errors.Wrap(err, "get new ca")
+	}
+	mergedCA, err := tls.MergePEM(oldCA, newCA)
+	if err != nil {
+		return errors.Wrap(err, "failed to merge ca")
 	}
 
 	for _, secretName := range secretNames {
@@ -391,14 +489,10 @@ func (r *ReconcilePerconaServerMongoDB) mergeNewCA(ctx context.Context, cr *api.
 			return errors.Wrap(err, "get ca secret")
 		}
 
-		mergedCA, err := tls.MergePEM(oldCA, newCA)
-		if err != nil {
-			return errors.Wrap(err, "failed to merge ca")
-		}
-
 		// If secret was already updated, we should delete the old one
 		if tls.EqualPEM(mergedCA, secret.Data["ca.crt"]) {
-			if err := r.client.Delete(ctx, oldSecret); err != nil {
+			// As above, an old secret that is already gone is not a failure.
+			if err := r.client.Delete(ctx, oldSecret); client.IgnoreNotFound(err) != nil {
 				return err
 			}
 			log.Info("new ca is already in secret, deleting old secret")
@@ -478,26 +572,28 @@ func (r *ReconcilePerconaServerMongoDB) applyCertManagerCertificates(ctx context
 	}
 
 	tlsCert := tls.CertificateTLS(cr, false)
-	if err := applyFunc(func() (util.ApplyStatus, error) {
-		return c.ApplyCertificate(ctx, cr, tlsCert)
-	}); err != nil {
-		return "", errors.Wrap(err, "create certificate")
-	}
-
 	certificates := []tls.Certificate{tlsCert}
-
 	if internalCert := tls.CertificateTLS(cr, true); tlsCert.SecretName() != internalCert.SecretName() {
-		if err := applyFunc(func() (util.ApplyStatus, error) {
-			return c.ApplyCertificate(ctx, cr, internalCert)
-		}); err != nil {
-			return "", errors.Wrap(err, "create certificate")
-		}
 		certificates = append(certificates, internalCert)
 	}
-
+	managePBMCert, err := r.shouldManagePBMCert(ctx, cr)
+	if err != nil {
+		return "", err
+	}
+	if managePBMCert {
+		certificates = append(certificates, tls.CertificatePBMClient(cr))
+	}
+	for _, cert := range certificates {
+		if err := applyFunc(func() (util.ApplyStatus, error) {
+			return c.ApplyCertificate(ctx, cr, cert)
+		}); err != nil {
+			return "", errors.Wrapf(err, "create certificate %s", cert.Name())
+		}
+	}
 	if err := c.WaitForCerts(ctx, cr, certificates...); err != nil {
 		return "", errors.Wrap(err, "failed to wait for certs")
 	}
+
 	return applyStatus, nil
 }
 
@@ -516,9 +612,20 @@ func (r *ReconcilePerconaServerMongoDB) createSSLManually(ctx context.Context, c
 		return errors.Wrap(err, "get or create CA")
 	}
 
+	secretNames := []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)}
+	pbmSecretName := tls.CertificatePBMClient(cr).SecretName()
+	if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
+		secretNames = append(secretNames, pbmSecretName)
+	}
+
 	// Issue TLS certs signed by the shared CA
-	for _, secretName := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
-		tlsCert, tlsKey, err := tls.IssueWithCA(certificateDNSNames, caCertPEM, caKeyPEM)
+	for _, secretName := range secretNames {
+		var tlsCert, tlsKey []byte
+		if secretName == pbmSecretName {
+			tlsCert, tlsKey, err = tls.IssuePBMClientWithCA(caCertPEM, caKeyPEM)
+		} else {
+			tlsCert, tlsKey, err = tls.IssueWithCA(certificateDNSNames, caCertPEM, caKeyPEM)
+		}
 		if err != nil {
 			return errors.Wrapf(err, "issue TLS certificate for %s", secretName)
 		}
@@ -624,7 +731,12 @@ func (r *ReconcilePerconaServerMongoDB) updateSSLManually(ctx context.Context, c
 	certificateDNSNames := tls.GetCertificateSans(cr)
 	log.Info("SANs changed, re-signing TLS certificates with existing CA")
 
-	for _, secretName := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+	secretNames := []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)}
+	pbmSecretName := tls.CertificatePBMClient(cr).SecretName()
+	if cr.Spec.Backup.Enabled && cr.CompareVersion("1.24.0") >= 0 {
+		secretNames = append(secretNames, pbmSecretName)
+	}
+	for _, secretName := range secretNames {
 		secret, err := r.getSecret(ctx, cr, secretName)
 		if err != nil {
 			if k8serrors.IsNotFound(err) {
@@ -632,8 +744,22 @@ func (r *ReconcilePerconaServerMongoDB) updateSSLManually(ctx context.Context, c
 			}
 			return errors.Wrapf(err, "get secret %s", secretName)
 		}
+		if secretName == pbmSecretName {
+			isCustomSecret, err := tls.IsSecretCreatedByUser(ctx, r.client, cr, secret)
+			if err != nil {
+				return errors.Wrap(err, "check PBM client TLS secret ownership")
+			}
+			if isCustomSecret {
+				continue
+			}
+		}
 
-		tlsCert, tlsKey, err := tls.IssueWithCA(certificateDNSNames, caCertPEM, caKeyPEM)
+		var tlsCert, tlsKey []byte
+		if secretName == pbmSecretName {
+			tlsCert, tlsKey, err = tls.IssuePBMClientWithCA(caCertPEM, caKeyPEM)
+		} else {
+			tlsCert, tlsKey, err = tls.IssueWithCA(certificateDNSNames, caCertPEM, caKeyPEM)
+		}
 		if err != nil {
 			return errors.Wrapf(err, "re-sign TLS certificate for %s", secretName)
 		}
