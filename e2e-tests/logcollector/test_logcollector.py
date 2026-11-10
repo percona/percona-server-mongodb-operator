@@ -158,8 +158,10 @@ class TestLogCollector:
         time.sleep(1)
         for pod, marker in markers.items():
             _check_log_rotation(pod, tls_enabled=True)
-            older_log = _exec_logrotate(pod, "gzip", "-cd", f"{LOG_DIR}/mongod.full.log.2.gz")
-            assert marker in older_log
+            older_logs = _exec_logrotate(
+                pod, "sh", "-c", 'exec gzip -cd "$1"/mongod.full.log.*.gz', "sh", LOG_DIR
+            )
+            assert marker in older_logs, f"Rotation marker missing from compressed logs on {pod}"
 
     @pytest.mark.dependency(depends=["TestLogCollector::test_tls_rotation"])
     def test_tls_rotation_failure(self, config: LogCollectorConfig) -> None:
