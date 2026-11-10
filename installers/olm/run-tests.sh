@@ -71,7 +71,7 @@ pin_context() {
 	context="$(kubectl config current-context)" || die "no current kubectl context"
 	PINNED_KUBECONFIG="$(mktemp)"
 	trap 'rm -f "$PINNED_KUBECONFIG"' EXIT
-	kubectl config view --minify --flatten >"$PINNED_KUBECONFIG"
+	kubectl config view --minify --flatten --context "$context" >"$PINNED_KUBECONFIG"
 	export KUBECONFIG="$PINNED_KUBECONFIG"
 	kubectl api-resources --api-group=packages.operators.coreos.com -o name \
 		| grep -q '^packagemanifests' \
@@ -201,7 +201,7 @@ plan_runs() {
 # Returns non-zero when the test fails.
 run_test() {
 	local test="$1" csv="$2" skip_delete="$3"
-	local report="${SRC_DIR}/e2e-tests/reports/${test}-${csv}" start=$SECONDS from_csv=""
+	local report="${SRC_DIR}/e2e-tests/reports/${test}-${csv}" start=$SECONDS from_csv="" passed
 	[[ $test == "olm-upgrade" ]] && from_csv="$csv"
 	log "Running ${test} with ${csv} (target ${TARGET_CSV})"
 	# The shared pytest harness (conftest.py, lib/) lives in e2e-tests; load it as a plugin.
@@ -215,7 +215,12 @@ run_test() {
 			PYTHONPATH="e2e-tests:installers/olm/e2e-tests" \
 			uv run pytest -p conftest "installers/olm/e2e-tests/${test}/" \
 			--html="${report}.html" --junitxml="${report}.xml"); then
-		if [[ "$(passed_tests "${report}.xml")" -eq 0 ]]; then
+		passed="$(passed_tests "${report}.xml" || true)"
+		if [[ ! $passed =~ ^[0-9]+$ ]]; then
+			log "FAILED ${test} ${csv}: cannot read ${report}.xml"
+			return 1
+		fi
+		if [[ $passed -eq 0 ]]; then
 			log "FAILED ${test} ${csv}: every step was skipped, report ${report}.html"
 			return 1
 		fi
