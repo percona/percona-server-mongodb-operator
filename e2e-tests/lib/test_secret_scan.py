@@ -169,8 +169,12 @@ class FakeCluster:
                 for old in [key for key in self.logs if key[0] == pod]:
                     del self.logs[old]
                 self.add(pod, *self.replacements.pop(pod))
-            # A container that has not started has no log yet.
-            if (pod, container) not in self.logs or (pod, container) in self.broken:
+            # A deleted pod, or a container that has not started, has no log to read.
+            if (
+                pod not in self.pods
+                or (pod, container) not in self.logs
+                or (pod, container) in self.broken
+            ):
                 raise subprocess.CalledProcessError(1, ["kubectl", *args], stderr="NotFound")
             return self.logs[(pod, container)]
         raise AssertionError(f"Unexpected kubectl call: {args}")
@@ -295,10 +299,12 @@ def test_pod_logs_of_a_deleted_pod_are_skipped(cluster: FakeCluster) -> None:
     assert secret_scan._pod_logs("ns", "gone") is None
 
 
-def test_pod_logs_skip_a_pod_recreated_under_the_same_name(cluster: FakeCluster) -> None:
+def test_pod_logs_read_the_pod_recreated_under_the_same_name(cluster: FakeCluster) -> None:
     cluster.add("db-rs0-0", "old00000-uid", {"mongod": "old"})
     cluster.recreate_before_reading("db-rs0-0", "new00000-uid", {"mongod": "new"})
-    assert secret_scan._pod_logs("ns", "db-rs0-0") is None
+    logs = secret_scan._pod_logs("ns", "db-rs0-0")
+    assert logs and logs["pod/db-rs0-0/mongod"] == "new"
+    assert "old" not in logs.values()
 
 
 def test_pod_logs_fail_when_a_container_does_not_start(cluster: FakeCluster) -> None:

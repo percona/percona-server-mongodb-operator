@@ -208,18 +208,20 @@ def _container_log(namespace: str, pod: str, uid: str, container: str) -> str | 
 def _pod_logs(namespace: str, pod: str) -> dict[str, str] | None:
     """Current and previous logs of every container of `pod`, keyed by source name.
 
-    None when the pod is gone or was replaced by another pod of the same name. Waits
-    for containers that have not started yet and fails when they do not start within
-    the read attempts.
+    None when the pod is gone. A pod replaced by another pod of the same name during the
+    read is read again, so the running pod is scanned. Waits for containers that have
+    not started yet and fails when they do not start within the read attempts.
     """
     waiting: list[str] = []
     uid = ""
     for attempt in range(READ_ATTEMPTS):
         if attempt:
             time.sleep(READ_DELAY)
-        obj = _pod(namespace, pod, uid)
+        obj = _pod(namespace, pod)
         if obj is None:
             return None
+        if uid and obj["metadata"]["uid"] != uid:
+            logger.info("Pod %s was replaced while its logs were read; reading the new pod", pod)
         uid = obj["metadata"]["uid"]
         started, waiting = _containers(obj)
         if waiting:
@@ -228,7 +230,7 @@ def _pod_logs(namespace: str, pod: str) -> dict[str, str] | None:
         for container in started:
             current = _container_log(namespace, pod, uid, container)
             if current is None:
-                return None
+                break
             logs[f"pod/{pod}/{container}"] = current
             # Absent unless the container restarted.
             previous = kubectl_bin(
@@ -236,11 +238,15 @@ def _pod_logs(namespace: str, pod: str) -> dict[str, str] | None:
             )
             if previous:
                 logs[f"pod/{pod}/{container} (previous)"] = previous
-        return logs if _pod(namespace, pod, uid) else None
-    raise AssertionError(
-        f"Containers {waiting} of pod {pod} did not start in "
-        f"{(READ_ATTEMPTS - 1) * READ_DELAY}s, so their logs cannot be scanned"
-    )
+        else:
+            if _pod(namespace, pod, uid):
+                return logs
+    if waiting:
+        raise AssertionError(
+            f"Containers {waiting} of pod {pod} did not start in "
+            f"{(READ_ATTEMPTS - 1) * READ_DELAY}s, so their logs cannot be scanned"
+        )
+    raise AssertionError(f"Pod {pod} was replaced on each of {READ_ATTEMPTS} read attempts")
 
 
 def _names(namespace: str, resource: str, selector: str = "") -> list[str]:

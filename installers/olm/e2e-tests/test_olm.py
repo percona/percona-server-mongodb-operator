@@ -4,10 +4,14 @@ run-tests.sh runs only the test directories, so the OLM e2e runs do not collect 
 """
 
 import re
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
+import olm
 import pytest
-from olm import ErrorWindow, _log_time, unexpected_errors
+from lib.backup import MAX_EMPTY_READS
+from olm import ErrorWindow, _log_time, unexpected_errors, wait_reconciled
 
 START = datetime(2026, 11, 10, 10, 0, tzinfo=UTC)
 END = START + timedelta(minutes=5)
@@ -76,3 +80,31 @@ def test_error_lines_are_unexpected_without_windows() -> None:
 )
 def test_log_time(text: str, expected: datetime | None) -> None:
     assert _log_time(text) == expected
+
+
+def fake_kubectl(monkeypatch: pytest.MonkeyPatch, observed: list[str]) -> list[str]:
+    """kubectl for wait_reconciled: generation 4 before the patch, 5 after, then `observed`
+    for each status.observedGeneration read. Returns the reads left."""
+    reads: Iterator[str] = iter(["4", "5", *observed])
+
+    def kubectl(*args: str, **_: Any) -> str:
+        return next(reads)
+
+    monkeypatch.setattr(olm, "kubectl_bin", kubectl)
+    monkeypatch.setattr("olm.time.sleep", lambda _: None)
+    return observed
+
+
+def test_wait_reconciled_accepts_a_newer_observed_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_kubectl(monkeypatch, ["4", "6"])
+    wait_reconciled("ns", "db")
+
+
+def test_wait_reconciled_fails_after_empty_reads_in_a_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_kubectl(monkeypatch, ["", "4", *[""] * MAX_EMPTY_READS])
+    with pytest.raises(AssertionError, match=f"could not be read {MAX_EMPTY_READS} times"):
+        wait_reconciled("ns", "db")
