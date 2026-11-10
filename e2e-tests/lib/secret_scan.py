@@ -241,12 +241,17 @@ def _pod_logs(namespace: str, pod: str) -> dict[str, str] | None:
         else:
             if _pod(namespace, pod, uid):
                 return logs
+    if _pod(namespace, pod) is None:
+        return None
     if waiting:
         raise AssertionError(
             f"Containers {waiting} of pod {pod} did not start in "
             f"{(READ_ATTEMPTS - 1) * READ_DELAY}s, so their logs cannot be scanned"
         )
-    raise AssertionError(f"Pod {pod} was replaced on each of {READ_ATTEMPTS} read attempts")
+    raise AssertionError(
+        f"Pod {pod} changed during each of {READ_ATTEMPTS} log reads, so its logs could "
+        "not be read consistently"
+    )
 
 
 def _names(namespace: str, resource: str, selector: str = "") -> list[str]:

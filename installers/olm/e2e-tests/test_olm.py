@@ -82,9 +82,9 @@ def test_log_time(text: str, expected: datetime | None) -> None:
     assert _log_time(text) == expected
 
 
-def fake_kubectl(monkeypatch: pytest.MonkeyPatch, observed: list[str]) -> list[str]:
+def fake_kubectl(monkeypatch: pytest.MonkeyPatch, observed: list[str]) -> None:
     """kubectl for wait_reconciled: generation 4 before the patch, 5 after, then `observed`
-    for each status.observedGeneration read. Returns the reads left."""
+    for each status.observedGeneration read."""
     reads: Iterator[str] = iter(["4", "5", *observed])
 
     def kubectl(*args: str, **_: Any) -> str:
@@ -92,7 +92,6 @@ def fake_kubectl(monkeypatch: pytest.MonkeyPatch, observed: list[str]) -> list[s
 
     monkeypatch.setattr(olm, "kubectl_bin", kubectl)
     monkeypatch.setattr("olm.time.sleep", lambda _: None)
-    return observed
 
 
 def test_wait_reconciled_accepts_a_newer_observed_generation(

@@ -307,6 +307,40 @@ def test_pod_logs_read_the_pod_recreated_under_the_same_name(cluster: FakeCluste
     assert "old" not in logs.values()
 
 
+def test_pod_logs_of_a_pod_deleted_while_read_are_skipped(
+    cluster: FakeCluster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "log"})
+    real = cluster.kubectl
+
+    def delete_on_log_read(*args: str, **kwargs: Any) -> str:
+        if args[0] == "logs":
+            cluster.pods.pop("db-rs0-0", None)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(secret_scan, "kubectl_bin", delete_on_log_read)
+    assert secret_scan._pod_logs("ns", "db-rs0-0") is None
+
+
+def test_pod_logs_fail_when_the_pod_changes_on_every_read(
+    cluster: FakeCluster, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cluster.add("db-rs0-0", "uid00000-0", {"mongod": "log"})
+    real = cluster.kubectl
+    replaced = 0
+
+    def replace_on_log_read(*args: str, **kwargs: Any) -> str:
+        nonlocal replaced
+        if args[0] == "logs" and "--previous" not in args:
+            replaced += 1
+            cluster.recreate_before_reading("db-rs0-0", f"uid00000-{replaced}", {"mongod": "log"})
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(secret_scan, "kubectl_bin", replace_on_log_read)
+    with pytest.raises(AssertionError, match="could not be read consistently"):
+        secret_scan._pod_logs("ns", "db-rs0-0")
+
+
 def test_pod_logs_fail_when_a_container_does_not_start(cluster: FakeCluster) -> None:
     cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "log"}, waiting=("backup-agent",))
     with pytest.raises(AssertionError, match=r"\['backup-agent'\] of pod db-rs0-0 did not start"):
