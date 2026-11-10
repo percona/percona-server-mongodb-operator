@@ -238,13 +238,8 @@ spec:
           command:
             - /opt/percona/logcollector/entrypoint.sh
           env:
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  apiVersion: v1
-                  fieldPath: metadata.name
             - name: MONGODB_HOST
-              value: $(POD_NAME).my-cluster-name-cfg.NAME_SPACE.svc.cluster.local
+              value: localhost
             - name: MONGODB_PORT
               value: "27017"
             - name: MONGODB_USER

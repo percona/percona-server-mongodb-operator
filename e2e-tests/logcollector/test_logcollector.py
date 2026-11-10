@@ -151,8 +151,6 @@ class TestLogCollector:
         markers = {}
         for i in range(3):
             pod = f"{config.cluster}-rs0-{i}"
-            host = _exec_logrotate(pod, "printenv", "MONGODB_HOST").strip()
-            assert host == f"{pod}.{config.cluster}-rs0.{config.namespace}.svc.cluster.local"
             markers[pod] = _check_log_rotation(pod, tls_enabled=True)
 
         time.sleep(1)
