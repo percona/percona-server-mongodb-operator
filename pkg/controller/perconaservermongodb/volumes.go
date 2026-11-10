@@ -142,7 +142,10 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 
 	var actual resource.Quantity
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(claimName, pvc, sts) {
+		// only the PVCs we would resize count: a PVC kept from a member that was
+		// scaled away has no pod to resize it, so it never grows, and including
+		// it would hold actual below requested forever
+		if !slices.Contains(pvcsToUpdate, pvc.Name) {
 			continue
 		}
 
@@ -150,7 +153,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			continue
 		}
 
-		// we need to find the smallest size among all PVCs
+		// we need to find the smallest size among them
 		// since it indicates a resize operation is failed
 		if actual.IsZero() || pvc.Status.Capacity.Storage().Cmp(actual) < 0 {
 			actual = *pvc.Status.Capacity.Storage()
