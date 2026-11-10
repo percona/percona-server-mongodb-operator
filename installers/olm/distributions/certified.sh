@@ -79,14 +79,11 @@ set_image_ref() {
 
 	# A development bundle of an unreleased version has no certified images yet:
 	# use the development image of e2e-tests/release_versions, as community does.
+	# require_release_image has checked that the key is set.
 	if [[ -z ${digest} && ${BUNDLE_DEV_IMAGES:-0} == "1" ]]; then
-		dev_image="${!key:-}"
-		[[ -n ${dev_image} ]] || abort "${key} is required in ${release_versions_file}"
+		dev_image="${!key}"
 		log "No Red Hat digest for ${repository}:${tag}; using the development image ${dev_image}"
-		case "${dev_image}" in
-			*.*/* | *:*/* | localhost/*) echo -n "${dev_image}" ;;
-			*) echo -n "docker.io/${dev_image}" ;;
-		esac
+		qualified_image "${dev_image}"
 		return
 	fi
 
@@ -150,8 +147,7 @@ add_related_image() {
 
 	validate_certified_tag "${key}" "${tag}" "${source_tag}"
 
-	# The substitution runs in a subshell, where abort cannot stop the generation;
-	# propagate its failure (bash 3.2 has no inherit_errexit).
+	# abort in the substitution exits only its subshell; propagate the failure.
 	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")" || return 1
 
 	log "Related image ${name}: ${image}"
@@ -199,8 +195,9 @@ build_redhat_related_images() {
 	local mongod83_tag
 	local logcollector_tag
 
-	# Each call returns 1 when a digest cannot be resolved; stop at the first one
-	# (bash 3.2 has no inherit_errexit, so errexit does not reach this subshell).
+	# Each call returns 1 when a digest cannot be resolved. The caller runs this
+	# function as `redhat_data="$(build_redhat_related_images)" || return`, which
+	# disables errexit inside it on every bash version, so each call needs `|| return 1`.
 	log "Building Red Hat related images from ${release_versions_file}"
 
 	[[ -f "${release_versions_file}" ]] \

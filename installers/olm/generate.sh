@@ -119,6 +119,16 @@ release_version_value() {
 	echo -n "${version}"
 }
 
+# An image reference with a registry host: docker.io/ is added when it has none.
+qualified_image() {
+	local image="$1"
+
+	case "${image}" in
+		*.*/* | *:*/* | localhost/*) echo -n "${image}" ;;
+		*) echo -n "docker.io/${image}" ;;
+	esac
+}
+
 resolve_openshift_versions() {
 	local openshift_min
 	local openshift_max
