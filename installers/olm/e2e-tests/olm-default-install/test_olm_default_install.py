@@ -11,27 +11,31 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from lib.kubectl import kubectl_bin
+from lib.backup import MAX_EMPTY_READS
+from lib.kubectl import kubectl_bin, schedulable_nodes
 from lib.mongo import MongoManager
-from lib.secrets import get_user_data
-from lib.utils import Paths, env_bool, retry
+from lib.utils import Paths, env_bool
 from olm import (
     ALLOWED_OPERATOR_ERRORS,
     APP_PASSWORD,
     APP_USER,
     CatalogTarget,
     assert_operator_healthy,
+    cluster_uri,
+    create_app_user,
     csv_operator_image,
     delete_crds,
     event_count,
     get_csv,
     get_json,
+    insert,
     install,
     olm_available,
     olm_test_paths,
     operator_pod,
     resolve_target,
     teardown,
+    wait_reconciled,
     wait_until,
     warning_events,
 )
@@ -40,6 +44,11 @@ logger = logging.getLogger(__name__)
 
 # A sharded cluster (rs0, cfg and mongos, 3 pods each) is ready in about 5 minutes.
 CLUSTER_READY_TIMEOUT = 900
+# The operator retries a reconcile that ends in `error`, so the state is not terminal:
+# a conflict or a slow volume clears within a few reconciles, a real failure stays.
+ERROR_GRACE = 120
+# The example spreads the 3 pods of rs0, cfg and mongos over nodes (hostname anti-affinity).
+MIN_WORKER_NODES = 3
 
 
 @dataclass(frozen=True)
@@ -68,6 +77,11 @@ def config(create_namespace: Callable[[str], str], test_paths: Paths) -> OlmDefa
     """Resolve the target CSV from the catalog, then create the test namespace."""
     if not olm_available():
         pytest.skip("OLM is not available on this cluster")
+    nodes = schedulable_nodes(get_json("nodes")["items"])
+    assert len(nodes) >= MIN_WORKER_NODES, (
+        f"The default example needs {MIN_WORKER_NODES} schedulable worker nodes "
+        f"(hostname anti-affinity), the cluster has {len(nodes)}: {nodes}"
+    )
 
     target = resolve_target()
     logger.info(
@@ -125,12 +139,16 @@ def _components(example: dict[str, Any]) -> set[str]:
     return names
 
 
-def _progress(namespace: str, cluster: str) -> dict[str, str]:
-    """State, ready/size per component and message of the cluster; {} when unreadable."""
-    raw = kubectl_bin("get", "psmdb", cluster, "-n", namespace, "-o", "json", check=False)
-    if not raw.strip():
-        return {}
-    status = json.loads(raw).get("status", {})
+def _progress(namespace: str, cluster: str) -> tuple[dict[str, str], str]:
+    """(state, ready/size per component and message of the cluster, ""), or ({}, kubectl
+    error) when the cluster cannot be read."""
+    raw = kubectl_bin(
+        "get", "psmdb", cluster, "-n", namespace, "-o", "json", check=False, return_stderr=True
+    )
+    try:
+        status = json.loads(raw).get("status", {})
+    except json.JSONDecodeError:
+        return {}, raw.strip()
     progress = {
         "state": str(status.get("state", "")),
         "ready": f"{status.get('ready', 0)}/{status.get('size', 0)}",
@@ -142,7 +160,7 @@ def _progress(namespace: str, cluster: str) -> dict[str, str]:
         progress[name] = f"{component.get('ready', 0)}/{component.get('size', 0)}"
     if status.get("message"):
         progress["message"] = str(status["message"])
-    return progress
+    return progress, ""
 
 
 def _cluster_ready(progress: dict[str, str], components: set[str]) -> bool:
@@ -172,10 +190,6 @@ def _db_pods(namespace: str, cluster: str) -> dict[str, tuple[str, int]]:
         )
         for pod in pods["items"]
     }
-
-
-def _mongos_uri(cluster: str, namespace: str, user: str, password: str) -> str:
-    return f"{user}:{password}@{cluster}-mongos.{namespace}"
 
 
 class TestOlmDefaultInstall:
@@ -209,15 +223,36 @@ class TestOlmDefaultInstall:
         kubectl_bin("apply", "-n", config.namespace, "-f", "-", input_data=json.dumps(example))
 
         components = _components(example)
+        empty_reads = 0
+        error_since: float | None = None
 
         def fetch() -> dict[str, str]:
-            progress = _progress(config.namespace, cluster)
+            nonlocal empty_reads, error_since
+            progress, read_error = _progress(config.namespace, cluster)
+            if not progress:
+                empty_reads += 1
+                assert empty_reads < MAX_EMPTY_READS, (
+                    f"psmdb/{cluster} could not be read {empty_reads} times in a row: "
+                    f"{read_error or 'empty output'}"
+                )
+                return progress
+            empty_reads = 0
             message = progress.get("message", "")
             # A conflict on a concurrent update is retried by the operator, not an error.
-            if progress.get("state") == "error" and not any(
+            if progress.get("state") != "error" or any(
                 pattern.search(message) for pattern in ALLOWED_OPERATOR_ERRORS
             ):
-                raise RuntimeError(f"Cluster {cluster} reported an error: {progress}")
+                error_since = None
+            elif error_since is None:
+                error_since = time.monotonic()
+                logger.warning(
+                    f"Cluster {cluster} reported an error, waiting up to {ERROR_GRACE}s for "
+                    f"the operator to recover: {message}"
+                )
+            elif time.monotonic() - error_since >= ERROR_GRACE:
+                raise AssertionError(
+                    f"Cluster {cluster} has been in error state for {ERROR_GRACE}s: {progress}"
+                )
             return progress
 
         start = time.monotonic()
@@ -247,32 +282,17 @@ class TestOlmDefaultInstall:
     ) -> None:
         """Write a document through mongos and read it back"""
         cluster = example["metadata"]["name"]
-        secret = example["spec"]["secrets"]["users"]
-        psmdb_client.run_mongosh(
-            f'db.createUser({{user:"{APP_USER}",pwd:"{APP_PASSWORD}",'
-            f'roles:[{{db:"{APP_USER}",role:"readWrite"}}]}})',
-            _mongos_uri(
-                cluster,
-                config.namespace,
-                get_user_data(secret, "MONGODB_USER_ADMIN_USER"),
-                get_user_data(secret, "MONGODB_USER_ADMIN_PASSWORD"),
-            ),
-            driver="mongodb",
-            replica_set="",
+        create_app_user(
+            psmdb_client,
+            cluster,
+            config.namespace,
+            component="mongos",
+            users_secret=example["spec"]["secrets"]["users"],
         )
-        app_uri = _mongos_uri(cluster, config.namespace, APP_USER, APP_PASSWORD)
-        retry(
-            lambda: psmdb_client.run_mongosh(
-                f"db.getSiblingDB('{APP_USER}').test.insertOne({{ x: 100500 }})",
-                app_uri,
-                driver="mongodb",
-                replica_set="",
-            ),
-            condition=lambda result: "acknowledged: true" in result,
-        )
+        insert(psmdb_client, cluster, config.namespace, 100500, component="mongos")
         psmdb_client.compare_mongo_cmd(
             "find({}, { _id: 0 }).toArray()",
-            app_uri,
+            cluster_uri(cluster, config.namespace, APP_USER, APP_PASSWORD, component="mongos"),
             database=APP_USER,
             test_file=f"{test_paths['test_dir']}/compare/find-1.json",
             replica_set="",
@@ -282,8 +302,10 @@ class TestOlmDefaultInstall:
     def test_cluster_stable(
         self, config: OlmDefaultInstallConfig, example: dict[str, Any], state: State
     ) -> None:
-        """No DB pod was replaced or restarted and no Warning event came up once ready"""
-        pods = _db_pods(config.namespace, example["metadata"]["name"])
+        """After a reconcile, no DB pod was replaced or restarted and no Warning event came up"""
+        cluster = example["metadata"]["name"]
+        wait_reconciled(config.namespace, cluster)
+        pods = _db_pods(config.namespace, cluster)
         assert pods == state.pods, f"DB pods changed. When ready: {state.pods}, now: {pods}"
         new_warnings = [
             f"{ev['involvedObject']['kind']}/{ev['involvedObject']['name']}: "

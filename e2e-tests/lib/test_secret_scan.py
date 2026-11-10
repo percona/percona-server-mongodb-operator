@@ -1,11 +1,19 @@
 """Unit tests of the credential scan; run with `make py-unit` (no cluster, no conftest)."""
 
 import base64
+import json
+import subprocess
+import time
+from typing import Any
 
+import pytest
+
+from lib import secret_scan
 from lib.secret_scan import (
     ALLOWED_VALUES,
     MIN_VALUE_LENGTH,
     Finding,
+    LogRecorder,
     data_values,
     mask,
     scan_text,
@@ -85,6 +93,14 @@ def test_original_base64_of_a_value_with_a_trailing_newline_is_searched() -> Non
     assert [f.rule for f in findings] == ["secret value s3-secret/AWS_SECRET_ACCESS_KEY (base64)"]
 
 
+def test_lines_are_numbered_by_their_position_in_the_value() -> None:
+    values = data_values("s3-secret/key", _b64("\nfirst-value\n\nfirst-value\nsecond-value\n"))
+    assert {name: value for name, value in values.items() if "#" in name} == {
+        "s3-secret/key#2": "first-value",
+        "s3-secret/key#5": "second-value",
+    }
+
+
 def test_short_and_allowlisted_values_are_skipped() -> None:
     assert data_values("s3-secret/region", _b64("us-east-1\nshort\n")) == {
         "s3-secret/region (base64)": _b64("us-east-1\nshort\n"),
@@ -95,3 +111,144 @@ def test_short_and_allowlisted_values_are_skipped() -> None:
 
 def _b64(value: str) -> str:
     return base64.b64encode(value.encode()).decode()
+
+
+class FakeCluster:
+    """Pods and logs served to secret_scan through a fake kubectl_bin."""
+
+    def __init__(self) -> None:
+        self.pods: dict[str, dict[str, Any]] = {}
+        # Still listed by `get pods`, but gone when read.
+        self.deleted: list[dict[str, Any]] = []
+        self.logs: dict[tuple[str, str], str] = {}
+        self.broken: set[tuple[str, str]] = set()
+        self.calls: list[tuple[str, ...]] = []
+
+    def add(
+        self, name: str, uid: str, logs: dict[str, str], waiting: tuple[str, ...] = ()
+    ) -> None:
+        containers = [c for c in [*logs, *waiting] if c != "init"]
+        self.pods[name] = {
+            "metadata": {"name": name, "uid": uid},
+            "spec": {
+                "initContainers": [{"name": "init"}],
+                "containers": [{"name": c} for c in containers],
+            },
+            "status": {
+                "initContainerStatuses": [{"name": "init", "state": {"terminated": {}}}],
+                "containerStatuses": [
+                    {"name": c, "state": {"waiting": {}} if c in waiting else {"running": {}}}
+                    for c in containers
+                ],
+            },
+        }
+        for container, log in {"init": "", **logs}.items():
+            self.logs[(name, container)] = log
+
+    def delete_after_listing(self, name: str) -> None:
+        self.deleted.append(self.pods.pop(name))
+
+    def kubectl(self, *args: str, **_: Any) -> str:
+        self.calls.append(args)
+        if args[:2] == ("get", "pods"):
+            return json.dumps({"items": [*self.pods.values(), *self.deleted]})
+        if args[:2] == ("get", "pod"):
+            return json.dumps(self.pods[args[2]]) if args[2] in self.pods else ""
+        if args[0] == "logs":
+            pod, container = args[1], args[args.index("-c") + 1]
+            if pod not in self.pods or (pod, container) in self.broken:
+                raise subprocess.CalledProcessError(1, ["kubectl", *args], stderr="NotFound")
+            return self.logs[(pod, container)]
+        raise AssertionError(f"Unexpected kubectl call: {args}")
+
+
+@pytest.fixture
+def cluster(monkeypatch: pytest.MonkeyPatch) -> FakeCluster:
+    fake = FakeCluster()
+    monkeypatch.setattr(secret_scan, "kubectl_bin", fake.kubectl)
+    monkeypatch.setattr(secret_scan, "READ_DELAY", 0)
+    return fake
+
+
+def test_recorder_keeps_the_latest_logs_of_replaced_pods(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "old00000-uid", {"init": "init log", "mongod": "started"})
+    recorder = LogRecorder("ns", "db")
+    recorder.record()
+    cluster.logs[("db-rs0-0", "mongod")] = "started\nrestored"
+    recorder.record()
+    cluster.add("db-rs0-0", "new00000-uid", {"init": "init again", "mongod": "rebuilt"})
+    recorder.record()
+    assert recorder.sources() == {
+        "pod/db-rs0-0/init (uid old00000)": "init log",
+        "pod/db-rs0-0/mongod (uid old00000)": "started\nrestored",
+    }
+
+
+def test_recorder_keeps_a_pod_deleted_while_it_reads(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "kept"})
+    recorder = LogRecorder("ns", "db")
+    recorder.record()
+    cluster.delete_after_listing("db-rs0-0")
+    recorder.record()
+    assert recorder.sources() == {
+        "pod/db-rs0-0/init (uid pod00000)": "",
+        "pod/db-rs0-0/mongod (uid pod00000)": "kept",
+    }
+
+
+def test_recorder_reads_only_started_containers(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "log"}, waiting=("backup-agent",))
+    LogRecorder("ns", "db").record()
+    read = {args[args.index("-c") + 1] for args in cluster.calls if args[0] == "logs"}
+    assert read == {"init", "mongod"}
+
+
+def test_recorder_fails_on_a_log_it_cannot_read(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "log"})
+    cluster.broken.add(("db-rs0-0", "mongod"))
+    with pytest.raises(AssertionError, match="container mongod of pod db-rs0-0 after 3 attempts"):
+        LogRecorder("ns", "db").record()
+
+
+def test_recorder_raises_the_error_of_its_thread(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "log"})
+    cluster.broken.add(("db-rs0-0", "mongod"))
+    with (
+        pytest.raises(AssertionError, match="Recording the logs of the db pods failed"),
+        LogRecorder("ns", "db", interval=0.01),
+    ):
+        pass
+
+
+def test_recorder_does_not_hide_the_error_of_the_step(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "log"})
+    cluster.broken.add(("db-rs0-0", "mongod"))
+    with (
+        pytest.raises(RuntimeError, match="restore failed"),
+        LogRecorder("ns", "db", interval=0.01),
+    ):
+        raise RuntimeError("restore failed")
+
+
+def test_recorder_reads_once_more_when_it_stops(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "old00000-uid", {"mongod": "old"})
+    with LogRecorder("ns", "db", interval=60) as recorder:
+        # Wait for the first read of the thread, which then sleeps for the interval.
+        deadline = time.monotonic() + 5
+        while len(recorder._logs) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        cluster.add("db-rs0-0", "new00000-uid", {"mongod": "new"})
+    assert recorder.sources() == {
+        "pod/db-rs0-0/init (uid old00000)": "",
+        "pod/db-rs0-0/mongod (uid old00000)": "old",
+    }
+
+
+def test_pod_logs_of_a_deleted_pod_are_skipped(cluster: FakeCluster) -> None:
+    assert secret_scan._pod_logs("ns", "gone") is None
+
+
+def test_pod_logs_fail_when_a_container_does_not_start(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "log"}, waiting=("backup-agent",))
+    with pytest.raises(AssertionError, match=r"\['backup-agent'\] of pod db-rs0-0 did not start"):
+        secret_scan._pod_logs("ns", "db-rs0-0")

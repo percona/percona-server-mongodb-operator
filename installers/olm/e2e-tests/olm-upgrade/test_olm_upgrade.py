@@ -46,6 +46,7 @@ from olm import (
     subscription_status,
     teardown,
     version,
+    wait_reconciled,
     wait_until,
     warning_events,
 )
@@ -63,9 +64,6 @@ ALLOWED_STATES = {"ready", "initializing"}
 SOAK_SECONDS = 180
 # A single failed read of the CR state is skipped; this many in a row fail the test.
 MAX_EMPTY_READS = 6
-# Only read by the version-service cron, which upgradeOptions.apply=disabled and
-# DISABLE_TELEMETRY leave idle: changing it bumps the CR generation without touching pods.
-RECONCILE_PROBE = '{"spec":{"upgradeOptions":{"schedule":"0 3 * * *"}}}'
 
 # Taken by the starting operator, restored by the target one.
 BACKUP = "backup-before-upgrade"
@@ -388,35 +386,7 @@ class TestOlmUpgrade:
     def test_cluster_not_restarted(self, config: OlmUpgradeConfig, state: UpgradeState) -> None:
         """The new operator reconciles the cluster without recreating or restarting DB pods"""
         # Prove the new operator acts on the CR: an idle state would also look unchanged.
-        generation = int(
-            kubectl_bin(
-                "patch",
-                "psmdb",
-                config.cluster,
-                "-n",
-                config.namespace,
-                "--type=merge",
-                "-p",
-                RECONCILE_PROBE,
-                "-o",
-                "jsonpath={.metadata.generation}",
-            )
-        )
-        wait_until(
-            f"the operator to reconcile generation {generation}",
-            lambda: kubectl_bin(
-                "get",
-                "psmdb",
-                config.cluster,
-                "-n",
-                config.namespace,
-                "-o",
-                "jsonpath={.status.observedGeneration}",
-                check=False,
-            ).strip(),
-            lambda observed: observed == str(generation),
-            timeout=300,
-        )
+        wait_reconciled(config.namespace, config.cluster)
 
         # The new operator may only change the StatefulSets on a later reconcile,
         # so keep watching for a while before comparing.

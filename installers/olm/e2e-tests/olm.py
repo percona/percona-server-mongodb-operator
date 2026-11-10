@@ -8,6 +8,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -479,15 +480,38 @@ def apply(namespace: str, obj: dict[str, Any]) -> None:
 
 
 def cluster_uri(
-    cluster: str, namespace: str, user: str, password: str, pod: int | None = None
+    cluster: str,
+    namespace: str,
+    user: str,
+    password: str,
+    pod: int | None = None,
+    component: str = "rs0",
 ) -> str:
-    host = f"{cluster}-rs0" + (f"-{pod}.{cluster}-rs0" if pod is not None else "")
+    """user:password@host of the `component` Service (rs0, cfg or mongos), or of one pod."""
+    service = f"{cluster}-{component}"
+    host = service + (f"-{pod}.{service}" if pod is not None else "")
     return f"{user}:{password}@{host}.{namespace}"
 
 
-def create_app_user(client: MongoManager, cluster: str, namespace: str) -> None:
-    secret = f"{cluster}-secrets"
-    client.run_mongosh(
+def _mongosh(client: MongoManager, command: str, uri: str, component: str) -> str:
+    if component == "mongos":
+        # mongos is a ClusterIP Service: no SRV record and no replica set name.
+        return client.run_mongosh(command, uri, driver="mongodb", replica_set="")
+    return client.run_mongosh(command, uri)
+
+
+def create_app_user(
+    client: MongoManager,
+    cluster: str,
+    namespace: str,
+    component: str = "rs0",
+    users_secret: str = "",
+) -> None:
+    """Create the readWrite APP_USER through `component` as the user admin of `users_secret`
+    (default: <cluster>-secrets)."""
+    secret = users_secret or f"{cluster}-secrets"
+    _mongosh(
+        client,
         f'db.createUser({{user:"{APP_USER}",pwd:"{APP_PASSWORD}",'
         f'roles:[{{db:"{APP_USER}",role:"readWrite"}}]}})',
         cluster_uri(
@@ -495,16 +519,23 @@ def create_app_user(client: MongoManager, cluster: str, namespace: str) -> None:
             namespace,
             get_user_data(secret, "MONGODB_USER_ADMIN_USER"),
             get_user_data(secret, "MONGODB_USER_ADMIN_PASSWORD"),
+            component=component,
         ),
+        component,
     )
 
 
-def insert(client: MongoManager, cluster: str, namespace: str, value: int) -> None:
-    """Insert {x: value} into myApp.test through the primary, retried until acknowledged."""
+def insert(
+    client: MongoManager, cluster: str, namespace: str, value: int, component: str = "rs0"
+) -> None:
+    """Insert {x: value} into myApp.test through `component`, retried until acknowledged."""
+    uri = cluster_uri(cluster, namespace, APP_USER, APP_PASSWORD, component=component)
     retry(
-        lambda: client.run_mongosh(
+        lambda: _mongosh(
+            client,
             f"db.getSiblingDB('{APP_USER}').test.insertOne({{ x: {value} }})",
-            cluster_uri(cluster, namespace, APP_USER, APP_PASSWORD),
+            uri,
+            component,
         ),
         condition=lambda result: "acknowledged: true" in result,
     )
@@ -576,27 +607,71 @@ def operator_restarts(pod: dict[str, Any]) -> int:
     return sum(c.get("restartCount", 0) for c in pod["status"].get("containerStatuses", []))
 
 
+@dataclass(frozen=True)
+class ErrorWindow:
+    """An operator error line expected only between `start` and `end`, at most `max_count`
+    times. The time is the RFC3339 timestamp that starts each operator log line."""
+
+    pattern: re.Pattern[str]
+    start: datetime
+    end: datetime
+    max_count: int
+
+
+def _log_time(line: str) -> datetime | None:
+    try:
+        logged = datetime.fromisoformat(line.split(maxsplit=1)[0])
+    except (IndexError, ValueError):
+        return None
+    return logged if logged.tzinfo else None
+
+
+def unexpected_errors(lines: list[str], windows: tuple[ErrorWindow, ...] = ()) -> list[str]:
+    """Error lines not covered by ALLOWED_OPERATOR_ERRORS or by one of `windows`.
+
+    A line that matches a window's pattern outside its time range, or after the window
+    has allowed `max_count` lines, is returned with a note saying so.
+    """
+    used = [0] * len(windows)
+    errors = []
+    for line in lines:
+        if not OPERATOR_ERROR.search(line) or any(
+            pattern.search(line) for pattern in ALLOWED_OPERATOR_ERRORS
+        ):
+            continue
+        note = ""
+        for i, window in enumerate(windows):
+            if not window.pattern.search(line):
+                continue
+            logged = _log_time(line)
+            if logged is None or not window.start <= logged <= window.end:
+                note = f"  [allowed only between {window.start} and {window.end}]"
+            elif used[i] >= window.max_count:
+                note = f"  [allowed at most {window.max_count} times]"
+            else:
+                used[i] += 1
+                break
+        else:
+            errors.append(line + note)
+    return errors
+
+
 def operator_errors(
-    namespace: str, pod_name: str, allowed: tuple[re.Pattern[str], ...] = ()
+    namespace: str, pod_name: str, windows: tuple[ErrorWindow, ...] = ()
 ) -> list[str]:
-    """Error lines of the operator log not covered by ALLOWED_OPERATOR_ERRORS or `allowed`."""
-    return [
-        line
-        for line in kubectl_bin("logs", pod_name, "-n", namespace).splitlines()
-        if OPERATOR_ERROR.search(line)
-        and not any(pattern.search(line) for pattern in (*ALLOWED_OPERATOR_ERRORS, *allowed))
-    ]
+    """Error lines of the operator log, see unexpected_errors."""
+    return unexpected_errors(kubectl_bin("logs", pod_name, "-n", namespace).splitlines(), windows)
 
 
 def assert_operator_healthy(
     namespace: str,
     csv: dict[str, Any],
     expected_uid: str = "",
-    allowed_errors: tuple[re.Pattern[str], ...] = (),
+    windows: tuple[ErrorWindow, ...] = (),
 ) -> dict[str, Any]:
     """The operator pod is Ready, was not replaced or restarted, and logged no errors.
 
-    `allowed_errors` extends ALLOWED_OPERATOR_ERRORS for the caller's situation.
+    `windows` allows error lines that are expected only during a step of the caller.
     Returns the pod.
     """
     pod = operator_pod(namespace, csv)
@@ -608,7 +683,7 @@ def assert_operator_healthy(
     if restarts := operator_restarts(pod):
         previous = kubectl_bin("logs", name, "-n", namespace, "--previous", check=False)
         raise AssertionError(f"Operator restarted {restarts} times. Previous logs:\n{previous}")
-    errors = operator_errors(namespace, name, allowed_errors)
+    errors = operator_errors(namespace, name, windows)
     assert not errors, "Operator logged errors:\n" + "\n".join(errors)
     return pod
 
@@ -620,3 +695,49 @@ def warning_events(namespace: str) -> dict[str, dict[str, Any]]:
 
 def event_count(event: dict[str, Any]) -> int:
     return int(event.get("count") or event.get("series", {}).get("count") or 1)
+
+
+# Only read by the version-service cron, which upgradeOptions.apply=disabled and
+# DISABLE_TELEMETRY leave idle: changing it bumps the CR generation without touching pods.
+RECONCILE_PROBE = '{"spec":{"upgradeOptions":{"schedule":"0 3 * * *"}}}'
+
+
+def wait_reconciled(namespace: str, cluster: str, timeout: int = 300) -> None:
+    """Bump the generation of psmdb/`cluster` and wait for status.observedGeneration.
+
+    Proves that the operator reconciles the CR: an idle operator also leaves the
+    cluster unchanged.
+    """
+    before = kubectl_bin(
+        "get", "psmdb", cluster, "-n", namespace, "-o", "jsonpath={.metadata.generation}"
+    )
+    generation = kubectl_bin(
+        "patch",
+        "psmdb",
+        cluster,
+        "-n",
+        namespace,
+        "--type=merge",
+        "-p",
+        RECONCILE_PROBE,
+        "-o",
+        "jsonpath={.metadata.generation}",
+    )
+    assert int(generation) > int(before), (
+        f"{RECONCILE_PROBE} did not change psmdb/{cluster} (generation {before})"
+    )
+    wait_until(
+        f"the operator to reconcile generation {generation} of {cluster}",
+        lambda: kubectl_bin(
+            "get",
+            "psmdb",
+            cluster,
+            "-n",
+            namespace,
+            "-o",
+            "jsonpath={.status.observedGeneration}",
+            check=False,
+        ).strip(),
+        lambda observed: observed == generation,
+        timeout=timeout,
+    )

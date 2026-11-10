@@ -6,6 +6,7 @@ import re
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,12 +14,13 @@ import pytest
 from lib.backup import wait_backup, wait_physical_restore, wait_restore
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.secret_scan import check_logs_for_secrets
+from lib.secret_scan import LogRecorder, check_logs_for_secrets
 from lib.utils import Paths, env_bool
 from olm import (
     LOCAL_S3,
     RS0_SIZE,
     CatalogTarget,
+    ErrorWindow,
     apply,
     assert_operator_healthy,
     check_members,
@@ -43,10 +45,14 @@ logger = logging.getLogger(__name__)
 # A logical restore of a few documents takes about a minute; a hang shows up early.
 LOGICAL_RESTORE_TIMEOUT = 900
 
-# A physical restore stops every mongod while PBM replaces the data files, so one
-# reconcile cannot reach the replica set and the operator reports it as a crash
-# before it rebuilds the StatefulSets. Seen once per restore on the first run.
-PHYSICAL_RESTORE_ERRORS = (re.compile(r"FULL CLUSTER CRASH.*ping mongo: server selection error"),)
+# A physical restore stops every mongod while PBM replaces the data files, so a
+# reconcile cannot reach the replica set and the operator logs it as a full cluster
+# crash before it rebuilds the StatefulSets. Allowed only during the physical
+# restore: elsewhere the line means the operator force-reconfigures a replset.
+PHYSICAL_RESTORE_CRASH = re.compile(r"FULL CLUSTER CRASH.*ping mongo: server selection error")
+# Seen once per restore; a few more reconciles can run while the mongods are down,
+# but not more than one per member.
+PHYSICAL_RESTORE_CRASH_MAX = RS0_SIZE
 
 
 @dataclass(frozen=True)
@@ -58,9 +64,13 @@ class OlmBackupRestoreConfig:
 
 @dataclass
 class State:
-    """What the install step saw, for the final operator check."""
+    """What the steps saw, for the final operator and credential checks."""
 
     operator_pod_uid: str = ""
+    # Start and end of the physical restore, in UTC.
+    physical_restore: tuple[datetime, datetime] | None = None
+    # Logs of the pods the physical restore replaced.
+    restore_logs: LogRecorder | None = None
 
 
 @pytest.fixture(scope="class")
@@ -198,9 +208,14 @@ class TestOlmBackupRestore:
     def test_physical_backup(
         self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str
     ) -> None:
-        """A physical backup reaches ready, with no credential in the logs so far"""
+        """A physical backup reaches ready"""
         _backup(config, csv, storage, "physical")
-        # The physical restore replaces the replset pods and their logs.
+
+    @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_physical_backup"])
+    def test_no_credentials_before_physical_restore(
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any]
+    ) -> None:
+        """No credential in the logs and objects of the backups and the logical restore"""
         operator = operator_pod(config.namespace, csv)["metadata"]["name"]
         check_logs_for_secrets(config.namespace, config.cluster, operator)
 
@@ -211,12 +226,18 @@ class TestOlmBackupRestore:
         csv: dict[str, Any],
         test_paths: Paths,
         psmdb_client: MongoManager,
+        state: State,
     ) -> None:
         """A physical restore rebuilds the cluster with the data as of the backup"""
         compare = f"{test_paths['test_dir']}/compare"
         insert(psmdb_client, config.cluster, config.namespace, 100501)
         check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-2.json")
-        _restore(config, csv, "physical")
+        # The operator replaces the replset pods when the restore completes; keep their logs.
+        state.restore_logs = LogRecorder(config.namespace, config.cluster)
+        start = datetime.now(UTC)
+        with state.restore_logs:
+            _restore(config, csv, "physical")
+        state.physical_restore = (start, datetime.now(UTC))
         check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-1.json")
         # The rebuilt cluster accepts writes.
         insert(psmdb_client, config.cluster, config.namespace, 100501)
@@ -227,14 +248,18 @@ class TestOlmBackupRestore:
         self, config: OlmBackupRestoreConfig, csv: dict[str, Any], state: State
     ) -> None:
         """The operator was not replaced or restarted and logged no unexpected errors"""
-        assert_operator_healthy(
-            config.namespace, csv, state.operator_pod_uid, PHYSICAL_RESTORE_ERRORS
+        assert state.physical_restore, "The physical restore step did not record its time"
+        crash = ErrorWindow(
+            PHYSICAL_RESTORE_CRASH, *state.physical_restore, PHYSICAL_RESTORE_CRASH_MAX
         )
+        assert_operator_healthy(config.namespace, csv, state.operator_pod_uid, (crash,))
 
-    @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_physical_restore"])
+    # Last, and only after the deploy step, so it also runs when a backup or restore fails.
+    @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_deploy_cluster"])
     def test_no_credentials_in_logs(
-        self, config: OlmBackupRestoreConfig, csv: dict[str, Any]
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], state: State
     ) -> None:
         """No storage credential or credential-shaped string in the logs and objects"""
         operator = operator_pod(config.namespace, csv)["metadata"]["name"]
-        check_logs_for_secrets(config.namespace, config.cluster, operator)
+        recorded = state.restore_logs.sources() if state.restore_logs else {}
+        check_logs_for_secrets(config.namespace, config.cluster, operator, extra_sources=recorded)

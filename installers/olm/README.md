@@ -358,12 +358,16 @@ Runs once per bundle type. It installs the target CSV with a Manual-approval
 Subscription and applies the first `alm-examples` entry of the CSV unchanged:
 the PerconaServerMongoDB that the OpenShift console prefills when a user clicks
 Create. Today that is a sharded cluster (`rs0`, `cfg` and `mongos`, three pods
-each, with hostname anti-affinity, so it needs three worker nodes) with backups
-enabled and no storage. The test fails fast when the cluster reports `error`,
-and otherwise waits up to 15 minutes for `ready` with every component ready.
-It then writes a document through the mongos Service and reads it back. Once
-the cluster is ready, no DB pod may be replaced or restarted and no Warning
-event may come up, and the operator pod must not restart or log errors.
+each, with hostname anti-affinity) with backups enabled and no storage. The
+test fails at the start when the cluster has fewer than three schedulable
+worker nodes. It waits up to 15 minutes for `ready` with every component ready,
+and fails earlier when the cluster stays in `error` for 2 minutes (the operator
+retries an error) or cannot be read 6 times in a row. It then writes a document
+through the mongos Service and reads it back. It changes
+`spec.upgradeOptions.schedule` and waits for `status.observedGeneration`, so the
+operator has reconciled the cluster before the final checks: once the cluster
+is ready, no DB pod may be replaced or restarted and no Warning event may come
+up, and the operator pod must not restart or log errors.
 
 ## olm-backup-restore
 
@@ -376,11 +380,20 @@ after the restore every member (direct connection to each pod) must return only
 the data as of the backup, and the cluster must accept writes again. For the
 physical restore it also waits for the `percona.com/resync-pbm` annotation, the
 StatefulSet rebuild and the PBM resync. The operator pod must not restart or
-log errors during the run. Finally the logs of the operator and database pods,
-the backup and restore objects, the events and the cluster object are scanned
-for the storage credentials and for credential-shaped strings
-(`e2e-tests/lib/secret_scan.py`); a finding fails the test with the source,
-line and rule, with the match masked.
+log errors during the run. The only exception is the `FULL CLUSTER CRASH` line,
+which the operator logs while the physical restore stops every mongod: it is
+allowed at most three times, and only between the start and the end of the
+physical restore.
+
+The logs of the operator and database pods, the backup and restore objects,
+the events and the cluster object are scanned for the storage credentials and
+for credential-shaped strings (`e2e-tests/lib/secret_scan.py`) before the
+physical restore and at the end of the run. A finding fails the test with the
+source, line and rule, with the match masked. The operator replaces the
+database pods when the physical restore completes, so their logs are read
+every 15 seconds during the restore, and the logs of the replaced pods are
+scanned at the end too. The final scan also runs when a backup or restore step
+fails.
 
 ## olm-upgrade
 

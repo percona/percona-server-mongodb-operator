@@ -11,13 +11,22 @@ account keys, private key blocks, MongoDB URIs with a password). A finding repor
 the source, the line number and the rule; the scan's own assertion message masks
 the matched text. The failure report the harness attaches (operator logs, events)
 is not redacted.
+
+The operator replaces the database pods when a physical restore completes, and
+their logs go with them. LogRecorder keeps them: run the restore inside it and pass
+its sources to check_logs_for_secrets.
 """
 
 import base64
 import json
 import logging
 import re
+import subprocess
+import threading
+import time
 from dataclasses import dataclass
+from types import TracebackType
+from typing import Any, Self
 
 from .kubectl import kubectl_bin
 
@@ -62,6 +71,17 @@ PATTERNS = (
 # A URI whose password is already masked is not a leak.
 MASKED_PASSWORD = re.compile(r"^(\*+|x+|<[^>]*>|\[[^\]]*\]|REDACTED)$", re.IGNORECASE)
 
+# A pod can be deleted, and a container can be still starting, between listing the
+# pod and reading its log: a read is tried this many times, READ_DELAY seconds apart.
+READ_ATTEMPTS = 3
+READ_DELAY = 5
+
+# LogRecorder reads every RECORD_INTERVAL seconds, so it misses a pod that lives
+# shorter and the last lines a pod logs before it is deleted.
+RECORD_INTERVAL = 15
+# Upper bound for the recorder thread to finish its current read on exit.
+RECORD_STOP_TIMEOUT = 120
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -100,15 +120,19 @@ def secret_values(namespace: str, secret_names: tuple[str, ...]) -> dict[str, st
 
 
 def data_values(name: str, encoded: str) -> dict[str, str]:
-    """Search values for one Secret data entry: its distinct lines and its base64."""
+    """Search values for one Secret data entry: its base64 and its distinct lines, each
+    keyed by the number of its first line in the value."""
     decoded = base64.b64decode(encoded).decode(errors="replace")
     values: dict[str, str] = {}
     if len(decoded.strip()) >= MIN_VALUE_LENGTH and decoded.strip() not in ALLOWED_VALUES:
         values[f"{name} (base64)"] = encoded
-    lines = dict.fromkeys(line.strip() for line in decoded.splitlines())
-    for number, line in enumerate(lines, start=1):
-        if len(line) >= MIN_VALUE_LENGTH and line not in ALLOWED_VALUES:
-            values[f"{name}#{number}"] = line
+    seen = set()
+    for number, raw_line in enumerate(decoded.splitlines(), start=1):
+        line = raw_line.strip()
+        if line in seen or len(line) < MIN_VALUE_LENGTH or line in ALLOWED_VALUES:
+            continue
+        seen.add(line)
+        values[f"{name}#{number}"] = line
     return values
 
 
@@ -128,27 +152,82 @@ def scan_text(source: str, text: str, values: dict[str, str]) -> list[Finding]:
     return findings
 
 
-def _pod_logs(namespace: str, pod: str) -> dict[str, str]:
-    """Current and previous logs of every container of `pod`, keyed by source name."""
-    containers = kubectl_bin(
-        "get",
-        "pod",
-        pod,
-        "-n",
-        namespace,
-        "-o",
-        "jsonpath={.spec.initContainers[*].name} {.spec.containers[*].name}",
-    ).split()
-    logs = {}
-    for container in containers:
-        logs[f"pod/{pod}/{container}"] = kubectl_bin("logs", pod, "-n", namespace, "-c", container)
-        # Absent unless the container restarted.
-        previous = kubectl_bin(
-            "logs", pod, "-n", namespace, "-c", container, "--previous", check=False
-        )
-        if previous:
-            logs[f"pod/{pod}/{container} (previous)"] = previous
-    return logs
+def _pod(namespace: str, pod: str) -> dict[str, Any] | None:
+    """The pod object, or None when it is gone."""
+    raw = kubectl_bin("get", "pod", pod, "-n", namespace, "-o", "json", "--ignore-not-found")
+    return dict(json.loads(raw)) if raw.strip() else None
+
+
+def _containers(pod: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """(started, not started) containers of `pod`, init containers first."""
+    status = pod.get("status", {})
+    statuses = {
+        c["name"]: c
+        for c in (status.get("initContainerStatuses") or [])
+        + (status.get("containerStatuses") or [])
+    }
+    started, waiting = [], []
+    for container in (pod["spec"].get("initContainers") or []) + pod["spec"]["containers"]:
+        container_status = statuses.get(container["name"], {})
+        states = {**container_status.get("lastState", {}), **container_status.get("state", {})}
+        if "running" in states or "terminated" in states:
+            started.append(container["name"])
+        else:
+            waiting.append(container["name"])
+    return started, waiting
+
+
+def _container_log(namespace: str, pod: str, container: str) -> str | None:
+    """Current log of `container`, or None when its pod is gone. Fails after READ_ATTEMPTS."""
+    error = ""
+    for attempt in range(READ_ATTEMPTS):
+        if attempt:
+            time.sleep(READ_DELAY)
+        try:
+            return kubectl_bin("logs", pod, "-n", namespace, "-c", container)
+        except subprocess.CalledProcessError as e:
+            error = str(e.stderr or "").strip()
+        if _pod(namespace, pod) is None:
+            return None
+    raise AssertionError(
+        f"Cannot read the log of container {container} of pod {pod} after "
+        f"{READ_ATTEMPTS} attempts: {error}"
+    )
+
+
+def _pod_logs(namespace: str, pod: str) -> dict[str, str] | None:
+    """Current and previous logs of every container of `pod`, keyed by source name.
+
+    None when the pod is gone. Waits for containers that have not started yet and
+    fails when they do not start within the read attempts.
+    """
+    waiting: list[str] = []
+    for attempt in range(READ_ATTEMPTS):
+        if attempt:
+            time.sleep(READ_DELAY)
+        obj = _pod(namespace, pod)
+        if obj is None:
+            return None
+        started, waiting = _containers(obj)
+        if waiting:
+            continue
+        logs = {}
+        for container in started:
+            current = _container_log(namespace, pod, container)
+            if current is None:
+                return None
+            logs[f"pod/{pod}/{container}"] = current
+            # Absent unless the container restarted.
+            previous = kubectl_bin(
+                "logs", pod, "-n", namespace, "-c", container, "--previous", check=False
+            )
+            if previous:
+                logs[f"pod/{pod}/{container} (previous)"] = previous
+        return logs
+    raise AssertionError(
+        f"Containers {waiting} of pod {pod} did not start in "
+        f"{(READ_ATTEMPTS - 1) * READ_DELAY}s, so their logs cannot be scanned"
+    )
 
 
 def _names(namespace: str, resource: str, selector: str = "") -> list[str]:
@@ -167,7 +246,11 @@ def collect_sources(namespace: str, cluster: str, operator_pod: str) -> dict[str
 
     sources: dict[str, str] = {}
     for pod in dict.fromkeys(pods):
-        sources.update(_pod_logs(namespace, pod))
+        logs = _pod_logs(namespace, pod)
+        if logs is None:
+            logger.info(f"Pod {pod} was deleted before its logs were read, skipping it")
+            continue
+        sources.update(logs)
     for resource in ("psmdb-backup", "psmdb-restore", "events"):
         sources[resource] = kubectl_bin("get", resource, "-n", namespace, "-o", "yaml")
     sources[f"psmdb/{cluster}"] = kubectl_bin(
@@ -181,18 +264,20 @@ def check_logs_for_secrets(
     cluster: str,
     operator_pod: str,
     secret_names: tuple[str, ...] = STORAGE_SECRETS,
+    extra_sources: dict[str, str] | None = None,
 ) -> None:
     """Fail when a storage credential or a credential-shaped string is in the logs.
 
     Scans the operator pod, every pod of `cluster` (all containers, previous logs
     included), the pods of Jobs in the namespace, the psmdb-backup and psmdb-restore
-    objects, the events and the psmdb object. The report masks every match. Logs
-    of the pods that run a physical restore are not covered, because the operator
-    replaces those pods when the restore completes; call this before one too.
+    objects, the events and the psmdb object, plus `extra_sources`: text read
+    earlier, such as the logs a LogRecorder kept of the pods that ran a physical
+    restore. The report masks every match.
     """
     values = secret_values(namespace, secret_names)
     assert values, f"No credential values to scan for: none of {secret_names} in {namespace}"
     sources = collect_sources(namespace, cluster, operator_pod)
+    sources.update(extra_sources or {})
     findings = [
         finding for source, text in sources.items() for finding in scan_text(source, text, values)
     ]
@@ -205,3 +290,105 @@ def check_logs_for_secrets(
     assert not findings, "Credentials found in logs (masked):\n" + "\n".join(
         str(finding) for finding in findings
     )
+
+
+class LogRecorder:
+    """Keeps the logs of the pods of `cluster` that are deleted while it runs.
+
+    A context manager. A thread reads the current log of every started container
+    (init containers included) of the cluster's pods every `interval` seconds and
+    keeps the latest read per pod UID and container. On exit it stops the thread,
+    reads once more and raises any error of the thread. sources() returns the kept
+    logs of the pods that were gone at that last read; check_logs_for_secrets reads
+    the running ones itself.
+    """
+
+    def __init__(self, namespace: str, cluster: str, interval: float = RECORD_INTERVAL) -> None:
+        self.namespace = namespace
+        self.cluster = cluster
+        self.interval = interval
+        # (pod UID, container) -> (source name, log)
+        self._logs: dict[tuple[str, str], tuple[str, str]] = {}
+        self._running: set[str] = set()
+        self._stop = threading.Event()
+        self._error: Exception | None = None
+        self._thread = threading.Thread(target=self._run, name=f"logs-{cluster}", daemon=True)
+
+    def record(self) -> None:
+        """Read the logs of the cluster's pods once."""
+        pods = json.loads(
+            kubectl_bin(
+                "get",
+                "pods",
+                "-n",
+                self.namespace,
+                "-l",
+                f"app.kubernetes.io/instance={self.cluster}",
+                "-o",
+                "json",
+            )
+        )["items"]
+        running = set()
+        for pod in pods:
+            name, uid = pod["metadata"]["name"], pod["metadata"]["uid"]
+            # A terminating pod is gone by the time the final scan reads the cluster.
+            if not pod["metadata"].get("deletionTimestamp"):
+                running.add(uid)
+            for container in _containers(pod)[0]:
+                log = _container_log(self.namespace, name, container)
+                if log is None:
+                    logger.debug(f"Pod {name} ({uid}) is gone, keeping its last recorded logs")
+                    running.discard(uid)
+                    break
+                self._logs[(uid, container)] = (f"pod/{name}/{container} (uid {uid[:8]})", log)
+        self._running = running
+
+    def sources(self) -> dict[str, str]:
+        """Kept logs of the pods that were gone at the last read, keyed by source name."""
+        return {
+            source: log
+            for (uid, _), (source, log) in self._logs.items()
+            if uid not in self._running
+        }
+
+    def _run(self) -> None:
+        try:
+            while True:
+                self.record()
+                if self._stop.wait(self.interval):
+                    return
+        except Exception as e:
+            self._error = e
+
+    def __enter__(self) -> Self:
+        logger.info(f"Recording the logs of the {self.cluster} pods every {self.interval}s")
+        self._thread.start()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        self._stop.set()
+        self._thread.join(RECORD_STOP_TIMEOUT)
+        if self._thread.is_alive():
+            self._error = TimeoutError(f"the recorder did not stop in {RECORD_STOP_TIMEOUT}s")
+        elif self._error is None:
+            try:
+                self.record()
+            except Exception as e:
+                self._error = e
+        logger.info(
+            f"Stopped recording the logs of the {self.cluster} pods: kept "
+            f"{len(self._logs)} pod/container logs, {len(self.sources())} of pods now gone"
+        )
+        if self._error is None:
+            return
+        message = f"Recording the logs of the {self.cluster} pods failed: {self._error!r}"
+        if exc_type is not None:
+            # The error of the step itself is the one to report.
+            logger.error(message)
+            return
+        raise AssertionError(message) from self._error
