@@ -50,6 +50,9 @@ The plan contains:
 
 - the problem, in one to three sentences;
 - numbered acceptance criteria, each checkable by a test or a command;
+- the steps: the criteria in the order they will be built, each step small
+  enough to review on its own and leaving the code building and its tests
+  passing;
 - the files and packages that change;
 - the test plan: unit tests for logic and rendering, envtest for reconcile
   behavior, e2e tests only for what needs a real cluster (see

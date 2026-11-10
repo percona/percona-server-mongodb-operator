@@ -13,11 +13,11 @@ Before writing Go, read `docs/guidelines/architecture.md` and
 `docs/guidelines/go-style.md`. Before writing tests, read
 `docs/guidelines/qa.md` and, for `e2e-tests/`, `e2e-tests/AGENTS.md`.
 
-## Loop, one acceptance criterion at a time
+## Loop, one step of the plan at a time
 
-1. Where a unit test can express the criterion (how a CR field renders into
-   Kubernetes objects, defaults, validation, version logic), write the test
-   first and watch it fail.
+1. Where a unit test can express the step's criteria (how a CR field
+   renders into Kubernetes objects, defaults, validation, version logic),
+   write the test first and watch it fail.
 2. Write the code where `AGENTS.md` says it belongs. Reuse existing helpers.
 3. If you changed CR types, run `make generate manifests` and include the
    generated files. `docs/guidelines/architecture.md` lists what else changes
@@ -25,6 +25,10 @@ Before writing Go, read `docs/guidelines/architecture.md` and
 4. Run the checks from the "Checks to run before pushing" table in
    `AGENTS.md` that match what you changed.
 5. Commit the step. The message starts with the Jira key.
+6. Stop and show the user the step's diff and what the checks reported.
+   Wait for the user to review it, answer questions and ask for changes
+   before you start the next step. Skip the stop only when the user asked
+   for an unattended run.
 
 ## Rules
 
