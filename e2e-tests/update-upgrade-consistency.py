@@ -5,7 +5,6 @@ import re
 import shutil
 from pathlib import Path
 
-
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -42,9 +41,7 @@ def replace_ordered(pattern: str, replacements: list[str], text: str, *, flags: 
 
     result = compiled.sub(_repl, text)
     if idx != len(replacements):
-        raise ValueError(
-            f"Expected {len(replacements)} matches for pattern: {pattern}, got {idx}"
-        )
+        raise ValueError(f"Expected {len(replacements)} matches for pattern: {pattern}, got {idx}")
     return result
 
 
@@ -52,9 +49,7 @@ def parse_suffixes(path: Path, resource_pattern: str, expected_count: int) -> li
     text = read_text(path)
     matches = re.findall(resource_pattern, text)
     if len(matches) != expected_count:
-        raise ValueError(
-            f"{path}: expected {expected_count} suffix matches, got {len(matches)}"
-        )
+        raise ValueError(f"{path}: expected {expected_count} suffix matches, got {len(matches)}")
     return matches
 
 
@@ -117,7 +112,9 @@ def update_conf(conf_path: Path, start_version: str) -> None:
     write_text(conf_path, text)
 
 
-def update_run_upgrade_consistency(run_path: Path, versions: list[str], suffixes: list[str]) -> None:
+def update_run_upgrade_consistency(
+    run_path: Path, versions: list[str], suffixes: list[str]
+) -> None:
     start, mid, final = versions
     start_suffix, mid_suffix, final_suffix = suffixes
 
@@ -127,7 +124,9 @@ def update_run_upgrade_consistency(run_path: Path, versions: list[str], suffixes
         f'desc "create first PSMDB cluster {start} $CLUSTER"',
         text,
     )
-    text = replace_ordered(r"desc 'test \d+\.\d+\.\d+'", [f"desc 'test {mid}'", f"desc 'test {final}'"], text)
+    text = replace_ordered(
+        r"desc 'test \d+\.\d+\.\d+'", [f"desc 'test {mid}'", f"desc 'test {final}'"], text
+    )
     text = replace_ordered(
         r'"spec": \{"crVersion":"\d+\.\d+\.\d+"\}',
         [f'"spec": {{"crVersion":"{mid}"}}', f'"spec": {{"crVersion":"{final}"}}'],
@@ -166,7 +165,9 @@ def update_run_upgrade_consistency_sharded_tls(
         f'desc "create first PSMDB cluster {start} $CLUSTER"',
         text,
     )
-    text = replace_ordered(r"desc 'test \d+\.\d+\.\d+'", [f"desc 'test {mid}'", f"desc 'test {final}'"], text)
+    text = replace_ordered(
+        r"desc 'test \d+\.\d+\.\d+'", [f"desc 'test {mid}'", f"desc 'test {final}'"], text
+    )
     text = replace_ordered(
         r'"spec": \{"crVersion":"\d+\.\d+\.\d+"\}',
         [f'"spec": {{"crVersion":"{mid}"}}', f'"spec": {{"crVersion":"{final}"}}'],

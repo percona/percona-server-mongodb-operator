@@ -166,6 +166,7 @@ make py-update-deps   # Update Python dependencies
 make py-fmt           # Format code and organize imports with ruff
 make py-check         # Run ruff linter and mypy type checks
 make e2e-test TEST=<name>  # Run a single e2e test (Python or bash via pytest)
+make e2e-suite SUITE=<csv> JOBS=<n>  # Run a suite with bounded parallelism
 ```
 
 ### Running tests with pytest
@@ -206,6 +207,44 @@ Run tests matching a pattern:
 uv run pytest e2e-tests/ -k "init"
 ```
 
+### Running a suite in parallel
+
+A whole suite (a CSV of test names, one per line) can run with bounded parallelism on a
+single cluster. Parallel-safe tests fan out across `JOBS` workers; tests flagged
+`parallel: false` in `tests.yaml` run serially afterwards.
+
+```
+make e2e-suite SUITE=run-minikube.csv JOBS=4
+# or directly:
+JOBS=4 e2e-tests/simulate-jenkins-local.sh run-minikube.csv
+```
+
+How parallelism works and its constraints:
+
+* Each worker runs a test in its own copied `KUBECONFIG` and namespace, so the
+  per-test `kubectl config set-context` never leaks between concurrent jobs.
+* Parallel runs are **namespaced mode only** (`OPERATOR_NS` unset). Cluster-wide
+  operators watch all namespaces, so they cannot run concurrently on one cluster.
+* Shared cluster-scoped resources are not deleted per test in parallel mode. The
+  PSMDB CRD is installed once up front; cert-manager and chaos-mesh are installed by
+  the first test that needs them and reused (their teardown is skipped).
+* `CLEAN_NAMESPACE` is forced to `0` in parallel mode to avoid deleting sibling jobs'
+  namespaces.
+
+Marking a test as non-parallelizable — add `parallel: false` to its entry in
+`tests.yaml` (default is parallel-safe). Use this for tests that mutate cluster-scoped
+state such as deleting or downgrading the CRD:
+
+```yaml
+  upgrade:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade]
+    requires: [minio]
+    parallel: false  # installs an older CRD from a git tag, then upgrades it
+```
+```
+
 ## Using environment variables to customize the testing process
 
 ### Re-declaring default image names
@@ -238,6 +277,8 @@ images. It defaults to `docker.io`.
 * `SKIP_BACKUPS_TO_AWS_GCP_AZURE` - skips cloud backup tests, `1` by default when cloud credentials are unavailable
 * `UPDATE_COMPARE_FILES=1` - replaces expected resource files with the current Kubernetes output
 * `OPERATOR_NS` - deploys the operator in a separate namespace
+* `E2E_PARALLEL=1` - enables namespaced-mode parallel behavior: shared cluster-scoped resources (CRD, cert-manager, chaos-mesh) are reused instead of recreated/deleted per test. Set automatically per job by the parallel suite runner
+* `PYTEST_NAMESPACE_FILE` - path where the active namespace is recorded for failure reports; per-job when running in parallel
 * `CERT_MANAGER_VER`, `MINIO_VER`, `CHAOS_MESH_VER`, and `PMM_SERVER_VER` - override dependency versions
 
 ### Using automatic clean-up after testing

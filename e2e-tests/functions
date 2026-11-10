@@ -930,7 +930,16 @@ destroy_vault() {
 deploy_chaos_mesh() {
 	local chaos_mesh_ns=$1
 
-	destroy_chaos_mesh
+	# chaos-mesh installs cluster-scoped CRDs/webhooks and its controller watches all
+	# namespaces, so in parallel mode a single shared install serves every test namespace.
+	if [[ ${E2E_PARALLEL} == 1 ]]; then
+		if helm list --all-namespaces --filter chaos-mesh | grep -q chaos-mesh; then
+			desc 'chaos-mesh already present, reusing shared instance'
+			return
+		fi
+	else
+		destroy_chaos_mesh
+	fi
 
 	desc 'install chaos-mesh'
 	helm repo add chaos-mesh https://charts.chaos-mesh.org
@@ -960,6 +969,11 @@ deploy_chaos_mesh() {
 }
 
 destroy_chaos_mesh() {
+	if [[ ${E2E_PARALLEL} == 1 ]]; then
+		log "Parallel mode: leaving chaos-mesh (shared cluster-scoped CRDs) in place"
+		return
+	fi
+
 	local chaos_mesh_ns=$(helm list --all-namespaces --filter chaos-mesh | tail -n1 | awk -F' ' '{print $2}' | sed 's/NAMESPACE//')
 
 	desc 'destroy chaos-mesh'
@@ -1626,8 +1640,17 @@ deploy_cert_manager() {
 
 	desc 'deploy cert manager'
 
-	kubectl_bin -n cert-manager delete clusterissuer --all || :
-	kubectl_bin -n cert-manager delete certificate --all || :
+	# cert-manager is a shared, cluster-scoped dependency in parallel mode: reuse the
+	# instance installed once by the orchestrator and skip the cluster-wide deletes.
+	if [[ ${E2E_PARALLEL} == 1 ]]; then
+		if kubectl_bin get deployment cert-manager -n cert-manager >/dev/null 2>&1; then
+			desc 'cert-manager already present, reusing shared instance'
+			return
+		fi
+	else
+		kubectl_bin -n cert-manager delete clusterissuer --all || :
+		kubectl_bin -n cert-manager delete certificate --all || :
+	fi
 	kubectl_bin create namespace cert-manager || :
 	kubectl_bin label namespace cert-manager certmanager.k8s.io/disable-validation=true || :
 	curl -sL "https://github.com/cert-manager/cert-manager/releases/download/v${CERT_MANAGER_VER}/cert-manager.yaml" \
@@ -1696,7 +1719,11 @@ destroy() {
 
 	delete_backups
 
-	delete_crd
+	# In parallel mode the CRD and cluster-scoped RBAC are shared across sibling jobs and
+	# are managed once by the orchestrator, so skip the destructive (cluster-wide) delete_crd.
+	if [[ ${E2E_PARALLEL} != 1 ]]; then
+		delete_crd
+	fi
 
 	destroy_cert_manager || true
 	if [[ -n "$OPENSHIFT" ]]; then
@@ -1716,6 +1743,11 @@ destroy() {
 destroy_cert_manager() {
 	if [[ $PLATFORM == "rancher" ]]; then
 		log "Rancher cluster detected, skipping cert manager destroy"
+		return
+	fi
+
+	if [[ ${E2E_PARALLEL} == 1 ]]; then
+		log "Parallel mode: leaving shared cert-manager in place"
 		return
 	fi
 
@@ -2309,7 +2341,7 @@ setup_azure_credentials() {
 create_infra() {
 	local ns="$1"
 
-	echo "$ns" > /tmp/pytest_current_namespace
+	echo "$ns" > "${PYTEST_NAMESPACE_FILE:-/tmp/pytest_current_namespace}"
 
 	if [[ ${DELETE_CRD_ON_START} == 1 ]]; then
 		delete_crd

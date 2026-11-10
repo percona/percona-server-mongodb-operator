@@ -60,7 +60,8 @@ _current_namespace: str | None = None
 
 # Path shared with the bash harness (see e2e-tests/functions), which writes the
 # active namespace here so failure reports can be generated for bash-wrapped tests.
-_NAMESPACE_FILE = "/tmp/pytest_current_namespace"
+# Made configurable so parallel jobs each get their own file (see E2E_PARALLEL).
+_NAMESPACE_FILE = os.environ.get("PYTEST_NAMESPACE_FILE", "/tmp/pytest_current_namespace")
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -176,6 +177,20 @@ def setup_env_vars() -> None:
 
     for key, value in defaults.items():
         os.environ.setdefault(key, value)
+
+    if env_bool("E2E_PARALLEL"):
+        # Safety net: sharing one cluster across concurrent jobs is only safe in
+        # namespaced mode with namespace cleanup disabled.
+        if env_bool("CLEAN_NAMESPACE"):
+            logger.warning(
+                "E2E_PARALLEL is set: forcing CLEAN_NAMESPACE=0 to protect sibling jobs"
+            )
+            os.environ["CLEAN_NAMESPACE"] = "0"
+        if os.environ.get("OPERATOR_NS"):
+            logger.warning(
+                "E2E_PARALLEL is set with OPERATOR_NS (cluster-wide); parallel runs support "
+                "namespaced mode only and cluster-wide operators watch all namespaces"
+            )
 
     registry_full = os.environ["REGISTRY_NAME"].rstrip("/") + "/"
     image_vars = [
@@ -341,6 +356,12 @@ def create_infra(
 
     logger.info("Cleaning up test environment")
 
+    # In parallel mode the PSMDB CRD (and cluster-wide RBAC) are shared, cluster-scoped
+    # resources installed once by the orchestrator. Deleting them here would break sibling
+    # jobs, so only clean namespace-scoped resources and let namespace deletion handle the
+    # rest (namespaced Role/RoleBinding are garbage-collected with the namespace).
+    parallel = env_bool("E2E_PARALLEL")
+
     commands = [
         ["delete", "psmdb-backup", "--all", "--ignore-not-found"],
         [
@@ -349,17 +370,21 @@ def create_infra(
             f"{test_paths['test_dir']}/../conf/container-rc.yaml",
             "--ignore-not-found",
         ],
-        [
-            "delete",
-            "-f",
-            f"{test_paths['src_dir']}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml",
-            "--ignore-not-found",
-        ],
     ]
+    if not parallel:
+        commands.append(
+            [
+                "delete",
+                "-f",
+                f"{test_paths['src_dir']}/deploy/{'cw-' if os.environ.get('OPERATOR_NS') else ''}rbac.yaml",
+                "--ignore-not-found",
+            ]
+        )
 
     with ThreadPoolExecutor(max_workers=len(commands) + 1) as executor:
         futures = [executor.submit(run_cmd, cmd) for cmd in commands]
-        futures.append(executor.submit(cleanup_crd))
+        if not parallel:
+            futures.append(executor.submit(cleanup_crd))
 
     # Clean up all created namespaces (in parallel) after resource cleanup so
     # finalizer-bearing resources (e.g. psmdb-backup) are removed first.
@@ -412,6 +437,10 @@ def deploy_chaos_mesh() -> Generator[Callable[[str], None]]:
 
     yield _deploy
 
+    if env_bool("E2E_PARALLEL"):
+        logger.info("Parallel mode: leaving chaos-mesh (shared cluster-scoped CRDs) in place")
+        return
+
     for ns in deployed_namespaces:
         try:
             helm_bin("uninstall", "chaos-mesh", "--namespace", ns, "--wait", "--timeout", "60s")
@@ -425,6 +454,24 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
     cert_manager_url = f"https://github.com/cert-manager/cert-manager/releases/download/v{os.environ.get('CERT_MANAGER_VER')}/cert-manager.yaml"
 
     def _deploy(*extra_args: str) -> None:
+        # cert-manager is a shared, cluster-scoped dependency (CRDs + webhook). In parallel
+        # mode it is installed once by the orchestrator; reuse it if already present.
+        if env_bool("E2E_PARALLEL"):
+            existing = kubectl_bin(
+                "get",
+                "deployment",
+                "cert-manager",
+                "-n",
+                "cert-manager",
+                "--ignore-not-found",
+                "-o",
+                "name",
+                check=False,
+            ).strip()
+            if existing:
+                logger.info("cert-manager already present, reusing shared instance")
+                return
+
         logger.info("Deploying cert-manager")
         try:
             kubectl_bin("create", "namespace", "cert-manager")
@@ -462,6 +509,10 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
             raise
 
     yield _deploy
+
+    if env_bool("E2E_PARALLEL"):
+        logger.info("Parallel mode: leaving shared cert-manager in place")
+        return
 
     try:
         kubectl_bin("delete", "-f", cert_manager_url, "--ignore-not-found")

@@ -1,0 +1,709 @@
+platformSkips:
+  gke:
+    - name: demand-backup-eks-credentials
+      reason: requires EKS credentials integration
+    - name: demand-backup-eks-credentials-irsa
+      reason: requires EKS IRSA
+  gke-arm64:
+    - name: monitoring-2-0
+      reason: PMM 2 images are unavailable for ARM64
+    - name: monitoring-pmm3
+      reason: PMM 3 images are unavailable for ARM64
+    - name: upgrade
+      reason: upgrade images are unavailable for ARM64
+    - name: upgrade-sharded
+      reason: upgrade images are unavailable for ARM64
+    - name: upgrade-partial-backup
+      reason: upgrade images are unavailable for ARM64
+  eks:
+    - name: demand-backup-gcs-workload-identity
+      reason: requires GKE Workload Identity
+    - name: demand-backup-snapshot
+      reason: volume snapshot setup currently supports only GKE
+    - name: demand-backup-snapshot-vault
+      reason: volume snapshot setup currently supports only GKE
+    - name: multi-cluster-service
+      reason: requires GKE Multi-Cluster Services
+  aks:
+    - name: demand-backup-eks-credentials
+      reason: requires EKS credentials integration
+    - name: demand-backup-eks-credentials-irsa
+      reason: requires EKS IRSA
+    - name: demand-backup-gcs-workload-identity
+      reason: requires GKE Workload Identity
+    - name: demand-backup-snapshot
+      reason: volume snapshot setup currently supports only GKE
+    - name: demand-backup-snapshot-vault
+      reason: volume snapshot setup currently supports only GKE
+    - name: multi-cluster-service
+      reason: requires GKE Multi-Cluster Services
+  openshift:
+    - name: demand-backup-eks-credentials
+      reason: requires EKS credentials integration
+    - name: demand-backup-eks-credentials-irsa
+      reason: requires EKS IRSA
+    - name: demand-backup-gcs-workload-identity
+      reason: requires GKE Workload Identity
+    - name: demand-backup-snapshot
+      reason: volume snapshot setup currently supports only GKE
+    - name: demand-backup-snapshot-vault
+      reason: volume snapshot setup currently supports only GKE
+    - name: multi-cluster-service
+      reason: requires GKE Multi-Cluster Services
+    - name: storage
+      reason: requires hostPath, which is unsupported on OpenShift
+
+tests:
+  arbiter:
+    suites: [pr, release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [cert-manager]
+
+  balancer:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [sharding]
+    requires: [minio]
+
+  cert-management-policy:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, tls]
+
+  clustersync:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [sharding]
+    requires: [minio]
+
+  cross-site-sharded:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking, sharding]
+
+  custom-replset-name:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [minio]
+
+  custom-tls:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [tls]
+    requires: [cert-manager]
+
+  custom-users-roles:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [users]
+
+  custom-users-roles-sharded:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [users, sharding]
+
+  data-at-rest-encryption:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [security, backup, sharding]
+    requires: [vault, minio]
+
+  data-sharded:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [sharding, tls]
+    requires: [cert-manager]
+
+  default-cr:
+    suites: [release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [nodes-4]
+    parallel: false  # deletes and re-applies the cluster-scoped CRD
+
+  demand-backup:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio, cloud-storage-credentials]
+
+  demand-backup-eks-credentials:
+    suites: [backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [aws-s3-credentials]
+
+  demand-backup-eks-credentials-irsa:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [aws-s3-credentials, aws-irsa]
+
+  demand-backup-fs:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, storage]
+    requires: [nfs]
+
+  demand-backup-gcs-workload-identity:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [gcs-credentials, gcs-workload-identity]
+
+  demand-backup-if-unhealthy:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio]
+
+  demand-backup-incremental-aws:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [aws-s3-credentials]
+
+  demand-backup-incremental-azure:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [azure-blob-credentials]
+
+  demand-backup-incremental-gcp-native:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [gcs-credentials]
+
+  demand-backup-incremental-gcp-s3:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [gcs-credentials]
+
+  demand-backup-incremental-minio:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio]
+
+  demand-backup-incremental-oss-native:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [oss-credentials]
+
+  demand-backup-incremental-oss-s3:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [oss-credentials]
+
+  demand-backup-incremental-sharded-aws:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [aws-s3-credentials, load-balancer]
+
+  demand-backup-incremental-sharded-azure:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [azure-blob-credentials, load-balancer]
+
+  demand-backup-incremental-sharded-gcp-native:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [gcs-credentials, load-balancer]
+
+  demand-backup-incremental-sharded-gcp-s3:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [gcs-credentials, load-balancer]
+
+  demand-backup-incremental-sharded-minio:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [minio, load-balancer]
+
+  demand-backup-incremental-sharded-oss-native:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [oss-credentials, load-balancer]
+
+  demand-backup-incremental-sharded-oss-s3:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [oss-credentials, load-balancer]
+
+  demand-backup-logical-minio-native-tls:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, tls]
+    requires: [minio, cert-manager]
+
+  demand-backup-physical-aws:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [aws-s3-credentials]
+
+  demand-backup-physical-azure:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [azure-blob-credentials]
+
+  demand-backup-physical-gcp-native:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [gcs-credentials]
+
+  demand-backup-physical-gcp-s3:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [gcs-credentials]
+
+  demand-backup-physical-minio:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio]
+
+  demand-backup-physical-minio-native:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio]
+
+  demand-backup-physical-minio-native-tls:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, tls]
+    requires: [minio, cert-manager]
+
+  demand-backup-physical-oci:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [oci-credentials]
+
+  demand-backup-physical-oss-native:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [oss-credentials]
+
+  demand-backup-physical-oss-s3:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [oss-credentials]
+
+  demand-backup-physical-parallel:
+    suites: [pr, release, minikube, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio, cloud-storage-credentials]
+
+  demand-backup-physical-sharded-aws:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [aws-s3-credentials, load-balancer]
+
+  demand-backup-physical-sharded-azure:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [azure-blob-credentials, load-balancer]
+
+  demand-backup-physical-sharded-gcp-native:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [gcs-credentials, load-balancer]
+
+  demand-backup-physical-sharded-minio:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [minio, load-balancer]
+
+  demand-backup-physical-sharded-minio-native:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [minio, load-balancer]
+
+  demand-backup-physical-sharded-oss-native:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [oss-credentials, load-balancer]
+
+  demand-backup-physical-sharded-oss-s3:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [oss-credentials, load-balancer]
+
+  demand-backup-physical-sharded-parallel:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [minio, cloud-storage-credentials, load-balancer]
+
+  demand-backup-sharded:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [minio, cloud-storage-credentials, load-balancer]
+
+  demand-backup-snapshot:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [volume-snapshots, minio]
+
+  demand-backup-snapshot-vault:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, security]
+    requires: [volume-snapshots, vault, minio]
+
+  disabled-auth:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [security]
+    requires: [minio]
+
+  expose-sharded:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking, sharding]
+    requires: [load-balancer]
+
+  external-dns:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking]
+    requires: [external-dns]
+
+  finalizer:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  ignore-labels-annotations:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  init-deploy:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  ldap:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [users, security]
+    requires: [ldap]
+
+  ldap-tls:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [users, security, tls]
+    requires: [ldap, cert-manager]
+
+  limits:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  liveness:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [minio]
+
+  mongod-major-upgrade:
+    suites: [pr, release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade]
+    requires: [version-service]
+
+  mongod-major-upgrade-sharded:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade, sharding]
+    requires: [version-service]
+
+  monitoring-2-0:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [monitoring]
+    requires: [pmm2, cert-manager]
+
+  monitoring-pmm3:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [monitoring]
+    requires: [pmm3, cert-manager, load-balancer]
+
+  multi-cluster-service:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking]
+    requires: [gke-multi-cluster-services]
+
+  multi-storage:
+    suites: [pr]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, pitr]
+    requires: [minio]
+
+  non-voting-and-hidden:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [cert-manager, minio]
+
+  one-pod:
+    suites: [pr, release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [minio]
+
+  operator-self-healing-chaos:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [chaos]
+    requires: [chaos-mesh]
+
+  pitr:
+    suites: [pr, release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [pitr]
+    requires: [minio]
+
+  pitr-physical:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [pitr]
+    requires: [minio]
+
+  pitr-physical-backup-source:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [pitr]
+    requires: [minio]
+
+  pitr-sharded:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [pitr, sharding]
+    requires: [minio, load-balancer]
+
+  pitr-to-new-cluster:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [pitr]
+    requires: [minio]
+
+  preinit-updates:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  pvc-auto-resize:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [storage]
+    requires: [storage-expansion]
+
+  pvc-resize:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [storage]
+    requires: [storage-expansion]
+
+  recover-no-primary:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, sharding]
+
+  replset-overrides:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [minio]
+
+  replset-remapping:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio]
+
+  replset-remapping-sharded:
+    suites: [pr, release, backups, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup, sharding]
+    requires: [minio]
+
+  rs-shard-migration:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [sharding]
+    requires: [minio]
+    parallel: false  # deletes the cluster-scoped CRD mid-test
+
+  scaling:
+    suites: [pr, release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  scheduled-backup:
+    suites: [pr, release, minikube, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [backup]
+    requires: [minio, cloud-storage-credentials]
+
+  security-context:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [security]
+    requires: [minio]
+
+  self-healing-chaos:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [chaos]
+    requires: [chaos-mesh]
+
+  service-per-pod:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking]
+    requires: [cert-manager, load-balancer]
+
+  serviceless-external-nodes:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking]
+
+  smart-update:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, upgrade]
+
+  split-horizon:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking, tls]
+    requires: [cert-manager]
+
+  split-horizon-manual-tls:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [networking, tls]
+
+  stable-resource-version:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+
+  storage:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [storage, tls]
+    requires: [hostpath, cert-manager]
+
+  tls-clusterissuer-cert-manager:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide]
+    groups: [tls]
+    requires: [cert-manager]
+
+  tls-issue-cert-manager:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [tls]
+    requires: [cert-manager]
+
+  unsafe-psa:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [storage, security]
+    requires: [minio, storage-expansion]
+
+  upgrade:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade]
+    requires: [minio]
+    parallel: false  # installs an older CRD from a git tag, then upgrades it
+
+  upgrade-consistency:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade]
+
+  upgrade-consistency-sharded-tls:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade, sharding, tls]
+    requires: [cert-manager]
+
+  upgrade-partial-backup:
+    suites: [pr, release, backups]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade, backup]
+    requires: [cloud-storage-credentials]
+    parallel: false  # installs an older CRD from a release tag
+
+  upgrade-sharded:
+    suites: [pr, release, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [upgrade, sharding]
+    requires: [cert-manager, minio]
+    parallel: false  # installs an older CRD from a git tag, then upgrades it
+
+  users:
+    suites: [pr, release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [users]
+    requires: [minio]
+
+  users-vault:
+    suites: [pr, release, minikube, distro]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [users, security]
+    requires: [vault]
+
+  vector-search:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]
+    requires: [mongodb-8.3, minio]
+
+  vector-search-sharded:
+    suites: [pr, release]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core, sharding]
+    requires: [mongodb-8.3, pbm-1764-resolved]
+
+  version-service:
+    suites: [pr, release, minikube]
+    operatorModes: [cluster-wide, namespaced]
+    groups: [core]

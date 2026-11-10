@@ -58,6 +58,12 @@ endif
 		uv run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
 	fi
 
+# Run a suite (CSV of test names) with bounded parallelism on a single cluster.
+# Usage: make e2e-suite SUITE=run-minikube.csv JOBS=4
+# Parallel-safe tests fan out across JOBS; `parallel: false` tests run serially.
+SUITE ?= run-minikube.csv
+JOBS ?= 1
+
 ##@ Build
 
 .PHONY: build
