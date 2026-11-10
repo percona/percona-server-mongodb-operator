@@ -61,10 +61,39 @@ check_tools() {
 	for command in kubectl oc helm jq make uv; do
 		command -v "$command" >/dev/null 2>&1 || die "$command is required"
 	done
+}
+
+# The runs take an hour or more, and another tool (a cluster deploy, another test run)
+# can switch the current context of the shared kubeconfig meanwhile. Every run uses a
+# copy of the context checked here; namespaces the tests switch to stay in the copy.
+pin_context() {
+	local context
+	context="$(kubectl config current-context)" || die "no current kubectl context"
+	PINNED_KUBECONFIG="$(mktemp)"
+	trap 'rm -f "$PINNED_KUBECONFIG"' EXIT
+	kubectl config view --minify --flatten >"$PINNED_KUBECONFIG"
+	export KUBECONFIG="$PINNED_KUBECONFIG"
 	kubectl api-resources --api-group=packages.operators.coreos.com -o name \
 		| grep -q '^packagemanifests' \
-		|| die "OLM is not available on the current kubectl context"
-	log "Using kubectl context $(kubectl config current-context)"
+		|| die "OLM is not available on kubectl context ${context}"
+	log "Using kubectl context ${context}, pinned for every run"
+}
+
+# Tests that passed in a JUnit report: a run whose steps were all skipped passes pytest
+# but checks nothing.
+passed_tests() {
+	uv run python -I - "$1" <<'EOT'
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+suites = [root] if root.tag == "testsuite" else list(root)
+print(sum(
+    int(s.get("tests", 0)) - int(s.get("skipped", 0)) - int(s.get("failures", 0))
+    - int(s.get("errors", 0))
+    for s in suites
+))
+EOT
 }
 
 check_tests() {
@@ -186,6 +215,10 @@ run_test() {
 			PYTHONPATH="e2e-tests:installers/olm/e2e-tests" \
 			uv run pytest -p conftest "installers/olm/e2e-tests/${test}/" \
 			--html="${report}.html" --junitxml="${report}.xml"); then
+		if [[ "$(passed_tests "${report}.xml")" -eq 0 ]]; then
+			log "FAILED ${test} ${csv}: every step was skipped, report ${report}.html"
+			return 1
+		fi
 		log "PASSED ${test} ${csv} in $((SECONDS - start))s, report ${report}.html"
 	else
 		log "FAILED ${test} ${csv} in $((SECONDS - start))s, report ${report}.html"
@@ -196,6 +229,7 @@ run_test() {
 main() {
 	set_package
 	check_tools
+	pin_context
 	check_tests
 	# The operator lives in the test namespace; a cluster-wide OPERATOR_NS would mislead the harness.
 	unset OPERATOR_NS

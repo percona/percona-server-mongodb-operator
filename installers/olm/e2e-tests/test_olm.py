@@ -107,3 +107,19 @@ def test_wait_reconciled_fails_after_empty_reads_in_a_row(
     fake_kubectl(monkeypatch, ["", "4", *[""] * MAX_EMPTY_READS])
     with pytest.raises(AssertionError, match=f"could not be read {MAX_EMPTY_READS} times"):
         wait_reconciled("ns", "db")
+
+
+# The line the operator logged on OpenShift while the default example started up.
+PBM_LINE = (
+    "2026-11-10T10:34:41.157Z\tERROR\tPBM\tno ready pods to get pbm-agent version\t"
+    '{"controller": "psmdb-controller", "PerconaServerMongoDB": {"name":"my-cluster-name"}}'
+)
+
+
+def test_pbm_agent_not_ready_is_allowed_only_during_startup() -> None:
+    at = datetime(2026, 11, 10, 10, 34, 41, 157000, tzinfo=UTC)
+    during = olm.pbm_agent_not_ready(at - timedelta(minutes=1), at + timedelta(minutes=1))
+    after = olm.pbm_agent_not_ready(at - timedelta(hours=1), at - timedelta(minutes=10))
+    assert unexpected_errors([PBM_LINE], (during,)) == []
+    assert unexpected_errors([PBM_LINE], (after,)) != []
+    assert unexpected_errors([PBM_LINE]) == [PBM_LINE]

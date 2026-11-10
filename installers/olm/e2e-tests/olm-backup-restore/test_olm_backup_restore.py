@@ -6,7 +6,7 @@ import re
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +17,7 @@ from lib.mongo import MongoManager
 from lib.secret_scan import LogRecorder, check_logs_for_secrets
 from lib.utils import Paths, env_bool
 from olm import (
+    CLOCK_SKEW,
     LOCAL_S3,
     RS0_SIZE,
     CatalogTarget,
@@ -36,6 +37,7 @@ from olm import (
     olm_available,
     olm_test_paths,
     operator_pod,
+    pbm_agent_not_ready,
     resolve_target,
     teardown,
 )
@@ -55,8 +57,6 @@ PHYSICAL_RESTORE_CRASH = re.compile(r"FULL CLUSTER CRASH.*ping mongo: server sel
 # window confines the line; the cap only catches a reconcile loop that keeps
 # force-reconfiguring the replset.
 PHYSICAL_RESTORE_CRASH_MAX = 10
-# The window is measured on this machine and the line time on the operator's node.
-CLOCK_SKEW = timedelta(seconds=60)
 
 
 @dataclass(frozen=True)
@@ -71,6 +71,9 @@ class State:
     """What the steps saw, for the final operator and credential checks."""
 
     operator_pod_uid: str = ""
+    # Start of the deploy and start of the first backup, in UTC: the cluster's start-up.
+    deploy_start: datetime | None = None
+    startup: tuple[datetime, datetime] | None = None
     # Start and end of the physical restore, in UTC.
     physical_restore: tuple[datetime, datetime] | None = None
     # Logs of the pods the physical restore replaced.
@@ -165,9 +168,10 @@ class TestOlmBackupRestore:
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_install_operator"])
     def test_deploy_cluster(
-        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str, state: State
     ) -> None:
         """Deploy a replica set with backups from the CSV's example CR"""
+        state.deploy_start = datetime.now(UTC)
         apply(config.namespace, example_cluster(csv, config.cluster, storage))
         wait_for_running(f"{config.cluster}-rs0", RS0_SIZE)
 
@@ -187,9 +191,12 @@ class TestOlmBackupRestore:
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_write_data"])
     def test_logical_backup(
-        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str, state: State
     ) -> None:
         """A logical backup reaches ready"""
+        # A backup needs ready backup agents, so the start-up is over by now.
+        if state.deploy_start:
+            state.startup = (state.deploy_start, datetime.now(UTC))
         _backup(config, csv, storage, "logical")
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_logical_backup"])
@@ -260,7 +267,11 @@ class TestOlmBackupRestore:
             end + CLOCK_SKEW,
             PHYSICAL_RESTORE_CRASH_MAX,
         )
-        assert_operator_healthy(config.namespace, csv, state.operator_pod_uid, (crash,))
+        # The rebuild after the restore starts the backup agents again.
+        windows: tuple[ErrorWindow, ...] = (crash, pbm_agent_not_ready(start, end))
+        if state.startup:
+            windows += (pbm_agent_not_ready(*state.startup),)
+        assert_operator_healthy(config.namespace, csv, state.operator_pod_uid, windows)
 
     # Last, and only after the deploy step, so it also runs when a backup or restore fails.
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_deploy_cluster"])

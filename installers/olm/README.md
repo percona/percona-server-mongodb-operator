@@ -345,7 +345,11 @@ package (`OLM_CATALOG_TIMEOUT`, 300 seconds), so it can run right after
 `OLM_TARGET_CHANNEL`. `OLM_TESTS` (default
 `olm-default-install olm-backup-restore olm-upgrade`) selects the tests.
 Reports are written to `e2e-tests/reports/<test>-<csv>.*` in the repository
-root.
+root. The runner copies the current kubectl context into a temporary
+kubeconfig and uses it for every run, so a context switch in
+`~/.kube/config` during the runs (a cluster deploy, another test run) does not
+move them to another cluster. A run whose steps were all skipped counts as
+failed.
 
 For a dev catalog, every test checks that the head of the default channel is
 `OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
@@ -367,7 +371,10 @@ through the mongos Service and reads it back. It changes
 `spec.upgradeOptions.schedule` and waits for `status.observedGeneration`, so the
 operator has reconciled the cluster before the final checks: once the cluster
 is ready, no DB pod may be replaced or restarted and no Warning event may come
-up, and the operator pod must not restart or log errors.
+up, and the operator pod must not restart or log errors. The one exception is
+`no ready pods to get pbm-agent version`, which the operator logs at ERROR
+level while no backup agent is ready yet: it is allowed from applying the
+example until the cluster is ready.
 
 ## olm-backup-restore
 
