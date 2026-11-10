@@ -40,10 +40,15 @@ func TestMongosLogrotateAddress(t *testing.T) {
 			expectedLoopback: []corev1.HostAlias{{IP: "127.0.0.1", Hostnames: []string{"cluster-mongos.ns.svc.example"}}},
 		},
 		{
-			name:             "per pod service targets this router",
+			name:             "per pod services resolve to localhost",
 			servicePerPod:    true,
 			collectorEnabled: true,
 			expectedHost:     "$(POD_NAME).ns.svc.example",
+			expectedLoopback: []corev1.HostAlias{{IP: "127.0.0.1", Hostnames: []string{
+				"cluster-mongos-0.ns.svc.example",
+				"cluster-mongos-1.ns.svc.example",
+				"cluster-mongos-2.ns.svc.example",
+			}}},
 		},
 		{
 			name: "disabled collector leaves host aliases unchanged",
@@ -57,6 +62,7 @@ func TestMongosLogrotateAddress(t *testing.T) {
 			cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(false)}
 			cr.Spec.Sharding.Mongos.Configuration = "net:\n  port: 28017\n"
 			cr.Spec.Sharding.Mongos.Expose.ServicePerPod = tc.servicePerPod
+			cr.Spec.Sharding.Mongos.Size = 3
 			customAliases := []corev1.HostAlias{{IP: "192.0.2.1", Hostnames: []string{"custom.example"}}}
 			cr.Spec.Sharding.Mongos.HostAliases = customAliases
 			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
