@@ -613,7 +613,7 @@ CLOCK_SKEW = timedelta(seconds=60)
 # The operator logs this while no backup agent is ready yet and then retries: the call is
 # log.V(1).Error (pkg/controller/perconaservermongodb/pbm.go), and logr prints an Error at
 # any verbosity, so a debug message shows up as ERROR. Expected while the cluster starts or
-# its pods are rebuilt, nowhere else; drop it once the operator logs it as debug.
+# its pods are rebuilt, nowhere else; drop it once K8SPSMDB-1919 logs it as debug.
 PBM_AGENT_NOT_READY = re.compile(r"PBM\s+no ready pods to get pbm-agent version")
 # Once per reconcile until an agent is ready; the time window is what confines it.
 PBM_AGENT_NOT_READY_MAX = 200
