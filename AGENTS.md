@@ -81,11 +81,12 @@ diffs with known defects; rerun it when a guideline or a review skill changes.
 | Skill | Use it to |
 | ----- | --------- |
 | `plan` | turn a ticket into acceptance criteria and a plan, or a proposal |
-| `implement` | build the plan, tests first, one criterion at a time |
+| `implement` | build the plan, tests first, one reviewable step at a time |
 | `verify` | run the checks, tests and reviews, and report what was verified |
 | `review-architecture` | review a diff against `docs/guidelines/architecture.md` |
 | `review-go-style` | review a diff against `docs/guidelines/go-style.md` |
 | `review-qa` | review tests against `docs/guidelines/qa.md` |
+| `test-plan` | write a manual test plan for a change, and list what the tests already cover |
 
 ## Commands
 

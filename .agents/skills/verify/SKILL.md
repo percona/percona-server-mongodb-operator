@@ -30,6 +30,8 @@ that match the changed files. If CR types or RBAC changed, run
   running, check that `kubectl config current-context` points at a cluster
   you own. If no cluster is available, write that in the report; never skip
   silently.
+- Manual checks: for what no test covers, the `test-plan` skill writes the
+  steps; put the plan or its link in the report.
 
 ## 3. Acceptance criteria
 
