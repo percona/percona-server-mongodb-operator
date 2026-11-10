@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from lib.backup import wait_backup, wait_restore
+from lib.backup import MAX_EMPTY_READS, wait_backup, wait_restore
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
 from lib.utils import Paths, env_bool
@@ -62,8 +62,6 @@ DEPRECATION_WARNING = "PerconaServerMongoDB is deprecated and will be removed in
 # A brief "initializing" while the new operator takes over is tolerated; pods must not change.
 ALLOWED_STATES = {"ready", "initializing"}
 SOAK_SECONDS = 180
-# A single failed read of the CR state is skipped; this many in a row fail the test.
-MAX_EMPTY_READS = 6
 
 # Taken by the starting operator, restored by the target one.
 BACKUP = "backup-before-upgrade"

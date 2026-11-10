@@ -109,10 +109,12 @@ py-check: uv py-setup-plan py-unit ## Run ruff, mypy, the fixture check and the 
 	$(UV) run mypy e2e-tests/
 	MYPYPATH=e2e-tests $(UV) run mypy installers/olm/e2e-tests/
 
-# Pure-Python helpers under e2e-tests/lib have unit tests next to them. --noconftest:
-# the e2e conftest.py gates every test on a cluster.
+# Pure-Python helpers under e2e-tests/lib and installers/olm/e2e-tests have unit tests
+# next to them. --noconftest: the e2e conftest.py gates every test on a cluster.
+# PYTHONPATH: the OLM helpers import the shared harness (lib.*) from e2e-tests/.
+PY_UNIT = PYTHONPATH=e2e-tests:installers/olm/e2e-tests $(UV) run pytest --noconftest -p no:cacheprovider -q
 py-unit: uv ## Run the unit tests of the e2e helpers (no cluster needed)
-	cd e2e-tests && $(UV) run pytest --noconftest -p no:cacheprovider -q lib/
+	$(PY_UNIT) e2e-tests/lib/ installers/olm/e2e-tests/test_olm.py
 
 # Resolves every fixture of every test without a cluster (nothing is executed), so a
 # fixture renamed or removed in conftest.py fails here and not in the e2e run.

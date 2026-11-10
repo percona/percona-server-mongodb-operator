@@ -50,9 +50,10 @@ LOGICAL_RESTORE_TIMEOUT = 900
 # crash before it rebuilds the StatefulSets. Allowed only during the physical
 # restore: elsewhere the line means the operator force-reconfigures a replset.
 PHYSICAL_RESTORE_CRASH = re.compile(r"FULL CLUSTER CRASH.*ping mongo: server selection error")
-# Seen once per restore; a few more reconciles can run while the mongods are down,
-# but not more than one per member.
-PHYSICAL_RESTORE_CRASH_MAX = RS0_SIZE
+# Logged once per reconcile that runs while the mongods are down, not once per member.
+# Usually once per restore; 3 is an observed ceiling (one OpenShift run logged it 3
+# times), not a limit the operator guarantees.
+PHYSICAL_RESTORE_CRASH_MAX = 3
 # The window is measured on this machine and the line time on the operator's node.
 CLOCK_SKEW = timedelta(seconds=60)
 

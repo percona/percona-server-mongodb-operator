@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from lib.backup import MAX_EMPTY_READS
 from lib.kubectl import kubectl_bin
 from lib.mongo import MongoManager
 from lib.operator import check_crd_for_deletion, delete_crd_rbac
@@ -726,9 +727,12 @@ def wait_reconciled(namespace: str, cluster: str, timeout: int = 300) -> None:
     assert int(generation) > int(before), (
         f"{RECONCILE_PROBE} did not change psmdb/{cluster} (generation {before})"
     )
-    wait_until(
-        f"the operator to reconcile generation {generation} of {cluster}",
-        lambda: kubectl_bin(
+    empty_reads = 0
+
+    def observed() -> str:
+        """status.observedGeneration; fails after MAX_EMPTY_READS failed reads in a row."""
+        nonlocal empty_reads
+        out = kubectl_bin(
             "get",
             "psmdb",
             cluster,
@@ -737,7 +741,21 @@ def wait_reconciled(namespace: str, cluster: str, timeout: int = 300) -> None:
             "-o",
             "jsonpath={.status.observedGeneration}",
             check=False,
-        ).strip(),
-        lambda observed: observed == generation,
+            return_stderr=True,
+        ).strip()
+        if out.isdigit():
+            empty_reads = 0
+            return out
+        empty_reads += 1
+        assert empty_reads < MAX_EMPTY_READS, (
+            f"status.observedGeneration of psmdb/{cluster} could not be read {empty_reads} "
+            f"times in a row: {out or 'empty output'}"
+        )
+        return out
+
+    wait_until(
+        f"the operator to reconcile generation {generation} of {cluster}",
+        observed,
+        lambda value: value.isdigit() and int(value) >= int(generation),
         timeout=timeout,
     )

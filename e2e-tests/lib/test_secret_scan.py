@@ -120,6 +120,8 @@ class FakeCluster:
         self.pods: dict[str, dict[str, Any]] = {}
         # Still listed by `get pods`, but gone when read.
         self.deleted: list[dict[str, Any]] = []
+        # Pods recreated under the same name right before their first log read.
+        self.replacements: dict[str, tuple[str, dict[str, str], tuple[str, ...]]] = {}
         self.logs: dict[tuple[str, str], str] = {}
         self.broken: set[tuple[str, str]] = set()
         self.calls: list[tuple[str, ...]] = []
@@ -148,6 +150,13 @@ class FakeCluster:
     def delete_after_listing(self, name: str) -> None:
         self.deleted.append(self.pods.pop(name))
 
+    def recreate_before_reading(
+        self, name: str, uid: str, logs: dict[str, str], waiting: tuple[str, ...] = ()
+    ) -> None:
+        """Replace pod `name` with a new pod `uid` between listing it and reading its log,
+        as a StatefulSet does with a deleted pod."""
+        self.replacements[name] = (uid, logs, waiting)
+
     def kubectl(self, *args: str, **_: Any) -> str:
         self.calls.append(args)
         if args[:2] == ("get", "pods"):
@@ -156,7 +165,12 @@ class FakeCluster:
             return json.dumps(self.pods[args[2]]) if args[2] in self.pods else ""
         if args[0] == "logs":
             pod, container = args[1], args[args.index("-c") + 1]
-            if pod not in self.pods or (pod, container) in self.broken:
+            if pod in self.replacements:
+                for old in [key for key in self.logs if key[0] == pod]:
+                    del self.logs[old]
+                self.add(pod, *self.replacements.pop(pod))
+            # A container that has not started has no log yet.
+            if (pod, container) not in self.logs or (pod, container) in self.broken:
                 raise subprocess.CalledProcessError(1, ["kubectl", *args], stderr="NotFound")
             return self.logs[(pod, container)]
         raise AssertionError(f"Unexpected kubectl call: {args}")
@@ -194,6 +208,39 @@ def test_recorder_keeps_a_pod_deleted_while_it_reads(cluster: FakeCluster) -> No
         "pod/db-rs0-0/init (uid pod00000)": "",
         "pod/db-rs0-0/mongod (uid pod00000)": "kept",
     }
+
+
+def test_recorder_drops_a_read_of_a_pod_recreated_under_the_same_name(
+    cluster: FakeCluster,
+) -> None:
+    cluster.add("db-rs0-0", "old00000-uid", {"mongod": "started"})
+    recorder = LogRecorder("ns", "db")
+    recorder.record()
+    cluster.logs[("db-rs0-0", "mongod")] = "started\nrestored"
+    recorder.record()
+    cluster.recreate_before_reading("db-rs0-0", "new00000-uid", {"mongod": "rebuilt"})
+    recorder.record()
+    assert recorder.sources() == {
+        "pod/db-rs0-0/init (uid old00000)": "",
+        "pod/db-rs0-0/mongod (uid old00000)": "started\nrestored",
+    }
+    recorder.record()
+    assert "rebuilt" not in recorder.sources().values()
+
+
+def test_recorder_skips_a_recreated_pod_that_has_not_started(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "old00000-uid", {"mongod": "restored"})
+    recorder = LogRecorder("ns", "db")
+    recorder.record()
+    cluster.recreate_before_reading("db-rs0-0", "new00000-uid", {}, waiting=("mongod",))
+    cluster.calls.clear()
+    recorder.record()
+    assert recorder.sources() == {
+        "pod/db-rs0-0/init (uid old00000)": "",
+        "pod/db-rs0-0/mongod (uid old00000)": "restored",
+    }
+    # No retries: the read of the new pod's mongod failed once and the pod was skipped.
+    assert sum(1 for args in cluster.calls if args[0] == "logs" and "mongod" in args) == 1
 
 
 def test_recorder_reads_only_started_containers(cluster: FakeCluster) -> None:
@@ -246,6 +293,12 @@ def test_recorder_reads_once_more_when_it_stops(cluster: FakeCluster) -> None:
 
 def test_pod_logs_of_a_deleted_pod_are_skipped(cluster: FakeCluster) -> None:
     assert secret_scan._pod_logs("ns", "gone") is None
+
+
+def test_pod_logs_skip_a_pod_recreated_under_the_same_name(cluster: FakeCluster) -> None:
+    cluster.add("db-rs0-0", "old00000-uid", {"mongod": "old"})
+    cluster.recreate_before_reading("db-rs0-0", "new00000-uid", {"mongod": "new"})
+    assert secret_scan._pod_logs("ns", "db-rs0-0") is None
 
 
 def test_pod_logs_fail_when_a_container_does_not_start(cluster: FakeCluster) -> None:

@@ -73,6 +73,8 @@ MASKED_PASSWORD = re.compile(r"^(\*+|x+|<[^>]*>|\[[^\]]*\]|REDACTED)$", re.IGNOR
 
 # A pod can be deleted, and a container can be still starting, between listing the
 # pod and reading its log: a read is tried this many times, READ_DELAY seconds apart.
+# A StatefulSet recreates a deleted pod under the same name, so every read is tied to
+# the UID of the pod that was listed: a pod with another UID counts as gone.
 READ_ATTEMPTS = 3
 READ_DELAY = 5
 
@@ -152,10 +154,14 @@ def scan_text(source: str, text: str, values: dict[str, str]) -> list[Finding]:
     return findings
 
 
-def _pod(namespace: str, pod: str) -> dict[str, Any] | None:
-    """The pod object, or None when it is gone."""
+def _pod(namespace: str, pod: str, uid: str = "") -> dict[str, Any] | None:
+    """The pod object, or None when it is gone or, with `uid`, was replaced by another pod
+    of the same name."""
     raw = kubectl_bin("get", "pod", pod, "-n", namespace, "-o", "json", "--ignore-not-found")
-    return dict(json.loads(raw)) if raw.strip() else None
+    if not raw.strip():
+        return None
+    obj = dict(json.loads(raw))
+    return None if uid and obj["metadata"]["uid"] != uid else obj
 
 
 def _containers(pod: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -177,8 +183,12 @@ def _containers(pod: dict[str, Any]) -> tuple[list[str], list[str]]:
     return started, waiting
 
 
-def _container_log(namespace: str, pod: str, container: str) -> str | None:
-    """Current log of `container`, or None when its pod is gone. Fails after READ_ATTEMPTS."""
+def _container_log(namespace: str, pod: str, uid: str, container: str) -> str | None:
+    """Current log of `container`, or None when pod `uid` is gone. Fails after READ_ATTEMPTS.
+
+    A log read while the pod is replaced can come from the new pod: the caller checks the
+    UID again after its reads.
+    """
     error = ""
     for attempt in range(READ_ATTEMPTS):
         if attempt:
@@ -187,7 +197,7 @@ def _container_log(namespace: str, pod: str, container: str) -> str | None:
             return kubectl_bin("logs", pod, "-n", namespace, "-c", container)
         except subprocess.CalledProcessError as e:
             error = str(e.stderr or "").strip()
-        if _pod(namespace, pod) is None:
+        if _pod(namespace, pod, uid) is None:
             return None
     raise AssertionError(
         f"Cannot read the log of container {container} of pod {pod} after "
@@ -198,22 +208,25 @@ def _container_log(namespace: str, pod: str, container: str) -> str | None:
 def _pod_logs(namespace: str, pod: str) -> dict[str, str] | None:
     """Current and previous logs of every container of `pod`, keyed by source name.
 
-    None when the pod is gone. Waits for containers that have not started yet and
-    fails when they do not start within the read attempts.
+    None when the pod is gone or was replaced by another pod of the same name. Waits
+    for containers that have not started yet and fails when they do not start within
+    the read attempts.
     """
     waiting: list[str] = []
+    uid = ""
     for attempt in range(READ_ATTEMPTS):
         if attempt:
             time.sleep(READ_DELAY)
-        obj = _pod(namespace, pod)
+        obj = _pod(namespace, pod, uid)
         if obj is None:
             return None
+        uid = obj["metadata"]["uid"]
         started, waiting = _containers(obj)
         if waiting:
             continue
         logs = {}
         for container in started:
-            current = _container_log(namespace, pod, container)
+            current = _container_log(namespace, pod, uid, container)
             if current is None:
                 return None
             logs[f"pod/{pod}/{container}"] = current
@@ -223,7 +236,7 @@ def _pod_logs(namespace: str, pod: str) -> dict[str, str] | None:
             )
             if previous:
                 logs[f"pod/{pod}/{container} (previous)"] = previous
-        return logs
+        return logs if _pod(namespace, pod, uid) else None
     raise AssertionError(
         f"Containers {waiting} of pod {pod} did not start in "
         f"{(READ_ATTEMPTS - 1) * READ_DELAY}s, so their logs cannot be scanned"
@@ -248,7 +261,7 @@ def collect_sources(namespace: str, cluster: str, operator_pod: str) -> dict[str
     for pod in dict.fromkeys(pods):
         logs = _pod_logs(namespace, pod)
         if logs is None:
-            logger.info(f"Pod {pod} was deleted before its logs were read, skipping it")
+            logger.info(f"Pod {pod} was deleted or replaced while its logs were read, skipping it")
             continue
         sources.update(logs)
     for resource in ("psmdb-backup", "psmdb-restore", "events"):
@@ -297,10 +310,11 @@ class LogRecorder:
 
     A context manager. A thread reads the current log of every started container
     (init containers included) of the cluster's pods every `interval` seconds and
-    keeps the latest read per pod UID and container. On exit it stops the thread,
-    reads once more and raises any error of the thread. sources() returns the kept
-    logs of the pods that were gone at that last read; check_logs_for_secrets reads
-    the running ones itself.
+    keeps the latest read per pod UID and container. A read of a pod that was replaced
+    by a new pod of the same name in the meantime is dropped, so the replaced pod keeps
+    its last log. On exit it stops the thread, reads once more and raises any error of
+    the thread. sources() returns the kept logs of the pods that were gone at that last
+    read; check_logs_for_secrets reads the running ones itself.
     """
 
     def __init__(self, namespace: str, cluster: str, interval: float = RECORD_INTERVAL) -> None:
@@ -310,6 +324,8 @@ class LogRecorder:
         # (pod UID, container) -> (source name, log)
         self._logs: dict[tuple[str, str], tuple[str, str]] = {}
         self._running: set[str] = set()
+        # Guards _logs and _running: sources() can run while a timed-out thread still reads.
+        self._lock = threading.Lock()
         self._stop = threading.Event()
         self._error: Exception | None = None
         self._thread = threading.Thread(target=self._run, name=f"logs-{cluster}", daemon=True)
@@ -334,22 +350,39 @@ class LogRecorder:
             # A terminating pod is gone by the time the final scan reads the cluster.
             if not pod["metadata"].get("deletionTimestamp"):
                 running.add(uid)
-            for container in _containers(pod)[0]:
-                log = _container_log(self.namespace, name, container)
-                if log is None:
-                    logger.debug(f"Pod {name} ({uid}) is gone, keeping its last recorded logs")
-                    running.discard(uid)
-                    break
-                self._logs[(uid, container)] = (f"pod/{name}/{container} (uid {uid[:8]})", log)
-        self._running = running
+            logs = self._read(name, uid, _containers(pod)[0])
+            if logs is None:
+                logger.debug(f"Pod {name} ({uid}) is gone, keeping its last recorded logs")
+                running.discard(uid)
+                continue
+            with self._lock:
+                self._logs.update(logs)
+        with self._lock:
+            self._running = running
+
+    def _read(
+        self, name: str, uid: str, containers: list[str]
+    ) -> dict[tuple[str, str], tuple[str, str]] | None:
+        """Logs of `containers` of pod `uid`, or None when that pod is gone or replaced."""
+        logs = {}
+        for container in containers:
+            log = _container_log(self.namespace, name, uid, container)
+            if log is None:
+                return None
+            logs[(uid, container)] = (f"pod/{name}/{container} (uid {uid[:8]})", log)
+        # A log read after the pod was replaced belongs to the new pod.
+        if logs and _pod(self.namespace, name, uid) is None:
+            return None
+        return logs
 
     def sources(self) -> dict[str, str]:
         """Kept logs of the pods that were gone at the last read, keyed by source name."""
-        return {
-            source: log
-            for (uid, _), (source, log) in self._logs.items()
-            if uid not in self._running
-        }
+        with self._lock:
+            return {
+                source: log
+                for (uid, _), (source, log) in self._logs.items()
+                if uid not in self._running
+            }
 
     def _run(self) -> None:
         try:
@@ -380,9 +413,11 @@ class LogRecorder:
                 self.record()
             except Exception as e:
                 self._error = e
+        with self._lock:
+            kept = len(self._logs)
         logger.info(
             f"Stopped recording the logs of the {self.cluster} pods: kept "
-            f"{len(self._logs)} pod/container logs, {len(self.sources())} of pods now gone"
+            f"{kept} pod/container logs, {len(self.sources())} of pods now gone"
         )
         if self._error is None:
             return
