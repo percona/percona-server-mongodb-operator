@@ -6,7 +6,7 @@
 #   2. write documents holding vector embeddings
 #   3. create a vectorSearch index
 #   4. run a $vectorSearch query and assert the nearest neighbours
-#   5. resize and autoscale search storage, then re-verify search
+#   5. autoscale search storage, then re-verify search
 #   6. take a physical backup
 #   7. restore the physical backup and re-verify data and search
 #
@@ -156,21 +156,11 @@ check_search_storage_scaling() {
 
 	local pod_uid sts_uid
 	pod_uid=$(kubectl_bin get pod "${pod}" -o jsonpath='{.metadata.uid}')
-	sts_uid=$(kubectl_bin get sts "${sts}" -o jsonpath='{.metadata.uid}')
 
-	desc 'expand shared search storage from 3Gi to 4Gi'
-	kubectl_bin patch psmdb "${cluster}" --type=merge -p '{"spec":{"storageScaling":{"enableVolumeScaling":true},"search":{"storage":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"4Gi"}}}}}}}'
-	wait_search_storage "4Gi" "${sts_uid}"
-	if [[ $(kubectl_bin get pod "${pod}" -o jsonpath='{.metadata.uid}') != "${pod_uid}" ]]; then
-		echo "Search pod ${pod} was restarted during storage scaling"
-		exit 1
-	fi
-	wait_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
-	check_vector_search "myApp:myPass@${cluster}-rs0.${namespace}"
-
+	# Use a single expansion so EBS-backed volumes do not hit the modification cooldown.
 	desc 'enable autoscaling with a replset search storage override'
-	kubectl_bin patch psmdb "${cluster}" --type=json -p '[{"op":"add","path":"/spec/replsets/0/search","value":{"storage":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"4Gi"}}}}}}]'
-	kubectl_bin patch psmdb "${cluster}" --type=merge -p '{"spec":{"storageScaling":{"autoscaling":{"enabled":true,"triggerThresholdPercent":50,"growthStep":"2Gi","maxSize":"6Gi"}}}}'
+	kubectl_bin patch psmdb "${cluster}" --type=json -p '[{"op":"add","path":"/spec/replsets/0/search","value":{"storage":{"persistentVolumeClaim":{"resources":{"requests":{"storage":"3Gi"}}}}}}]'
+	kubectl_bin patch psmdb "${cluster}" --type=merge -p '{"spec":{"storageScaling":{"enableVolumeScaling":true,"autoscaling":{"enabled":true,"triggerThresholdPercent":50,"growthStep":"2Gi","maxSize":"5Gi"}}}}'
 	if ! kubectl_bin wait psmdb "${cluster}" --for="jsonpath={.status.storageAutoscaling.${pvc}.currentSize}" --timeout=300s; then
 		kubectl_bin get psmdb "${cluster}" -o jsonpath='{.status.storageAutoscaling}' | jq .
 		return 1
@@ -178,8 +168,8 @@ check_search_storage_scaling() {
 	sts_uid=$(kubectl_bin get sts "${sts}" -o jsonpath='{.metadata.uid}')
 
 	desc 'fill mongot storage past the autoscaling threshold'
-	kubectl_bin exec "${pod}" -c mongot -- dd if=/dev/zero of=/data/mongot/e2e-fillfile bs=1M count=2300
-	wait_search_storage "6Gi" "${sts_uid}"
+	kubectl_bin exec "${pod}" -c mongot -- dd if=/dev/zero of=/data/mongot/e2e-fillfile bs=1M count=1800
+	wait_search_storage "5Gi" "${sts_uid}"
 	kubectl_bin exec "${pod}" -c mongot -- rm /data/mongot/e2e-fillfile
 	check_autoscaling_status "${cluster}" 1 "${pvc}"
 	local last_error
@@ -188,9 +178,9 @@ check_search_storage_scaling() {
 		echo "Search storage autoscaling failed: ${last_error}"
 		exit 1
 	fi
-	if [[ $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.replsets[0].search.storage.persistentVolumeClaim.resources.requests.storage}') != "6Gi" ||
-	$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.search.storage.persistentVolumeClaim.resources.requests.storage}') != "4Gi" ]]; then
-		echo "Search storage autoscaling should update only the replset override to 6Gi and keep shared storage at 4Gi"
+	if [[ $(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.replsets[0].search.storage.persistentVolumeClaim.resources.requests.storage}') != "5Gi" ||
+	$(kubectl_bin get psmdb "${cluster}" -o jsonpath='{.spec.search.storage.persistentVolumeClaim.resources.requests.storage}') != "3Gi" ]]; then
+		echo "Search storage autoscaling should update only the replset override to 5Gi and keep shared storage at 3Gi"
 		exit 1
 	fi
 	if [[ $(kubectl_bin get pod "${pod}" -o jsonpath='{.metadata.uid}') != "${pod_uid}" ]]; then
