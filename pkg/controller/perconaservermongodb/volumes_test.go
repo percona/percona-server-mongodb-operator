@@ -127,6 +127,10 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 	}
 	for _, component := range components {
 		for _, tt := range tests {
+			if component == naming.ComponentSearch && tt.volumeShrink {
+				tt.name = "rejects search shrink for multi-member replica set"
+				tt.expectErrContains = "volume shrinking is not supported for search"
+			}
 			t.Run(component+"/"+tt.name, func(t *testing.T) {
 				const restartedAt = "2026-01-01T00:00:00Z"
 				var (
@@ -177,6 +181,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 						labels = naming.MongodLabels(cr, cr.Spec.Sharding.ConfigsvrReplSet)
 						labels[naming.LabelKubernetesComponent] = naming.ComponentConfigSrv
 					case naming.ComponentSearch:
+						rs.Size = 3
 						cr.Spec.Search = &api.SearchSpec{Enabled: true, Storage: rs.VolumeSpec.DeepCopy()}
 						labels = naming.SearchLabels(cr, rs)
 						stsName = naming.SearchStatefulSetName(cr, rs)

@@ -73,6 +73,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		}
 	}
 
+	delete(sfs.Annotations, api.AnnotationPVCResizeInProgress)
+
 	err = r.createOrUpdate(ctx, sfs)
 	if err != nil {
 		return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)

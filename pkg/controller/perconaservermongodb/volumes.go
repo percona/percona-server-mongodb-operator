@@ -299,6 +299,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 
 	if requested.Cmp(actual) < 0 {
 		if cr.Spec.IsVolumeShrinkEnabled() {
+			if ls[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+				if err := r.revertVolumeTemplate(ctx, cr, sts, configured); err != nil {
+					return errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
+				}
+				return errors.New("volume shrinking is not supported for search")
+			}
 			err := r.shrinkVolumesIfNeeded(ctx, cr, sts, ls, claimName, pvcSpec, psmdbv1.PVCShrinkState{})
 			// Always align the original STS VolumeClaimTemplate with the actual
 			// PVC size so that createOrUpdate (which runs after reconcilePVCs)

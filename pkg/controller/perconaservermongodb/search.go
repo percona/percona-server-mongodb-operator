@@ -76,8 +76,10 @@ func (r *ReconcilePerconaServerMongoDB) getSearchStatefulSet(ctx context.Context
 	} else if !k8serrors.IsNotFound(err) {
 		return nil, errors.Wrap(err, "get mongot StatefulSet")
 	}
-	if value, ok := cr.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)]; ok {
-		sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt] = value
+	if _, ok := current.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt]; !ok {
+		if value, ok := cr.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)]; ok {
+			sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt] = value
+		}
 	}
 	if err := setControllerReference(cr, sts, r.scheme); err != nil {
 		return nil, errors.Wrapf(err, "set owner ref for StatefulSet %s", sts.Name)
