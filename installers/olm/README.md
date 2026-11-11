@@ -356,7 +356,19 @@ For a dev catalog, every test checks that the head of the default channel is
 the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
 check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
 
-## olm-default-install
+## Tests
+
+| Test | What it checks | Run only this test |
+| ---- | -------------- | ------------------ |
+| `olm-default-install` | Installs the operator and creates the cluster from the CSV's default example, the one the OpenShift console prefills on Create. Writes data, then checks that the cluster stays stable and the operator logs no errors. | `make tests OLM_TESTS=olm-default-install` |
+| `olm-backup-restore` | Takes a logical and a physical backup and restores each one: every member must return the data as of the backup. Scans the logs and objects for leaked storage credentials. | `make tests OLM_TESTS=olm-backup-restore` |
+| `olm-upgrade` | Upgrades every older bundle of the catalog straight to the target, then checks the operator, the cluster, the data and a restore of a backup taken before the upgrade. | `make tests OLM_TESTS=olm-upgrade` |
+
+`make tests` runs each test against both catalogs; use `make tests/community`
+or `make tests/certified` for one. `OLM_TESTS` takes several names separated by
+spaces. The sections below describe each test in detail.
+
+### olm-default-install
 
 Runs once per bundle type. It installs the target CSV with a Manual-approval
 Subscription and applies the first `alm-examples` entry of the CSV unchanged:
@@ -376,7 +388,7 @@ up, and the operator pod must not restart or log errors. The one exception is
 level while no backup agent is ready yet: it is allowed from applying the
 example until the cluster is ready.
 
-## olm-backup-restore
+### olm-backup-restore
 
 Runs once per bundle type. It installs the target CSV with a Manual-approval
 Subscription, deploys SeaweedFS (the S3 storage of the shared harness) in the
@@ -387,10 +399,11 @@ after the restore every member (direct connection to each pod) must return only
 the data as of the backup, and the cluster must accept writes again. For the
 physical restore it also waits for the `percona.com/resync-pbm` annotation, the
 StatefulSet rebuild and the PBM resync. The operator pod must not restart or
-log errors during the run. The only exception is the `FULL CLUSTER CRASH` line,
-which the operator logs while the physical restore stops every mongod: it is
-allowed at most three times, and only between the start and the end of the
-physical restore.
+log errors during the run, with two exceptions. The `FULL CLUSTER CRASH` line,
+which the operator logs while the physical restore stops every mongod, is
+allowed at most ten times, and only between the start and the end of the
+physical restore. `no ready pods to get pbm-agent version` is allowed while the
+cluster starts and during the physical restore (see `olm-default-install`).
 
 The logs of the operator and database pods, the backup and restore objects,
 the events and the cluster object are scanned for the storage credentials and
@@ -402,7 +415,7 @@ every 15 seconds during the restore, and the logs of the replaced pods are
 scanned at the end too. The final scan also runs when a backup or restore step
 fails.
 
-## olm-upgrade
+### olm-upgrade
 
 Runs once for every bundle in the catalog older than the target. Each run
 installs that bundle with a Manual-approval Subscription (`startingCSV`) on the
