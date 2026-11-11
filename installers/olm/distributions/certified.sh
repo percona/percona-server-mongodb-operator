@@ -13,6 +13,7 @@ redhat_containers_repository="${REDHAT_CONTAINERS_REPOSITORY:-percona/percona-se
 redhat_operator_tag="${REDHAT_OPERATOR_TAG:-${redhat_release}}"
 redhat_related_images="[]"
 redhat_missing_digests=()
+redhat_image_ref=""
 release_versions_file="${repo_root}/e2e-tests/release_versions"
 
 image_tag() {
@@ -61,6 +62,8 @@ catalog_digest() {
 	return 1
 }
 
+# Sets redhat_image_ref instead of printing it: a $(...) subshell would drop
+# redhat_missing_digests and turn abort into an exit of the subshell only.
 set_image_ref() {
 	local key="$1"
 	local name="$2"
@@ -89,7 +92,7 @@ set_image_ref() {
 		digest="sha256:${digest#sha256:}"
 	fi
 
-	echo -n "${redhat_registry}/${repository}@${digest}"
+	redhat_image_ref="${redhat_registry}/${repository}@${digest}"
 }
 
 validate_certified_tag() {
@@ -132,18 +135,17 @@ add_related_image() {
 	local repository="$3"
 	local tag="$4"
 	local source_tag="${5:-}"
-	local image
 
 	validate_certified_tag "${key}" "${tag}" "${source_tag}"
 
-	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")"
+	set_image_ref "${key}" "${name}" "${repository}" "${tag}"
 
-	log "Related image ${name}: ${image}"
+	log "Related image ${name}: ${redhat_image_ref}"
 
 	redhat_related_images="$(
 		jq -c \
 			--arg name "${name}" \
-			--arg image "${image}" \
+			--arg image "${redhat_image_ref}" \
 			'. + [{ name: $name, image: $image }]' \
 			<<<"${redhat_related_images}"
 	)"
