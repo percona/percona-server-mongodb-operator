@@ -202,6 +202,26 @@ def test_recorder_keeps_the_latest_logs_of_replaced_pods(cluster: FakeCluster) -
     }
 
 
+def test_recorder_keeps_the_log_of_a_container_run_before_a_restart(
+    cluster: FakeCluster,
+) -> None:
+    cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "first run"})
+    recorder = LogRecorder("ns", "db")
+    recorder.record()
+    cluster.logs[("db-rs0-0", "mongod")] = "second run"
+    cluster.pods["db-rs0-0"]["status"]["containerStatuses"][0]["restartCount"] = 1
+    recorder.record()
+    # The pod still runs: only the run before the restart is returned.
+    assert recorder.sources() == {"pod/db-rs0-0/mongod (uid pod00000)": "first run"}
+    cluster.delete_after_listing("db-rs0-0")
+    recorder.record()
+    assert recorder.sources() == {
+        "pod/db-rs0-0/init (uid pod00000)": "",
+        "pod/db-rs0-0/mongod (uid pod00000)": "first run",
+        "pod/db-rs0-0/mongod (uid pod00000, restart 1)": "second run",
+    }
+
+
 def test_recorder_keeps_a_pod_deleted_while_it_reads(cluster: FakeCluster) -> None:
     cluster.add("db-rs0-0", "pod00000-uid", {"mongod": "kept"})
     recorder = LogRecorder("ns", "db")

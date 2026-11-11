@@ -71,7 +71,8 @@ pin_context() {
 	context="$(kubectl config current-context)" || die "no current kubectl context"
 	PINNED_KUBECONFIG="$(mktemp)"
 	trap 'rm -f "$PINNED_KUBECONFIG"' EXIT
-	kubectl config view --minify --flatten --context "$context" >"$PINNED_KUBECONFIG"
+	# --raw: without it, kubectl may redact the credentials in the copy.
+	kubectl config view --minify --flatten --raw --context "$context" >"$PINNED_KUBECONFIG"
 	export KUBECONFIG="$PINNED_KUBECONFIG"
 	kubectl api-resources --api-group=packages.operators.coreos.com -o name \
 		| grep -q '^packagemanifests' \

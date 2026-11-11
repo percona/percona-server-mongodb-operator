@@ -183,6 +183,16 @@ def _containers(pod: dict[str, Any]) -> tuple[list[str], list[str]]:
     return started, waiting
 
 
+def _restarts(pod: dict[str, Any]) -> dict[str, int]:
+    """Restart count of every container of `pod` that has a status."""
+    status = pod.get("status", {})
+    return {
+        c["name"]: c.get("restartCount", 0)
+        for c in (status.get("initContainerStatuses") or [])
+        + (status.get("containerStatuses") or [])
+    }
+
+
 def _container_log(namespace: str, pod: str, uid: str, container: str) -> str | None:
     """Current log of `container`, or None when pod `uid` is gone. Fails after READ_ATTEMPTS.
 
@@ -321,19 +331,21 @@ class LogRecorder:
 
     A context manager. A thread reads the current log of every started container
     (init containers included) of the cluster's pods every `interval` seconds and
-    keeps the latest read per pod UID and container. A read of a pod that was replaced
-    by a new pod of the same name in the meantime is dropped, so the replaced pod keeps
-    its last log. On exit it stops the thread, reads once more and raises any error of
-    the thread. sources() returns the kept logs of the pods that were gone at that last
-    read; check_logs_for_secrets reads the running ones itself.
+    keeps the latest read per pod UID, container and restart count, so a container
+    restart does not overwrite the log of the run before it. A read of a pod that was
+    replaced by a new pod of the same name in the meantime is dropped, so the replaced
+    pod keeps its last log. On exit it stops the thread, reads once more and raises any
+    error of the thread. sources() returns the kept logs of the pods that were gone at
+    that last read and of the earlier runs of restarted containers;
+    check_logs_for_secrets reads the current runs itself.
     """
 
     def __init__(self, namespace: str, cluster: str, interval: float = RECORD_INTERVAL) -> None:
         self.namespace = namespace
         self.cluster = cluster
         self.interval = interval
-        # (pod UID, container) -> (source name, log)
-        self._logs: dict[tuple[str, str], tuple[str, str]] = {}
+        # (pod UID, container, restart count) -> (source name, log)
+        self._logs: dict[tuple[str, str, int], tuple[str, str]] = {}
         self._running: set[str] = set()
         # Guards _logs and _running: sources() can run while a timed-out thread still reads.
         self._lock = threading.Lock()
@@ -361,7 +373,7 @@ class LogRecorder:
             # A terminating pod is gone by the time the final scan reads the cluster.
             if not pod["metadata"].get("deletionTimestamp"):
                 running.add(uid)
-            logs = self._read(name, uid, _containers(pod)[0])
+            logs = self._read(name, uid, _containers(pod)[0], _restarts(pod))
             if logs is None:
                 logger.debug(f"Pod {name} ({uid}) is gone, keeping its last recorded logs")
                 running.discard(uid)
@@ -372,27 +384,34 @@ class LogRecorder:
             self._running = running
 
     def _read(
-        self, name: str, uid: str, containers: list[str]
-    ) -> dict[tuple[str, str], tuple[str, str]] | None:
+        self, name: str, uid: str, containers: list[str], restarts: dict[str, int]
+    ) -> dict[tuple[str, str, int], tuple[str, str]] | None:
         """Logs of `containers` of pod `uid`, or None when that pod is gone or replaced."""
         logs = {}
         for container in containers:
             log = _container_log(self.namespace, name, uid, container)
             if log is None:
                 return None
-            logs[(uid, container)] = (f"pod/{name}/{container} (uid {uid[:8]})", log)
+            count = restarts.get(container, 0)
+            source = f"pod/{name}/{container} (uid {uid[:8]}"
+            source += f", restart {count})" if count else ")"
+            logs[(uid, container, count)] = (source, log)
         # A log read after the pod was replaced belongs to the new pod.
         if logs and _pod(self.namespace, name, uid) is None:
             return None
         return logs
 
     def sources(self) -> dict[str, str]:
-        """Kept logs of the pods that were gone at the last read, keyed by source name."""
+        """Kept logs of the pods that were gone at the last read and of the earlier runs
+        of restarted containers, keyed by source name."""
         with self._lock:
+            latest: dict[tuple[str, str], int] = {}
+            for uid, container, count in self._logs:
+                latest[(uid, container)] = max(count, latest.get((uid, container), 0))
             return {
                 source: log
-                for (uid, _), (source, log) in self._logs.items()
-                if uid not in self._running
+                for (uid, container, count), (source, log) in self._logs.items()
+                if uid not in self._running or count < latest[(uid, container)]
             }
 
     def _run(self) -> None:
