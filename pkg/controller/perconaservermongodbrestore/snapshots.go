@@ -274,6 +274,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRunning(
 	return status, nil
 }
 
+// restoreFinishScript runs pbm-agent restore-finish with the container args
+// and keeps the container running after it succeeds.
+//
+// restore-finish is a one-shot command. If it were the container's main
+// process, the container would exit as soon as the restore is done. That kills
+// the operator's `pbm describe-restore` exec in the same container (exit code
+// 137), and the restarted container runs restore-finish again on a datadir
+// that is already restored, which corrupts it. The container must stay up until
+// the operator sees the restore as done and deletes the statefulsets.
+//
+// pbm-agent runs in the background and the shell waits on it so the TERM trap
+// fires immediately: bash is PID 1 and would otherwise ignore SIGTERM, making
+// every pod wait for its full termination grace period. A failed restore-finish
+// still exits non-zero.
+const restoreFinishScript = `trap 'exit 0' TERM
+/opt/percona/pbm-agent "$@" &
+wait $! || exit $?
+sleep infinity &
+wait $!`
+
 func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotRestore(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
@@ -333,7 +353,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				sfs.Spec.Replicas = new(int32(0))
 
 				// When the pods come up, they should start pbm with the following command:
-				sfs.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/pbm-agent"}
+				sfs.Spec.Template.Spec.Containers[0].Command = []string{"bash", "-c", restoreFinishScript, "--"}
 
 				isEncrypted, err := isEncrypted(rs)
 				if err != nil {
@@ -379,7 +399,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					}
 					sfs.Spec.Template.Spec.Containers[0].Command = []string{
 						"bash", "-c",
-						fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", srcPath, dstPath, dstPath),
+						fmt.Sprintf("cp %s %s && chmod 0600 %s || exit 1\n%s", srcPath, dstPath, dstPath, restoreFinishScript),
 						"--",
 					}
 				}
