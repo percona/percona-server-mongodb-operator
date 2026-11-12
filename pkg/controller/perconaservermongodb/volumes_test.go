@@ -28,7 +28,7 @@ import (
 
 func TestValidatePVCName(t *testing.T) {
 	sts := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "some-name-rs0"},
+		Name: "some-name-rs0",
 	}
 
 	tests := []struct {
@@ -61,7 +61,7 @@ func TestValidatePVCName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pvc := corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: tt.pvcName},
+				Name: tt.pvcName,
 			}
 
 			assert.Equal(t, tt.want, validatePVCName(config.MongodDataVolClaimName, pvc, sts))
