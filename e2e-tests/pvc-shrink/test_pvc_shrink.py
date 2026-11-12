@@ -27,6 +27,7 @@ CLUSTER = "some-name"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _pvc_size(pvc: str) -> str:
     return kubectl_bin("get", "pvc", pvc, "-o", "jsonpath={.status.capacity.storage}").strip()
 
@@ -50,11 +51,8 @@ def _cr_storage(replset: str) -> str:
     return kubectl_bin("get", "psmdb", CLUSTER, "-o", f"jsonpath={jsonpath}").strip()
 
 
-
 def _has_shrink_in_progress() -> bool:
-    raw = kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o", "jsonpath={.status.pvcShrink}"
-    ).strip()
+    raw = kubectl_bin("get", "psmdb", CLUSTER, "-o", "jsonpath={.status.pvcShrink}").strip()
     return raw != "" and raw != "{}"
 
 
@@ -73,7 +71,10 @@ def _wait_no_shrink_in_progress(max_attempts: int = 180, delay: int = 10) -> Non
 
 def _replset_index(replset: str) -> int:
     idx_raw = kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o",
+        "get",
+        "psmdb",
+        CLUSTER,
+        "-o",
         "jsonpath={range .spec.replsets[*]}{.name}{'\\n'}{end}",
     ).strip()
     names = idx_raw.splitlines()
@@ -85,57 +86,90 @@ def _replset_index(replset: str) -> int:
 def _patch_replset_storage(replset: str, size: str) -> None:
     idx = _replset_index(replset)
     kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=json", "-p",
-        json.dumps([{
-            "op": "replace",
-            "path": f"/spec/replsets/{idx}/volumeSpec/persistentVolumeClaim/resources/requests/storage",
-            "value": size,
-        }]),
+        "patch",
+        "psmdb",
+        CLUSTER,
+        "--type=json",
+        "-p",
+        json.dumps(
+            [
+                {
+                    "op": "replace",
+                    "path": f"/spec/replsets/{idx}/volumeSpec/persistentVolumeClaim/resources/requests/storage",
+                    "value": size,
+                }
+            ]
+        ),
     )
 
 
 def _patch_nonvoting_storage(replset: str, size: str) -> None:
     idx = _replset_index(replset)
     kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=json", "-p",
-        json.dumps([{
-            "op": "replace",
-            "path": f"/spec/replsets/{idx}/nonvoting/volumeSpec/persistentVolumeClaim/resources/requests/storage",
-            "value": size,
-        }]),
+        "patch",
+        "psmdb",
+        CLUSTER,
+        "--type=json",
+        "-p",
+        json.dumps(
+            [
+                {
+                    "op": "replace",
+                    "path": f"/spec/replsets/{idx}/nonvoting/volumeSpec/persistentVolumeClaim/resources/requests/storage",
+                    "value": size,
+                }
+            ]
+        ),
     )
 
 
 def _patch_hidden_storage(replset: str, size: str) -> None:
     idx = _replset_index(replset)
     kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=json", "-p",
-        json.dumps([{
-            "op": "replace",
-            "path": f"/spec/replsets/{idx}/hidden/volumeSpec/persistentVolumeClaim/resources/requests/storage",
-            "value": size,
-        }]),
+        "patch",
+        "psmdb",
+        CLUSTER,
+        "--type=json",
+        "-p",
+        json.dumps(
+            [
+                {
+                    "op": "replace",
+                    "path": f"/spec/replsets/{idx}/hidden/volumeSpec/persistentVolumeClaim/resources/requests/storage",
+                    "value": size,
+                }
+            ]
+        ),
     )
-
 
 
 def _patch_shrink_enabled(enabled: bool) -> None:
     kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=merge", "-p",
+        "patch",
+        "psmdb",
+        CLUSTER,
+        "--type=merge",
+        "-p",
         json.dumps({"spec": {"storageScaling": {"enableVolumeShrink": enabled}}}),
     )
 
 
 def _default_storageclass() -> str:
     return kubectl_bin(
-        "get", "sc", "-o",
+        "get",
+        "sc",
+        "-o",
         'jsonpath={.items[?(@.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class=="true")].metadata.name}',
     ).strip()
 
 
 def _allows_volume_expansion(storageclass: str) -> bool:
     allowed = kubectl_bin(
-        "get", "sc", storageclass, "-o", "jsonpath={.allowVolumeExpansion}",
+        "get",
+        "sc",
+        storageclass,
+        "-o",
+        "jsonpath={.allowVolumeExpansion}",
         check=False,
     ).strip()
     return allowed == "true"
@@ -159,8 +193,14 @@ class LiveTrafficWriter:
     proving no data was lost and no write was silently dropped.
     """
 
-    def __init__(self, client_pod: str, uri: str, namespace: str,
-                 db: str = "liveTraffic", col: str = "writes"):
+    def __init__(
+        self,
+        client_pod: str,
+        uri: str,
+        namespace: str,
+        db: str = "liveTraffic",
+        col: str = "writes",
+    ):
         self.client_pod = client_pod
         self.uri = uri
         self.namespace = namespace
@@ -180,7 +220,9 @@ class LiveTrafficWriter:
         self._stop.set()
         if self._thread:
             self._thread.join(timeout=60)
-        logger.info(f"Live traffic writer stopped: {self.written} docs written, {len(self.errors)} errors")
+        logger.info(
+            f"Live traffic writer stopped: {self.written} docs written, {len(self.errors)} errors"
+        )
         return self.written
 
     def _run(self) -> None:
@@ -192,12 +234,18 @@ class LiveTrafficWriter:
                     f"{{seq: {seq}, ts: new Date(), data: 'shrink-test-payload-' + '{seq}'.padStart(6, '0')}})"
                 )
                 kubectl_bin(
-                    "exec", self.client_pod, "--",
-                    "timeout", "15",
-                    "env", "HOME=/tmp",
+                    "exec",
+                    self.client_pod,
+                    "--",
+                    "timeout",
+                    "15",
+                    "env",
+                    "HOME=/tmp",
                     "mongosh",
                     f"mongodb://{self.uri}.{self.namespace}.svc.cluster.local/admin?ssl=false&replicaSet=rs0",
-                    "--eval", write_cmd, "--quiet",
+                    "--eval",
+                    write_cmd,
+                    "--quiet",
                     check=True,
                 )
                 seq += 1
@@ -209,18 +257,30 @@ class LiveTrafficWriter:
             time.sleep(0.5)
 
 
-def _verify_live_traffic(client_pod: str, uri: str, namespace: str,
-                         expected_count: int,
-                         db: str = "liveTraffic", col: str = "writes") -> None:
+def _verify_live_traffic(
+    client_pod: str,
+    uri: str,
+    namespace: str,
+    expected_count: int,
+    db: str = "liveTraffic",
+    col: str = "writes",
+) -> None:
     """Verify all documents written by LiveTrafficWriter are present."""
     conn = f"mongodb://{uri}.{namespace}.svc.cluster.local/admin?ssl=false&replicaSet=rs0"
     count_cmd = f"db.getSiblingDB('{db}').{col}.countDocuments({{}})"
     result = kubectl_bin(
-        "exec", client_pod, "--",
-        "timeout", "15",
-        "env", "HOME=/tmp",
-        "mongosh", conn,
-        "--eval", count_cmd, "--quiet",
+        "exec",
+        client_pod,
+        "--",
+        "timeout",
+        "15",
+        "env",
+        "HOME=/tmp",
+        "mongosh",
+        conn,
+        "--eval",
+        count_cmd,
+        "--quiet",
     ).strip()
     actual_count = int(result)
     logger.info(f"Live traffic verification: expected={expected_count}, actual={actual_count}")
@@ -235,11 +295,18 @@ def _verify_live_traffic(client_pod: str, uri: str, namespace: str,
         f".toArray())"
     )
     agg_result = kubectl_bin(
-        "exec", client_pod, "--",
-        "timeout", "15",
-        "env", "HOME=/tmp",
-        "mongosh", conn,
-        "--eval", gaps_cmd, "--quiet",
+        "exec",
+        client_pod,
+        "--",
+        "timeout",
+        "15",
+        "env",
+        "HOME=/tmp",
+        "mongosh",
+        conn,
+        "--eval",
+        gaps_cmd,
+        "--quiet",
     ).strip()
     logger.info(f"Live traffic aggregation: {agg_result}")
     agg = json.loads(agg_result)
@@ -260,6 +327,7 @@ class PVCShrinkConfig:
 # ---------------------------------------------------------------------------
 # Test class 1: basic 3-member replset shrink (non-sharded)
 # ---------------------------------------------------------------------------
+
 
 class TestPVCShrinkBasic:
     """Shrink a 3-member replset (with nonvoting, hidden, arbiter) from 10Gi to 5Gi."""
@@ -297,7 +365,9 @@ class TestPVCShrinkBasic:
         wait_for_running(f"{config.cluster}-{self.RS}-hidden", 2, check_cluster_readyness=False)
         wait_for_running(f"{config.cluster}-{self.RS}-arbiter", 1, check_cluster_readyness=False)
         for pvc in self.PVCS + self.NV_PVCS + self.HIDDEN_PVCS:
-            assert _pvc_size(pvc) == self.INITIAL_SIZE, f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
+            assert _pvc_size(pvc) == self.INITIAL_SIZE, (
+                f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
+            )
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_01_create_cluster"])
     def test_02_seed_data(self, config: PVCShrinkConfig, psmdb_client: MongoManager) -> None:
@@ -306,22 +376,27 @@ class TestPVCShrinkBasic:
         psmdb_client.run_mongosh(
             "db.createUser({user:'testWriter',pwd:'testWriter123456',"
             "roles:[{db:'shrinkTest',role:'readWrite'},{db:'liveTraffic',role:'readWrite'}]})",
-            admin_uri, driver="mongodb",
+            admin_uri,
+            driver="mongodb",
         )
         uri = f"testWriter:testWriter123456@{CLUSTER}-rs0.{config.namespace}"
         for i in range(100):
             psmdb_client.run_mongosh(
                 f"db.getSiblingDB('shrinkTest').seedData.insertOne({{idx: {i}, payload: 'pre-shrink-{i}'}})",
-                uri, driver="mongodb",
+                uri,
+                driver="mongodb",
             )
         count = psmdb_client.run_mongosh(
             "db.getSiblingDB('shrinkTest').seedData.countDocuments({})",
-            uri, driver="mongodb",
+            uri,
+            driver="mongodb",
         ).strip()
         assert count == "100", f"Expected 100 seed documents, got {count}"
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_02_seed_data"])
-    def test_03_shrink_with_live_traffic(self, config: PVCShrinkConfig, psmdb_client: MongoManager) -> None:
+    def test_03_shrink_with_live_traffic(
+        self, config: PVCShrinkConfig, psmdb_client: MongoManager
+    ) -> None:
         """Shrink from 10Gi to 5Gi while a background writer inserts documents.
 
         Proves the replica set stays available throughout the rolling PVC
@@ -332,7 +407,9 @@ class TestPVCShrinkBasic:
         writer.start()
 
         time.sleep(5)
-        assert writer.written > 0, "Writer should have inserted at least one document before shrink"
+        assert writer.written > 0, (
+            "Writer should have inserted at least one document before shrink"
+        )
 
         _patch_replset_storage(self.RS, self.SHRUNK_SIZE)
         time.sleep(10)
@@ -354,7 +431,9 @@ class TestPVCShrinkBasic:
 
         real_errors = [e for e in writer.errors if "exit status 124" not in str(e)]
         if writer.errors:
-            logger.info(f"Transient timeout errors (kubectl exec): {len(writer.errors) - len(real_errors)}")
+            logger.info(
+                f"Transient timeout errors (kubectl exec): {len(writer.errors) - len(real_errors)}"
+            )
         assert len(real_errors) == 0, (
             f"Write errors during shrink (potential downtime): {real_errors}"
         )
@@ -365,12 +444,15 @@ class TestPVCShrinkBasic:
         assert _cr_storage(self.RS) == self.SHRUNK_SIZE
 
     @pytest.mark.dependency(depends=["TestPVCShrinkBasic::test_03_shrink_with_live_traffic"])
-    def test_05_seed_data_intact(self, config: PVCShrinkConfig, psmdb_client: MongoManager) -> None:
+    def test_05_seed_data_intact(
+        self, config: PVCShrinkConfig, psmdb_client: MongoManager
+    ) -> None:
         """Verify the 100 documents inserted before shrink are still present."""
         uri = f"testWriter:testWriter123456@{CLUSTER}-rs0.{config.namespace}"
         count = psmdb_client.run_mongosh(
             "db.getSiblingDB('shrinkTest').seedData.countDocuments({})",
-            uri, driver="mongodb",
+            uri,
+            driver="mongodb",
         ).strip()
         assert count == "100", f"Pre-shrink data lost: expected 100, got {count}"
 
@@ -540,7 +622,9 @@ class TestPVCShrinkBasic:
         _patch_replset_storage(self.RS, expand_size)
         time.sleep(10)
 
-        assert not _has_shrink_in_progress(), "Shrink status should NOT be set for expand after re-enable"
+        assert not _has_shrink_in_progress(), (
+            "Shrink status should NOT be set for expand after re-enable"
+        )
 
         for pvc in self.PVCS:
             _wait_pvc_size(pvc, expand_size, max_attempts=60)
