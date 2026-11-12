@@ -41,7 +41,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 }
 
 func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
-	return strings.HasPrefix(pvc.Name, claimName+"-"+sts.Name)
+	prefix := claimName + "-" + sts.Name + "-"
+	ordinal, ok := strings.CutPrefix(pvc.Name, prefix)
+	if !ok || ordinal == "" {
+		return false
+	}
+
+	for _, digit := range ordinal {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func maxPVCCapacity(pvcs []corev1.PersistentVolumeClaim, claimName string, sts *appsv1.StatefulSet) resource.Quantity {
