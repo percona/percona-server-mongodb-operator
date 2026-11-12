@@ -266,13 +266,21 @@ func TestRatioScaledLimits(t *testing.T) {
 			expected:    rl("4", "8Gi"),
 		},
 		{
-			name: "resource with no original request keeps its original limit",
+			name: "resource with no original request scales 1:1 from its limit",
 			orig: corev1.ResourceRequirements{
 				Requests: rl("1", ""),
 				Limits:   rl("2", "4Gi"),
 			},
 			newRequests: rl("2", "2Gi"),
-			expected:    rl("4", "4Gi"),
+			expected:    rl("4", "2Gi"),
+		},
+		{
+			name: "no original requests at all scales every limit 1:1",
+			orig: corev1.ResourceRequirements{
+				Limits: rl("2", "4Gi"),
+			},
+			newRequests: rl("4", "8Gi"),
+			expected:    rl("4", "8Gi"),
 		},
 		{
 			name: "resource with no original limit is not added",
@@ -284,13 +292,13 @@ func TestRatioScaledLimits(t *testing.T) {
 			expected:    rl("4", ""),
 		},
 		{
-			name: "zero original request is skipped rather than dividing by zero",
+			name: "zero original request scales 1:1 rather than dividing by zero",
 			orig: corev1.ResourceRequirements{
 				Requests: rl("0", ""),
 				Limits:   rl("2", ""),
 			},
 			newRequests: rl("1", ""),
-			expected:    rl("2", ""),
+			expected:    rl("1", ""),
 		},
 		{
 			name: "new request for a resource absent from orig leaves limits untouched",
@@ -379,6 +387,209 @@ func TestRatioScaledLimitsDoesNotMutateInput(t *testing.T) {
 	assertResourceList(t, rl("1", "1Gi"), orig.Requests)
 	assertResourceList(t, rl("2", "4Gi"), orig.Limits)
 	assertResourceList(t, rl("4", "8Gi"), scaled)
+}
+
+func TestEffectiveBounds(t *testing.T) {
+	tests := []struct {
+		name      string
+		global    *api.VPASpec
+		component *api.ComponentVPASpec
+		expected  vpaBounds
+	}{
+		{
+			name: "nil component leaves the global bounds in place",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: nil,
+			expected: vpaBounds{
+				minAllowed: rl("100m", "256Mi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "component without bounds falls back to the global ones",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{},
+			expected: vpaBounds{
+				minAllowed: rl("100m", "256Mi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "component bounds take precedence over the global ones",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", "1Gi"),
+				MaxAllowed: rl("4", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "1Gi"),
+				maxAllowed: rl("4", "8Gi"),
+			},
+		},
+		{
+			name: "a partial component bound overrides only the specified resource",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", ""),
+				MaxAllowed: rl("", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "256Mi"),
+				maxAllowed: rl("8", "8Gi"),
+			},
+		},
+		{
+			name: "min and max are merged independently",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", "1Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "1Gi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name:   "component bounds stand alone when the global spec sets none",
+			global: &api.VPASpec{},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("500m", "1Gi"),
+				MaxAllowed: rl("4", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("500m", "1Gi"),
+				maxAllowed: rl("4", "8Gi"),
+			},
+		},
+		{
+			name: "a component bound for a resource the global spec omits is added",
+			global: &api.VPASpec{
+				MinAllowed: rl("100m", ""),
+				MaxAllowed: rl("8", ""),
+			},
+			component: &api.ComponentVPASpec{
+				MinAllowed: rl("", "1Gi"),
+				MaxAllowed: rl("", "8Gi"),
+			},
+			expected: vpaBounds{
+				minAllowed: rl("100m", "1Gi"),
+				maxAllowed: rl("8", "8Gi"),
+			},
+		},
+		{
+			name:      "no bounds anywhere yields empty bounds",
+			global:    &api.VPASpec{},
+			component: &api.ComponentVPASpec{},
+			expected:  vpaBounds{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := effectiveBounds(tt.global, tt.component)
+			assertResourceList(t, tt.expected.minAllowed, got.minAllowed)
+			assertResourceList(t, tt.expected.maxAllowed, got.maxAllowed)
+		})
+	}
+}
+
+func TestVPABoundsValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		bounds  vpaBounds
+		wantErr string
+	}{
+		{
+			name:   "empty bounds are valid",
+			bounds: vpaBounds{},
+		},
+		{
+			name: "min below max for every resource is valid",
+			bounds: vpaBounds{
+				minAllowed: rl("100m", "256Mi"),
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "min equal to max is valid, pinning the resource to one value",
+			bounds: vpaBounds{
+				minAllowed: rl("2", "4Gi"),
+				maxAllowed: rl("2", "4Gi"),
+			},
+		},
+		{
+			name: "equal values written in different units are still equal",
+			bounds: vpaBounds{
+				minAllowed: rl("1000m", "1Gi"),
+				maxAllowed: rl("1", "1024Mi"),
+			},
+		},
+		{
+			name: "cpu min above max is rejected",
+			bounds: vpaBounds{
+				minAllowed: rl("8", "256Mi"),
+				maxAllowed: rl("4", "16Gi"),
+			},
+			wantErr: "minAllowed for resource cpu is greater than maxAllowed",
+		},
+		{
+			name: "memory min above max is rejected",
+			bounds: vpaBounds{
+				minAllowed: rl("100m", "16Gi"),
+				maxAllowed: rl("8", "8Gi"),
+			},
+			wantErr: "minAllowed for resource memory is greater than maxAllowed",
+		},
+		{
+			name: "a min with no matching max is not compared",
+			bounds: vpaBounds{
+				minAllowed: rl("8", "16Gi"),
+				maxAllowed: nil,
+			},
+		},
+		{
+			name: "a max with no matching min is not compared",
+			bounds: vpaBounds{
+				minAllowed: nil,
+				maxAllowed: rl("8", "16Gi"),
+			},
+		},
+		{
+			name: "only the resources present on both sides are compared",
+			bounds: vpaBounds{
+				// cpu would be inverted, but no cpu max is set to compare it against.
+				minAllowed: rl("8", "256Mi"),
+				maxAllowed: rl("", "16Gi"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.bounds.validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.EqualError(t, err, tt.wantErr)
+		})
+	}
 }
 
 // vpaTestClient builds a real client whose RESTMapper either knows the
@@ -492,9 +703,11 @@ func TestReadVPARecommendationToleratesMissingCRD(t *testing.T) {
 // vpaObject builds a VerticalPodAutoscaler with the given container recommendations.
 // A nil map omits status.recommendation entirely.
 func vpaObject(name string, recs map[string]corev1.ResourceList) *vpav1.VerticalPodAutoscaler {
+	off := vpav1.UpdateModeOff
 	obj := &vpav1.VerticalPodAutoscaler{
 		Name: name, Namespace: "ns",
 	}
+	obj.Spec.UpdatePolicy = &vpav1.PodUpdatePolicy{UpdateMode: &off}
 	if recs == nil {
 		return obj
 	}

@@ -144,6 +144,7 @@ def setup_tests(test_paths: Paths, config: GoldilocksConfig) -> Generator[None]:
         "namespace",
         config.namespace,
         "goldilocks.fairwinds.com/enabled=true",
+        "goldilocks.fairwinds.com/vpa-update-mode=off",
         "--overwrite",
     )
 
@@ -179,13 +180,19 @@ class TestVPAGoldilocks:
             condition=lambda out: "not found" not in out.lower() and out.strip() != "",
         )
 
-        # The operator applies recommendations itself, so the VPA object must not
-        # be in a mode where a real Updater would evict pods.
+        # Off is the only mode in which the operator applies a recommendation: under
+        # any other one the VPA updater owns the pod resources and the operator
+        # stands down. Assert it here, where the cause is obvious, rather than
+        # letting test_auto_mode_applies_recommendation time out further on with
+        # nothing to say why the recommendation was never applied.
         mode = kubectl_bin(
             "get", "vpa", GOLDILOCKS_VPA, "-o", "jsonpath={.spec.updatePolicy.updateMode}"
         ).strip()
-        if mode != "Off":
-            logger.warning(f"Goldilocks VPA updateMode is {mode!r}, expected 'Off'")
+        assert mode == "Off", (
+            f"Goldilocks VPA {GOLDILOCKS_VPA} has updateMode {mode!r}, expected 'Off'. The "
+            "operator only applies recommendations from objects in updateMode Off; check the "
+            "goldilocks.fairwinds.com/vpa-update-mode namespace label set in setup_tests"
+        )
 
         logger.info(
             f"Waiting up to {VPA_TIMEOUT}s for a recommendation "
