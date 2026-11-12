@@ -1167,6 +1167,7 @@ compare_kubectl() {
 			del(.. | select(has("percona.com/configuration-hash"))."percona.com/configuration-hash") |
 			del(.. | select(has("percona.com/ssl-hash"))."percona.com/ssl-hash") |
 			del(.. | select(has("percona.com/ssl-internal-hash"))."percona.com/ssl-internal-hash") |
+			del(.. | select(has("percona.com/pbm-tls-hash"))."percona.com/pbm-tls-hash") |
 			del(.spec.volumeClaimTemplates[].spec.volumeMode | select(. == "Filesystem")) |
 			del(.. | select(has("healthCheckNodePort")).healthCheckNodePort) |
 			del(.. | select(has("nodePort")).nodePort) |
@@ -1208,6 +1209,26 @@ compare_kubectl() {
 	fi
 
 	log "compare_kubectl: ${resource} OK"
+}
+
+# Prints what keeps a cluster from becoming ready, before a wait gives up.
+print_cluster_diagnostics() {
+	local cluster=$1
+
+	desc "psmdb/${cluster} status"
+	kubectl_bin get psmdb "${cluster}" -o yaml | yq '.status' || true
+	desc "pods"
+	kubectl_bin get pods -o wide || true
+	for pod in $(kubectl_bin get pods -l app.kubernetes.io/instance="${cluster}" --no-headers \
+		| awk '{split($2, c, "/"); if (c[1] != c[2] || $3 != "Running") print $1}'); do
+		desc "describe pod ${pod}"
+		kubectl_bin describe pod "${pod}" || true
+	done
+	desc "events"
+	kubectl_bin get events --sort-by=.lastTimestamp | tail -n 50 || true
+	desc "operator logs"
+	print_operator_logs | tail -n 200 || true
+	collect_physical_restore_logs "${cluster}" || true
 }
 
 run_recovery_check() {
@@ -1255,6 +1276,7 @@ run_recovery_check() {
 			if [[ ${error_time} -ge ${error_grace} ]]; then
 				echo
 				echo "cluster ${cluster} has been in error state for ${error_time}s after physical restore"
+				print_cluster_diagnostics "${cluster}"
 				exit 1
 			fi
 		else
@@ -1265,6 +1287,7 @@ run_recovery_check() {
 		if [[ ${retry} -ge ${max_wait} ]]; then
 			echo
 			echo "max retry count ${retry} reached (state: ${state})"
+			print_cluster_diagnostics "${cluster}"
 			exit 1
 		fi
 		echo -n .

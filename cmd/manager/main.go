@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	vpav1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -48,6 +49,9 @@ func init() {
 	utilruntime.Must(volumesnapshotv1.AddToScheme(scheme))
 	// Setup Scheme for cert-manager resources
 	utilruntime.Must(certmgrscheme.AddToScheme(scheme))
+	// VerticalPodAutoscaler is read, never created. Registering the kind is purely
+	// client-side, so it stays safe when the CRD is not installed.
+	utilruntime.Must(vpav1.AddToScheme(scheme))
 }
 
 func main() {

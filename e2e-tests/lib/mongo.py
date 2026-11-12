@@ -12,10 +12,21 @@ from .utils import render_yaml_diff, retry
 
 logger = logging.getLogger(__name__)
 
+# Certificates mounted by conf/client-70-tls.yml.
+_TLS_FLAGS = (
+    "--tls",
+    "--tlsCAFile",
+    "/etc/mongodb-ssl/ca.crt",
+    "--tlsCertificateKeyFile",
+    "/tmp/tls.pem",
+    "--tlsAllowInvalidHostnames",
+)
+
 
 class MongoManager:
-    def __init__(self, client: str):
+    def __init__(self, client: str, tls: bool = False):
         self.client = client
+        self.tls = tls
 
     def run_mongosh(
         self,
@@ -26,10 +37,24 @@ class MongoManager:
         mongo_flag: str = "",
         timeout: int = 30,
         check: bool = True,
+        replica_set: str | None = None,
     ) -> str:
-        """Execute mongosh command in PSMDB client container."""
-        replica_set = "cfg" if "cfg" in uri else "rs0"
-        connection_string = f"{driver}://{uri}{suffix}/admin?ssl=false&replicaSet={replica_set}"
+        """Execute mongosh command in PSMDB client container.
+
+        `replica_set` defaults to the name guessed from the URI; pass "" to drop the
+        parameter entirely, which is what mongos needs.
+        """
+        if replica_set is None:
+            replica_set = "cfg" if "cfg" in uri else "rs0"
+
+        params = [] if self.tls else ["ssl=false"]
+        if replica_set:
+            params.append(f"replicaSet={replica_set}")
+        query = f"?{'&'.join(params)}" if params else ""
+        connection_string = f"{driver}://{uri}{suffix}/admin{query}"
+
+        flags = [*_TLS_FLAGS] if self.tls else []
+        flags += mongo_flag.split()
 
         result = kubectl_bin(
             "exec",
@@ -41,7 +66,7 @@ class MongoManager:
             "HOME=/tmp",
             "mongosh",
             connection_string,
-            *mongo_flag.split(),
+            *flags,
             "--eval",
             command,
             "--quiet",
@@ -127,6 +152,7 @@ class MongoManager:
         test_file: str = "",
         retries: int = 3,
         retry_delay: int = 10,
+        replica_set: str | None = None,
     ) -> None:
         """Compare MongoDB command output"""
         full_cmd = f"{collection}.{command}"
@@ -141,7 +167,9 @@ class MongoManager:
         mongo_expr = f"EJSON.stringify(db.getSiblingDB('{database}').{full_cmd})"
 
         def _compare() -> None:
-            result = json.loads(self.run_mongosh(mongo_expr, uri, "mongodb"))
+            result = json.loads(
+                self.run_mongosh(mongo_expr, uri, "mongodb", replica_set=replica_set)
+            )
             logger.info(f"MongoDB output: {result}")
             diff = DeepDiff(expected, result)
             assert not diff, (

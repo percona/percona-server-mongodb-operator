@@ -1,13 +1,16 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -585,6 +588,175 @@ func TestLiveMembers(t *testing.T) {
 			live := countLiveMembers(tt.rsStatus, tt.cnf, tt.rs, rsMembers)
 			assert.Equal(t, tt.expectedLive, live)
 			assert.Equal(t, tt.expectedRSMembers, rsMembers)
+		})
+	}
+}
+
+func TestRemoveUndesiredMembers(t *testing.T) {
+	t.Parallel()
+
+	const namespace = "psmdb"
+
+	cr := &api.PerconaServerMongoDB{
+		Name: "my-cluster-name", Namespace: namespace,
+		Spec: api.PerconaServerMongoDBSpec{
+			ClusterServiceDNSSuffix: "svc.cluster.local",
+			ClusterServiceDNSMode:   api.DNSModeInternal,
+		},
+	}
+	replset := &api.ReplsetSpec{Name: "rs0"}
+
+	// host derives a member host the same way the operator writes it into the config, so
+	// the cases exercise the matching rather than a hardcoded DNS format.
+	host := func(t *testing.T, podName string) string {
+		t.Helper()
+		h, err := psmdb.MongoHost(context.Background(), nil, cr, cr.Spec.ClusterServiceDNSMode, replset, false, corev1.Pod{
+			Name: podName, Namespace: namespace,
+		})
+		require.NoError(t, err)
+		return h
+	}
+
+	pods := func(names ...string) []corev1.Pod {
+		out := make([]corev1.Pod, 0, len(names))
+		for _, name := range names {
+			out = append(out, corev1.Pod{Name: name, Namespace: namespace})
+		}
+		return out
+	}
+
+	// member describes a replset config entry. An empty pod leaves it untagged, the way the
+	// operator writes arbiters and external nodes; an empty host is derived from the pod.
+	type member struct {
+		pod  string
+		host string
+	}
+
+	resolve := func(t *testing.T, m member) string {
+		t.Helper()
+		if m.host != "" {
+			return m.host
+		}
+		return host(t, m.pod)
+	}
+
+	cases := []struct {
+		name          string
+		pods          []corev1.Pod
+		externalNodes []*api.ExternalNode
+		members       []member
+		// want lists the members expected to survive, in order.
+		want []member
+	}{
+		{
+			name:    "every member has a pod",
+			pods:    pods("rs0-0", "rs0-1", "rs0-2"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+			want:    []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+		},
+		{
+			name:    "members whose pods are gone are dropped",
+			pods:    pods("rs0-0"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+			want:    []member{{pod: "rs0-0"}},
+		},
+		{
+			name:    "hidden member is dropped alongside mongod members",
+			pods:    pods("rs0-0"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}, {pod: "rs0-hidden-0"}},
+			want:    []member{{pod: "rs0-0"}},
+		},
+		{
+			// MongoHost returns the address a member should have. Mid-transition the config
+			// still holds the old one, and the transition itself steps the primary down, so
+			// recovery can run right then. Matching on the host would drop a live member.
+			name: "member whose host is mid-change is kept",
+			pods: pods("rs0-0", "rs0-1", "rs0-2"),
+			members: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1", host: "rs0-1.old-domain.example.com:27017"},
+				{pod: "rs0-2"},
+			},
+			want: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1", host: "rs0-1.old-domain.example.com:27017"},
+				{pod: "rs0-2"},
+			},
+		},
+		{
+			name: "untagged member is kept while its pod exists",
+			pods: pods("rs0-0", "rs0-arbiter-0"),
+			members: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1"},
+				{host: host(t, "rs0-arbiter-0")},
+			},
+			want: []member{{pod: "rs0-0"}, {host: host(t, "rs0-arbiter-0")}},
+		},
+		{
+			name: "untagged member is dropped once its pod is gone",
+			pods: pods("rs0-0"),
+			members: []member{
+				{pod: "rs0-0"},
+				{host: host(t, "rs0-arbiter-0")},
+			},
+			want: []member{{pod: "rs0-0"}},
+		},
+		{
+			name:          "external nodes are kept, they have no pod by definition",
+			pods:          pods("rs0-0"),
+			externalNodes: []*api.ExternalNode{{Host: "external-1", Port: 27017}},
+			members:       []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {host: "external-1:27017"}},
+			want:          []member{{pod: "rs0-0"}, {host: "external-1:27017"}},
+		},
+		{
+			name:    "config is left alone when no member has a pod",
+			pods:    pods("rs0-0"),
+			members: []member{{host: "stale-1:27017"}, {host: "stale-2:27017"}},
+			want:    []member{{host: "stale-1:27017"}, {host: "stale-2:27017"}},
+		},
+		{
+			name:    "no pods at all leaves the config alone",
+			pods:    nil,
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}},
+			want:    []member{{pod: "rs0-0"}, {pod: "rs0-1"}},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rs := replset.DeepCopy()
+			rs.ExternalNodes = c.externalNodes
+
+			cfg := mongo.RSConfig{}
+			for i, m := range c.members {
+				cm := mongo.ConfigMember{
+					ID:       i,
+					Host:     resolve(t, m),
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				}
+				if m.pod != "" {
+					cm.Tags = mongo.ReplsetTags{"podName": m.pod}
+				}
+				cfg.Members = append(cfg.Members, cm)
+			}
+
+			want := make([]string, 0, len(c.want))
+			for _, m := range c.want {
+				want = append(want, resolve(t, m))
+			}
+
+			r := &ReconcilePerconaServerMongoDB{}
+			r.removeUndesiredMembers(context.Background(), cr, rs, c.pods, &cfg)
+
+			got := make([]string, 0, len(cfg.Members))
+			for _, m := range cfg.Members {
+				got = append(got, m.Host)
+			}
+
+			assert.Equal(t, want, got, "members left in config")
+			assert.NotEmptyf(t, cfg.Members, "config must never be left without members")
 		})
 	}
 }

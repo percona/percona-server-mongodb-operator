@@ -144,8 +144,14 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 	log.V(1).Info("Got object from API server", "state", cr.Status.State)
 
-	if (cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateError) &&
-		cr.ObjectMeta.DeletionTimestamp == nil {
+	// Finish cancellation before running deletion finalizers
+	if !backupStateTerminal(cr.Status.State) && cancellationRequested(cr) {
+		return r.reconcileCancellation(ctx, cr)
+	}
+	if backupStateTerminal(cr.Status.State) && cr.DeletionTimestamp == nil {
+		if err := r.runReleaseLockFinalizer(ctx, cr); err != nil {
+			return rr, err
+		}
 		return reconcile.Result{}, nil
 	}
 	if cr.DeletionTimestamp != nil {
@@ -156,20 +162,24 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 	defer func() {
 		if err != nil {
-			status.State = psmdbv1.BackupStateError
+			if status.State != psmdbv1.BackupStateCanceling {
+				status.State = psmdbv1.BackupStateError
+			}
 			status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error {
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || cr.Status.WaitingReason != status.WaitingReason ||
+			!slices.Equal(cr.Status.Snapshots, status.Snapshots) {
 			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
 			uerr := r.updateStatus(ctx, cr)
 			if uerr != nil {
 				log.Error(uerr, "failed to update backup status", "backup", cr.Name)
+				return
 			}
 
 			switch cr.Status.State {
-			case psmdbv1.BackupStateReady, psmdbv1.BackupStateError:
+			case psmdbv1.BackupStateReady, psmdbv1.BackupStateError, psmdbv1.BackupStateCanceled:
 				log.Info("Releasing backup lock", "lease", naming.BackupLeaseName(cr.Spec.ClusterName))
 
 				err := k8s.ReleaseLease(ctx, r.client, naming.BackupLeaseName(cr.Spec.ClusterName), cr.Namespace, naming.BackupHolderId(cr))
@@ -322,6 +332,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	if cjobs {
 		log.Info("Waiting to finish another backup/restore.")
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonConcurrentJob
 		return status, nil
 	}
 
@@ -329,8 +340,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, err
 	} else if blocked {
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonClusterSync
 		return status, nil
 	}
+	status.WaitingReason = ""
 
 	acquired, err := r.tryAcquireLease(ctx, cr, cluster)
 	if err != nil {
@@ -338,6 +351,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 	if !acquired {
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonBackupLease
 		return status, nil
 	}
 
@@ -352,9 +366,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 
 	err = retry.OnError(defaultBackoff, func(err error) bool { return err != nil }, func() error {
 		updatedStatus, err := bcp.Status(ctx, r.client, cluster, cr)
-		if err == nil {
-			status = updatedStatus
-		}
+		status = updatedStatus
 		return err
 	})
 
@@ -379,9 +391,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.
 		return false, nil
 	}
 	logf.FromContext(ctx).Info("Waiting for ClusterSync to release the cluster.", "lease", csLeaseName)
-	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
-		"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
-		cluster.Name, csLeaseName)
+	if cr.Status.WaitingReason != psmdbv1.BackupWaitingReasonClusterSync {
+		r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+			"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
+			cluster.Name, csLeaseName)
+	}
 	return true, nil
 }
 
@@ -441,7 +455,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) tryAcquireLease(ctx context.Contex
 }
 
 func backupStateTerminal(state psmdbv1.BackupState) bool {
-	return state == psmdbv1.BackupStateReady || state == psmdbv1.BackupStateError
+	return state == psmdbv1.BackupStateReady || state == psmdbv1.BackupStateError || state == psmdbv1.BackupStateCanceled
 }
 
 func (r *ReconcilePerconaServerMongoDBBackup) ensureReleaseLockFinalizer(

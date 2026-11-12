@@ -8,6 +8,8 @@ spec:
   unsafeFlags:
     replsetSize: true
     mongosSize: true
+  tls:
+    mode: requireTLS
   secrets:
     users: source-users
   sharding:
@@ -30,6 +32,10 @@ spec:
               storage: 1Gi
     mongos:
       size: 1
+      configuration: |
+        net:
+          tls:
+            allowConnectionsWithoutCertificates: true
       affinity:
         antiAffinityTopologyKey: none
       expose:

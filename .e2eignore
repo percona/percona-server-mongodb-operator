@@ -1,7 +1,6 @@
 docs/**
-code-of-conduct.md
-CONTRIBUTING.md
-README.md
+*.md
+**/*.md
 .gitattributes
 .gitignore
 LICENSE
