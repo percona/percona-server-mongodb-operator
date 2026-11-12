@@ -36,14 +36,18 @@ Every review skill follows these steps.
    When the report goes on a pull request, post it as one comment (for
    example `gh pr review <number> --comment --body-file <report>`), after the
    user has read it:
-   - first line: the skill, the verdict and the count of findings by
-     severity, such as `review-qa: needs work (1 Critical, 2 Major, 2 Minor,
-     1 Suggestion)`;
-   - each finding starts with its severity in bold and names the file and
-     line;
-   - with more than five findings, Minor findings and Suggestions go in a
-     collapsed `<details>` block;
-   - last line: what was run to confirm findings, or that nothing was run.
+   - severity markers: 🔴 Critical, 🟠 Major, 🔵 Minor, ⚪ Suggestion;
+   - a heading with the skill and the verdict, a table with the count of
+     findings by severity, and the summary in a GitHub alert
+     (`> [!CAUTION]` with a Critical finding, `> [!WARNING]` with a Major
+     one, `> [!NOTE]` otherwise);
+   - each finding in its own `<details>` block whose summary line holds the
+     marker, number, severity and title; open for Critical and Major,
+     collapsed for the rest; inside: where, what, the rule, the proof and
+     the fix, as a `diff` block when the fix is short;
+   - action items as a task list with the markers;
+   - last line, in `<sub>`: what was run to confirm findings, or that
+     nothing was run.
    [`review-comment-example.md`](review-comment-example.md) shows the format.
 6. **Verification.** You may build the code and run tests to confirm a
    finding, on the branch or on a copy. A copy is a git worktree at the head
