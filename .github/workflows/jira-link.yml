@@ -1,5 +1,5 @@
 name: Add Jira ticket to PR
-description: Branch names contain Jira ticket names. This workflow adds the ticket name to the PR description and it becomes clickable automatically
+# Branch names contain Jira ticket names. This workflow adds the ticket name to the PR description and it becomes clickable automatically
 on:
   pull_request_target:
     types: [opened]
