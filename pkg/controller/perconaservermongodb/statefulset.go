@@ -3,16 +3,22 @@ package perconaservermongodb
 import (
 	"context"
 	"maps"
+	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -72,6 +78,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		return sfs, nil
 	}
 
+	if err := r.validateJournalStorage(ctx, sfs, journalStorage(cr, sfs) != nil); err != nil {
+		return nil, err
+	}
+
+	recreated, err := r.recreateStsForStorageIfNeeded(ctx, cr, sfs)
+	if err != nil {
+		return nil, errors.Wrapf(err, "recreate StatefulSet %s for storage change", sfs.Name)
+	}
+	if recreated {
+		return sfs, nil
+	}
+
 	var pvcSpec *api.PVCSpec
 	if volumeSpec != nil {
 		pvcSpec = &volumeSpec.PersistentVolumeClaim
@@ -110,6 +128,102 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	}
 
 	return sfs, nil
+}
+
+var errJournalStorageDisable = errors.New("journalStorage can't be disabled on a running statefulset")
+
+func (r *ReconcilePerconaServerMongoDB) validateJournalStorage(ctx context.Context, sfs *appsv1.StatefulSet, wantJournal bool) error {
+	if wantJournal {
+		return nil
+	}
+
+	current := new(appsv1.StatefulSet)
+	err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current)
+	if client.IgnoreNotFound(err) != nil {
+		return errors.Wrapf(err, "get statefulset %s", sfs.Name)
+	}
+
+	var hasJournal bool
+	if err == nil {
+		hasJournal = k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodJournalVolClaimName)
+	} else {
+		// the journal moved off the data PVC, so retained journal PVCs still hold it
+		hasJournal, err = r.hasJournalPVCs(ctx, sfs)
+		if err != nil {
+			return err
+		}
+	}
+	if !hasJournal {
+		return nil
+	}
+
+	return errors.Wrapf(errJournalStorageDisable, "statefulset %s", sfs.Name)
+}
+
+func (r *ReconcilePerconaServerMongoDB) hasJournalPVCs(ctx context.Context, sfs *appsv1.StatefulSet) (bool, error) {
+	pvcList := new(corev1.PersistentVolumeClaimList)
+	if err := r.client.List(ctx, pvcList, client.InNamespace(sfs.Namespace)); err != nil {
+		return false, errors.Wrap(err, "list PVCs")
+	}
+
+	prefix := psmdbconfig.MongodJournalVolClaimName + "-" + sfs.Name + "-"
+	return slices.ContainsFunc(pvcList.Items, func(pvc corev1.PersistentVolumeClaim) bool {
+		ordinal, ok := strings.CutPrefix(pvc.Name, prefix)
+		if !ok {
+			return false
+		}
+		_, err := strconv.Atoi(ordinal)
+		return err == nil
+	}), nil
+}
+
+var errStorageChangeNeedsSmartUpdate = errors.New("changing logStorage or journalStorage on running pods requires updateStrategy SmartUpdate")
+
+func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
+	if cr.CompareVersion("1.24.0") < 0 {
+		return false, nil
+	}
+
+	if sfs.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
+		return false, nil
+	}
+
+	current := new(appsv1.StatefulSet)
+	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, current); err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+
+	// orphan deletion keeps the object until its finalizer is processed
+	if current.DeletionTimestamp != nil {
+		return true, nil
+	}
+
+	logChanged := k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodLogVolClaimName) != (logStorage(cr, sfs) != nil)
+	journalChanged := k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodJournalVolClaimName) != (journalStorage(cr, sfs) != nil)
+	if !logChanged && !journalChanged {
+		return false, nil
+	}
+
+	// only SmartUpdate recreates pods that miss a new claim, the statefulset controller can't add volumes to them
+	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType && current.Status.Replicas > 0 {
+		return false, errStorageChangeNeedsSmartUpdate
+	}
+
+	err := r.client.Delete(ctx, current,
+		client.PropagationPolicy(metav1.DeletePropagationOrphan),
+		client.Preconditions{UID: &current.UID},
+	)
+	if err != nil {
+		if k8sErrors.IsNotFound(err) || k8sErrors.IsConflict(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "delete statefulset/%s", current.Name)
+	}
+
+	logf.FromContext(ctx).Info("Recreating statefulset to change storage", "statefulset", sfs.Name,
+		"logStorage", logChanged, "journalStorage", journalChanged)
+
+	return true, nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {

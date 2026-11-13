@@ -192,10 +192,13 @@ func checkCancellationTimeout(ctx context.Context, cl client.Client, cluster *ap
 func cleanupCanceledSnapshots(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDBBackup) (bool, error) {
 	names := make(map[string]struct{})
 	for _, snapshot := range cr.Status.Snapshots {
-		names[snapshot.SnapshotName] = struct{}{}
+		for _, name := range snapshot.Names() {
+			names[name] = struct{}{}
+		}
 	}
 	for _, rs := range cr.Status.ReplsetNames {
 		names[naming.VolumeSnapshotName(cr, rs)] = struct{}{}
+		names[naming.JournalVolumeSnapshotName(cr, rs)] = struct{}{}
 	}
 	done := true
 	for name := range names {

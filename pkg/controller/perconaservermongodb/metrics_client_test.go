@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -141,11 +143,6 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 				},
 			}
 
-			r := &ReconcilePerconaServerMongoDB{
-				clientcmd:       mockCmd,
-				pvcUsageBackoff: testPVCUsageBackoff,
-			}
-
 			pod := &corev1.Pod{
 				Name:      "test-pod-0",
 				Namespace: "test-namespace",
@@ -169,6 +166,9 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 				},
 			}
 
+			r := buildFakeClient(pod)
+			r.clientcmd = mockCmd
+
 			result, err := r.getPVCUsageFromMetrics(ctx, pod, tt.pvcName, naming.ContainerMongod, config.MongodContainerDataDir)
 
 			if tt.expectedErrMsg != "" {
@@ -182,6 +182,54 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 				assert.Equal(t, tt.expected.TotalBytes, result.TotalBytes)
 				assert.Equal(t, tt.expected.UsagePercent, result.UsagePercent)
 			}
+		})
+	}
+}
+
+func TestGetPVCUsageFromMetricsRetry(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		objects   func(pod *corev1.Pod) []client.Object
+		wantCalls int
+	}{
+		"running pod is retried": {
+			objects:   func(pod *corev1.Pod) []client.Object { return []client.Object{pod} },
+			wantCalls: testPVCUsageBackoff.Steps,
+		},
+		"deleted pod is not retried": {
+			objects:   func(*corev1.Pod) []client.Object { return nil },
+			wantCalls: 1,
+		},
+		"terminating pod is not retried": {
+			objects: func(pod *corev1.Pod) []client.Object {
+				terminating := pod.DeepCopy()
+				terminating.Finalizers = []string{"test"}
+				terminating.DeletionTimestamp = new(metav1.Now())
+				return []client.Object{terminating}
+			},
+			wantCalls: 1,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			pod := &corev1.Pod{Name: "test-pod-0", Namespace: "test-namespace"}
+
+			calls := 0
+			r := buildFakeClient(tt.objects(pod)...)
+			r.clientcmd = &mockClientCmd{
+				execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+					calls++
+					return errors.New(`unable to upgrade connection: pods "test-pod-0" not found`)
+				},
+			}
+
+			_, err := r.getPVCUsageFromMetrics(t.Context(), pod, "mongod-data-test-pod-0", naming.ContainerMongod, config.MongodContainerDataDir)
+			require.ErrorContains(t, err, "wait for df execution")
+			assert.Equal(t, tt.wantCalls, calls)
 		})
 	}
 }

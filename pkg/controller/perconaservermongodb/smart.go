@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -145,6 +146,16 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
+	if pod, ok := podBlockingClaimRollout(sfs, list.Items); ok {
+		if blocked, err := r.smartUpdateBlocked(ctx, cr, sfs); err != nil || blocked {
+			return err
+		}
+
+		log.Info("statefulset can't create missing pods until this pod has its volume claims, recreating it", "pod", pod.Name)
+
+		return r.recreateNWait(ctx, cr, sfs.Status.UpdateRevision, &pod, waitLimit)
+	}
+
 	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
 		// Members are reported only after the replset is reconciled (e.g. added
 		// as a shard). Until then, pods outside the replset have no users and
@@ -167,33 +178,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	if cr.IsPVCShrinkInProgress() {
-		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
-		return nil
-	}
-
-	isBackupRunning, err := r.isBackupRunning(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to check active backups")
-	}
-	if isBackupRunning {
-		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
-		return nil
-	}
-
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
-	if err != nil {
-		if cr.Status.State == api.AppStateError {
-			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
-		} else {
-			return errors.Wrap(err, "failed to check active jobs")
-		}
-	}
-
-	_, ok = sfs.Annotations[api.AnnotationRestoreInProgress]
-	if !ok && hasActiveJobs {
-		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
-		return nil
+	if blocked, err := r.smartUpdateBlocked(ctx, cr, sfs); err != nil || blocked {
+		return err
 	}
 
 	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
@@ -201,6 +187,38 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		if err != nil {
 			return errors.Wrap(err, "failed to stop balancer")
 		}
+	}
+
+	component := sfs.Labels[naming.LabelKubernetesComponent]
+	canStepDown := component != naming.ComponentNonVoting && component != naming.ComponentHidden
+
+	if podsMissingClaimVolumes(sfs, list.Items) {
+		log.Info("pods are missing a volume claim, updating them bottom-up")
+
+		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
+
+		for _, pod := range list.Items {
+			isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+			if err != nil {
+				return errors.Wrap(err, "is pod primary")
+			}
+
+			if isPrimary && canStepDown && pod.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
+				if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+					return err
+				}
+			}
+
+			log.Info("apply changes to pod", "pod", pod.Name)
+
+			if err := updatePod(&pod); err != nil {
+				return err
+			}
+		}
+
+		log.Info("smart update finished for statefulset")
+
+		return nil
 	}
 
 	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
@@ -224,10 +242,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	component := sfs.Labels[naming.LabelKubernetesComponent]
-	// Primary can't be one of NonVoting and Hidden members, so we don't need to step down
 	// If the primary is external, we can't match it with a running pod and it'll have an empty name
-	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
+	if canStepDown && len(primaryPod.Name) > 0 {
 		updateRevision := sfs.Status.UpdateRevision
 
 		resized := primaryPod.Labels["controller-revision-hash"] == updateRevision
@@ -244,30 +260,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 				return errors.Wrap(err, "wait primary pod ready")
 			}
 		} else {
-			forceStepDown := replset.Size == 1
-			log.Info("doing step down...", "force", forceStepDown)
-			cl, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
-			if err != nil {
-				return fmt.Errorf("failed to get mongo client: %v", err)
-			}
-
-			defer func() {
-				err := cl.Disconnect(ctx)
-				if err != nil {
-					log.Error(err, "failed to close connection")
-				}
-			}()
-
-			err = cl.StepDown(ctx, 60, forceStepDown)
-			if err != nil {
-				if strings.Contains(err.Error(), "No electable secondaries caught up") {
-					err = cl.StepDown(ctx, 60, true)
-					if err != nil {
-						return errors.Wrap(err, "failed to do forced step down")
-					}
-				} else {
-					return errors.Wrap(err, "failed to do step down")
-				}
+			if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+				return err
 			}
 
 			log.Info("apply changes to primary pod", "pod", primaryPod.Name)
@@ -280,6 +274,105 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	log.Info("smart update finished for statefulset")
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) stepDownPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
+	forceStepDown := replset.Size == 1
+	log.Info("doing step down...", "force", forceStepDown)
+
+	client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+	if err != nil {
+		return errors.Wrap(err, "get mongo client")
+	}
+
+	defer func() {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	err = client.StepDown(ctx, 60, forceStepDown)
+	if err != nil {
+		if strings.Contains(err.Error(), "No electable secondaries caught up") {
+			err = client.StepDown(ctx, 60, true)
+			if err != nil {
+				return errors.Wrap(err, "failed to do forced step down")
+			}
+		} else {
+			return errors.Wrap(err, "failed to do step down")
+		}
+	}
+
+	return nil
+}
+
+// smartUpdateBlocked reports whether a PVC shrink, backup or PBM job forbids restarting pods.
+func (r *ReconcilePerconaServerMongoDB) smartUpdateBlocked(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
+	log := logf.FromContext(ctx).WithName("SmartUpdate").WithValues("statefulset", sfs.Name)
+
+	if cr.IsPVCShrinkInProgress() {
+		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
+		return true, nil
+	}
+
+	isBackupRunning, err := r.isBackupRunning(ctx, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to check active backups")
+	}
+	if isBackupRunning {
+		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
+		return true, nil
+	}
+
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	if err != nil {
+		if cr.Status.State == api.AppStateError {
+			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
+		} else {
+			return false, errors.Wrap(err, "failed to check active jobs")
+		}
+	}
+
+	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
+	if !ok && hasActiveJobs {
+		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// podsMissingClaimVolumes reports whether a pod lacks a volume for one of the claim templates.
+func podsMissingClaimVolumes(sfs *appsv1.StatefulSet, pods []corev1.Pod) bool {
+	for _, pod := range pods {
+		for _, vct := range sfs.Spec.VolumeClaimTemplates {
+			if !slices.ContainsFunc(pod.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == vct.Name }) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func podBlockingClaimRollout(sfs *appsv1.StatefulSet, pods []corev1.Pod) (corev1.Pod, bool) {
+	if sfs.Spec.Replicas == nil || len(pods) >= int(*sfs.Spec.Replicas) {
+		return corev1.Pod{}, false
+	}
+
+	pods = slices.Clone(pods)
+	sortPodsByOrdinal(pods, func(i, j int) bool { return i < j })
+
+	for _, pod := range pods {
+		if podsMissingClaimVolumes(sfs, []corev1.Pod{pod}) {
+			return pod, true
+		}
+	}
+
+	return corev1.Pod{}, false
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {

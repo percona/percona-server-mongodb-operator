@@ -68,24 +68,7 @@ func MongosStatefulsetSpec(cr *api.PerconaServerMongoDB, template corev1.PodTemp
 
 // MongosLogPVC returns the volume claim template backing mongos log storage.
 func mongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
-	storage := cr.Spec.Sharding.Mongos.LogStorage()
-
-	labels := map[string]string{}
-	maps.Copy(labels, storage.Labels)
-	maps.Copy(labels, naming.MongosLabels(cr))
-
-	pvc := corev1.PersistentVolumeClaim{
-		Name:        config.MongosLogVolClaimName,
-		Namespace:   cr.Namespace,
-		Labels:      labels,
-		Annotations: storage.Annotations,
-	}
-
-	if storage.PersistentVolumeClaimSpec != nil {
-		pvc.Spec = *storage.PersistentVolumeClaimSpec
-	}
-
-	return pvc
+	return auxiliaryPVC(cr, config.MongosLogVolClaimName, cr.Spec.Sharding.Mongos.LogStorage(), naming.MongosLabels(cr))
 }
 
 func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr.Logger, configs StatefulConfigParams, cfgInstances []string, keyfileExists bool) (corev1.PodTemplateSpec, error) {

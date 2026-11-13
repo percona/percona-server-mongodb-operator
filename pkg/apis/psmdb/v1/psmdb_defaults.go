@@ -412,6 +412,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 
 	for _, replset := range repls {
+		for _, c := range replset.storageComponents() {
+			setDefaultAccessModes(cr.JournalStorage(c.journal))
+			setDefaultAccessModes(cr.LogStorage(c.log))
+		}
+
 		if len(cr.Name+replset.Name) > clusterNameMaxLen {
 			return errors.Errorf("cluster name (%s) + replset name (%s) is too long, must be no more than %d characters", cr.Name, replset.Name, clusterNameMaxLen)
 		}
@@ -573,6 +578,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 		if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
+		}
+
+		if err := cr.validateStorage(replset); err != nil {
+			return errors.Wrapf(err, "replset %s", replset.Name)
 		}
 	}
 
@@ -1350,4 +1359,70 @@ func validateOCIStorages(cr *PerconaServerMongoDB) error {
 	}
 
 	return nil
+}
+
+var (
+	errStorageCRVersion = errors.New("dedicated storage requires crVersion 1.24.0 or newer")
+	errJournalInMemory  = errors.New("journalStorage is not supported with the inMemory storage engine")
+	errJournalNoDataPVC = errors.New("journalStorage requires the data volume to be a persistentVolumeClaim")
+	errLogNoCollector   = errors.New("logStorage requires the log collector to be enabled")
+)
+
+type storageComponent struct {
+	prefix  string
+	enabled bool
+	journal *StorageSpec
+	log     *StorageSpec
+	volume  *VolumeSpec
+}
+
+// storageComponents lists the members of rs that can have dedicated storage. The arbiter has none.
+func (rs *ReplsetSpec) storageComponents() []storageComponent {
+	return []storageComponent{
+		{enabled: true, journal: rs.JournalStorage, log: rs.LogStorage, volume: rs.VolumeSpec},
+		{prefix: "nonvoting.", enabled: rs.NonVoting.Enabled, journal: rs.NonVoting.JournalStorage, log: rs.NonVoting.LogStorage, volume: rs.NonVoting.VolumeSpec},
+		{prefix: "hidden.", enabled: rs.Hidden.Enabled, journal: rs.Hidden.JournalStorage, log: rs.Hidden.LogStorage, volume: rs.Hidden.VolumeSpec},
+	}
+}
+
+func (cr *PerconaServerMongoDB) validateStorage(rs *ReplsetSpec) error {
+	for _, c := range rs.storageComponents() {
+		if !c.enabled {
+			continue
+		}
+
+		if c.log != nil {
+			name := c.prefix + "logStorage"
+			if cr.CompareVersion("1.24.0") < 0 {
+				return errors.Wrap(errStorageCRVersion, name)
+			}
+			if !cr.IsLogCollectorEnabled() {
+				return errors.Wrap(errLogNoCollector, name)
+			}
+		}
+
+		if c.journal != nil {
+			name := c.prefix + "journalStorage"
+			if cr.CompareVersion("1.24.0") < 0 {
+				return errors.Wrap(errStorageCRVersion, name)
+			}
+			if rs.Storage != nil && rs.Storage.Engine == StorageEngineInMemory {
+				return errors.Wrap(errJournalInMemory, name)
+			}
+			if c.volume == nil || c.volume.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+				return errors.Wrap(errJournalNoDataPVC, name)
+			}
+		}
+	}
+
+	return nil
+}
+
+func setDefaultAccessModes(pvc *PVCSpec) {
+	if pvc == nil || pvc.PersistentVolumeClaimSpec == nil {
+		return
+	}
+	if len(pvc.AccessModes) == 0 {
+		pvc.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+	}
 }
