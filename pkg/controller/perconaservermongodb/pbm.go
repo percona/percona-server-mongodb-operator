@@ -757,7 +757,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 		break
 	}
 	if pod == nil {
-		log.V(1).Error(nil, "no ready pods to get pbm-agent version")
+		log.V(1).Info("no ready pods to get pbm-agent version")
 		return nil
 	}
 
