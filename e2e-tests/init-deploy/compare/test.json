@@ -1,3 +1,0 @@
- E QUERY    [thread1] Error: Authentication failed. :
-connect@src/mongo/shell/mongo.js:263:13
-@(connect):1:6
