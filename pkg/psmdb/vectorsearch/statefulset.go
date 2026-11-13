@@ -49,8 +49,6 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 		annotations[naming.AnnotationSSLInternalHash] = hash
 	}
 
-	volumes := podVolumes(cr, rs, spec)
-
 	return &appsv1.StatefulSet{
 		APIVersion: "apps/v1",
 		Kind:       "StatefulSet",
@@ -77,7 +75,7 @@ func StatefulSet(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, initImage, c
 					ImagePullSecrets: cr.Spec.ImagePullSecrets,
 					InitContainers:   psmdbInit.Containers(cr, initImage),
 					Containers:       []corev1.Container{mongotContainer(cr, spec)},
-					Volumes:          volumes,
+					Volumes:          podVolumes(cr, rs, spec),
 					SchedulerName:    cr.Spec.SchedulerName,
 				},
 			},
