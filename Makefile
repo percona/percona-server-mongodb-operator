@@ -103,6 +103,10 @@ py-fmt: uv ## Format and organize imports in e2e-tests
 	$(UV) run ruff check --select I --fix $(PY_DIRS)
 	$(UV) run ruff format $(PY_DIRS)
 
+# --noconftest: the e2e conftest talks to a cluster; harness unit tests need none.
+py-unit: uv ## Run the e2e harness unit tests (no cluster needed)
+	$(UV) run pytest --noconftest -p no:cacheprovider e2e-tests/lib/tests
+
 # MYPYPATH: the OLM tests import the shared harness (lib.*) from e2e-tests/.
 py-check: uv ## Run ruff and mypy checks on e2e-tests
 	$(UV) run ruff check $(PY_DIRS)

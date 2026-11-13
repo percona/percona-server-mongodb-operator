@@ -93,7 +93,9 @@ check against that.
 - **pytest:** chain dependent steps with `pytest.mark.dependency`, give
   cluster-creating fixtures `class` scope, log with
   `logging.getLogger(__name__)`, type every helper, and never swallow errors
-  of a step that changes state. `make py-fmt` and `make py-check` must pass.
+  of a step that changes state. `make py-fmt`, `make py-check` and
+  `make py-unit` must pass. Changes to `lib/` come with a unit test in
+  `lib/tests/` when the logic can be checked without a cluster.
 
 ## OLM and OpenShift tests
 
