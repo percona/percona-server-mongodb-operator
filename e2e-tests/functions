@@ -844,7 +844,8 @@ create_s3_bucket() {
 	local bucket=$1
 	local endpoint=$2
 
-	aws_cli_s3 "${endpoint}" s3 mb "s3://${bucket}"
+	# The S3 gateway starts after the pod is Ready; retry until it accepts connections.
+	retry 12 10 aws_cli_s3 "${endpoint}" s3 mb "s3://${bucket}"
 }
 
 aws_cli_s3() {
@@ -1223,6 +1224,11 @@ print_cluster_diagnostics() {
 		| awk '{split($2, c, "/"); if (c[1] != c[2] || $3 != "Running") print $1}'); do
 		desc "describe pod ${pod}"
 		kubectl_bin describe pod "${pod}" || true
+		for container in $(kubectl_bin get pod "${pod}" \
+			-o jsonpath='{range .status.containerStatuses[?(@.restartCount>0)]}{.name}{"\n"}{end}'); do
+			desc "previous logs of ${pod}/${container}"
+			kubectl_bin logs "${pod}" -c "${container}" --previous --tail=100 || true
+		done
 	done
 	desc "events"
 	kubectl_bin get events --sort-by=.lastTimestamp | tail -n 50 || true
