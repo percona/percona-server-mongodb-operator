@@ -1176,3 +1176,235 @@ func TestGetMongoUri(t *testing.T) {
 		})
 	}
 }
+
+// TestPBMStorageConfigMinimalSpec pins down what the operator produces when a
+// user configures only the fields a storage backend cannot work without.
+//
+// TestPBMStorageConfig above always fills in every optional field, so it only
+// ever exercises one half of each option: the half where the user set a value.
+// Defaults live in the other half. Every case here omits the tuning fields
+// (part sizes, retryers, timeouts, encryption) on purpose.
+//
+// The contract being pinned: identity fields map through, tuning fields stay
+// at their zero value, and PBM applies its own defaults later when it builds
+// the client. One consequence of that is a known bug. The OSS connect timeout
+// stays 0 below, and that zero is what the operator reports in the backup
+// status, while the timeout PBM actually uses is 5s (K8SPSMDB-1746). When that
+// is fixed, the oss case here changes to 5s. Making that change visible is the
+// point of the test.
+func TestPBMStorageConfigMinimalSpec(t *testing.T) {
+	t.Parallel()
+
+	cr := &api.PerconaServerMongoDB{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cr",
+			Namespace: "test-namespace",
+		},
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: MinPBMVersionOSS,
+		},
+	}
+
+	secretWith := func(data map[string][]byte) client.Object {
+		return &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-secret",
+				Namespace: "test-namespace",
+			},
+			Data: data,
+		}
+	}
+
+	awsSecret := secretWith(map[string][]byte{
+		AWSAccessKeySecretKey:       []byte("some-access-key"),
+		AWSSecretAccessKeySecretKey: []byte("some-secret-key"),
+	})
+	ossSecret := secretWith(map[string][]byte{
+		OSSAccessKeySecretKey:       []byte("some-access-key"),
+		OSSSecretAccessKeySecretKey: []byte("some-secret-key"),
+	})
+	azureSecret := secretWith(map[string][]byte{
+		AzureStorageAccountNameSecretKey: []byte("some-storage-account"),
+		AzureStorageAccountKeySecretKey:  []byte("some-storage-key"),
+	})
+	gcsSecret := secretWith(map[string][]byte{
+		GCSClientEmailSecretKey: []byte("serviceaccount@google.com"),
+		GCSPrivateKeySecretKey:  []byte("some-private-key"),
+	})
+	ociSecret := secretWith(map[string][]byte{
+		OCITenancySecretKey:     []byte("some-tenancy"),
+		OCIUserSecretKey:        []byte("some-user"),
+		OCIFingerprintSecretKey: []byte("some-fingerprint"),
+		OCIPrivateKeySecretKey:  []byte("some-private-key"),
+	})
+
+	tests := map[string]struct {
+		secrets  []client.Object
+		stg      api.BackupStorageSpec
+		expected config.StorageConf
+	}{
+		"s3": {
+			secrets: []client.Object{awsSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					Bucket:            "operator-testing",
+					Region:            "us-east-1",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.S3,
+				S3: &s3.Config{
+					Bucket: "operator-testing",
+					Region: "us-east-1",
+					Credentials: s3.Credentials{
+						AccessKeyID:     "some-access-key",
+						SecretAccessKey: "some-secret-key",
+					},
+				},
+			},
+		},
+		"minio": {
+			secrets: []client.Object{awsSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageMinio,
+				Minio: api.BackupStorageMinioSpec{
+					Bucket:            "operator-testing",
+					EndpointURL:       "http://minio-service:9000",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.Minio,
+				Minio: &mio.Config{
+					Bucket:   "operator-testing",
+					Endpoint: "http://minio-service:9000",
+					Credentials: mio.Credentials{
+						AccessKeyID:     "some-access-key",
+						SecretAccessKey: "some-secret-key",
+					},
+				},
+			},
+		},
+		"gcs": {
+			secrets: []client.Object{gcsSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageGCS,
+				GCS: api.BackupStorageGCSSpec{
+					Bucket:            "operator-testing",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.GCS,
+				GCS: &gcs.Config{
+					Bucket: "operator-testing",
+					Credentials: gcs.Credentials{
+						ClientEmail: "serviceaccount@google.com",
+						PrivateKey:  "some-private-key",
+					},
+				},
+			},
+		},
+		"azure": {
+			secrets: []client.Object{azureSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageAzure,
+				Azure: api.BackupStorageAzureSpec{
+					Container:         "operator-testing",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.Azure,
+				Azure: &azure.Config{
+					Account:     "some-storage-account",
+					Container:   "operator-testing",
+					Credentials: azure.Credentials{Key: "some-storage-key"},
+				},
+			},
+		},
+		"oss": {
+			secrets: []client.Object{ossSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageOSS,
+				OSS: api.BackupStorageOSSSpec{
+					Bucket:            "operator-testing",
+					Region:            "oss-eu-central-1",
+					EndpointURL:       "https://oss-eu-central-1.aliyuncs.com",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.OSS,
+				OSS: &oss.Config{
+					Bucket:      "operator-testing",
+					Region:      "oss-eu-central-1",
+					EndpointURL: "https://oss-eu-central-1.aliyuncs.com",
+					Credentials: oss.Credentials{
+						AccessKeyID:     "some-access-key",
+						AccessKeySecret: "some-secret-key",
+					},
+					// K8SPSMDB-1746: reported as 0s, PBM actually uses 5s.
+					ConnectTimeout: 0,
+				},
+			},
+		},
+		"oci": {
+			secrets: []client.Object{ociSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Bucket:    "operator-testing",
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Credentials: api.OCICredentialsSpec{
+						Type:       api.AuthTypeUserPrincipal,
+						SecretName: "test-secret",
+					},
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Bucket:    "operator-testing",
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeUserPrincipal,
+						UserPrincipal: &oci.UserPrincipalCredentials{
+							Tenancy:     "some-tenancy",
+							User:        "some-user",
+							Fingerprint: "some-fingerprint",
+							PrivateKey:  "some-private-key",
+						},
+					},
+				},
+			},
+		},
+		"filesystem": {
+			secrets: []client.Object{},
+			stg: api.BackupStorageSpec{
+				Type:       api.BackupStorageFilesystem,
+				Filesystem: api.BackupStorageFilesystemSpec{Path: "/mnt/backups"},
+			},
+			expected: config.StorageConf{
+				Type:       storage.Filesystem,
+				Filesystem: &fs.Config{Path: "/mnt/backups"},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cl := buildFakeClient(t, tt.secrets...)
+			got, err := GetPBMStorageConfig(context.Background(), cl, cr, tt.stg)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, got)
+		})
+	}
+}
