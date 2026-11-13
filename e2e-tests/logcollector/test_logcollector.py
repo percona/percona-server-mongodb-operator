@@ -101,16 +101,17 @@ def _check_log_rotation(pod: str, tls_enabled: bool) -> str:
 
 
 def _check_log_rotation_failure(pod: str, tls_enabled: bool) -> None:
-    """Authentication failure must fail rotation and retain the restricted client PEM."""
+    """Report authentication failure while still rotating captured output."""
     logger.info(f"Checking log rotation with an invalid password on {pod}")
     error_log = "/tmp/e2e-logrotate-error"
+    marker = f"e2e-logrotate-failure-{time.time_ns()}"
     _exec_logrotate(
         pod,
         "sh",
         "-c",
         'printf "%s\\n" "$1" >> "$2"',
         "sh",
-        "e2e-logrotate-failure",
+        marker,
         f"{LOG_DIR}/mongod.full.log",
     )
     logger.info(
@@ -132,6 +133,13 @@ def _check_log_rotation_failure(pod: str, tls_enabled: bool) -> None:
     _exec_logrotate(
         pod, "grep", "-Fq", "ERROR: failed to rotate mongod.log with mongosh", error_log
     )
+    _exec_logrotate(pod, "grep", "-Fq", marker, f"{LOG_DIR}/mongod.full.log.1")
+    logger.info(
+        f"Checking marker is absent from mongod.full.log on {pod}; grep exit code 1 is expected"
+    )
+    with pytest.raises(subprocess.CalledProcessError) as error:
+        _exec_logrotate(pod, "grep", "-Fq", marker, f"{LOG_DIR}/mongod.full.log")
+    assert error.value.returncode == 1, f"Could not check mongod.full.log on {pod}"
     if tls_enabled:
         _check_pem_permissions(pod)
 
