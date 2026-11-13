@@ -432,27 +432,21 @@ def install(namespace: str, target: CatalogTarget, channel: str, csv: str) -> di
 def example_cluster(csv: dict[str, Any], name: str, storage: str | None) -> dict[str, Any]:
     """A 3-member rs0 from the CSV's example CR, with backups to `storage` or disabled.
 
-    The example matches the release's crVersion and images. Sharding, PMM, PITR and the
-    extra member types are off; automatic upgrades are off so images stay pinned.
+    The example matches the release's crVersion and images. Sharding and PMM are turned
+    off; automatic upgrades, PITR and the extra member types are already off in it.
     """
     cr = csv_example(csv, "PerconaServerMongoDB")
     cr["metadata"] = {"name": name, "finalizers": cr["metadata"].get("finalizers", [])}
     spec = cr["spec"]
-    spec["upgradeOptions"] = {"apply": "disabled"}
     spec.setdefault("secrets", {})["users"] = f"{name}-secrets"
     for section in ("sharding", "pmm"):
         spec.setdefault(section, {})["enabled"] = False
     backup = spec.setdefault("backup", {})
     backup["enabled"] = storage is not None
-    backup["pitr"] = {"enabled": False}
-    backup.pop("tasks", None)
     backup["storages"] = {storage: LOCAL_S3_STORAGE} if storage else {}
     rs0 = spec["replsets"][0]
     rs0["size"] = RS0_SIZE
     rs0["affinity"] = {"antiAffinityTopologyKey": "none"}
-    for member in ("arbiter", "nonvoting", "hidden"):
-        if member in rs0:
-            rs0[member]["enabled"] = False
     spec["replsets"] = [rs0]
     return cr
 
@@ -716,7 +710,7 @@ def event_count(event: dict[str, Any]) -> int:
     return int(event.get("count") or event.get("series", {}).get("count") or 1)
 
 
-# Only read by the version-service cron, which upgradeOptions.apply=disabled and
+# Only read by the version-service cron, which the examples' upgradeOptions.apply=disabled and
 # DISABLE_TELEMETRY leave idle: changing it bumps the CR generation without touching pods.
 RECONCILE_PROBE = '{"spec":{"upgradeOptions":{"schedule":"0 3 * * *"}}}'
 
