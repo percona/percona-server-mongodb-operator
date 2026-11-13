@@ -6,6 +6,76 @@ test_dir=$(realpath $(dirname $0))
 . ${test_dir}/../functions
 set_debug
 
+dump_security_context_diagnostics() {
+	local cluster_name="$1"
+	local pod
+	local pods
+
+	echo "Collecting diagnostics for ${cluster_name}"
+	if ! pods=$(kubectl_bin get pods -o name); then
+		echo "Failed to list pods while collecting security-context diagnostics" >&2
+		pods=""
+	fi
+
+	while IFS= read -r pod; do
+		[[ "${pod}" == "pod/${cluster_name}-rs0-"* ]] || continue
+
+		echo "Recent logs for ${pod}"
+		if ! kubectl_bin logs "${pod}" --all-containers=true --tail=200 --prefix=true; then
+			echo "Failed to collect current logs for ${pod}" >&2
+		fi
+		if ! kubectl_bin logs "${pod}" --all-containers=true --previous --tail=200 --prefix=true; then
+			echo "Failed to collect previous logs for ${pod}" >&2
+		fi
+		if ! kubectl_bin describe "${pod}"; then
+			echo "Failed to describe ${pod}" >&2
+		fi
+	done <<<"${pods}"
+
+	if ! kubectl_bin get events --sort-by=.lastTimestamp; then
+		echo "Failed to collect namespace events" >&2
+	fi
+}
+
+wait_for_cluster_ready() {
+	local cluster_name="$1"
+	local timeout=0
+	local state
+
+	set +x
+	echo -n "Waiting for cluster ${cluster_name} to be ready"
+	while [[ ${timeout} -lt 1500 ]]; do
+		state=$(kubectl_bin get psmdb "${cluster_name}" -o jsonpath='{.status.state}')
+		if [[ "${state}" == "ready" ]]; then
+			echo
+			set_debug
+			return 0
+		fi
+		if [[ "${state}" == "error" ]]; then
+			echo
+			echo "Cluster ${cluster_name} entered error state"
+			return 1
+		fi
+
+		sleep 1
+		timeout=$((timeout + 1))
+		echo -n .
+	done
+
+	echo
+	echo "Timed out waiting for cluster ${cluster_name}; last state: ${state:-unknown}"
+	return 1
+}
+
+collect_diagnostics_on_failure() {
+	local status=$?
+	trap - EXIT
+	if [[ ${status} -ne 0 ]]; then
+		dump_security_context_diagnostics "${cluster}"
+	fi
+	exit "${status}"
+}
+
 create_infra $namespace
 
 desc 'create secrets and start client'
@@ -34,12 +104,14 @@ deploy_s3_storage
 desc 'change security context'
 postfix="-changed"
 apply_cluster $test_dir/conf/${cluster}-rs0$postfix.yml
-sleep 20
 
-wait_for_running "${cluster}-rs0" "3"
+trap collect_diagnostics_on_failure EXIT
+wait_for_running "${cluster}-rs0" "3" false
+wait_for_cluster_ready "${cluster}"
 
 desc 'check if statefulset created with expected config'
 compare_kubectl "statefulset/${cluster}-rs0" $postfix
+trap - EXIT
 
 if [[ -n "$OPENSHIFT" ]]; then
 	oc adm policy remove-scc-from-user privileged -z percona-server-mongodb-operator-workload
