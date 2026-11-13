@@ -4,7 +4,7 @@ metadata:
   name: minimal-cluster
 spec:
   crVersion: 1.24.0
-  image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+  image: perconalab/percona-server-mongodb-operator:main-mongod8.3
   unsafeFlags:
     replsetSize: true
     mongosSize: true

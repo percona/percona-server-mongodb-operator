@@ -103,11 +103,13 @@ check against that.
   resolve to Knative's Subscription.
 - Select a PackageManifest by its catalog label (`-l catalog=<source>`): the
   same package name is served by several catalogs.
-- With `installPlanApproval: Manual`, OLM prepares the next upgrade as soon as
-  a version is installed. After a channel switch the Subscription can still
-  point at that stale pending plan, or at a plan or CSV that was already
-  deleted. Delete pending plans you do not want, and read referenced plans and
-  CSVs as "may be gone".
+- Upgrade the way users do: install the old version with `startingCSV` on
+  the channel it ships in and upgrade in that channel, without switching it.
+- With `installPlanApproval: Manual`, OLM creates the InstallPlan for the
+  upgrade as soon as the old version is installed. Leave it unapproved until
+  the cluster and data are in place. A Subscription can still name a plan or
+  CSV that OLM already replaced; read referenced plans and CSVs as "may be
+  gone".
 - Approve only the plan you intend to test. The bundles skip every older
   version (`olm.skipRange` in community bundles, `spec.skips` in certified
   ones), so an upgrade to the newest version is one hop.
