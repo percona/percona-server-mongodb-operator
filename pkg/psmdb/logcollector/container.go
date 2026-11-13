@@ -25,7 +25,7 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Containers(cr *api.PerconaServerMongoDB, mongoAddr string, logVol config.LogVolume) ([]corev1.Container, error) {
+func Containers(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogVolume) ([]corev1.Container, error) {
 	if cr.Spec.LogCollector == nil || !cr.Spec.LogCollector.Enabled {
 		return nil, nil
 	}
@@ -35,7 +35,7 @@ func Containers(cr *api.PerconaServerMongoDB, mongoAddr string, logVol config.Lo
 		return nil, err
 	}
 
-	logRotationCont, err := logrotate.Container(cr, mongoAddr, logVol)
+	logRotationCont, err := logrotate.Container(cr, mongoPort, logVol)
 	if err != nil {
 		return nil, err
 	}

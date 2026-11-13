@@ -1,11 +1,10 @@
 package logrotate
 
 import (
+	"errors"
 	"fmt"
-	"net"
 	"strconv"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -27,14 +26,9 @@ func ConfigMapName(prefix string) string {
 	return fmt.Sprintf("%s-%s", prefix, ConfigMapNameSuffix)
 }
 
-func Container(cr *api.PerconaServerMongoDB, mongoAddr string, logVol config.LogVolume) (*corev1.Container, error) {
+func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogVolume) (*corev1.Container, error) {
 	if cr.Spec.LogCollector == nil {
 		return nil, errors.New("logcollector can't be nil")
-	}
-
-	host, port, err := net.SplitHostPort(mongoAddr)
-	if err != nil {
-		return nil, errors.Wrap(err, "parse mongo address")
 	}
 
 	usersSecretName := api.UserSecretName(cr)
@@ -42,11 +36,11 @@ func Container(cr *api.PerconaServerMongoDB, mongoAddr string, logVol config.Log
 	envs := []corev1.EnvVar{
 		{
 			Name:  "MONGODB_HOST",
-			Value: host,
+			Value: "localhost",
 		},
 		{
 			Name:  "MONGODB_PORT",
-			Value: port,
+			Value: strconv.Itoa(int(mongoPort)),
 		},
 		{
 			Name: "MONGODB_USER",

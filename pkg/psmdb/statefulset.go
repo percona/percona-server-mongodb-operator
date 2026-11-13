@@ -443,8 +443,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		}
 
 		if cr.CompareVersion("1.21.0") >= 0 {
-			mongoAddr := fmt.Sprintf("localhost:%d", replset.GetPort())
-			logCollectorCs, err := logcollector.Containers(cr, mongoAddr, config.MongodLogVolume())
+			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), config.MongodLogVolume())
 			if err != nil {
 				log.Error(err, "error preparing logcollector containers")
 			}

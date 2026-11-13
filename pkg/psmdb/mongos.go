@@ -112,8 +112,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 	}
 
 	if cr.CompareVersion("1.23.1") >= 0 && cr.IsLogCollectorEnabled() {
-		mongoAddr := fmt.Sprintf("localhost:%d", cr.Spec.Sharding.Mongos.GetPort())
-		logCollectorCs, err := logcollector.Containers(cr, mongoAddr, config.MongosLogVolume())
+		logCollectorCs, err := logcollector.Containers(cr, cr.Spec.Sharding.Mongos.GetPort(), config.MongosLogVolume())
 		if err != nil {
 			return corev1.PodTemplateSpec{}, errors.Wrap(err, "prepare logcollector containers for mongos")
 		}

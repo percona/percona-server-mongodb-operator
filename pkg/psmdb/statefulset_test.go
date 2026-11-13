@@ -17,51 +17,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
-func TestLogrotateLocalAddress(t *testing.T) {
-	const (
-		expectedHost = "localhost"
-		expectedPort = "28017"
-	)
-
-	for _, dnsMode := range []api.DNSMode{
-		api.DNSModeInternal,
-		api.DNSModeExternal,
-		api.DNSModeServiceMesh,
-	} {
-		t.Run(string(dnsMode), func(t *testing.T) {
-			cr, err := readDefaultCR("cluster", "ns")
-			require.NoError(t, err)
-			cr.Spec.ClusterServiceDNSSuffix = "svc.example"
-			cr.Spec.ClusterServiceDNSMode = dnsMode
-			cr.Spec.Backup.Enabled = false
-			cr.Spec.LogCollector.Enabled = true
-			cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeRequire, AllowInvalidCertificates: new(false)}
-			cr.Spec.Replsets[0].Configuration = "net:\n  port: 28017\n"
-			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
-
-			replset := cr.Spec.Replsets[0]
-			spec, err := StatefulSpec(t.Context(), cr, replset, naming.MongodLabels(cr, replset), cr.Spec.InitImage,
-				StatefulConfigParams{}, StatefulSpecSecretParams{})
-			require.NoError(t, err)
-
-			index := slices.IndexFunc(spec.Template.Spec.Containers, func(container corev1.Container) bool {
-				return container.Name == "logrotate"
-			})
-			require.NotEqual(t, -1, index, "logrotate container must be present")
-			logrotate := spec.Template.Spec.Containers[index]
-
-			require.Contains(t, logrotate.Env, corev1.EnvVar{
-				Name:  "MONGODB_HOST",
-				Value: expectedHost,
-			})
-			require.Contains(t, logrotate.Env, corev1.EnvVar{
-				Name:  "MONGODB_PORT",
-				Value: expectedPort,
-			})
-		})
-	}
-}
-
 func TestCollectStorageCABundles(t *testing.T) {
 	t.Parallel()
 

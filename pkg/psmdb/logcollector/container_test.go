@@ -158,7 +158,7 @@ func TestContainers(t *testing.T) {
 				cr.Spec.CRVersion = tt.crVersion
 			}
 
-			containers, err := Containers(cr, "localhost:27017", config.MongodLogVolume())
+			containers, err := Containers(cr, 27017, config.MongodLogVolume())
 
 			if tt.expectedContainers != nil {
 				var gotNames []string
@@ -266,7 +266,7 @@ func TestContainersProbes(t *testing.T) {
 			cr := newCR()
 			tt.setup(cr)
 
-			containers, err := Containers(cr, "localhost:27017", config.MongodLogVolume())
+			containers, err := Containers(cr, 27017, config.MongodLogVolume())
 			assert.NoError(t, err)
 
 			logs := getContainer(t, containers, "logs")
