@@ -37,3 +37,16 @@ jobs:
         run: |
           uv run mypy e2e-tests/
           MYPYPATH=e2e-tests uv run mypy installers/olm/e2e-tests/
+
+      # Same command as `make py-unit` (see the Makefile for the flags).
+      - name: Run unit tests
+        run: |
+          PYTHONPATH=e2e-tests:installers/olm/e2e-tests uv run pytest --noconftest -p no:cacheprovider -q e2e-tests/lib/ installers/olm/e2e-tests/test_olm.py
+
+      # Resolves every fixture without a cluster, so a renamed or removed fixture in
+      # conftest.py fails here. Same commands as `make py-setup-plan` (see the Makefile
+      # for the flags).
+      - name: Check test fixtures
+        run: |
+          uv run pytest --setup-plan -q -p no:cacheprovider -p no:dependency e2e-tests/
+          PYTHONPATH=e2e-tests:installers/olm/e2e-tests uv run pytest --setup-plan -q -p no:cacheprovider -p no:dependency -p conftest installers/olm/e2e-tests/

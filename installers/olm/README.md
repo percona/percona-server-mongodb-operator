@@ -70,6 +70,7 @@ Useful optional variables:
 | `CATALOG_PLATFORM` | Platform used when building previous OperatorHub bundle images and catalog images. | `linux/amd64` |
 | `CATALOG_BUILD_PUSH` | Build and push catalog images during deploy targets when enabled. | `1` |
 | `BUNDLE_SKIP_DIGEST_FAILURE` | Continue certified bundle generation when a non-required digest cannot be resolved. Missing digests are rendered as `<DIGEST>`. | `1` |
+| `BUNDLE_DEV_IMAGES` | Set by the development targets (`bundle/<type>`, `deploy/<type>`): a certified image whose Red Hat digest cannot be resolved is replaced by the development image from `../../e2e-tests/release_versions`, so the example CR of an unreleased version is deployable. Production targets leave it unset. | `1` |
 
 OpenShift versions are resolved from `../../e2e-tests/release_versions` and used
 to render `com.redhat.openshift.versions`.
@@ -320,17 +321,17 @@ Validation uses:
 
 ---
 
-# Upgrade tests
+# OLM tests
 
-`make tests` runs the `e2e-tests/olm-upgrade` pytest test (in this directory)
-against the deployed development catalogs. Deploy them first with
-`make deploy/<type>`, and point `kubectl` and `oc` at the OpenShift cluster (the
-shared harness creates the test project with `oc`; `uv` is also required). Build the catalog with
-`CATALOG_PREVIOUS_MINORS=2` to test upgrades from the two previous minor
-versions and all their patch releases.
+`make tests` runs the pytest tests in `e2e-tests/` (in this directory) against
+the deployed development catalogs. Deploy them first with `make deploy/<type>`,
+and point `kubectl` and `oc` at the OpenShift cluster (the shared harness
+creates the test project with `oc`; `helm`, `jq` and `uv` are also required).
+Build the catalog with `CATALOG_PREVIOUS_MINORS=2` to test upgrades from the
+two previous minor versions and all their patch releases.
 
 ```bash
-make deploy/community CATALOG_PREVIOUS_MINORS=2
+make deploy CATALOG_PREVIOUS_MINORS=2
 make tests
 make tests/community
 make tests/certified
@@ -340,17 +341,91 @@ make tests/certified
 (also under `make -j`), because each run deletes the cluster-wide operator CRDs.
 Each one first waits for the CatalogSource to be `READY` and to serve the
 package (`OLM_CATALOG_TIMEOUT`, 300 seconds), so it can run right after
-`make deploy/<type>`.
+`make deploy/<type>`. The target is the head of the default channel, or of
+`OLM_TARGET_CHANNEL`. `OLM_TESTS` (default
+`olm-default-install olm-backup-restore olm-upgrade`) selects the tests.
+Reports are written to `e2e-tests/reports/<test>-<csv>.*` in the repository
+root. The runner copies the current kubectl context into a temporary
+kubeconfig and uses it for every run, so a context switch in
+`~/.kube/config` during the runs (a cluster deploy, another test run) does not
+move them to another cluster. A run whose steps were all skipped counts as
+failed.
 
-The target is the head of the default channel, or of `OLM_TARGET_CHANNEL`. The
-test runs once for every bundle in the catalog older than the target. Each
-run installs that bundle with a Manual-approval Subscription (`startingCSV`) on
-the target's channel, deploys a replica set from the bundle's example CR and
-writes data. It then approves only the InstallPlan straight to the target and
-deletes any other pending one, such as one for a newer patch, so each starting
-version is upgraded directly, without changing the channel, as users do. In a
-catalog with a channel per minor version, the test moves the Subscription to
-the target's channel first. After the upgrade it checks that:
+For a dev catalog, every test checks that the head of the default channel is
+`OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
+the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
+check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
+
+## Tests
+
+| Test | What it checks | Run only this test |
+| ---- | -------------- | ------------------ |
+| `olm-default-install` | Installs the operator and creates the cluster from the CSV's default example, the one the OpenShift console prefills on Create. Writes data, then checks that the cluster stays stable and the operator logs no errors. | `make tests OLM_TESTS=olm-default-install` |
+| `olm-backup-restore` | Takes a logical and a physical backup and restores each one: every member must return the data as of the backup. Scans the logs and objects for leaked storage credentials. | `make tests OLM_TESTS=olm-backup-restore` |
+| `olm-upgrade` | Upgrades every older bundle of the catalog straight to the target, then checks the operator, the cluster, the data and a restore of a backup taken before the upgrade. | `make tests OLM_TESTS=olm-upgrade` |
+
+`make tests` runs each test against both catalogs; use `make tests/community`
+or `make tests/certified` for one. `OLM_TESTS` takes several names separated by
+spaces. The sections below describe each test in detail.
+
+### olm-default-install
+
+Runs once per bundle type. It installs the target CSV with a Manual-approval
+Subscription and applies the first `alm-examples` entry of the CSV unchanged:
+the PerconaServerMongoDB that the OpenShift console prefills when a user clicks
+Create. Today that is a sharded cluster (`rs0`, `cfg` and `mongos`, three pods
+each, with hostname anti-affinity) with backups enabled and no storage. The
+test fails at the start when the cluster has fewer than three schedulable
+worker nodes. It waits up to 15 minutes for `ready` with every component ready,
+and fails earlier when the cluster stays in `error` for 2 minutes (the operator
+retries an error) or cannot be read 6 times in a row. It then writes a document
+through the mongos Service and reads it back. It changes
+`spec.upgradeOptions.schedule` and waits for `status.observedGeneration`, so the
+operator has reconciled the cluster before the final checks: once the cluster
+is ready, no DB pod may be replaced or restarted and no Warning event may come
+up, and the operator pod must not restart or log errors. The one exception is
+`no ready pods to get pbm-agent version`, which the operator logs at ERROR
+level while no backup agent is ready yet: it is allowed from applying the
+example until the cluster is ready.
+
+### olm-backup-restore
+
+Runs once per bundle type. It installs the target CSV with a Manual-approval
+Subscription, deploys SeaweedFS (the S3 storage of the shared harness) in the
+test project and a replica set with backups from the bundle's example CR, and
+writes data. It then takes a logical and a physical backup, built from the
+bundle's example objects. Before each restore it writes one more document;
+after the restore every member (direct connection to each pod) must return only
+the data as of the backup, and the cluster must accept writes again. For the
+physical restore it also waits for the `percona.com/resync-pbm` annotation, the
+StatefulSet rebuild and the PBM resync. The operator pod must not restart or
+log errors during the run, with two exceptions. The `FULL CLUSTER CRASH` line,
+which the operator logs while the physical restore stops every mongod, is
+allowed at most ten times, and only between the start and the end of the
+physical restore. `no ready pods to get pbm-agent version` is allowed while the
+cluster starts and during the physical restore (see `olm-default-install`).
+
+The logs of the operator and database pods, the backup and restore objects,
+the events and the cluster object are scanned for the storage credentials and
+for credential-shaped strings (`e2e-tests/lib/secret_scan.py`) before the
+physical restore and at the end of the run. A finding fails the test with the
+source, line and rule, with the match masked. The operator replaces the
+database pods when the physical restore completes, so their logs are read
+every 15 seconds during the restore, and the logs of the replaced pods are
+scanned at the end too. The final scan also runs when a backup or restore step
+fails.
+
+### olm-upgrade
+
+Runs once for every bundle in the catalog older than the target. Each run
+installs that bundle with a Manual-approval Subscription (`startingCSV`) on the
+target's channel, deploys a replica set with backups from the bundle's example
+CR, writes data and takes a logical backup. It then approves only the
+InstallPlan straight to the target and deletes any other pending one, such as
+one for a newer patch, so each starting version is upgraded directly, without
+changing the channel, as users do. In a catalog with a channel per minor
+version, the test moves the Subscription to the target's channel first. After
+the upgrade it checks that:
 
 - only the target CSV is left and the operator runs its image;
 - the operator pod stays Ready and is not replaced or restarted, and its logs
@@ -359,20 +434,16 @@ the target's channel first. After the upgrade it checks that:
 - the operator reconciled the cluster (`status.observedGeneration`), the cluster
   stayed `ready`, and no DB pod was recreated or restarted;
 - the data written before the upgrade is readable on every member (direct
-  connection to each pod), and new writes succeed.
-
-For a dev catalog, the test checks that the head of the default channel is
-`OPERATOR_VERSION`, the `crVersion` in `deploy/cr.yaml`, and fails early when
-the catalog is stale. Set `OLM_TARGET_VERSION` to expect another version. The
-check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
+  connection to each pod), and new writes succeed;
+- the target operator restores the backup taken by the starting one: every
+  member returns only the pre-upgrade data, and new writes succeed.
 
 `make tests` fails when the catalog holds fewer than two previous minor
 versions, not counting the target's own minor line. Set `OLM_MIN_MINORS` to
-change that number.
+change that number. Set `OLM_FROM_CSVS` to a space-separated list of CSV names
+to choose the starting bundles.
 
-Set `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the
-starting bundles. Reports are written to `e2e-tests/reports/olm-upgrade-<csv>.*`
-in the repository root.
+## Running by hand and in a pipeline
 
 OLM tests live in `installers/olm/e2e-tests/` and are not part of the regular
 e2e suite: they need an OpenShift cluster with the catalogs deployed, and
@@ -380,12 +451,14 @@ changes here do not trigger the PR e2e run (`installers/olm/**` is in
 `.e2eignore`). They reuse the shared pytest harness from the repository's
 `e2e-tests/` (`conftest.py` and `lib/`) unchanged, loaded with `-p conftest`;
 each test overrides `test_paths` for its location, and `olm.py` holds the OLM
-helpers. To run one test by hand from the repository
-root:
+helpers. `make py-check` in the repository root resolves their fixtures without
+a cluster (`make py-setup-plan`) and type-checks them, so a fixture or helper
+renamed in the shared harness fails CI. To run one test by hand from the
+repository root:
 
 ```bash
 SKIP_DELETE=0 PYTHONPATH=e2e-tests:installers/olm/e2e-tests \
-  uv run pytest -p conftest installers/olm/e2e-tests/olm-upgrade/
+  uv run pytest -p conftest installers/olm/e2e-tests/olm-backup-restore/
 ```
 
 The shared `conftest.py` defaults to `SKIP_DELETE=1`, so a manual run without
@@ -398,6 +471,17 @@ the run. OLM leaves CRDs behind, and a newer CRD blocks installing an older
 bundle. Use a dedicated cluster. Run `make tests SKIP_DELETE=1` to keep the
 last run's resources for debugging; earlier runs are always cleaned up, since
 the next run deletes the CRDs anyway.
+
+A scheduled job (an OpenShift cluster in the current `kubectl` and `oc`
+context, push rights to `DEV_REPOSITORY`) builds the catalogs and runs every
+test with one command from the repository root:
+
+```bash
+make -C installers/olm deploy tests CATALOG_PREVIOUS_MINORS=2 CONFIRM_PUSH=0
+```
+
+It exits non-zero when any run fails and leaves one JUnit report per run in
+`e2e-tests/reports/`.
 
 ---
 
@@ -423,6 +507,12 @@ Bundle generation fails when:
 - a required image is missing;
 - a certified image tag does not match the expected pattern;
 - the required `clustersync` tag is not found in the Red Hat repository.
+
+Development targets set `BUNDLE_DEV_IMAGES=1`: an image whose digest cannot be
+resolved, which is every image of an unreleased version, is replaced by the
+development image from `../../e2e-tests/release_versions`, so the dev catalog's
+example CR deploys and the OLM tests can run against it. Production targets
+fail instead.
 
 When `BUNDLE_SKIP_DIGEST_FAILURE=1`, missing non-`clustersync` digests are rendered as
 `<DIGEST>` and reported in the build output. The `clustersync` tag is always
