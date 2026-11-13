@@ -1196,10 +1196,8 @@ func TestPBMStorageConfigMinimalSpec(t *testing.T) {
 	t.Parallel()
 
 	cr := &api.PerconaServerMongoDB{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cr",
-			Namespace: "test-namespace",
-		},
+		Name:      "test-cr",
+		Namespace: "test-namespace",
 		Spec: api.PerconaServerMongoDBSpec{
 			CRVersion: version.Version(),
 		},
@@ -1210,11 +1208,9 @@ func TestPBMStorageConfigMinimalSpec(t *testing.T) {
 
 	secretWith := func(data map[string][]byte) client.Object {
 		return &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-secret",
-				Namespace: "test-namespace",
-			},
-			Data: data,
+			Name:      "test-secret",
+			Namespace: "test-namespace",
+			Data:      data,
 		}
 	}
 
