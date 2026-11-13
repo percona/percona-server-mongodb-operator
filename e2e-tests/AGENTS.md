@@ -54,7 +54,8 @@ check against that.
 - **Fail fast on terminal states.** When the watched object reports `Failed`
   or `Error`, stop with its message instead of waiting out the timeout.
 - **Treat an empty read as unknown.** A `kubectl_bin(..., check=False)` that
-  returns `""` is not a state; retry it or skip that sample.
+  returns `""` is not a state; retry it or skip that sample. When every sample
+  is empty, fail: the object is gone or the API is down.
 - **No sleeps for readiness.** Poll the condition. Sleeps that encode real
   time (a soak, a PITR window, a known upstream bug workaround) stay, with a
   comment saying why.
