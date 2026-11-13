@@ -2,10 +2,12 @@
 
 import json
 import logging
+import secrets
 import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from urllib.parse import quote_plus
 
 import pytest
 from lib.config import apply_cluster
@@ -50,6 +52,66 @@ def _check_pem_permissions(pod: str) -> None:
     assert permissions == "600", (
         f"Expected permissions 600 for {CLIENT_PEM} on {pod}, got {permissions}"
     )
+
+
+def _capture_restart_state(cluster: str) -> dict[str, object]:
+    pods = json.loads(
+        kubectl_bin("get", "pods", *(f"{cluster}-rs0-{i}" for i in range(3)), "-o", "json")
+    )
+    sts = json.loads(kubectl_bin("get", "statefulset", f"{cluster}-rs0", "-o", "json"))
+    return {
+        "pods": {
+            pod["metadata"]["name"]: {
+                "uid": pod["metadata"]["uid"],
+                "restarts": {
+                    c["name"]: c["restartCount"] for c in pod["status"]["containerStatuses"]
+                },
+            }
+            for pod in pods["items"]
+        },
+        "currentRevision": sts["status"]["currentRevision"],
+        "updateRevision": sts["status"]["updateRevision"],
+    }
+
+
+def _check_password_rotation(cluster: str, tls_enabled: bool) -> None:
+    """Reload clusterAdmin credentials without restarting pods or containers."""
+    before = _capture_restart_state(cluster)
+    password = secrets.token_urlsafe(24) + "@:/%?#"
+    kubectl_bin(
+        "patch",
+        "secret",
+        "some-users",
+        "--type=merge",
+        "-p",
+        json.dumps({"stringData": {"MONGODB_CLUSTER_ADMIN_PASSWORD": password}}),
+    )
+
+    expected = quote_plus(password)
+    deadline = time.monotonic() + 180
+    pending = [f"{cluster}-rs0-{i}" for i in range(3)]
+    while pending and time.monotonic() < deadline:
+        status = json.loads(kubectl_bin("get", "psmdb", cluster, "-o", "json"))["status"]
+        assert status.get("state", "").lower() not in {"error", "failed"}, (
+            f"Cluster failed during password rotation: {status}"
+        )
+        pending = [
+            pod
+            for pod in pending
+            if _exec_logrotate(
+                pod,
+                "cat",
+                "/etc/users-secret/MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
+            )
+            != expected
+        ]
+        if pending:
+            time.sleep(2)
+    assert not pending, f"Updated clusterAdmin password was not projected on: {pending}"
+
+    for i in range(3):
+        _check_log_rotation(f"{cluster}-rs0-{i}", tls_enabled=tls_enabled)
+    assert _capture_restart_state(cluster) == before, "Password rotation caused a restart"
 
 
 def _check_log_rotation(pod: str, tls_enabled: bool) -> str:
@@ -104,6 +166,20 @@ def _check_log_rotation_failure(pod: str, tls_enabled: bool) -> None:
     """Report authentication failure while still rotating captured output."""
     logger.info(f"Checking log rotation with an invalid password on {pod}")
     error_log = "/tmp/e2e-logrotate-error"
+    failure_config = "/tmp/e2e-logrotate-failure.conf"
+    _exec_logrotate(
+        pod,
+        "sh",
+        "-c",
+        "mkdir -p /tmp/e2e-logrotate-users && "
+        "cp /etc/users-secret/MONGODB_CLUSTER_ADMIN_USER_ESCAPED /tmp/e2e-logrotate-users/ && "
+        'printf "%s" e2e-invalid-password '
+        "> /tmp/e2e-logrotate-users/MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED && "
+        'sed "s|/etc/users-secret|/tmp/e2e-logrotate-users|g" "$1" > "$2"',
+        "sh",
+        LOGROTATE_CONFIG,
+        failure_config,
+    )
     marker = f"e2e-logrotate-failure-{time.time_ns()}"
     _exec_logrotate(
         pod,
@@ -120,19 +196,18 @@ def _check_log_rotation_failure(pod: str, tls_enabled: bool) -> None:
     with pytest.raises(subprocess.CalledProcessError):
         _exec_logrotate(
             pod,
-            "env",
-            "MONGODB_PASSWORD=e2e-invalid-password",
             "sh",
             "-c",
             'export PATH="${PATH}:/opt/fluent-bit/bin"; '
             'exec logrotate -f -s /tmp/e2e-logrotate.status "$1" > "$2" 2>&1',
             "sh",
-            LOGROTATE_CONFIG,
+            failure_config,
             error_log,
         )
     _exec_logrotate(
         pod, "grep", "-Fq", "ERROR: failed to rotate mongod.log with mongosh", error_log
     )
+    _exec_logrotate(pod, "grep", "-Fq", "Authentication failed", error_log)
     _exec_logrotate(pod, "grep", "-Fq", marker, f"{LOG_DIR}/mongod.full.log.1")
     logger.info(
         f"Checking marker is absent from mongod.full.log on {pod}; grep exit code 1 is expected"
@@ -175,6 +250,11 @@ class TestLogCollector:
         _check_log_rotation_failure(f"{config.cluster}-rs0-0", tls_enabled=True)
 
     @pytest.mark.dependency(depends=["TestLogCollector::test_tls_rotation_failure"])
+    def test_tls_password_rotation(self, config: LogCollectorConfig) -> None:
+        """Rotate logs after a password change while TLS is enabled."""
+        _check_password_rotation(config.cluster, tls_enabled=True)
+
+    @pytest.mark.dependency(depends=["TestLogCollector::test_tls_password_rotation"])
     def test_disable_tls(self, config: LogCollectorConfig) -> None:
         """Pause, disable TLS, and restart so plaintext checks use the updated pods."""
         cluster = config.cluster
@@ -210,3 +290,8 @@ class TestLogCollector:
     def test_plaintext_rotation_failure(self, config: LogCollectorConfig) -> None:
         """Check authentication failure propagates after disabling TLS"""
         _check_log_rotation_failure(f"{config.cluster}-rs0-0", tls_enabled=False)
+
+    @pytest.mark.dependency(depends=["TestLogCollector::test_plaintext_rotation_failure"])
+    def test_plaintext_password_rotation(self, config: LogCollectorConfig) -> None:
+        """Rotate logs after a password change while TLS is disabled."""
+        _check_password_rotation(config.cluster, tls_enabled=False)

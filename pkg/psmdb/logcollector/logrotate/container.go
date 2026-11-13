@@ -87,6 +87,11 @@ func Container(cr *api.PerconaServerMongoDB, mongoPort int32, logVol config.LogV
 		},
 	}
 	if cr.CompareVersion("1.24.0") >= 0 {
+		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{
+			Name:      "users-secret-file",
+			MountPath: "/etc/users-secret",
+			ReadOnly:  true,
+		})
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  "MONGODB_TLS_ENABLED",
 			Value: strconv.FormatBool(cr.TLSEnabled()),

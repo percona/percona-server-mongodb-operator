@@ -345,7 +345,7 @@ func expectedContainers(
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Name:     "internal-my-cluster-users",
-						Key:      "MONGODB_CLUSTER_ADMIN_USER_ESCAPED",
+						Key:      api.EnvMongoDBClusterAdminUser + "_ESCAPED",
 						Optional: &boolFalse,
 					},
 				},
@@ -355,7 +355,7 @@ func expectedContainers(
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Name:     "internal-my-cluster-users",
-						Key:      "MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED",
+						Key:      api.EnvMongoDBClusterAdminPassword + "_ESCAPED",
 						Optional: &boolFalse,
 					},
 				},
@@ -368,6 +368,9 @@ func expectedContainers(
 	}
 
 	if tlsEnabled != nil {
+		logRotateC.VolumeMounts = append(logRotateC.VolumeMounts, corev1.VolumeMount{
+			Name: "users-secret-file", MountPath: "/etc/users-secret", ReadOnly: true,
+		})
 		tlsValue := "false"
 		if *tlsEnabled {
 			tlsValue = "true"
