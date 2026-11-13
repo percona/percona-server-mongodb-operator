@@ -202,7 +202,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, updated.Spec.Replicas)
 		assert.Equal(t, int32(0), *updated.Spec.Replicas)
-		assert.Equal(t, []string{"/opt/percona/pbm-agent"}, updated.Spec.Template.Spec.Containers[0].Command)
+		assert.Equal(t, []string{"bash", "-c", restoreFinishScript, "--"}, updated.Spec.Template.Spec.Containers[0].Command)
 		assert.Equal(t, "restore-finish", updated.Spec.Template.Spec.Containers[0].Args[0])
 		assert.Equal(t, pbmName, updated.Spec.Template.Spec.Containers[0].Args[1])
 		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].LivenessProbe)
@@ -341,7 +341,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 		container := updated.Spec.Template.Spec.Containers[0]
 		assert.Equal(t, "bash", container.Command[0])
-		assert.Contains(t, container.Command[2], "exec /opt/percona/pbm-agent")
+		assert.Contains(t, container.Command[2], restoreFinishScript)
 		assert.Contains(t, container.Command[2], psmdbv1.EncryptionKeyName)
 		assert.Contains(t, container.Args, "--db-config")
 		assert.Contains(t, container.Args, "/etc/pbm-db-config/db_config.yaml")
@@ -367,7 +367,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		assert.True(t, foundMount, "expected pbm-db-config volume mount to be added")
 	})
 
-	t.Run("encryption explicitly disabled uses plain pbm-agent command", func(t *testing.T) {
+	t.Run("encryption explicitly disabled runs pbm-agent without db-config", func(t *testing.T) {
 		noEncCluster := &psmdbv1.PerconaServerMongoDB{
 			Name:      "noenc-cluster",
 			Namespace: ns,
@@ -421,7 +421,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		require.NoError(t, err)
 
 		container := updated.Spec.Template.Spec.Containers[0]
-		assert.Equal(t, []string{"/opt/percona/pbm-agent"}, container.Command)
+		assert.Equal(t, []string{"bash", "-c", restoreFinishScript, "--"}, container.Command)
 		assert.Equal(t, "restore-finish", container.Args[0])
 		assert.Equal(t, pbmName, container.Args[1])
 		assert.NotContains(t, container.Args, "--db-config")
@@ -480,7 +480,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 		container := updated.Spec.Template.Spec.Containers[0]
 		assert.Equal(t, "bash", container.Command[0], "encryption enabled by default should use bash wrapper")
-		assert.Contains(t, container.Command[2], "exec /opt/percona/pbm-agent")
+		assert.Contains(t, container.Command[2], restoreFinishScript)
 		assert.Contains(t, container.Args, "--db-config")
 
 		foundVolume := false
