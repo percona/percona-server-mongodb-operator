@@ -25,6 +25,7 @@ CLUSTER = "some-name"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _pvc_size(pvc: str) -> str:
     return kubectl_bin("get", "pvc", pvc, "-o", "jsonpath={.status.capacity.storage}").strip()
 
@@ -44,9 +45,7 @@ def _wait_pvc_size(pvc: str, expected: str, max_attempts: int = 120, delay: int 
 
 
 def _has_shrink_in_progress() -> bool:
-    raw = kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o", "jsonpath={.status.pvcShrink}"
-    ).strip()
+    raw = kubectl_bin("get", "psmdb", CLUSTER, "-o", "jsonpath={.status.pvcShrink}").strip()
     return raw != "" and raw != "{}"
 
 
@@ -65,36 +64,55 @@ def _wait_no_shrink_in_progress(max_attempts: int = 180, delay: int = 10) -> Non
 
 def _patch_mongos_log_storage(size: str) -> None:
     kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=merge", "-p",
-        json.dumps({
-            "spec": {
-                "sharding": {
-                    "mongos": {
-                        "logs": {"persistentVolumeClaim": {"resources": {"requests": {"storage": size}}}},
+        "patch",
+        "psmdb",
+        CLUSTER,
+        "--type=merge",
+        "-p",
+        json.dumps(
+            {
+                "spec": {
+                    "sharding": {
+                        "mongos": {
+                            "logs": {
+                                "persistentVolumeClaim": {
+                                    "resources": {"requests": {"storage": size}}
+                                }
+                            },
+                        },
                     },
                 },
-            },
-        }),
+            }
+        ),
     )
 
 
 def _mongos_log_storage() -> str:
     return kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o",
+        "get",
+        "psmdb",
+        CLUSTER,
+        "-o",
         "jsonpath={.spec.sharding.mongos.logs.persistentVolumeClaim.resources.requests.storage}",
     ).strip()
 
 
 def _default_storageclass() -> str:
     return kubectl_bin(
-        "get", "sc", "-o",
+        "get",
+        "sc",
+        "-o",
         'jsonpath={.items[?(@.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class=="true")].metadata.name}',
     ).strip()
 
 
 def _allows_volume_expansion(storageclass: str) -> bool:
     allowed = kubectl_bin(
-        "get", "sc", storageclass, "-o", "jsonpath={.allowVolumeExpansion}",
+        "get",
+        "sc",
+        storageclass,
+        "-o",
+        "jsonpath={.allowVolumeExpansion}",
         check=False,
     ).strip()
     return allowed == "true"
@@ -120,6 +138,7 @@ class PVCShrinkConfig:
 # ---------------------------------------------------------------------------
 # Test: mongos log PVC shrink (logcollector with PVC)
 # ---------------------------------------------------------------------------
+
 
 class TestPVCShrinkMongosLog:
     """Shrink mongos log PVCs (disposable data, no initial sync)."""
@@ -155,7 +174,9 @@ class TestPVCShrinkMongosLog:
         wait_cluster_consistency(config.cluster, 900)
 
         for pvc in self.MONGOS_LOG_PVCS:
-            assert _pvc_size(pvc) == self.INITIAL_SIZE, f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
+            assert _pvc_size(pvc) == self.INITIAL_SIZE, (
+                f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
+            )
 
     @pytest.mark.dependency(depends=["TestPVCShrinkMongosLog::test_01_create_cluster"])
     def test_02_shrink_mongos_log(self, config: PVCShrinkConfig) -> None:
