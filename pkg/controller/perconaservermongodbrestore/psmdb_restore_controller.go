@@ -228,9 +228,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) Reconcile(ctx context.Context, re
 
 	if cr.Status.State == psmdbv1.RestoreStateNew || cr.Status.State == psmdbv1.RestoreStateWaiting {
 		// Check the clustersync lease before any cluster-mutating step.
-		blocked, err := r.checkClusterSyncLease(ctx, cr, cluster)
-		if err != nil {
-			return rr, errors.Wrap(err, "check clustersync lease")
+		blocked, leaseErr := r.checkClusterSyncLease(ctx, cr, cluster)
+		if leaseErr != nil {
+			return rr, errors.Wrap(leaseErr, "check clustersync lease")
 		}
 		clusterSyncChecked = true
 		clusterSyncActive = blocked
@@ -383,7 +383,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkRestoreLocks(ctx context.Con
 		return psmdbv1.RestoreWaitingReasonBackupLease, nil
 	}
 
-	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
+	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		log.Info("Waiting for pbm-agent.")
 		return psmdbv1.RestoreWaitingReasonPBMAgent, nil
