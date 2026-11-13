@@ -19,7 +19,8 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-v -s --self-contained-html"
+# --durations: list the 10 slowest steps at the end of the run
+addopts = "-v -s --self-contained-html --durations=10"
 render_collapsed = "all"
 junit_family = "xunit2"
 junit_suite_name = "psmdb-e2e-tests"
