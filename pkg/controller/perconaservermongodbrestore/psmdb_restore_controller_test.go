@@ -2,16 +2,124 @@ package perconaservermongodbrestore
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
+
+	fakeClientcmd "github.com/percona/percona-server-mongodb-operator/clientcmd/fake"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
+
+func TestReconcileValidationError(t *testing.T) {
+	t.Parallel()
+
+	ns := "reconcile-validation"
+	clusterName := ns + "-cr"
+	backupName := ns + "-backup"
+	restoreName := ns + "-restore"
+	secretName := ns + "-secret"
+	storageName := ns + "-stg"
+
+	secret := &corev1.Secret{
+		Name:      secretName,
+		Namespace: ns,
+	}
+
+	cluster := readDefaultCluster(t, clusterName, ns)
+	cluster.Spec.Backup.Storages = map[string]psmdbv1.BackupStorageSpec{
+		storageName: {
+			Type: psmdbv1.BackupStorageS3,
+			S3: psmdbv1.BackupStorageS3Spec{
+				Bucket:            "some-bucket",
+				Prefix:            "some-prefix",
+				Region:            "some-region",
+				EndpointURL:       "some-endpoint",
+				CredentialsSecret: secretName,
+			},
+		},
+	}
+	cluster.Status.BackupVersion = pbmVersion.Current().Version
+
+	bcp := &psmdbv1.PerconaServerMongoDBBackup{
+		Name:      backupName,
+		Namespace: ns,
+		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
+			Type:        defs.LogicalBackup,
+			ClusterName: clusterName,
+			StorageName: storageName,
+		},
+		Status: psmdbv1.PerconaServerMongoDBBackupStatus{
+			State: psmdbv1.BackupStateReady,
+			Type:  defs.LogicalBackup,
+			LastWriteAt: &metav1.Time{
+				Time: mustParseTime(time.RFC3339, "2026-11-12T10:27:02Z"),
+			},
+		},
+	}
+
+	restore := &psmdbv1.PerconaServerMongoDBRestore{
+		Name:      restoreName,
+		Namespace: ns,
+		Spec: psmdbv1.PerconaServerMongoDBRestoreSpec{
+			BackupName:  backupName,
+			ClusterName: clusterName,
+			PITR: &psmdbv1.PITRestoreSpec{
+				Type: psmdbv1.PITRestoreTypeDate,
+				Date: &psmdbv1.PITRestoreDate{
+					Time: metav1.Time{
+						Time: mustParseTime(time.RFC3339, "2020-01-01T00:00:00Z"),
+					},
+				},
+			},
+		},
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/version" {
+			http.NotFound(w, req)
+			return
+		}
+		_, _ = w.Write([]byte(`{"gitVersion":"v1.34.0"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	restClient, err := rest.RESTClientFor(&rest.Config{
+		Host:                 srv.URL,
+		GroupVersion:         &metav1.SchemeGroupVersion,
+		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+	})
+	require.NoError(t, err)
+
+	r := fakeReconciler(secret, restore, cluster, bcp)
+	r.clientcmd = &fakeClientcmd.Client{
+		RESTFunc: func() rest.Interface { return restClient },
+	}
+
+	_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(restore)})
+	require.EqualError(t, err, "failed to validate restore: backup's last write is later than target time")
+
+	got := new(psmdbv1.PerconaServerMongoDBRestore)
+	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(restore), got))
+	assert.Equal(t, psmdbv1.RestoreStateError, got.Status.State)
+	assert.Equal(t, "backup's last write is later than target time", got.Status.Error)
+}
 
 var _ = Describe("PerconaServerMongoDBRestore CEL validations", Ordered, func() {
 	ctx := context.Background()
