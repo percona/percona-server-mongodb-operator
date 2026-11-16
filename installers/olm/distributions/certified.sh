@@ -82,7 +82,6 @@ set_image_ref() {
 		fi
 
 		digest="<DIGEST>"
-		redhat_missing_digests+=("${name}:${redhat_registry}/${repository}:${tag}")
 	fi
 
 	if [[ "${digest}" != "<DIGEST>" ]]; then
@@ -136,7 +135,13 @@ add_related_image() {
 
 	validate_certified_tag "${key}" "${tag}" "${source_tag}"
 
-	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")"
+	# set_image_ref runs in a subshell: its abort only ends that subshell, and
+	# it cannot update redhat_missing_digests. Both are handled here.
+	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")" || exit $?
+	[[ -n ${image} ]] || abort "empty image reference for ${name}"
+	if [[ ${image} == *"@<DIGEST>" ]]; then
+		redhat_missing_digests+=("${name}:${redhat_registry}/${repository}:${tag}")
+	fi
 
 	log "Related image ${name}: ${image}"
 
