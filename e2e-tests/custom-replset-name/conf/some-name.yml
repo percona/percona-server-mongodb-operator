@@ -63,7 +63,6 @@ spec:
         resources:
           requests:
             storage: 2Gi
-        storageClassName: standard-rwo
   - affinity:
       antiAffinityTopologyKey: none
     arbiter:
@@ -91,7 +90,6 @@ spec:
         resources:
           requests:
             storage: 2Gi
-        storageClassName: standard-rwo
   - affinity:
       antiAffinityTopologyKey: none
     arbiter:
@@ -119,7 +117,6 @@ spec:
         resources:
           requests:
             storage: 2Gi
-        storageClassName: standard-rwo
   - affinity:
       antiAffinityTopologyKey: none
     arbiter:
@@ -147,7 +144,6 @@ spec:
         resources:
           requests:
             storage: 2Gi
-        storageClassName: standard-rwo
   secrets:
     users: some-users
   sharding:
@@ -175,7 +171,6 @@ spec:
           resources:
             requests:
               storage: 5Gi
-          storageClassName: standard-rwo
     enabled: true
     mongos:
       affinity:
