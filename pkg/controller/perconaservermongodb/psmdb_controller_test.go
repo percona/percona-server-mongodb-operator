@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -640,4 +641,46 @@ func TestHandleShardingToggleConditionNotInCache(t *testing.T) {
 		err := staleCache(100).handleShardingToggle(ctx, cr.DeepCopy())
 		require.ErrorIs(t, err, errShardingConditionNotInCache)
 	})
+}
+
+// The documented way to toggle sharding without a pause: disable backups, toggle sharding, enable backups.
+func TestHandleShardingToggleWithBackupsDisabled(t *testing.T) {
+	ctx := context.Background()
+
+	const ns = "sharding-toggle-backups-disabled"
+
+	cr, err := readDefaultCR(ns+"-cr", ns)
+	require.NoError(t, err)
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+	cr.Status.AddCondition(psmdbv1.ClusterCondition{
+		Type:   psmdbv1.AppStateSharding,
+		Status: psmdbv1.ConditionTrue,
+	})
+	cr.Status.BackupConfigHash = "some-hash"
+
+	// While mongod pods are running, a detected toggle keeps the cluster paused.
+	pod := &corev1.Pod{
+		Name:      ns + "-cr-rs0-0",
+		Namespace: ns,
+		Labels:    naming.MongodLabels(cr, cr.Spec.Replsets[0]),
+	}
+	r := buildFakeClient(cr.DeepCopy(), pod)
+	r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+
+	step := func(backupEnabled, shardingEnabled bool) {
+		t.Helper()
+		cr.Spec.Backup.Enabled = backupEnabled
+		cr.Spec.Sharding.Enabled = shardingEnabled
+		require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+		require.NoError(t, r.handleShardingToggle(ctx, cr))
+		assert.False(t, cr.Spec.Pause)
+		assert.Equal(t, shardingEnabled, cr.Spec.Sharding.Enabled)
+	}
+
+	step(false, true)
+	step(false, false)
+	assert.Equal(t, psmdbv1.ConditionFalse, cr.Status.FindCondition(psmdbv1.AppStateSharding).Status)
+	// Toggling sharding removes the PBM collections, so PBM must be reconfigured once backups are back.
+	assert.Empty(t, cr.Status.BackupConfigHash)
+	step(true, false)
 }

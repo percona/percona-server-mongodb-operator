@@ -651,7 +651,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileReplsets(ctx context.Context, c
 var errShardingConditionNotInCache = errors.New("sharding condition is not in the cache yet")
 
 func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if cr.Spec.Pause || !cr.Spec.Backup.Enabled {
+	if cr.Spec.Pause {
 		return nil
 	}
 
@@ -668,6 +668,19 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 	}
 
 	condition := cr.Status.FindCondition(api.AppStateSharding)
+
+	// Without backups the toggle needs no pause, but the condition must follow the spec.
+	// Otherwise enabling backups later is taken for a toggle and pauses the cluster.
+	if !cr.Spec.Backup.Enabled {
+		if condition != nil && condition.Status != getShardingStatus(cr) {
+			condition.Status = getShardingStatus(cr)
+			condition.LastTransitionTime = metav1.NewTime(time.Now())
+			// toggling sharding status removes all PBM collections, so we need to reconfigure
+			cr.Status.BackupConfigHash = ""
+		}
+		return nil
+	}
+
 	if condition == nil {
 		cr.Status.AddCondition(api.ClusterCondition{
 			Status:             getShardingStatus(cr),
