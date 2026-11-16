@@ -25,6 +25,7 @@ CLUSTER = "some-name"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _pvc_size(pvc: str) -> str:
     return kubectl_bin("get", "pvc", pvc, "-o", "jsonpath={.status.capacity.storage}").strip()
 
@@ -50,15 +51,16 @@ def _cr_storage(replset: str) -> str:
 
 def _cfg_storage() -> str:
     return kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o",
+        "get",
+        "psmdb",
+        CLUSTER,
+        "-o",
         "jsonpath={.spec.sharding.configsvrReplSet.volumeSpec.persistentVolumeClaim.resources.requests.storage}",
     ).strip()
 
 
 def _has_shrink_in_progress() -> bool:
-    raw = kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o", "jsonpath={.status.pvcShrink}"
-    ).strip()
+    raw = kubectl_bin("get", "psmdb", CLUSTER, "-o", "jsonpath={.status.pvcShrink}").strip()
     return raw != "" and raw != "{}"
 
 
@@ -77,7 +79,10 @@ def _wait_no_shrink_in_progress(max_attempts: int = 180, delay: int = 10) -> Non
 
 def _replset_index(replset: str) -> int:
     idx_raw = kubectl_bin(
-        "get", "psmdb", CLUSTER, "-o",
+        "get",
+        "psmdb",
+        CLUSTER,
+        "-o",
         "jsonpath={range .spec.replsets[*]}{.name}{'\\n'}{end}",
     ).strip()
     names = idx_raw.splitlines()
@@ -89,40 +94,64 @@ def _replset_index(replset: str) -> int:
 def _patch_replset_storage(replset: str, size: str) -> None:
     idx = _replset_index(replset)
     kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=json", "-p",
-        json.dumps([{
-            "op": "replace",
-            "path": f"/spec/replsets/{idx}/volumeSpec/persistentVolumeClaim/resources/requests/storage",
-            "value": size,
-        }]),
+        "patch",
+        "psmdb",
+        CLUSTER,
+        "--type=json",
+        "-p",
+        json.dumps(
+            [
+                {
+                    "op": "replace",
+                    "path": f"/spec/replsets/{idx}/volumeSpec/persistentVolumeClaim/resources/requests/storage",
+                    "value": size,
+                }
+            ]
+        ),
     )
 
 
 def _patch_cfg_storage(size: str) -> None:
     kubectl_bin(
-        "patch", "psmdb", CLUSTER, "--type=merge", "-p",
-        json.dumps({
-            "spec": {
-                "sharding": {
-                    "configsvrReplSet": {
-                        "volumeSpec": {"persistentVolumeClaim": {"resources": {"requests": {"storage": size}}}},
+        "patch",
+        "psmdb",
+        CLUSTER,
+        "--type=merge",
+        "-p",
+        json.dumps(
+            {
+                "spec": {
+                    "sharding": {
+                        "configsvrReplSet": {
+                            "volumeSpec": {
+                                "persistentVolumeClaim": {
+                                    "resources": {"requests": {"storage": size}}
+                                }
+                            },
+                        },
                     },
                 },
-            },
-        }),
+            }
+        ),
     )
 
 
 def _default_storageclass() -> str:
     return kubectl_bin(
-        "get", "sc", "-o",
+        "get",
+        "sc",
+        "-o",
         'jsonpath={.items[?(@.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class=="true")].metadata.name}',
     ).strip()
 
 
 def _allows_volume_expansion(storageclass: str) -> bool:
     allowed = kubectl_bin(
-        "get", "sc", storageclass, "-o", "jsonpath={.allowVolumeExpansion}",
+        "get",
+        "sc",
+        storageclass,
+        "-o",
+        "jsonpath={.allowVolumeExpansion}",
         check=False,
     ).strip()
     return allowed == "true"
@@ -148,6 +177,7 @@ class PVCShrinkConfig:
 # ---------------------------------------------------------------------------
 # Test: parallel shard shrink (2 shards + configsvr)
 # ---------------------------------------------------------------------------
+
 
 class TestPVCShrinkSharded:
     """Shrink two shards in parallel -- both rs0 and rs1 process simultaneously."""
@@ -184,7 +214,9 @@ class TestPVCShrinkSharded:
         wait_pod(f"{config.cluster}-mongos-1")
 
         for pvc in self.RS0_PVCS + self.RS1_PVCS + self.CFG_PVCS:
-            assert _pvc_size(pvc) == self.INITIAL_SIZE, f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
+            assert _pvc_size(pvc) == self.INITIAL_SIZE, (
+                f"PVC {pvc} did not start at {self.INITIAL_SIZE}"
+            )
 
     @pytest.mark.dependency(depends=["TestPVCShrinkSharded::test_01_create_sharded_cluster"])
     def test_02_shrink_both_shards(self, config: PVCShrinkConfig) -> None:
@@ -206,7 +238,9 @@ class TestPVCShrinkSharded:
     def test_03_cfg_untouched(self) -> None:
         """Config server PVCs should not be affected by shard shrink."""
         for pvc in self.CFG_PVCS:
-            assert _pvc_size(pvc) == self.INITIAL_SIZE, f"Config PVC {pvc} should still be {self.INITIAL_SIZE}"
+            assert _pvc_size(pvc) == self.INITIAL_SIZE, (
+                f"Config PVC {pvc} should still be {self.INITIAL_SIZE}"
+            )
 
     @pytest.mark.dependency(depends=["TestPVCShrinkSharded::test_02_shrink_both_shards"])
     def test_04_shrink_configsvr(self, config: PVCShrinkConfig) -> None:
