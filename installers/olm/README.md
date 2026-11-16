@@ -383,10 +383,7 @@ through the mongos Service and reads it back. It changes
 `spec.upgradeOptions.schedule` and waits for `status.observedGeneration`, so the
 operator has reconciled the cluster before the final checks: once the cluster
 is ready, no DB pod may be replaced or restarted and no Warning event may come
-up, and the operator pod must not restart or log errors. The one exception is
-`no ready pods to get pbm-agent version`, which the operator logs at ERROR
-level while no backup agent is ready yet: it is allowed from applying the
-example until the cluster is ready.
+up, and the operator pod must not restart or log errors.
 
 ### olm-backup-restore
 
@@ -399,11 +396,10 @@ after the restore every member (direct connection to each pod) must return only
 the data as of the backup, and the cluster must accept writes again. For the
 physical restore it also waits for the `percona.com/resync-pbm` annotation, the
 StatefulSet rebuild and the PBM resync. The operator pod must not restart or
-log errors during the run, with two exceptions. The `FULL CLUSTER CRASH` line,
-which the operator logs while the physical restore stops every mongod, is
+log errors during the run. The only exception is the `FULL CLUSTER CRASH` line,
+which the operator logs while the physical restore stops every mongod: it is
 allowed at most ten times, and only between the start and the end of the
-physical restore. `no ready pods to get pbm-agent version` is allowed while the
-cluster starts and during the physical restore (see `olm-default-install`).
+physical restore.
 
 The logs of the operator and database pods, the backup and restore objects,
 the events and the cluster object are scanned for the storage credentials and

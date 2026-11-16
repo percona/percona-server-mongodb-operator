@@ -604,20 +604,6 @@ def operator_restarts(pod: dict[str, Any]) -> int:
 
 # A window is measured on the test machine and a log line is stamped on the operator's node.
 CLOCK_SKEW = timedelta(seconds=60)
-# The operator logs this while no backup agent is ready yet and then retries: the call is
-# log.V(1).Error (pkg/controller/perconaservermongodb/pbm.go), and logr prints an Error at
-# any verbosity, so a debug message shows up as ERROR. Expected while the cluster starts or
-# its pods are rebuilt, nowhere else; drop it once K8SPSMDB-1919 logs it as debug.
-PBM_AGENT_NOT_READY = re.compile(r"PBM\s+no ready pods to get pbm-agent version")
-# Once per reconcile until an agent is ready; the time window is what confines it.
-PBM_AGENT_NOT_READY_MAX = 200
-
-
-def pbm_agent_not_ready(start: datetime, end: datetime) -> "ErrorWindow":
-    """Allow PBM_AGENT_NOT_READY between `start` and `end` (UTC), with CLOCK_SKEW margin."""
-    return ErrorWindow(
-        PBM_AGENT_NOT_READY, start - CLOCK_SKEW, end + CLOCK_SKEW, PBM_AGENT_NOT_READY_MAX
-    )
 
 
 @dataclass(frozen=True)

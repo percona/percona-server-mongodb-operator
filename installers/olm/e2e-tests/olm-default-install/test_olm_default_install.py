@@ -7,7 +7,6 @@ import time
 import uuid
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +33,6 @@ from olm import (
     olm_available,
     olm_test_paths,
     operator_pod,
-    pbm_agent_not_ready,
     resolve_target,
     teardown,
     wait_reconciled,
@@ -66,8 +64,6 @@ class State:
     operator_pod_uid: str = ""
     pods: dict[str, tuple[str, int]] = field(default_factory=dict)
     events: dict[str, int] = field(default_factory=dict)
-    # From applying the example until the cluster was ready, in UTC.
-    startup: tuple[datetime, datetime] | None = None
 
 
 @pytest.fixture(scope="class")
@@ -224,7 +220,6 @@ class TestOlmDefaultInstall:
         logger.info(
             f"Applying the first alm-examples entry unchanged: PerconaServerMongoDB/{cluster}"
         )
-        applied = datetime.now(UTC)
         kubectl_bin("apply", "-n", config.namespace, "-f", "-", input_data=json.dumps(example))
 
         components = _components(example)
@@ -267,7 +262,6 @@ class TestOlmDefaultInstall:
             lambda progress: _cluster_ready(progress, components),
             timeout=CLUSTER_READY_TIMEOUT,
         )
-        state.startup = (applied, datetime.now(UTC))
         state.pods = _db_pods(config.namespace, cluster)
         # Warning events from the start-up are expected; new ones from here on are not.
         state.events = {
@@ -327,8 +321,5 @@ class TestOlmDefaultInstall:
     def test_operator_healthy(
         self, config: OlmDefaultInstallConfig, csv: dict[str, Any], state: State
     ) -> None:
-        """The operator was not replaced or restarted and logged no errors after start-up"""
-        assert state.startup, "The deploy step did not record the start-up"
-        assert_operator_healthy(
-            config.namespace, csv, state.operator_pod_uid, (pbm_agent_not_ready(*state.startup),)
-        )
+        """The operator was not replaced or restarted and logged no errors"""
+        assert_operator_healthy(config.namespace, csv, state.operator_pod_uid)
