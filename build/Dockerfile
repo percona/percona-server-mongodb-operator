@@ -37,7 +37,7 @@ RUN find $GOPATH/pkg/mod -regextype posix-extended -iregex '.*(license|notice)(\
                    && cp -v "$0" /licenses/$(echo "$0" | sed -E "s/\/(license|notice).*$//gi")' {} \;
 
 FROM registry.access.redhat.com/${BASE_IMAGE}/ubi-minimal AS ubi
-RUN microdnf update -y && microdnf clean all
+RUN microdnf update -y && microdnf -y install krb5-libs && microdnf clean all
 
 LABEL name="Percona Server for MongoDB Operator" \
       vendor="Percona" \
