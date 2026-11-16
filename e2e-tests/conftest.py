@@ -613,6 +613,27 @@ spec:
         time.sleep(5)
 
 
+def _wait_for_single_cert_manager_controller(timeout: int = 300) -> None:
+    """Wait until the controller pod replaced by a rollout has terminated."""
+    deadline = time.monotonic() + timeout
+    while True:
+        pods = kubectl_bin(
+            "get",
+            "pods",
+            "-n",
+            "cert-manager",
+            "-l",
+            "app.kubernetes.io/component=controller",
+            "-o",
+            "name",
+        ).split()
+        if len(pods) == 1:
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"cert-manager controller pods did not settle: {pods}")
+        time.sleep(2)
+
+
 @pytest.fixture(scope="class")
 def destroy_cert_manager() -> Callable[[], None]:
     """Delete cert-manager so certificates are issued by the operator, not cert-manager."""
@@ -656,6 +677,9 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
                     "cert-manager",
                     "--timeout=300s",
                 )
+            # rollout status does not count terminating pods, so the old controller can still run.
+            if extra_args:
+                _wait_for_single_cert_manager_controller()
             _wait_for_cert_manager_webhook()
         except Exception:
             _delete_cert_manager()

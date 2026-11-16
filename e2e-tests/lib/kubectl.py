@@ -178,6 +178,40 @@ def wait_for_running(
         _wait_cluster_ready(cluster_name.replace(f"-{rs_name}", ""), timeout)
 
 
+def wait_certificates_ready(names: list[str], timeout: int = 600) -> None:
+    """Wait for cert-manager Certificates to be ready, re-issuing any whose issuance failed.
+
+    cert-manager can race and generate two private keys for one Certificate right after it
+    starts ("CSR not signed by referenced private key"). It then backs off for up to an hour,
+    so delete the Certificate and let the operator recreate it.
+    """
+    logger.info(f"Waiting for certificates {', '.join(names)} to be ready...")
+    deadline = time.time() + timeout
+    pending = list(names)
+    while pending:
+        for name in list(pending):
+            out = kubectl_bin(
+                "get", "certificate", name, "-o", "json", "--ignore-not-found", check=False
+            )
+            if not out.strip():
+                continue
+            status = json.loads(out).get("status", {})
+            conditions = {c["type"]: c for c in status.get("conditions", [])}
+            if conditions.get("Ready", {}).get("status") == "True":
+                pending.remove(name)
+            elif status.get("lastFailureTime"):
+                logger.warning(
+                    f"Certificate {name} failed to issue, recreating it: "
+                    f"{conditions.get('Issuing', {}).get('message', '')}"
+                )
+                kubectl_bin("delete", "certificate", name, "--ignore-not-found")
+        if pending and time.time() >= deadline:
+            raise TimeoutError(f"Timeout waiting for certificates: {', '.join(pending)}")
+        if pending:
+            time.sleep(5)
+    logger.info("Certificates are ready")
+
+
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
     """Wait for a specific resource to be deleted"""
     logger.info(f"Waiting for {resource} to be deleted")
