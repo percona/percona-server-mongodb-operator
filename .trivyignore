@@ -1,0 +1,4 @@
+# Future CVEs in krb5 - waiting for patches
+# These are scheduled for 2026 and cannot be patched yet
+CVE-2026-112322
+CVE-2026-71200
