@@ -13,7 +13,12 @@ from pathlib import Path
 import allure
 import pytest
 
-_PASSWORD = re.compile(r":[^:@/\s]+@")
+# user:password@host in connection strings, and pwd:'...' in createUser calls.
+# Image digests (tag@sha256:...) look the same and are left alone.
+_PASSWORD = re.compile(r":[^:@/\s]+@(?!sha256:)")
+# The pwd value runs to the next , or } so that shell-escaped quotes in xtrace
+# output ('\''secret'\'') are masked too.
+_PWD_FIELD = re.compile(r"""(\bpwd['"]?\s*:\s*)[^,}\n]+""")
 _MAX_VALUE_LEN = 80
 
 # Failure diagnostics from K8sCollector.capture_summary(), in report order.
@@ -27,8 +32,8 @@ _SUMMARY_TITLES = {
 
 
 def mask(text: str) -> str:
-    """Hide the password of a user:password@host connection string."""
-    return _PASSWORD.sub(":***@", text)
+    """Hide passwords in connection strings and in mongosh createUser calls."""
+    return _PWD_FIELD.sub(r"\1***", _PASSWORD.sub(":***@", text))
 
 
 def _title_value(value: object) -> str:
@@ -74,7 +79,12 @@ def attach_summary(summary: dict[str, str]) -> None:
     for key, title in _SUMMARY_TITLES.items():
         content = summary.get(key)
         if content:
-            allure.attach(content, name=title, attachment_type=allure.attachment_type.TEXT)
+            attach_text(content, title)
+
+
+def attach_text(content: str, name: str) -> None:
+    """Attach text to the current test, with passwords masked."""
+    allure.attach(mask(content), name=name, attachment_type=allure.attachment_type.TEXT)
 
 
 def set_title(title: str) -> None:

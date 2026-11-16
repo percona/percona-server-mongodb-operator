@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from .allure_support import step
+from .allure_support import mask, step
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def kubectl_bin(
     """Execute kubectl command"""
     arg_list, input_data = _apply_arch_scheduling(list(args), input_data)
     cmd = ["kubectl"] + arg_list
-    logger.debug(" ".join(map(str, cmd)))
+    logger.debug(mask(" ".join(map(str, cmd))))
     for attempt in range(10):
         result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
         if result.returncode == 0 or attempt == 9 or not TRANSIENT_ERRORS.search(result.stderr):
@@ -103,7 +103,7 @@ def kubectl_bin(
 
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, cmd, output=result.stdout, stderr=result.stderr
+            result.returncode, [mask(c) for c in cmd], output=result.stdout, stderr=result.stderr
         )
 
     if result.returncode != 0 and return_stderr and not result.stdout:
