@@ -426,6 +426,10 @@ func TestIsContainerUnavailableError(t *testing.T) {
 			err:  errors.New(`describe restore stderr:  stdout: : Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "5611bd31": OCI runtime exec failed: exec failed: cannot exec in a stopped container`),
 			want: true,
 		},
+		"container killed during exec": {
+			err:  errors.New("describe restore stderr:  stdout: : command terminated with exit code 137"),
+			want: true,
+		},
 		"pbm error": {
 			err:  errors.New("describe restore stderr: Error: get restore meta: not found stdout: "),
 			want: false,
