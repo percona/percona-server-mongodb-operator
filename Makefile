@@ -48,7 +48,7 @@ manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle
 # Run a single e2e test via pytest (native Python or bash wrapper).
 # Usage: make e2e-test TEST=init-deploy
 # Optional: REPORT_OPTS=... to override HTML/JUnit report flags
-REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml
+REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml --alluredir=e2e-tests/allure-results
 
 .PHONY: e2e-test
 e2e-test: uv ## Run a single e2e test via pytest (TEST=<name>)
@@ -61,6 +61,15 @@ endif
 	else \
 		$(UV) run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
 	fi
+
+.PHONY: allure-report
+allure-report: ## Open the Allure report for the collected e2e results (needs the allure CLI)
+	@if [ -d e2e-tests/allure-report/history ]; then \
+		rm -rf e2e-tests/allure-results/history; \
+		cp -R e2e-tests/allure-report/history e2e-tests/allure-results/history; \
+	fi
+	allure generate --clean -o e2e-tests/allure-report e2e-tests/allure-results
+	allure open e2e-tests/allure-report
 
 ##@ Build
 
