@@ -578,7 +578,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 
 			ls := map[string]string{"app": "test"}
 
-			resizeErr := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim)
+			_, resizeErr := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim)
 
 			stsKey := types.NamespacedName{Name: stsName, Namespace: ns}
 
@@ -942,8 +942,9 @@ func TestShrinkMongosShrinkEntryPath(t *testing.T) {
 		},
 	}
 
-	err = r.resizeVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongosLogVolClaimName, pvcSpec)
+	templates, err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongosLogVolClaimName, pvcSpec)
 	require.NoError(t, err, "blocked mongos shrink should return nil")
+	assert.Equal(t, sts.Spec.VolumeClaimTemplates, templates, "returned templates must preserve the shrink correction")
 
 	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
 	assert.Equal(t, actual.String(), vctSize.String(),
@@ -1078,7 +1079,7 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 				scheme: testScheme(),
 			}
 
-			err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim)
+			_, err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim)
 			if tt.wantErr {
 				assert.ErrorContains(t, err, "volume resize failed")
 			} else {
