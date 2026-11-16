@@ -8,6 +8,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from .allure_support import step
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,7 @@ def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, time
     )
 
 
+@step("Wait for pod {pod_name} to be ready")
 def wait_pod(pod_name: str, timeout: int = 360) -> None:
     """Wait for pod to be ready."""
     _wait_for(
@@ -141,6 +143,7 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
     )
 
 
+@step("Wait for cluster {cluster_name} to be ready")
 def _wait_cluster_ready(cluster_name: str, timeout: int) -> None:
     _wait_for(
         f"cluster {cluster_name}", ["psmdb", cluster_name], "{.status.state}", "ready", timeout
@@ -155,6 +158,7 @@ def _replset_field(cluster_name: str, rs_name: str, path: str) -> str:
     ).strip()
 
 
+@step("Wait for {expected_pods} pods of {cluster_name} to be running")
 def wait_for_running(
     cluster_name: str, expected_pods: int, check_cluster_readyness: bool = True, timeout: int = 600
 ) -> None:
@@ -179,6 +183,7 @@ def wait_for_running(
         _wait_cluster_ready(cluster_name.replace(f"-{rs_name}", ""), timeout)
 
 
+@step("Wait for {resource} to be deleted")
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
     """Wait for a specific resource to be deleted"""
     logger.info(f"Waiting for {resource} to be deleted")
@@ -190,6 +195,7 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     logger.info(f"{resource} was deleted")
 
 
+@step("Wait for cluster {cluster_name} to be {target_state}")
 def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 1500) -> None:
     """Wait for psmdb cluster to reach a specific state (e.g. 'ready', 'paused')."""
     _wait_for(
@@ -201,6 +207,7 @@ def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 
     )
 
 
+@step("Wait for cluster {cluster_name} to settle")
 def wait_cluster_consistency(cluster_name: str, timeout: int = 180) -> None:
     """Wait for the PSMDB cluster status to settle back to ready."""
     time.sleep(5)  # give the operator time to leave the "ready" state first

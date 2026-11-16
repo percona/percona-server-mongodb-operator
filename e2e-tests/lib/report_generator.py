@@ -6,6 +6,7 @@ from typing import Any
 
 from pytest_html import extras
 
+from lib.allure_support import attach_summary
 from lib.k8s_collector import K8sCollector
 from lib.kubectl import kubectl_bin
 
@@ -187,6 +188,7 @@ def generate_report(namespace: str) -> list[Any]:
         """
 
     summary = K8sCollector(namespace).capture_summary()
+    attach_summary(summary)
 
     return [
         extras.html(
