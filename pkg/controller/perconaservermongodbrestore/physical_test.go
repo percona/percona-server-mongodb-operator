@@ -211,7 +211,11 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				}))
 
 			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
-			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+			pemFile := "/tmp/pbm-tls.pem"
+			if tt.crVersion == "1.22.0" {
+				pemFile = "/tmp/tls.pem"
+			}
+			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=" + pemFile + "&tlsCAFile=/etc/mongodb-ssl/ca.crt"
 			if tt.wantTLSInsecure {
 				expectedURI += "&tlsInsecure=true"
 			}
