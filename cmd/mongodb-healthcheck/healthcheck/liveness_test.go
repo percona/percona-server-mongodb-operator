@@ -6,7 +6,8 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	mgo "go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/auth"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
@@ -14,44 +15,59 @@ import (
 )
 
 // A system user change reaches the mounted users secret up to a minute after
-// MongoDB, so the probe can fail to authenticate against a healthy mongod.
+// MongoDB, so the probe can be refused by a healthy mongod. Only a rejected
+// login may pass: other handshake errors can come from a hung server.
 func TestLivenessDialErrors(t *testing.T) {
 	orig := dial
 	t.Cleanup(func() { dial = orig })
 
+	wrap := func(err error) error {
+		return errors.Wrap(errors.Wrap(err, "ping mongo"), "failed to dial mongo")
+	}
+
 	tests := map[string]struct {
 		dialErr error
-		wantErr bool
+		alive   bool
 	}{
-		"authentication failed": {
-			dialErr: errors.Wrap(errors.Wrap(&auth.Error{}, "ping mongo"), "failed to dial mongo"),
-			wantErr: false,
+		"login rejected, command error": {
+			dialErr: wrap(mgo.CommandError{Code: 18, Name: "AuthenticationFailed", Message: "Authentication failed."}),
+			alive:   true,
+		},
+		"login rejected, driver error": {
+			dialErr: wrap(driver.Error{Code: 18, Message: "Authentication failed."}),
+			alive:   true,
+		},
+		"handshake failed without a server reply": {
+			dialErr: wrap(&auth.Error{}),
+			alive:   false,
 		},
 		"server unreachable": {
-			dialErr: errors.Wrap(errors.New("server selection error: context deadline exceeded"), "ping mongo"),
-			wantErr: true,
+			dialErr: wrap(errors.New("server selection error: context deadline exceeded")),
+			alive:   false,
 		},
 	}
 
 	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			dial = func(context.Context, *db.Config) (mongo.Client, error) {
-				return nil, tt.dialErr
-			}
+		dial = func(context.Context, *db.Config) (mongo.Client, error) {
+			return nil, tt.dialErr
+		}
 
+		t.Run(name+"/mongod", func(t *testing.T) {
 			state, err := HealthCheckMongodLiveness(t.Context(), &db.Config{})
-			if tt.wantErr {
-				require.Error(t, err, "mongod liveness")
+			if tt.alive {
+				assert.NoError(t, err)
+				assert.Nil(t, state, "no replication state without a login")
 			} else {
-				require.NoError(t, err, "mongod liveness")
-				assert.Nil(t, state, "no replication state without a connection")
+				assert.Error(t, err)
 			}
+		})
 
-			err = HealthCheckMongosLiveness(t.Context(), &db.Config{})
-			if tt.wantErr {
-				require.Error(t, err, "mongos liveness")
+		t.Run(name+"/mongos", func(t *testing.T) {
+			err := HealthCheckMongosLiveness(t.Context(), &db.Config{})
+			if tt.alive {
+				assert.NoError(t, err)
 			} else {
-				require.NoError(t, err, "mongos liveness")
+				assert.Error(t, err)
 			}
 		})
 	}
