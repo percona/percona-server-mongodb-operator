@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -63,7 +63,7 @@ func fakeReconciler(t *testing.T, objs ...client.Object) *ReconcilePerconaServer
 		scheme:   s,
 		crons:    crons,
 		lockers:  newLockStore(),
-		recorder: &record.FakeRecorder{},
+		recorder: &events.FakeRecorder{},
 		serverVersion: &version.ServerVersion{
 			Platform: version.PlatformKubernetes,
 			Info:     k8sversion.Info{GitVersion: "v1.30.0"},

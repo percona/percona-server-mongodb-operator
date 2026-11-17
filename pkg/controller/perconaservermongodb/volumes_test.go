@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -174,7 +174,7 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			r := &ReconcilePerconaServerMongoDB{
 				client:   fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects...).Build(),
 				scheme:   s,
-				recorder: &record.FakeRecorder{},
+				recorder: &events.FakeRecorder{},
 			}
 
 			err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
@@ -765,7 +765,7 @@ func TestShrinkRejectsSingleMember(t *testing.T) {
 	require.NoError(t, clientgoscheme.AddToScheme(s))
 	require.NoError(t, apis.AddToScheme(s))
 
-	rec := record.NewFakeRecorder(10)
+	rec := events.NewFakeRecorder(10)
 	r := &ReconcilePerconaServerMongoDB{
 		client:   fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
 		scheme:   s,
@@ -1429,8 +1429,8 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		ProcessedPods: []string{},
 	}
 
-	newReconciler := func(p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *record.FakeRecorder) {
-		rec := record.NewFakeRecorder(10)
+	newReconciler := func(p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *events.FakeRecorder) {
+		rec := events.NewFakeRecorder(10)
 		return &ReconcilePerconaServerMongoDB{
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects()...).Build(),
 			scheme:              s,
@@ -1524,14 +1524,14 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		require.NoError(t, err)
 		return h
 	}
-	replaced := func(t *testing.T, p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *record.FakeRecorder) {
+	replaced := func(t *testing.T, p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *events.FakeRecorder) {
 		objs := []runtime.Object{cr, sts}
 		for i := range 3 {
 			pod := stsPod(i)
 			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
 			objs = append(objs, pod, newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, resource.MustParse("3Gi"), resource.MustParse("3Gi")))
 		}
-		rec := record.NewFakeRecorder(10)
+		rec := events.NewFakeRecorder(10)
 		return &ReconcilePerconaServerMongoDB{
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
 			scheme:              s,
@@ -1620,7 +1620,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 			}
 			objs = append(objs, pod, newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, size, size))
 		}
-		rec := record.NewFakeRecorder(10)
+		rec := events.NewFakeRecorder(10)
 		r := &ReconcilePerconaServerMongoDB{
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
 			scheme:              s,
@@ -1649,7 +1649,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
 			scheme:              s,
 			mongoClientProvider: p,
-			recorder:            &record.FakeRecorder{},
+			recorder:            &events.FakeRecorder{},
 		}
 		cr.SetPVCShrinkState(stsName, secondariesState)
 
@@ -1667,7 +1667,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 				pvc.Finalizers = []string{"kubernetes.io/pvc-protection"}
 			}
 		}
-		rec := record.NewFakeRecorder(10)
+		rec := events.NewFakeRecorder(10)
 		r := &ReconcilePerconaServerMongoDB{
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
 			scheme:              s,
@@ -1683,7 +1683,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 }
 
 // eventReasons returns "<type> <reason>" of every event recorded so far.
-func eventReasons(rec *record.FakeRecorder) []string {
+func eventReasons(rec *events.FakeRecorder) []string {
 	var reasons []string
 	for {
 		select {

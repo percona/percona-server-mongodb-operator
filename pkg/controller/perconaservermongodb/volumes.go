@@ -602,7 +602,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 			return errors.Wrapf(err, "revert volume template for sts/%s", sc.sts.Name)
 		}
 		msg := fmt.Sprintf("PVC shrink rejected for %s: single-member replica set has no sync source", sc.sts.Name)
-		r.recorder.Event(sc.cr, corev1.EventTypeWarning, "PVCShrinkRejected", msg)
+		r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkRejected", "Preflight", "%s", msg)
 		return errors.New(msg)
 	}
 
@@ -636,7 +636,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 				return errors.Wrapf(err, "revert volume template for sts/%s", sc.sts.Name)
 			}
 			msg := fmt.Sprintf("PVC shrink rejected: pod %s disk usage exceeds %d%% of target size %s", pod.Name, int(maxUsageRatio*100), requested.String())
-			r.recorder.Event(sc.cr, corev1.EventTypeWarning, "PVCShrinkRejected", msg)
+			r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkRejected", "Preflight", "%s", msg)
 			return errors.New(msg)
 		}
 	}
@@ -682,7 +682,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 
 	log.Info("PVC shrink preflight passed, starting shrink operation",
 		"targetSize", requested.String(), "primaryPod", primaryPod)
-	r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkStarted", "Shrinking volumes of %s from %s to %s", sc.sts.Name, actual.String(), requested.String())
+	r.recorder.Eventf(sc.cr, nil, corev1.EventTypeNormal, "PVCShrinkStarted", "Preflight", "Shrinking volumes of %s from %s to %s", sc.sts.Name, actual.String(), requested.String())
 
 	// Store shrink state in CR status
 	sc.cr.SetPVCShrinkState(sc.sts.Name, psmdbv1.PVCShrinkState{
@@ -821,7 +821,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 				return nil
 			}
 			log.Info("Deleting PVC for shrink", "pvc", pvc.Name, "pod", pod.Name)
-			r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkReplacingMember", "Deleting PVC %s and pod %s to recreate them with %s", pvc.Name, pod.Name, state.TargetSize)
+			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkReplacingMember", "DeletePVC", "Deleting PVC %s and pod %s to recreate them with %s", pvc.Name, pod.Name, state.TargetSize)
 			if err := r.client.Delete(ctx, pvc); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrapf(err, "delete PVC %s", pvc.Name)
 			}
@@ -878,7 +878,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	} else {
 		sc.cr.ClearPVCShrinkState(sc.sts.Name)
 		log.Info("PVC shrink completed successfully")
-		r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkCompleted", "Volumes of %s shrunk to %s", sc.sts.Name, state.TargetSize)
+		r.recorder.Eventf(sc.cr, nil, corev1.EventTypeNormal, "PVCShrinkCompleted", "Shrink", "Volumes of %s shrunk to %s", sc.sts.Name, state.TargetSize)
 		return nil
 	}
 
@@ -938,7 +938,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 		state.WaitingFor = waitingFor
 		sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
 		if !r.isShrinkReplacingMember(ctx, sc, replacing, member) {
-			r.recorder.Eventf(sc.cr, corev1.EventTypeWarning, "PVCShrinkWaiting", "Shrink of %s is waiting: %s", sc.sts.Name, waitingFor)
+			r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkWaiting", "Wait", "Shrink of %s is waiting: %s", sc.sts.Name, waitingFor)
 		}
 	}
 	return false
@@ -1004,7 +1004,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 				return nil
 			}
 			log.Info("Stepping down primary", "pod", state.PrimaryPod)
-			r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkStepDown", "Stepping down primary %s", state.PrimaryPod)
+			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", state.PrimaryPod)
 			if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
 				return errors.Wrap(err, "step down primary for PVC shrink")
 			}
