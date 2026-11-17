@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -980,6 +981,15 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 		hiddenSFS := makeSFS(naming.HiddenStatefulSetName(cluster, rs))
 
 		r := fakeReconciler(cluster, mongodSFS, arbiterSFS, nvSFS, hiddenSFS)
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				do := &client.DeleteOptions{}
+				do.ApplyOptions(opts)
+				require.NotNil(t, do.PropagationPolicy, "statefulset %s", obj.GetName())
+				assert.Equal(t, metav1.DeletePropagationForeground, *do.PropagationPolicy, "statefulset %s", obj.GetName())
+				return c.Delete(ctx, obj, opts...)
+			},
+		})
 
 		err := r.deleteStatefulSetsForSnapshotRestore(ctx, cluster)
 		assert.NoError(t, err)
