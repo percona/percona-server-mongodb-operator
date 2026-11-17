@@ -897,6 +897,13 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 
 	log := logf.FromContext(ctx).WithName("PVCShrink").WithValues("sts", sc.sts.Name)
 
+	// The statefulset is orphan-deleted to change its volume template. Until it's recreated, the replset
+	// client can't find its pods and would spend the reconcile retrying localhost.
+	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{}); err != nil {
+		log.Info("PVC shrink waiting: statefulset is not recreated yet", "error", err)
+		return false
+	}
+
 	rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin)
 	if err != nil {
 		log.Info("PVC shrink waiting: failed to create mongo client for RS health check", "error", err)

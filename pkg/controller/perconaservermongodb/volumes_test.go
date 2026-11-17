@@ -1323,9 +1323,11 @@ type shrinkMongoProvider struct {
 	status    mongo.Status
 	isPrimary bool
 	stepDowns int
+	rsDials   int
 }
 
 func (p *shrinkMongoProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
+	p.rsDials++
 	return &shrinkMongoClient{Client: mongoFake.NewClient(), p: p}, nil
 }
 
@@ -1403,7 +1405,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 	}
 
 	objects := func() []runtime.Object {
-		objs := []runtime.Object{cr}
+		objs := []runtime.Object{cr, sts}
 		for i := range 3 {
 			podName := fmt.Sprintf("%s-%d", stsName, i)
 			objs = append(objs,
@@ -1523,7 +1525,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		return h
 	}
 	replaced := func(t *testing.T, p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *record.FakeRecorder) {
-		objs := []runtime.Object{cr}
+		objs := []runtime.Object{cr, sts}
 		for i := range 3 {
 			pod := stsPod(i)
 			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
@@ -1608,7 +1610,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 	})
 
 	t.Run("replaced member stays processed when next member is replaced in the same reconcile", func(t *testing.T) {
-		objs := []runtime.Object{cr}
+		objs := []runtime.Object{cr, sts}
 		for i := range 3 {
 			pod := stsPod(i)
 			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
@@ -1633,6 +1635,27 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		got, ok := cr.GetPVCShrinkState(stsName)
 		require.True(t, ok)
 		assert.Equal(t, []string{stsName + "-2"}, got.ProcessedPods)
+	})
+
+	t.Run("waits without connecting while statefulset is being recreated", func(t *testing.T) {
+		var objs []runtime.Object
+		for _, o := range objects() {
+			if _, ok := o.(*appsv1.StatefulSet); !ok {
+				objs = append(objs, o)
+			}
+		}
+		p := &shrinkMongoProvider{status: healthy}
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            &record.FakeRecorder{},
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 3, pvcCount(t, r))
+		assert.Zero(t, p.rsDials, "replset client has no hosts without the statefulset")
 	})
 
 	t.Run("PVC already being deleted is not deleted again", func(t *testing.T) {
