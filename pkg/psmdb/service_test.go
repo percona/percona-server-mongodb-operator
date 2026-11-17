@@ -17,6 +17,8 @@ import (
 )
 
 func TestMongosHost(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	pod := &corev1.Pod{
@@ -165,6 +167,8 @@ func TestMongosHost(t *testing.T) {
 }
 
 func TestExternalService(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		replset     *api.ReplsetSpec
 		podName     string
@@ -442,6 +446,8 @@ func TestExternalService(t *testing.T) {
 }
 
 func TestBuildDNSHostname(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		dns       *api.ExternalDNSConfig
 		component string
@@ -476,6 +482,8 @@ func TestBuildDNSHostname(t *testing.T) {
 }
 
 func TestBuildDNSHostnameWithoutIndex(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		dns       *api.ExternalDNSConfig
 		component string

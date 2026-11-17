@@ -51,7 +51,9 @@ spec:
             - -c
             - |
               echo "Waiting for LDAP server to be ready..."
-              sleep 60
+              until ldapsearch -x -H ldap://localhost:389 -b "" -s base >/dev/null 2>&1; do
+                sleep 5
+              done
               
               echo "Adding LDAP structure..."
               ldapadd -x -H ldap://localhost:389 -D "cn=admin,dc=ldap,dc=local" -w adminpassword <<EOF
@@ -130,20 +132,18 @@ spec:
               containerPort: 636
             - name: tcp-ldap
               containerPort: 389
+          startupProbe:
+            tcpSocket:
+              port: 636
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
           readinessProbe:
             tcpSocket:
               port: 636
-            initialDelaySeconds: 120
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 10
-          livenessProbe:
-            tcpSocket:
-              port: 636
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
           volumeMounts:
             - name: ldap-ca
               mountPath: /container/service/slapd/assets/certs

@@ -24,6 +24,8 @@ import (
 )
 
 func TestGeneratePVCFromSnapshot(t *testing.T) {
+	t.Parallel()
+
 	storageClassName := "fast"
 	spec := corev1.PersistentVolumeClaimSpec{
 		AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -47,6 +49,8 @@ func TestGeneratePVCFromSnapshot(t *testing.T) {
 }
 
 func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
+	t.Parallel()
+
 	oldClassName := "old-class"
 	newClassName := "new-class"
 
@@ -77,6 +81,8 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 }
 
 func TestReconcileSnapshotNew(t *testing.T) {
+	t.Parallel()
+
 	podZero := &corev1.Pod{
 		Name:      "my-cluster-rs0-0",
 		Namespace: "default",
@@ -119,6 +125,8 @@ func TestReconcileSnapshotNew(t *testing.T) {
 }
 
 func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -156,12 +164,15 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 	})
 
 	t.Run("scales down statefulset and returns not done when ready replicas > 0", func(t *testing.T) {
+		stsName := naming.MongodStatefulSetName(cluster, rs)
 		sfs := &appsv1.StatefulSet{
-			Name:      naming.MongodStatefulSetName(cluster, rs),
+			Name:      stsName,
 			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(3)),
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": stsName}},
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": stsName}},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -199,12 +210,15 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 	})
 
 	t.Run("returns done and sets condition when all statefulsets at zero ready replicas", func(t *testing.T) {
+		stsName := naming.MongodStatefulSetName(cluster, rs)
 		sfs := &appsv1.StatefulSet{
-			Name:      naming.MongodStatefulSetName(cluster, rs),
+			Name:      stsName,
 			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(0)),
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": stsName}},
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": stsName}},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mongod"}},
 					},
@@ -253,7 +267,9 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 				Namespace: ns,
 				Spec: appsv1.StatefulSetSpec{
 					Replicas: new(int32(0)),
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": name}},
 					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": name}},
 						Spec: corev1.PodSpec{
 							Containers: []corev1.Container{{Name: "mongod"}},
 						},
@@ -294,12 +310,15 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		}
 		encRS := encCluster.Spec.Replsets[0]
 
+		stsName := naming.MongodStatefulSetName(encCluster, encRS)
 		sfs := &appsv1.StatefulSet{
-			Name:      naming.MongodStatefulSetName(encCluster, encRS),
+			Name:      stsName,
 			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(1)),
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": stsName}},
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": stsName}},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mongod"}},
 					},
@@ -366,12 +385,15 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		}
 		noEncRS := noEncCluster.Spec.Replsets[0]
 
+		stsName := naming.MongodStatefulSetName(noEncCluster, noEncRS)
 		sfs := &appsv1.StatefulSet{
-			Name:      naming.MongodStatefulSetName(noEncCluster, noEncRS),
+			Name:      stsName,
 			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(1)),
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": stsName}},
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": stsName}},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{
 							{
@@ -427,12 +449,15 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		}
 		defaultRS := defaultCluster.Spec.Replsets[0]
 
+		stsName := naming.MongodStatefulSetName(defaultCluster, defaultRS)
 		sfs := &appsv1.StatefulSet{
-			Name:      naming.MongodStatefulSetName(defaultCluster, defaultRS),
+			Name:      stsName,
 			Namespace: ns,
 			Spec: appsv1.StatefulSetSpec{
 				Replicas: new(int32(1)),
+				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": stsName}},
 				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": stsName}},
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "mongod"}},
 					},
@@ -469,6 +494,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -545,6 +572,8 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestRestorePVC(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -636,6 +665,8 @@ func TestRestorePVC(t *testing.T) {
 }
 
 func TestRolloutRestoredPVCs(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -809,6 +840,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 }
 
 func TestRolloutRestoredPVCsSharded(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	const ns = "default"
 
@@ -902,6 +935,8 @@ func TestRolloutRestoredPVCsSharded(t *testing.T) {
 }
 
 func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -968,6 +1003,8 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
@@ -1006,6 +1043,8 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 
 // Ensure the restore node address arg is built with DefaultMongoPort.
 func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -1022,12 +1061,15 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 	rs := cluster.Spec.Replsets[0]
 	pbmName := "pbm-op-123"
 
+	stsName := naming.MongodStatefulSetName(cluster, rs)
 	sfs := &appsv1.StatefulSet{
-		Name:      naming.MongodStatefulSetName(cluster, rs),
+		Name:      stsName,
 		Namespace: ns,
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: new(int32(1)),
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": stsName}},
 			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": stsName}},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "mongod"}},
 				},
@@ -1058,6 +1100,8 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 }
 
 func TestDeleteDBConfigSecrets(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -1106,6 +1150,8 @@ func TestDeleteDBConfigSecrets(t *testing.T) {
 }
 
 func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
+	t.Parallel()
+
 	const ns = "default"
 
 	clusterName := "my-cluster"

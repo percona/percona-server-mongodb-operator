@@ -1,8 +1,6 @@
 package init
 
 import (
-	"strings"
-
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -43,7 +41,7 @@ func Containers(cr *api.PerconaServerMongoDB, initImage string) []corev1.Contain
 	image := cr.Spec.InitImage
 	if len(image) == 0 {
 		if cr.CompareVersion(version.Version()) != 0 {
-			image = strings.Split(initImage, ":")[0] + ":" + cr.Spec.CRVersion
+			image = replaceImageTag(initImage, cr.Spec.CRVersion)
 		} else {
 			image = initImage
 		}

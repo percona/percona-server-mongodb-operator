@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -39,31 +40,32 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/topo"
 	"github.com/percona/percona-backup-mongodb/pbm/util"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	psmdbtls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
 const (
-	MinPBMVersionOSS                 = "2.12.0"
-	KMSKeyID                         = "KMS_KEY_ID"
-	SSECustomerKey                   = "SSE_CUSTOMER_KEY"
-	AWSAccessKeySecretKey            = "AWS_ACCESS_KEY_ID"
-	AWSSecretAccessKeySecretKey      = "AWS_SECRET_ACCESS_KEY"
-	AWSSessionTokenSecretKey         = "AWS_SESSION_TOKEN"
-	OSSAccessKeySecretKey            = "ALIBABA_ACCESS_KEY_ID"
-	OSSSecretAccessKeySecretKey      = "ALIBABA_ACCESS_KEY_SECRET"
-	AzureStorageAccountNameSecretKey = "AZURE_STORAGE_ACCOUNT_NAME"
-	AzureStorageAccountKeySecretKey  = "AZURE_STORAGE_ACCOUNT_KEY"
-	GCSClientEmailSecretKey          = "GCS_CLIENT_EMAIL"
-	GCSPrivateKeySecretKey           = "GCS_PRIVATE_KEY"
-	OCITenancySecretKey              = "OCI_TENANCY"
-	OCIUserSecretKey                 = "OCI_USER"
-	OCIFingerprintSecretKey          = "OCI_FINGERPRINT"
-	OCIPrivateKeySecretKey           = "OCI_PRIVATE_KEY"
-	OCIPrivateKeyPassphraseSecretKey = "OCI_PRIVATE_KEY_PASSPHRASE"
-	OCISSECustomerKeySecretKey       = "OCI_SSE_CUSTOMER_KEY"
+	MinPBMVersionOSS                      = "2.12.0"
+	KMSKeyID                              = "KMS_KEY_ID"
+	SSECustomerKey                        = "SSE_CUSTOMER_KEY"
+	AWSAccessKeySecretKey                 = "AWS_ACCESS_KEY_ID"
+	AWSSecretAccessKeySecretKey           = "AWS_SECRET_ACCESS_KEY"
+	AWSSessionTokenSecretKey              = "AWS_SESSION_TOKEN"
+	OSSAccessKeySecretKey                 = "ALIBABA_ACCESS_KEY_ID"
+	OSSSecretAccessKeySecretKey           = "ALIBABA_ACCESS_KEY_SECRET"
+	AzureStorageAccountNameSecretKey      = "AZURE_STORAGE_ACCOUNT_NAME"
+	AzureStorageAccountKeySecretKey       = "AZURE_STORAGE_ACCOUNT_KEY"
+	AzureStorageConnectionStringSecretKey = "AZURE_STORAGE_CONNECTION_STRING"
+	GCSClientEmailSecretKey               = "GCS_CLIENT_EMAIL"
+	GCSPrivateKeySecretKey                = "GCS_PRIVATE_KEY"
+	OCITenancySecretKey                   = "OCI_TENANCY"
+	OCIUserSecretKey                      = "OCI_USER"
+	OCIFingerprintSecretKey               = "OCI_FINGERPRINT"
+	OCIPrivateKeySecretKey                = "OCI_PRIVATE_KEY"
+	OCIPrivateKeyPassphraseSecretKey      = "OCI_PRIVATE_KEY_PASSPHRASE"
+	OCISSECustomerKeySecretKey            = "OCI_SSE_CUSTOMER_KEY"
 )
 
 type pbmC struct {
@@ -90,6 +92,7 @@ type PBM interface {
 	SendCmd(ctx context.Context, cmd ctrl.Cmd) error
 	Close(ctx context.Context) error
 	HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error)
+	HasBackupLock(ctx context.Context, opID string) (bool, error)
 	ValidateBackup(ctx context.Context, cfg *config.Config, bcp *psmdbv1.PerconaServerMongoDBBackup) error
 
 	ResyncMainStorage(ctx context.Context) error
@@ -100,6 +103,7 @@ type PBM interface {
 	GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error)
 	GetRestoreMeta(ctx context.Context, name string) (*restore.RestoreMeta, error)
 	FinishBackup(ctx context.Context, bcpName string) error
+	CancelBackup(ctx context.Context, bcpName string) error
 
 	DeleteBackup(ctx context.Context, name string) error
 	DeleteBackupMeta(ctx context.Context, name string) error
@@ -179,6 +183,16 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 
 	tlsKey := sslSecret.Data["tls.key"]
 	tlsCert := sslSecret.Data["tls.crt"]
+
+	if cr.CompareVersion("1.24.0") >= 0 {
+		pbmCert := psmdbtls.CertificatePBMClient(cr)
+		pbmSecret, err := getSecret(ctx, k8sclient, cr.Namespace, pbmCert.SecretName())
+		if err != nil {
+			return "", errors.Wrap(err, "get PBM client TLS secret")
+		}
+		tlsKey = pbmSecret.Data["tls.key"]
+		tlsCert = pbmSecret.Data["tls.crt"]
+	}
 	tlsPemFile := fmt.Sprintf("/tmp/%s-%s-tls.pem", cr.Namespace, cr.Name)
 	tlsPem := append(tlsKey, tlsCert...)
 
@@ -195,16 +209,17 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 		return "", errors.Wrapf(err, "error checking and writing CA certificate to file %s", tlsPemFile)
 	}
 
-	murl += fmt.Sprintf(
-		"?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s&tlsAllowInvalidCertificates=true&tlsInsecure=true",
-		tlsPemFile,
-		caCertFile,
-	)
+	murl += fmt.Sprintf("?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s", tlsPemFile, caCertFile)
+	if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
+		murl += "&tlsInsecure=true"
+	}
 
 	return murl, nil
 }
 
 type NewPBMFunc func(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServerMongoDB) (PBM, error)
+
+var ErrNoReplsetAddrs = errors.New("no replset addresses")
 
 // NewPBM creates a new connection to PBM.
 // It should be closed after the last use with.
@@ -223,6 +238,10 @@ func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServer
 	addrs, err := psmdb.GetReplsetAddrs(ctx, c, cluster, cluster.Spec.ClusterServiceDNSMode, rs, false, pods.Items)
 	if err != nil {
 		return nil, errors.Wrap(err, "get replset addrs")
+	}
+
+	if len(addrs) == 0 {
+		return nil, ErrNoReplsetAddrs
 	}
 
 	murl, err := getMongoUri(ctx, c, cluster, addrs, cluster.TLSEnabled())
@@ -245,7 +264,13 @@ func NewPBM(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServer
 }
 
 // GetPriorities returns priorities to be used in PBM config.
+//
+// Deprecated: For >=1.24.0 this is no-op, operator doesn't configure any priorities any more.
 func GetPriorities(ctx context.Context, k8sclient client.Client, cluster *psmdbv1.PerconaServerMongoDB) (map[string]float64, error) {
+	if cluster.CompareVersion("1.24.0") >= 0 {
+		return nil, nil
+	}
+
 	log := logf.FromContext(ctx)
 	priorities := make(map[string]float64)
 
@@ -584,20 +609,55 @@ func GetPBMStorageAzureConfig(
 		return config.StorageConf{}, errors.Wrap(err, "get azure credentials secret")
 	}
 
+	account := string(azureSecret.Data[AzureStorageAccountNameSecretKey])
+	key := string(azureSecret.Data[AzureStorageAccountKeySecretKey])
+
+	if connStr := string(azureSecret.Data[AzureStorageConnectionStringSecretKey]); connStr != "" {
+		account, key, err = parseAzureConnectionString(connStr)
+		if err != nil {
+			return config.StorageConf{}, errors.Wrap(err, "parse azure connection string")
+		}
+	}
+
 	storageConf := config.StorageConf{
 		Type: storage.Azure,
 		Azure: &azure.Config{
-			Account:     string(azureSecret.Data[AzureStorageAccountNameSecretKey]),
+			Account:     account,
 			Container:   stg.Azure.Container,
 			EndpointURL: stg.Azure.EndpointURL,
 			Prefix:      stg.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(azureSecret.Data[AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString(key),
 			},
 		},
 	}
 
 	return storageConf, nil
+}
+
+// parseAzureConnectionString extracts AccountName and AccountKey from an Azure
+// storage connection string of the form:
+//
+//	DefaultEndpointsProtocol=https;AccountName=<name>;AccountKey=<key>;EndpointSuffix=core.windows.net
+func parseAzureConnectionString(connStr string) (account, key string, err error) {
+	for part := range strings.SplitSeq(strings.TrimRight(connStr, ";"), ";") {
+		// Use approach (strings.SplitN per segment with limit 2) so that
+		// base64-padded AccountKey values containing '=' are handled correctly.
+		parts := strings.SplitN(part, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		switch parts[0] {
+		case "AccountName":
+			account = parts[1]
+		case "AccountKey":
+			key = parts[1]
+		}
+	}
+	if account == "" || key == "" {
+		return "", "", errors.New("AccountName or AccountKey not found in connection string")
+	}
+	return account, key, nil
 }
 
 func GetPBMStorageOSSConfig(
@@ -1074,6 +1134,20 @@ func NotJobLock(j Job) LockHeaderPredicate {
 }
 
 func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error) {
+	return b.hasLocks(ctx, false, predicates...)
+}
+
+func (b *pbmC) hasActiveLocks(ctx context.Context, predicates ...LockHeaderPredicate) (bool, error) {
+	return b.hasLocks(ctx, true, predicates...)
+}
+
+func (b *pbmC) HasBackupLock(ctx context.Context, opID string) (bool, error) {
+	return b.hasActiveLocks(ctx, func(h lock.LockHeader) bool {
+		return h.Type == ctrl.CmdBackup && (opID == "" || h.OPID == opID)
+	})
+}
+
+func (b *pbmC) hasLocks(ctx context.Context, activeOnly bool, predicates ...LockHeaderPredicate) (bool, error) {
 	locks, err := lock.GetLocks(ctx, b.Client, &lock.LockHeader{})
 	if err != nil {
 		return false, errors.Wrap(err, "get lock data")
@@ -1085,6 +1159,13 @@ func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) 
 	}
 
 	locks = append(locks, opLocks...)
+	var clusterTime bson.Timestamp
+	if activeOnly && len(locks) > 0 {
+		clusterTime, err = topo.GetClusterTime(ctx, b.Client)
+		if err != nil {
+			return false, errors.Wrap(err, "get cluster time for backup locks")
+		}
+	}
 
 	allowedByAllPredicates := func(l lock.LockHeader) bool {
 		for _, allow := range predicates {
@@ -1096,6 +1177,9 @@ func (b *pbmC) HasLocks(ctx context.Context, predicates ...LockHeaderPredicate) 
 	}
 
 	for _, l := range locks {
+		if activeOnly && l.Heartbeat.T+defs.StaleFrameSec < clusterTime.T {
+			continue
+		}
 		if allowedByAllPredicates(l.LockHeader) {
 			return true, nil
 		}
@@ -1262,6 +1346,40 @@ func (b *pbmC) FinishBackup(ctx context.Context, bcpName string) error {
 	}
 
 	return backup.ChangeBackupState(b.Client, bcpName, defs.StatusCopyDone, "")
+}
+
+func (b *pbmC) CancelBackup(ctx context.Context, name string) error {
+	meta, err := b.GetBackupMeta(ctx, name)
+	if errors.Is(err, pbmErrors.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "get backup metadata before cancellation")
+	}
+	if meta == nil || meta.Name != name || meta.OPID == "" ||
+		!meta.Status.IsRunning() {
+		return nil
+	}
+
+	matched := false
+	otherBackup, err := b.hasActiveLocks(ctx, func(h lock.LockHeader) bool {
+		if h.Type != ctrl.CmdBackup {
+			return false
+		}
+		if h.OPID == meta.OPID {
+			matched = true
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		return errors.Wrap(err, "check backup locks before cancellation")
+	}
+	if otherBackup || !matched {
+		return nil
+	}
+
+	return errors.Wrap(b.SendCmd(ctx, ctrl.Cmd{Cmd: ctrl.CmdCancelBackup}), "send backup cancellation")
 }
 
 // deleteBackup deletes backup with the given name from the current storage and pbm database
@@ -1495,7 +1613,7 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 
 	for _, chnk := range chunks {
 		err = stg.Delete(chnk.FName)
-		if err != nil && err != storage.ErrNotExist {
+		if err != nil && !errors.Is(err, storage.ErrNotExist) {
 			return errors.Wrapf(err, "delete pitr chunk '%s' (%v) from storage", chnk.FName, chnk)
 		}
 
@@ -1511,24 +1629,6 @@ func (b *pbmC) DeletePITRChunks(ctx context.Context, until bson.Timestamp) error
 			return errors.Wrap(err, "delete pitr chunk metadata")
 		}
 	}
-	return nil
-}
-
-func ResyncConfigExec(ctx context.Context, cl clientcmd.Client, pod *corev1.Pod) error {
-	log := logf.FromContext(ctx)
-
-	stdoutBuffer := bytes.Buffer{}
-	stderrBuffer := bytes.Buffer{}
-
-	command := []string{"pbm", "config", "--force-resync"}
-
-	log.Info("starting config resync", "pod", pod.Name, "command", command)
-
-	err := cl.Exec(ctx, pod, naming.ContainerBackupAgent, command, nil, &stdoutBuffer, &stderrBuffer, false)
-	if err != nil {
-		return errors.Wrapf(err, "start resync: run %v stderr: %s stdout: %s", command, stderrBuffer.String(), stdoutBuffer.String())
-	}
-
 	return nil
 }
 

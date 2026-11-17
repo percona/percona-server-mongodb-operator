@@ -2,7 +2,7 @@
 name = "psmdb-pytest"
 version = "0.1.0"
 description = "Tests for PSMDB Operator"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.15"
 dependencies = [
     "deepdiff>=8.5.0",
     "junitparser>=3.2.0",

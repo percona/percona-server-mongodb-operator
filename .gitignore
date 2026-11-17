@@ -189,7 +189,19 @@ bin/
 projects/
 installers/olm/operator_*.yaml
 installers/olm/bundles
+installers/olm/tools
+installers/olm/catalogs
+
+# Generated namespace-scoped manifests
+config/manager/namespace/operator.yaml
+config/rbac/namespace/role.yaml
+config/rbac/namespace/role_binding.yaml
+config/rbac/namespace/service_account.yaml
 
 # Test Reports
 e2e-tests/reports/
 e2e-tests/**/__pycache__/
+installers/olm/e2e-tests/**/__pycache__/
+
+# e2e test logs
+e2e-tests/logs/

@@ -184,7 +184,7 @@ main() {
 	create_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
 	create_clusterissuer_rbac "$cluster-psmdb-issuer"
 
-	kubectl_bin delete secret "$cluster-ssl-old" "$cluster-ssl-internal-old" --ignore-not-found
+	kubectl_bin delete secret "$cluster-ssl" "$cluster-ssl-internal" "$cluster-ssl-old" "$cluster-ssl-internal-old" --ignore-not-found
 
 	desc "recreate PSMDB cluster $cluster with clusterissuer RBAC"
 	apply_cluster "$test_dir/conf/$cluster.yml"

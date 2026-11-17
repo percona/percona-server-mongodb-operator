@@ -35,6 +35,7 @@ _DELETE_KEYS_ANYWHERE = {
     "percona.com/configuration-hash",
     "percona.com/ssl-hash",
     "percona.com/ssl-internal-hash",
+    "percona.com/pbm-tls-hash",
     "healthCheckNodePort",
     "nodePort",
 }

@@ -19,6 +19,8 @@ import (
 )
 
 func TestNew(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	t.Run("no address", func(t *testing.T) {
@@ -69,6 +71,8 @@ func TestNew(t *testing.T) {
 }
 
 func TestGetUsersSecret(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		getFn        func(ctx context.Context, p string) (*vault.KVSecret, error)
@@ -132,6 +136,8 @@ func TestGetUsersSecret(t *testing.T) {
 }
 
 func TestFillSecretData(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		vaultData      map[string]any
@@ -233,6 +239,8 @@ func TestFillSecretData(t *testing.T) {
 }
 
 func TestFillSecretData_RequestInterval(t *testing.T) {
+	t.Parallel()
+
 	newFakeVault := func(getCalled *int) *vaultClient {
 		fkv := &fakeKV{
 			getFn: func(ctx context.Context, p string) (*vault.KVSecret, error) {

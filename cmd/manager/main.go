@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	vpav1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	"k8s.io/client-go/discovery"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -48,6 +49,9 @@ func init() {
 	utilruntime.Must(volumesnapshotv1.AddToScheme(scheme))
 	// Setup Scheme for cert-manager resources
 	utilruntime.Must(certmgrscheme.AddToScheme(scheme))
+	// VerticalPodAutoscaler is read, never created. Registering the kind is purely
+	// client-side, so it stays safe when the CRD is not installed.
+	utilruntime.Must(vpav1.AddToScheme(scheme))
 }
 
 func main() {
@@ -169,8 +173,10 @@ func main() {
 		}
 	}
 
+	ctx := ctrl.SetupSignalHandler()
+
 	// Setup all Controllers
-	if err := controller.AddToManager(mgr); err != nil {
+	if err := controller.AddToManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "")
 		os.Exit(1)
 	}
@@ -185,7 +191,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

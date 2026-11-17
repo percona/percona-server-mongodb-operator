@@ -1,0 +1,84 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+    - percona.com/delete-psmdb-pvc
+spec:
+  image:
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  storageScaling:
+    enableVolumeScaling: true
+    autoscaling:
+      enabled: true
+      triggerThresholdPercent: 50
+      growthStep: "2Gi"
+      maxSize: "10Gi"
+  backup:
+    enabled: false
+  # without the log collector mongos logs to stdout and the log volume stays empty
+  logcollector:
+    enabled: true
+    image: perconalab/fluentbit:main-logcollector
+    resources:
+      requests:
+        memory: 100M
+        cpu: 200m
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 500m
+          memory: 0.5G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    mongos:
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      resources:
+        limits:
+          cpu: 500m
+          memory: 0.5G
+        requests:
+          cpu: 100m
+          memory: 0.1G
+      expose:
+        type: ClusterIP
+      logs:
+        persistentVolumeClaim:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
+  replsets:
+  - name: rs0
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 0.5G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+  secrets:
+    users: some-users

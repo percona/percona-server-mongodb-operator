@@ -1,0 +1,467 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ACTION="${1:-}"
+BUNDLE_TYPE="${2:-}"
+CATALOG_REPO="${3:-}"
+BUNDLE_REPO="${4:-}"
+
+CONTAINER="${CONTAINER:-docker}"
+CATALOG_PLATFORM="${CATALOG_PLATFORM:-linux/amd64,linux/arm64}"
+CATALOG_RENDER_PLATFORM="${CATALOG_RENDER_PLATFORM:-${CATALOG_PLATFORM%%,*}}"
+CATALOG_BUNDLE_LIMIT="${CATALOG_BUNDLE_LIMIT:-2}"
+CATALOG_PREVIOUS_MINORS="${CATALOG_PREVIOUS_MINORS:-}"
+CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
+CONFIRM_PUSH="${CONFIRM_PUSH:-1}"
+NAME="${NAME:-percona-server-mongodb-operator}"
+CATALOG_ENV="${CATALOG_ENV:-dev}"
+
+usage() {
+	cat <<EOF
+Usage:
+  BUNDLE_IMAGE_VERSION=<version> $0 build \
+    <community|certified> <catalog-repo> <bundle-repo>
+
+  $0 apply \
+    <community|certified> <catalog-repo>
+
+Examples:
+  BUNDLE_IMAGE_VERSION=1.23.0 $0 build \
+    community \
+    docker.io/perconalab/percona-server-mongodb-operator \
+    docker.io/perconalab/percona-server-mongodb-operator
+
+  $0 apply \
+    community \
+    docker.io/perconalab/percona-server-mongodb-operator
+
+  $0 apply \
+    certified \
+    docker.io/percona/percona-server-mongodb-operator
+  # -> CatalogSource name: certified-prod
+EOF
+}
+
+die() {
+	echo "[olm] ERROR: $*" >&2
+	exit 1
+}
+
+require() {
+	command -v "$1" >/dev/null 2>&1 || die "$1 is required"
+}
+
+is_true() {
+	case "${1:-}" in
+		1|true|TRUE|yes|YES|y|Y) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+configure_bundle_type() {
+	case "$BUNDLE_TYPE" in
+		community)
+			GITHUB_REPO="k8s-operatorhub/community-operators"
+			OPERATOR_PATH="operators/percona-server-mongodb-operator"
+			;;
+		certified)
+			GITHUB_REPO="redhat-openshift-ecosystem/certified-operators"
+			OPERATOR_PATH="operators/percona-server-mongodb-operator-certified"
+			;;
+		*)
+			usage
+			die "unsupported bundle type: ${BUNDLE_TYPE:-empty}"
+			;;
+	esac
+}
+
+catalog_image() {
+	if [[ -n "$CATALOG_ENV" ]]; then
+		echo -n "${CATALOG_REPO}:${BUNDLE_TYPE}-${CATALOG_ENV}-catalog"
+		return
+	fi
+	echo -n "${CATALOG_REPO}:${BUNDLE_TYPE}-catalog"
+}
+
+current_bundle_image() {
+	echo -n "${BUNDLE_REPO}:${BUNDLE_IMAGE_VERSION}-${BUNDLE_TYPE}-bundle"
+}
+
+previous_bundle_image() {
+	if [[ -n "$CATALOG_ENV" ]]; then
+		echo -n "${CATALOG_REPO}:$1-${BUNDLE_TYPE}-bundle-${CATALOG_ENV}-catalog"
+		return
+	fi
+	echo -n "${CATALOG_REPO}:$1-${BUNDLE_TYPE}-bundle-catalog"
+}
+
+catalog_source_name() {
+	if [[ -n "$CATALOG_ENV" ]]; then
+		echo -n "${BUNDLE_TYPE}-${CATALOG_ENV}"
+		return
+	fi
+	echo -n "${BUNDLE_TYPE}"
+}
+
+list_bundle_images() {
+	local prefix="${1:-}"
+	local version
+
+	for version in "${OLD_VERSIONS[@]}"; do
+		echo "${prefix}$(previous_bundle_image "$version")"
+	done
+
+	echo "${prefix}$(current_bundle_image)"
+}
+
+resolve_bundle_image() {
+	local image="$1"
+	local manifest
+	local digest
+	local platform_os
+	local platform_arch
+	local platform_variant
+
+	IFS=/ read -r platform_os platform_arch platform_variant <<<"$CATALOG_RENDER_PLATFORM"
+	[[ -n "$platform_os" && -n "$platform_arch" ]] ||
+		die "invalid catalog render platform: $CATALOG_RENDER_PLATFORM"
+
+	manifest="$(
+		"$CONTAINER" buildx imagetools inspect "$image" \
+			--format '{{json .Manifest}}'
+	)"
+	digest="$(
+		jq -er \
+			--arg os "$platform_os" \
+			--arg arch "$platform_arch" \
+			--arg variant "${platform_variant:-}" '
+				if .manifests then
+					[
+						.manifests[]
+						| select(
+							.platform.os == $os
+							and .platform.architecture == $arch
+							and ($variant == "" or .platform.variant == $variant)
+						)
+					][0].digest
+				else
+					.digest
+				end
+			' <<<"$manifest"
+	)" || die "image $image does not support $CATALOG_RENDER_PLATFORM"
+
+	printf '%s@%s' "${image%:*}" "$digest"
+}
+
+download_operatorhub() {
+	local archive="${TMP_DIR}/operatorhub.tar.gz"
+
+	echo "[olm] Downloading ${GITHUB_REPO}"
+
+	mkdir -p "$OPERATORHUB_DIR"
+
+	curl -fsSL \
+		"https://github.com/${GITHUB_REPO}/archive/refs/heads/main.tar.gz" \
+		-o "$archive"
+
+	tar -xzf "$archive" \
+		-C "$OPERATORHUB_DIR" \
+		--strip-components=1
+}
+
+find_previous_versions() {
+	local operator_dir="${OPERATORHUB_DIR}/${OPERATOR_PATH}"
+
+	[[ -d "$operator_dir" ]] ||
+		die "operator directory not found: ${operator_dir}"
+
+	find "$operator_dir" \
+		-mindepth 1 \
+		-maxdepth 1 \
+		-type d \
+		-exec basename {} \; |
+		grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' |
+		awk -v current="$BUNDLE_IMAGE_VERSION" '
+			$0 != current && !seen[$0]++ { print }
+		' |
+		sort -t. -k1,1n -k2,2n -k3,3n |
+		select_previous_versions
+}
+
+# Reads versions sorted ascending. With CATALOG_PREVIOUS_MINORS=N keeps every
+# version of the N newest minor lines older than the current one (all their
+# patches), plus older patches of the current minor line; otherwise the newest
+# CATALOG_BUNDLE_LIMIT versions.
+select_previous_versions() {
+	if [[ -z "$CATALOG_PREVIOUS_MINORS" ]]; then
+		tail -n "$CATALOG_BUNDLE_LIMIT"
+		return
+	fi
+
+	# Versions newer than the one being built are not upgrade sources.
+	awk -F. -v current="$BUNDLE_IMAGE_VERSION" -v minors="$CATALOG_PREVIOUS_MINORS" '
+		BEGIN { split(current, c, "."); current_line = c[1] "." c[2] }
+		$1 > c[1] + 0 || ($1 == c[1] + 0 && ($2 > c[2] + 0 || ($2 == c[2] + 0 && $3 > c[3] + 0))) { next }
+		{ versions[++n] = $0; lines[n] = $1 "." $2 }
+		END {
+			for (i = n; i >= 1; i--) {
+				if (lines[i] == current_line) {
+					keep[i] = 1
+					continue
+				}
+				if (lines[i] != last) {
+					count++
+					last = lines[i]
+				}
+				if (count > minors) break
+				keep[i] = 1
+			}
+			for (i = 1; i <= n; i++) if (keep[i]) print versions[i]
+		}
+	'
+}
+
+# Minor lines among the given versions, not counting the current version's line.
+count_previous_minor_lines() {
+	printf '%s\n' "$@" | cut -d. -f1,2 | grep -vxF "${BUNDLE_IMAGE_VERSION%.*}" | sort -u | grep -c .
+}
+
+confirm_build() {
+	local answer
+	local tty_source=/dev/stdin
+
+	is_true "$CONFIRM_PUSH" || return 0
+
+	[[ -r /dev/tty ]] && tty_source=/dev/tty
+
+	echo
+	echo "[olm] Images to build and push:"
+	list_bundle_images "  - "
+	echo
+
+	read -r -p "Build and push these images? [y/N] " answer <"$tty_source"
+
+	case "$answer" in
+		y|Y|yes|YES) ;;
+		*)
+			echo "[olm] Build and push skipped"
+			exit 0
+			;;
+	esac
+}
+
+write_bundle_dockerfile() {
+	local bundle_dir="$1"
+	local annotations="${bundle_dir}/metadata/annotations.yaml"
+
+	[[ -f "$annotations" ]] ||
+		die "bundle annotations not found: ${annotations}"
+
+	[[ -d "${bundle_dir}/manifests" ]] ||
+		die "bundle manifests not found: ${bundle_dir}/manifests"
+
+	{
+		echo "FROM scratch"
+
+		yq -o=json '.annotations' "$annotations" |
+			jq -r '
+				to_entries[] |
+				"LABEL \(.key)=\(.value | tostring | @json)"
+			'
+
+		echo
+		echo "COPY manifests/ /manifests/"
+		echo "COPY metadata/ /metadata/"
+	} >"${bundle_dir}/Dockerfile"
+}
+
+build_previous_bundle() {
+	local version="$1"
+	local bundle_dir="${OPERATORHUB_DIR}/${OPERATOR_PATH}/${version}"
+	local image
+
+	image="$(previous_bundle_image "$version")"
+
+	echo "[olm] Building and pushing bundle ${image}"
+
+	write_bundle_dockerfile "$bundle_dir"
+
+	"$CONTAINER" buildx build \
+		--platform "$CATALOG_PLATFORM" \
+		--tag "$image" \
+		--push \
+		"$bundle_dir"
+}
+
+write_catalog_template() {
+	local image
+	local resolved_image
+
+	{
+		echo "Schema: olm.semver"
+		echo "GenerateMajorChannels: false"
+		echo "GenerateMinorChannels: false"
+		echo "Stable:"
+		echo "  Bundles:"
+		while IFS= read -r image; do
+			resolved_image="$(resolve_bundle_image "$image")"
+			echo "    - Image: $resolved_image"
+		done < <(list_bundle_images)
+	} >"$CATALOG_TEMPLATE"
+}
+
+# The semver template always generates a channel per minor version: opm falls
+# back to GenerateMinorChannels when both generate options are false. Published
+# catalogs have one channel, so rebuild the channels as a single channel with
+# the edges the bundles declare: olm.skipRange (community) or spec.skips
+# (certified), both covering every older version.
+single_channel_catalog() {
+	jq -s -c \
+		--arg channel "${BUNDLE_PACKAGE_CHANNEL:-stable}" \
+		--arg type "$BUNDLE_TYPE" '
+		def ver: capture("v(?<a>[0-9]+)\\.(?<b>[0-9]+)\\.(?<c>[0-9]+)$") | [.a, .b, .c] | map(tonumber);
+		(map(select(.schema == "olm.bundle")) | sort_by(.name | ver)) as $bundles
+		| [range(0; $bundles | length) as $i
+			| {name: $bundles[$i].name}
+			+ (if $i > 0 then {replaces: $bundles[$i - 1].name} else {} end)
+			+ (if $type == "certified"
+				then (if $i > 1 then {skips: [$bundles[0:$i - 1][].name]} else {} end)
+				else {skipRange: ("<" + ($bundles[$i].name | ver | map(tostring) | join(".")))}
+				end)
+		] as $entries
+		| (map(select(.schema != "olm.channel")
+			| if .schema == "olm.package" then .defaultChannel = $channel else . end)
+			+ [{schema: "olm.channel", package: $bundles[0].package, name: $channel, entries: $entries}])[]
+	'
+}
+
+build_catalog() {
+	local image
+
+	image="$(catalog_image)"
+
+	mkdir -p "$CATALOG_DIR"
+	write_catalog_template
+
+	echo "[olm] Catalog bundles:"
+	list_bundle_images "  - "
+	echo "[olm] Rendering ${BUNDLE_TYPE} catalog"
+
+	opm alpha render-template semver \
+		-o json \
+		<"$CATALOG_TEMPLATE" \
+		>"${TMP_DIR}/catalog-semver.json"
+	single_channel_catalog <"${TMP_DIR}/catalog-semver.json" >"${CATALOG_DIR}/catalog.json"
+
+	echo "[olm] Validating ${BUNDLE_TYPE} catalog"
+	opm validate "$CATALOG_DIR"
+
+	echo "[olm] Generating catalog Dockerfile"
+	opm generate dockerfile "$CATALOG_DIR"
+
+	echo "[olm] Building and pushing catalog ${image}"
+
+	"$CONTAINER" buildx build \
+		--platform "$CATALOG_PLATFORM" \
+		--file "${CATALOG_DIR}.Dockerfile" \
+		--tag "$image" \
+		--push \
+		"$CATALOG_ROOT"
+
+	echo "[olm] Catalog image pushed: ${image}"
+}
+
+run_build() {
+	local version
+
+	BUNDLE_IMAGE_VERSION="${BUNDLE_IMAGE_VERSION:-}"
+	[[ -n "$CATALOG_REPO" ]] || die "catalog repository is required"
+	[[ -n "$BUNDLE_REPO" ]] || die "bundle repository is required"
+	[[ -n "$BUNDLE_IMAGE_VERSION" ]] || die "BUNDLE_IMAGE_VERSION is required"
+	[[ "$CATALOG_BUNDLE_LIMIT" =~ ^[0-9]+$ ]] ||
+		die "CATALOG_BUNDLE_LIMIT must be a non-negative integer"
+	[[ -z "$CATALOG_PREVIOUS_MINORS" || "$CATALOG_PREVIOUS_MINORS" =~ ^[1-9][0-9]*$ ]] ||
+		die "CATALOG_PREVIOUS_MINORS must be a positive integer"
+
+	for command in curl tar jq yq opm "$CONTAINER"; do
+		require "$command"
+	done
+
+	TMP_DIR="$(mktemp -d)"
+	OPERATORHUB_DIR="${TMP_DIR}/operatorhub"
+	CATALOG_ROOT="${TMP_DIR}/catalog-build"
+	CATALOG_DIR="${CATALOG_ROOT}/catalog"
+	CATALOG_TEMPLATE="${TMP_DIR}/catalog-template.yaml"
+
+	trap 'rm -rf "$TMP_DIR"' EXIT
+
+	download_operatorhub
+
+	OLD_VERSIONS=()
+
+	while IFS= read -r version; do
+		[[ -n "$version" ]] && OLD_VERSIONS+=("$version")
+	done < <(find_previous_versions)
+
+	# Checked first: an empty array is "unbound" under set -u in bash 3.2 (macOS).
+	[[ "${#OLD_VERSIONS[@]}" -gt 0 || ( -z "$CATALOG_PREVIOUS_MINORS" && "$CATALOG_BUNDLE_LIMIT" -eq 0 ) ]] ||
+		die "no previous versions found in ${GITHUB_REPO}/${OPERATOR_PATH}"
+
+	if [[ -n "$CATALOG_PREVIOUS_MINORS" ]]; then
+		[[ "$(count_previous_minor_lines "${OLD_VERSIONS[@]}")" -eq "$CATALOG_PREVIOUS_MINORS" ]] ||
+			die "expected ${CATALOG_PREVIOUS_MINORS} previous minor lines, found: ${OLD_VERSIONS[*]}"
+	else
+		[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||
+			die "expected ${CATALOG_BUNDLE_LIMIT} previous versions, found ${#OLD_VERSIONS[@]}"
+	fi
+
+	confirm_build
+
+	for version in "${OLD_VERSIONS[@]}"; do
+		build_previous_bundle "$version"
+	done
+
+	build_catalog
+}
+
+run_apply() {
+	local source_name
+	local image
+
+	require kubectl
+	[[ -n "$CATALOG_REPO" ]] || die "catalog repository is required"
+
+	source_name="$(catalog_source_name)"
+	image="$(catalog_image)"
+
+	echo "[olm] Applying CatalogSource ${source_name}"
+	echo "[olm] Namespace: ${CATALOG_NAMESPACE}"
+	echo "[olm] Image: ${image}"
+
+	kubectl apply -f - <<EOF
+apiVersion: operators.coreos.com/v1alpha1
+kind: CatalogSource
+metadata:
+  name: ${source_name}
+  namespace: ${CATALOG_NAMESPACE}
+spec:
+  displayName: ${source_name}
+  sourceType: grpc
+  image: ${image}
+  updateStrategy:
+    registryPoll:
+      interval: 10m
+EOF
+}
+
+configure_bundle_type
+
+case "$ACTION" in
+	build) run_build ;;
+	apply) run_apply ;;
+	*)
+		usage
+		die "unsupported action: ${ACTION:-empty}"
+		;;
+esac

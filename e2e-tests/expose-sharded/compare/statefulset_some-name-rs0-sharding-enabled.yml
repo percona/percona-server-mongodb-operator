@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   annotations: {}
-  generation: 9
   labels:
     app.kubernetes.io/component: mongod
     app.kubernetes.io/instance: some-name
@@ -185,6 +184,8 @@ spec:
               value: "5"
             - name: SHARDED
               value: "TRUE"
+            - name: PBM_AGENT_TLS_DIR
+              value: /etc/mongodb-pbm
             - name: POD_NAME
               valueFrom:
                 fieldRef:
@@ -211,6 +212,9 @@ spec:
               readOnly: true
             - mountPath: /data/db
               name: mongod-data
+            - mountPath: /etc/mongodb-pbm
+              name: pbm-tls
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:
@@ -266,6 +270,10 @@ spec:
           secret:
             defaultMode: 420
             secretName: internal-some-name-users
+        - name: pbm-tls
+          secret:
+            defaultMode: 288
+            secretName: some-name-pbm
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:

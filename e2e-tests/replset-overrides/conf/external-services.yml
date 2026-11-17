@@ -6,6 +6,7 @@ spec:
   selector:
     statefulset.kubernetes.io/pod-name: some-name-rs0-0
   type: ClusterIP
+  publishNotReadyAddresses: true
   ports:
   - name: mongodb
     port: 27017
@@ -20,6 +21,7 @@ spec:
   selector:
     statefulset.kubernetes.io/pod-name: some-name-rs0-1
   type: ClusterIP
+  publishNotReadyAddresses: true
   ports:
   - name: mongodb
     port: 27017
@@ -34,6 +36,7 @@ spec:
   selector:
     statefulset.kubernetes.io/pod-name: some-name-rs0-2
   type: ClusterIP
+  publishNotReadyAddresses: true
   ports:
   - name: mongodb
     port: 27017

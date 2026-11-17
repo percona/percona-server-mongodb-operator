@@ -1,0 +1,60 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: some-name
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order
+    - percona.com/delete-psmdb-pvc
+spec:
+  image:
+  imagePullPolicy: Always
+  allowUnsafeConfigurations: false
+  # In-place resize only takes effect with SmartUpdate.
+  updateStrategy: SmartUpdate
+  vpa:
+    enabled: true
+    updateMode: "Auto"
+    # RequestsAndLimits on purpose: the WiredTiger cache is derived from the
+    # memory *limit*, so with RequestsOnly the limit never moves and the cache
+    # path is never exercised.
+    controlledValues: RequestsAndLimits
+    inPlaceResize: true
+    minAllowed:
+      cpu: 100m
+      memory: 512Mi
+    maxAllowed:
+      cpu: "2"
+      memory: 8Gi
+    # Short so the test is not dominated by waiting between applies. In-place
+    # resize does not restart pods, so a short window is cheap here.
+    stabilizationWindow: 30s
+  backup:
+    enabled: false
+  replsets:
+  - name: rs0
+    size: 3
+    affinity:
+      antiAffinityTopologyKey: none
+    # 2:1 limit/request ratio, which RequestsAndLimits preserves. The declared
+    # limit of 2Gi gives a starting cache of floor(0.5 * (2Gi - 1Gi)) = 0.5 GB.
+    resources:
+      requests:
+        cpu: 300m
+        memory: 1Gi
+      limits:
+        cpu: 600m
+        memory: 2Gi
+    storage:
+      engine: wiredTiger
+      wiredTiger:
+        engineConfig:
+          cacheSizeRatio: 0.5
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+  secrets:
+    users: some-users
+  sharding:
+    enabled: false

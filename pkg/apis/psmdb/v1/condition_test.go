@@ -7,6 +7,8 @@ import (
 )
 
 func TestConditions(t *testing.T) {
+	t.Parallel()
+
 	status := &PerconaServerMongoDBStatus{}
 
 	cond := status.FindCondition(AppStateReady)

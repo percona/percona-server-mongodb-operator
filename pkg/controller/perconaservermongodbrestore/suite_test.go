@@ -14,7 +14,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 )
 
@@ -63,17 +62,3 @@ var _ = AfterSuite(func() {
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
-
-// nolint:all
-func reconciler() *ReconcilePerconaServerMongoDBRestore {
-	cli, err := clientcmd.NewClient(cfg)
-	if err != nil {
-		Expect(err).ToNot(HaveOccurred())
-	}
-
-	return (&ReconcilePerconaServerMongoDBRestore{
-		client:    k8sClient,
-		scheme:    k8sClient.Scheme(),
-		clientcmd: cli,
-	})
-}

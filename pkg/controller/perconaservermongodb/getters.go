@@ -70,20 +70,6 @@ func (r *ReconcilePerconaServerMongoDB) getRsStatefulset(ctx context.Context, cr
 	return sts, err
 }
 
-func (r *ReconcilePerconaServerMongoDB) getArbiterStatefulsets(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
-	list := appsv1.StatefulSetList{}
-
-	err := r.client.List(ctx,
-		&list,
-		&client.ListOptions{
-			Namespace:     cr.Namespace,
-			LabelSelector: labels.SelectorFromSet(naming.ArbiterLabels(cr, nil)),
-		},
-	)
-
-	return list, err
-}
-
 func (r *ReconcilePerconaServerMongoDB) getMongodStatefulsets(ctx context.Context, cr *api.PerconaServerMongoDB) (appsv1.StatefulSetList, error) {
 	list := appsv1.StatefulSetList{}
 

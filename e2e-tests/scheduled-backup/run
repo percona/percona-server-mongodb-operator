@@ -31,6 +31,33 @@ check_backup_count() {
 	fi
 }
 
+get_scheduled_backups() {
+	local ancestor=$1
+
+	kubectl_bin get psmdb-backup -l percona.com/backup-ancestor=${ancestor} -o custom-columns=NAME:.metadata.name --no-headers
+}
+
+wait_scheduled_backup() {
+	local ancestor=$1
+	local existing=$2
+
+	set +o xtrace
+	local retry=0
+	echo -n "waiting for ${ancestor} to create a backup"
+	until get_scheduled_backups ${ancestor} | grep -qvxFf <(echo "${existing}"); do
+		let retry+=1
+		if [[ $retry -ge 30 ]]; then
+			kubectl_bin get psmdb-backup
+			echo "${ancestor} didn't create a backup"
+			exit 1
+		fi
+		echo -n .
+		sleep 5
+	done
+	echo '.OK'
+	set_debug
+}
+
 create_infra "$namespace"
 deploy_s3_storage
 
@@ -84,7 +111,9 @@ wait_backup_agent $cluster-2
 
 desc 'add backups schedule, wait for backups'
 apply_cluster "$test_dir/conf/$cluster-2.yml"
-sleep 55
+for ancestor in every-min-local-s3 every-min-aws-s3 every-min-gcp-cs every-min-azure-blob; do
+	wait_scheduled_backup ${ancestor}
+done
 
 desc 'disable backups schedule'
 apply_cluster "$test_dir/conf/$cluster.yml"
@@ -178,12 +207,13 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 fi
 
 desc 'add physical backup schedule, wait for the first backup'
+logical_backups_local_s3=$(get_scheduled_backups every-min-local-s3)
 apply_cluster "$test_dir/conf/$cluster-3.yml"
-sleep 55
+wait_scheduled_backup every-min-local-s3 "${logical_backups_local_s3}"
 
 apply_cluster "$test_dir/conf/$cluster.yml"
 
-backup_name_local_s3=$(kubectl_bin get psmdb-backup | grep local-s3 | awk '{print $1}' | tail -1)
+backup_name_local_s3=$(get_scheduled_backups every-min-local-s3 | grep -vxFf <(echo "${logical_backups_local_s3}") | head -1)
 wait_backup "$backup_name_local_s3"
 
 sleep 5

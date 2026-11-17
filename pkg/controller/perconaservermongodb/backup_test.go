@@ -12,6 +12,8 @@ import (
 )
 
 func TestIsBackupRunning(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	const (
@@ -45,6 +47,16 @@ func TestIsBackupRunning(t *testing.T) {
 			name:    "completed backup",
 			backups: []client.Object{backup("ready", crName, api.BackupStateReady)},
 			want:    false,
+		},
+		{
+			name:    "canceled backup does not block",
+			backups: []client.Object{backup("canceled", crName, api.BackupStateCanceled)},
+			want:    false,
+		},
+		{
+			name:    "canceling backup blocks",
+			backups: []client.Object{backup("canceling", crName, api.BackupStateCanceling)},
+			want:    true,
 		},
 		{
 			name:    "failed backup",

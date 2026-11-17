@@ -73,7 +73,7 @@ func (c *caCert) Object() *cm.Certificate {
 		issuerKind = cr.Spec.TLS.IssuerConf.Kind
 		issuerGroup = cr.Spec.TLS.IssuerConf.Group
 	}
-	return &cm.Certificate{
+	cert := &cm.Certificate{
 		Name:      c.Name(),
 		Namespace: c.Namespace(),
 		Labels:    labels,
@@ -90,12 +90,75 @@ func (c *caCert) Object() *cm.Certificate {
 			RenewBefore: &metav1.Duration{Duration: 730 * time.Hour},
 		},
 	}
+	if cr.CompareVersion("1.24.0") >= 0 {
+		cert.Spec.PrivateKey = &cm.CertificatePrivateKey{
+			// The default was changed from Never to Always in cert-manager >= 1.18.0
+			// We pin this to preserve the same functionality but this also means that
+			// we do not have a safe way to rotate the private key.
+			// TODO: make this configurable and provide a way to rotate the CA Certificate private key.
+			RotationPolicy: cm.RotationPolicyNever,
+		}
+	}
+	return cert
 }
 
 type tlsCert struct {
 	cr *api.PerconaServerMongoDB
 
 	internal bool
+}
+
+type pbmClientCert struct {
+	cr *api.PerconaServerMongoDB
+}
+
+func CertificatePBMClient(cr *api.PerconaServerMongoDB) Certificate {
+	return &pbmClientCert{cr: cr}
+}
+
+func (c *pbmClientCert) Name() string {
+	return c.cr.Name + "-pbm"
+}
+
+func (c *pbmClientCert) Namespace() string {
+	return c.cr.Namespace
+}
+
+func (c *pbmClientCert) SecretName() string {
+	if c.cr.Spec.Secrets != nil && c.cr.Spec.Secrets.SSLPBM != "" {
+		return c.cr.Spec.Secrets.SSLPBM
+	}
+	return c.Name()
+}
+
+func (c *pbmClientCert) Object() *cm.Certificate {
+	cr := c.cr
+
+	labels := naming.ClusterLabels(cr)
+
+	return &cm.Certificate{
+		Name:      c.Name(),
+		Namespace: cr.Namespace,
+		Labels:    labels,
+		Spec: cm.CertificateSpec{
+			SecretName: c.SecretName(),
+			CommonName: c.Name(),
+			Subject: &cm.X509Subject{
+				Organizations: []string{naming.CertificateOrganizationPBM},
+			},
+			Usages: []cm.KeyUsage{
+				cm.UsageDigitalSignature,
+				cm.UsageKeyEncipherment,
+				cm.UsageClientAuth,
+			},
+			Duration: &cr.Spec.TLS.CertValidityDuration,
+			IssuerRef: cmmeta.IssuerReference{
+				Name:  issuerName(cr),
+				Kind:  cr.Spec.TLS.IssuerConf.Kind,
+				Group: cr.Spec.TLS.IssuerConf.Group,
+			},
+		},
+	}
 }
 
 func CertificateTLS(cr *api.PerconaServerMongoDB, internal bool) Certificate {
@@ -140,7 +203,7 @@ func (c *tlsCert) Object() *cm.Certificate {
 		Labels:    naming.ClusterLabels(cr),
 		Spec: cm.CertificateSpec{
 			Subject: &cm.X509Subject{
-				Organizations: []string{"PSMDB"},
+				Organizations: []string{naming.CertificateOrganizationPSMDB},
 			},
 			CommonName: cr.Name,
 			SecretName: c.SecretName(),

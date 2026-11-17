@@ -23,6 +23,13 @@ wait_for_running $cluster-rs0 3 "false"
 wait_for_running $cluster-cfg 3 "false"
 wait_for_running $cluster-mongos 3
 
+desc 'check logs that cluster encrypted'
+if ! kubectl_bin logs ${cluster}-rs0-0 -c mongod | grep -i "Encryption keys DB is initialized successfully"; then
+	echo "Cluster is not encrypted"
+	exit 1
+fi
+log "psmdb/${cluster} is properly encrypted: OK"
+
 desc 'check vault security secrets'
 if kubectl_bin get secret "$cluster-mongodb-encryption-key"; then
 	echo "Encryption key secret should not be created when vault is used"
@@ -80,15 +87,6 @@ if [ -z "$SKIP_BACKUPS_TO_AWS_GCP_AZURE" ]; then
 	wait_restore "$backup_name_gcp" "$cluster"
 	compare_mongos_cmd "find" "myApp:myPass@$cluster-mongos.$namespace"
 fi
-
-desc 'check logs that cluster encrypted'
-
-if ! kubectl_bin logs ${cluster}-rs0-0 -c mongod | grep -i "Encryption keys DB is initialized successfully"; then
-	echo "Cluster is not encrypted"
-	exit 1
-fi
-
-log "psmdb/${cluster} is properly encrypted: OK"
 
 desc "check logs for unencrypted cluster"
 
