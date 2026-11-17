@@ -432,9 +432,7 @@ func TestStartupProbeDefaults(t *testing.T) {
 		"user handler is kept": {
 			modify: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.Replsets[0].StartupProbe = &corev1.Probe{
-					ProbeHandler: corev1.ProbeHandler{
-						Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
-					},
+					Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
 				}
 			},
 			wantRS:          8640,
