@@ -25,6 +25,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
@@ -635,34 +636,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		}
 	}
 
-	// RS health check (skip for mongos)
-	if sc.isRSComponent && sc.replset != nil {
-		rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin)
-		if err != nil {
-			log.Info("PVC shrink waiting: failed to create mongo client for RS health check", "error", err)
-			revertVCT()
-			return nil
-		}
-		defer func() {
-			if err := rsClient.Disconnect(ctx); err != nil {
-				log.Error(err, "failed to disconnect mongo client")
-			}
-		}()
-
-		rsStatus, err := rsClient.RSStatus(ctx)
-		if err != nil {
-			log.Info("PVC shrink waiting: failed to get RS status", "error", err)
-			revertVCT()
-			return nil
-		}
-
-		for _, member := range rsStatus.Members {
-			if member.StateStr != "PRIMARY" && member.StateStr != "SECONDARY" && member.StateStr != "ARBITER" {
-				log.Info("PVC shrink waiting: member not in healthy state", "member", member.Name, "state", member.StateStr)
-				revertVCT()
-				return nil
-			}
-		}
+	if !r.shrinkRSHealthy(ctx, sc) {
+		revertVCT()
+		return nil
 	}
 
 	// Disable balancer for sharded clusters when shrinking shard or configsvr
@@ -826,6 +802,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// Use Spec.Requests, not Status.Capacity, because storage classes may round capacity up.
 		pvcRequested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 		if pvcRequested.Cmp(targetSize) > 0 {
+			if !r.shrinkRSHealthy(ctx, sc) {
+				return nil
+			}
 			log.Info("Deleting PVC for shrink", "pvc", pvc.Name, "pod", pod.Name)
 			if err := r.client.Delete(ctx, pvc); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrapf(err, "delete PVC %s", pvc.Name)
@@ -885,6 +864,50 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	return nil
 }
 
+// shrinkRSHealthy checks every replset member, including hidden, non-voting and arbiter members from other statefulsets.
+func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc shrinkContext) bool {
+	if !sc.isRSComponent || sc.replset == nil {
+		return true
+	}
+
+	log := logf.FromContext(ctx).WithName("PVCShrink").WithValues("sts", sc.sts.Name)
+
+	rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin)
+	if err != nil {
+		log.Info("PVC shrink waiting: failed to create mongo client for RS health check", "error", err)
+		return false
+	}
+	defer func() {
+		if err := rsClient.Disconnect(ctx); err != nil {
+			log.Error(err, "failed to disconnect mongo client")
+		}
+	}()
+
+	rsStatus, err := rsClient.RSStatus(ctx)
+	if err != nil {
+		log.Info("PVC shrink waiting: failed to get RS status", "error", err)
+		return false
+	}
+
+	if member := unhealthyRSMember(rsStatus); member != nil {
+		log.Info("PVC shrink waiting: member not in healthy state", "member", member.Name, "state", mongo.MemberStateStrings[member.State])
+		return false
+	}
+
+	return true
+}
+
+func unhealthyRSMember(status mongo.Status) *mongo.Member {
+	for _, member := range status.Members {
+		switch member.State {
+		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
+		default:
+			return member
+		}
+	}
+	return nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	ctx context.Context,
 	sc shrinkContext,
@@ -918,6 +941,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 		if !isPrimary {
 			log.Info("Primary already stepped down, advancing to primary phase", "pod", state.PrimaryPod)
 		} else {
+			if !r.shrinkRSHealthy(ctx, sc) {
+				return nil
+			}
 			log.Info("Stepping down primary", "pod", state.PrimaryPod)
 			if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
 				return errors.Wrap(err, "step down primary for PVC shrink")
