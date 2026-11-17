@@ -1563,10 +1563,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		wantLogVCT := cr.Spec.Sharding.Mongos.LogStorage() != nil
 		if hasLogVCT != wantLogVCT {
 			log.Info("Recreating mongos statefulset to change log storage")
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); client.IgnoreNotFound(err) != nil {
-				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
-			}
-			return nil
+			return client.IgnoreNotFound(k8sutils.OrphanDeleteStatefulSet(ctx, r.client, sts))
 		}
 
 		if _, ok := sts.Annotations[api.AnnotationPVCResizeInProgress]; ok {

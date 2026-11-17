@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -63,6 +64,15 @@ func DeleteIfExists(ctx context.Context, c client.Client, obj client.Object) err
 
 	if err := c.Delete(ctx, obj); client.IgnoreNotFound(err) != nil {
 		return errors.Wrapf(err, "failed to delete %T %s/%s", obj, obj.GetNamespace(), obj.GetName())
+	}
+	return nil
+}
+
+// OrphanDeleteStatefulSet deletes sfs but keeps its pods and PVCs, so it can be recreated with new claim templates.
+func OrphanDeleteStatefulSet(ctx context.Context, c client.Client, sfs *appsv1.StatefulSet, opts ...client.DeleteOption) error {
+	opts = append(opts, client.PropagationPolicy(metav1.DeletePropagationOrphan))
+	if err := c.Delete(ctx, sfs, opts...); err != nil {
+		return errors.Wrapf(err, "delete statefulset/%s", sfs.Name)
 	}
 	return nil
 }

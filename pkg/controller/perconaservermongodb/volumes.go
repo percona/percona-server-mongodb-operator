@@ -503,14 +503,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 		}
 	}
 
-	if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
-	}
-
-	return nil
+	return client.IgnoreNotFound(k8s.OrphanDeleteStatefulSet(ctx, r.client, sts))
 }
 
 func (r *ReconcilePerconaServerMongoDB) handlePVCResizeFailure(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, claimName string, originalSize resource.Quantity) error {

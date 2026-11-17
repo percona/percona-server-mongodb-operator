@@ -311,3 +311,64 @@ func TestRecreateStsForStorageNeedsSmartUpdate(t *testing.T) {
 		})
 	}
 }
+
+func TestKeepClaimTemplateMeta(t *testing.T) {
+	t.Parallel()
+
+	vct := func(name string, labels, annotations map[string]string) corev1.PersistentVolumeClaim {
+		pvc := corev1.PersistentVolumeClaim{}
+		pvc.Name = name
+		pvc.Labels = labels
+		pvc.Annotations = annotations
+		return pvc
+	}
+
+	tests := map[string]struct {
+		desired []corev1.PersistentVolumeClaim
+		current []corev1.PersistentVolumeClaim
+		want    []corev1.PersistentVolumeClaim
+	}{
+		"replset labels changed": {
+			desired: []corev1.PersistentVolumeClaim{
+				vct(config.MongodLogVolClaimName, map[string]string{"team": "new"}, map[string]string{"a": "new"}),
+			},
+			current: []corev1.PersistentVolumeClaim{
+				vct(config.MongodLogVolClaimName, map[string]string{"team": "old"}, map[string]string{"a": "old"}),
+			},
+			want: []corev1.PersistentVolumeClaim{
+				vct(config.MongodLogVolClaimName, map[string]string{"team": "old"}, map[string]string{"a": "old"}),
+			},
+		},
+		"new claim keeps desired metadata": {
+			desired: []corev1.PersistentVolumeClaim{
+				vct(config.MongodJournalVolClaimName, map[string]string{"team": "new"}, nil),
+			},
+			current: []corev1.PersistentVolumeClaim{
+				vct(config.MongodDataVolClaimName, nil, nil),
+			},
+			want: []corev1.PersistentVolumeClaim{
+				vct(config.MongodJournalVolClaimName, map[string]string{"team": "new"}, nil),
+			},
+		},
+		"statefulset not created yet": {
+			desired: []corev1.PersistentVolumeClaim{
+				vct(config.MongodLogVolClaimName, map[string]string{"team": "new"}, nil),
+			},
+			want: []corev1.PersistentVolumeClaim{
+				vct(config.MongodLogVolClaimName, map[string]string{"team": "new"}, nil),
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			sts := &appsv1.StatefulSet{}
+			sts.Spec.VolumeClaimTemplates = tt.desired
+
+			keepClaimTemplateMeta(sts, tt.current)
+			assert.Equal(t, tt.want, sts.Spec.VolumeClaimTemplates)
+		})
+	}
+}

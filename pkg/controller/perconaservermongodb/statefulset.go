@@ -11,7 +11,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -209,21 +208,31 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 		return false, errStorageChangeNeedsSmartUpdate
 	}
 
-	err := r.client.Delete(ctx, current,
-		client.PropagationPolicy(metav1.DeletePropagationOrphan),
-		client.Preconditions{UID: &current.UID},
-	)
-	if err != nil {
+	if err := k8s.OrphanDeleteStatefulSet(ctx, r.client, current, client.Preconditions{UID: &current.UID}); err != nil {
 		if k8sErrors.IsNotFound(err) || k8sErrors.IsConflict(err) {
 			return false, nil
 		}
-		return false, errors.Wrapf(err, "delete statefulset/%s", current.Name)
+		return false, err
 	}
 
 	logf.FromContext(ctx).Info("Recreating statefulset to change storage", "statefulset", sfs.Name,
 		"logStorage", logChanged, "journalStorage", journalChanged)
 
 	return true, nil
+}
+
+// keepClaimTemplateMeta keeps the labels and annotations of existing claim templates, which are immutable.
+// fixVolumeLabels applies changes to the PVCs instead.
+func keepClaimTemplateMeta(sfs *appsv1.StatefulSet, current []corev1.PersistentVolumeClaim) {
+	for i := range sfs.Spec.VolumeClaimTemplates {
+		vct := &sfs.Spec.VolumeClaimTemplates[i]
+		idx := slices.IndexFunc(current, func(c corev1.PersistentVolumeClaim) bool { return c.Name == vct.Name })
+		if idx < 0 {
+			continue
+		}
+		vct.Labels = current[idx].Labels
+		vct.Annotations = current[idx].Annotations
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
@@ -348,8 +357,10 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
 
+	currentVCT := sfs.Spec.VolumeClaimTemplates
 	sfs.Labels = sfsSpec.Template.Labels
 	sfs.Spec = sfsSpec
+	keepClaimTemplateMeta(sfs, currentVCT)
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
