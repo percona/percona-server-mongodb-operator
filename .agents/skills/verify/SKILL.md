@@ -26,10 +26,11 @@ that match the changed files. If CR types or RBAC changed, run
 - Go: `make test`. Run the changed packages first, then the full target.
 - e2e: needed when the change touches reconcile logic, CR fields, images,
   backups, restores or upgrades. Pick the test under `e2e-tests/` that covers
-  the behavior and run it as `e2e-tests/AGENTS.md` describes. Before
-  running, check that `kubectl config current-context` points at a cluster
-  you own. If no cluster is available, write that in the report; never skip
-  silently.
+  the behavior and run it as `e2e-tests/AGENTS.md` describes. A context
+  name does not say who owns the cluster: before running, show the user
+  `kubectl config current-context` and wait for them to confirm it, unless
+  they named the context for this run. If no cluster is available, write
+  that in the report; never skip silently.
 - Manual checks: for what no test covers, the `test-plan` skill writes the
   steps; put the plan or its link in the report.
 

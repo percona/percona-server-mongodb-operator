@@ -1,6 +1,6 @@
 # Go style
 
-Last verified: 2026-11-03
+Last verified: 2026-11-17
 
 What CI enforces and the conventions the code base follows. New code follows
 the dominant convention; old code is changed only where it is touched anyway.
@@ -64,7 +64,7 @@ The review skill `review-go-style` applies this file.
   `ctx context.Context` as its first parameter and passes it on. Only
   constructors are exempt.
 - `context.TODO()` and `context.Background()` do not appear in operator
-  code. Tests use `t.Context()`.
+  code.
 
 ## Naming
 
@@ -85,14 +85,13 @@ The review skill `review-go-style` applies this file.
 
 - Standard `testing` with testify (`assert`, `require`), table-driven with
   `t.Run`, and `t.Parallel()` when the cases share no state.
-- Ginkgo, Gomega and envtest are used only by the two controller suites
+- Tests take their context from `t.Context()`.
+- Reconcile behavior is tested with envtest in the two controller suites
   (`perconaservermongodb/suite_test.go`,
-  `perconaservermongodbrestore/suite_test.go`). Reconcile behavior goes
-  there; everything else is a plain test.
-- Fake clients come from `fake.NewClientBuilder().WithScheme(...)
-  .WithObjects(...).WithStatusSubresource(...)`. Packages have a helper for
-  it (`buildFakeClient`, `fakeReconciler`, `newFakeClient`); reuse the one in
-  the package you are in.
+  `perconaservermongodbrestore/suite_test.go`); everything else is a plain
+  test.
+- Reuse the fake clients and mocks the package already has instead of
+  building new ones.
 - Load the example CR with `readDefaultCR`, which reads `deploy/cr.yaml`, so
   tests run on the documented defaults.
 - PBM mocks (`mock_pbm.go`) come from `go generate` through mockgen; do not
@@ -100,13 +99,18 @@ The review skill `review-go-style` applies this file.
 - Expected objects live in `testdata/` next to the test
   (`reconcile-statefulset/`, `rs-svc/`). They are static YAML with no update
   flag; change them only when the rendering changes on purpose.
-- `make test` runs `go test ./... -shuffle=on` with envtest assets for
-  Kubernetes 1.31. Tests must not depend on order.
+- `make test` runs `go test ./... -shuffle=on` with envtest assets for the
+  Kubernetes version in `ENVTEST_K8S_VERSION` (`Makefile`). Tests must not
+  depend on order.
 
 ## Comments and markers
 
-- Exported functions get a doc comment that starts with the name. Lint does
-  not enforce it; reviewers do.
+- Exported identifiers get a Go doc comment that starts with the name. Test
+  functions (`Test*`) do not need one. Lint does not enforce it; reviewers
+  do.
+- Inside a function, comment only what the code cannot show: a workaround,
+  an ordering constraint, a non-obvious invariant. Do not add comments that
+  restate the code.
 - `//nolint:<linter>` names the linter and carries a reason. Bare `// nolint`
   exists only on legacy fake-client imports.
 - `TODO` comments say what and why, with a ticket when there is one.

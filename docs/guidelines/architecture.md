@@ -1,6 +1,6 @@
 # Architecture
 
-Last verified: 2026-11-03
+Last verified: 2026-11-17
 
 Where code goes and how the controllers behave. The root `AGENTS.md` has the
 layout and code placement basics; this file adds what a change must respect.
@@ -8,36 +8,21 @@ The review skill `review-architecture` applies it.
 
 ## Components
 
-- `cmd/manager/main.go`: the operator binary. It registers the schemes
-  (client-go, psmdb, VolumeSnapshot, cert-manager, VPA), sets up leader
-  election and the `WATCH_NAMESPACE` cache, and adds the controllers listed in
-  `pkg/controller/controller.go`.
-- `cmd/mongodb-healthcheck/`: the liveness and readiness probe binary shipped
-  in the operator image (`build/Dockerfile`).
-- `pkg/apis/psmdb/v1`: the only API version. `psmdb_types.go` holds
-  `PerconaServerMongoDB`; backup, restore and cluster-sync CRs have their own
-  `*_types.go`. `psmdb_defaults.go` holds `CheckNSetDefaults`, which both
-  validates and defaults. `zz_generated.deepcopy.go` is generated.
-- `pkg/controller/<name>`: one package per CR (`perconaservermongodb`,
-  `perconaservermongodbbackup`, `perconaservermongodbrestore`,
-  `perconaservermongodbclustersync`), each registered from its `add_*.go`.
-- `pkg/psmdb`: builders for StatefulSets, Services, mongos, PDBs and
-  containers, plus the MongoDB client constructors. One subpackage per
-  domain: `backup` (PBM wrapper, interface `PBM`), `mongo` (driver wrapper,
-  interface `Client`), `tls` (cert-manager and manual certificates), `secret`,
-  `init`, `pmm`, `logcollector`, `clustersync`, `vectorsearch`, `config`.
-- `pkg/naming`: label keys, label builders (`ClusterLabels`, `MongodLabels`,
-  `RSLabels`, ...), object name builders and finalizer constants. New names,
-  labels and annotations go here, not in string literals.
-- `pkg/k8s` (annotations, Leases, watch namespace), `pkg/util` (`Apply`,
-  `ReconcileInterval`), `pkg/version` (`version.txt` is the operator
-  version), `pkg/secret` (secret providers, `vault/`), `pkg/mcs`,
-  `pkg/versionservice`, and `clientcmd/` (pod exec and REST client).
-- `deploy/`: `crd.yaml`, `bundle.yaml` and `cw-bundle.yaml` are built by
+What the code does not show at a glance:
+
+- `CheckNSetDefaults` in `pkg/apis/psmdb/v1/psmdb_defaults.go` both
+  validates and defaults the CR.
+- External systems sit behind interfaces in `pkg/psmdb/<domain>`: PBM in
+  `backup` (`PBM`), the MongoDB driver in `mongo` (`Client`). Mock those, not
+  the drivers.
+- Names, labels, annotations and finalizers live in `pkg/naming`, not in
+  string literals.
+- `deploy/crd.yaml`, `bundle.yaml` and `cw-bundle.yaml` are built by
   `make manifests` from `config/`. `rbac.yaml`, `cw-rbac.yaml`,
   `operator.yaml` and `cw-operator.yaml` are edited by hand; there are no
-  `+kubebuilder:rbac` markers. `cr.yaml` is the documented example and most
-  of it is commented options.
+  `+kubebuilder:rbac` markers.
+- `deploy/cr.yaml` is the documented example; most of it is commented
+  options.
 
 ## Reconcile loop of PerconaServerMongoDB
 

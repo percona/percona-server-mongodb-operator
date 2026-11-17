@@ -16,7 +16,8 @@ guidelines in `docs/guidelines/`, and the skills in `.agents/skills/`.
   `.gemini/`) only point at those files. They carry no content of their own
   and are optional. Claude Code reads skills from `.claude/skills/`, so each
   skill has a symlink there, and `.claude/agents/review-*.md` only start the
-  matching review skill.
+  matching review skill. Claude Code does not read `.agents/skills/` yet;
+  remove the symlinks once it does.
 - Enforcement lives in the repo, not in agent hooks: `make` targets, CI and
   the pull request checklist.
 

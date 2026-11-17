@@ -50,12 +50,14 @@ Every review skill follows these steps.
      nothing was run.
    [`review-comment-example.md`](review-comment-example.md) shows the format.
 6. **Verification.** You may build the code and run tests to confirm a
-   finding, on the branch or on a copy. A copy is a git worktree at the head
-   of the branch under review; some tools make their copies from `main`, so
+   finding, only on your own copy: a git worktree at the head of the branch
+   under review. Never write to the checkout you started in; other reviewers
+   may run there in parallel. Some tools make their copies from `main`, so
    check with `git log -1` before you trust a result. Use an existing test
-   when one covers the case. When proving a finding needs a new test, keep it
-   in the code base: add it to the branch and name it in the report. Do not
-   add a test that duplicates an existing one.
+   when one covers the case. When proving a finding needs a new test, write
+   it in your copy and put it in the report with its path, its code and its
+   result; the author decides whether to add it. Do not propose a test that
+   duplicates an existing one.
 7. **Limits.** Do not repeat what the linters and `make test` report; CI runs
    them. Do not review generated files except to check that they were
    regenerated. When you cannot verify something, say so instead of guessing.
