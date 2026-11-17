@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"testing"
 
@@ -49,9 +50,9 @@ func systemUsersData(backupPassword string) map[string][]byte {
 
 // usersTestReconciler builds a ready cluster whose users secret has a new
 // backup password, so reconcileUsers changes the users and restarts the backup
-// agents. exec handles every "kill 1"; it gets the fake client to mark the
-// container restarted, the way the kubelet does after a real kill.
-func usersTestReconciler(t *testing.T, exec func(r *ReconcilePerconaServerMongoDB, pod string) error) (*ReconcilePerconaServerMongoDB, *api.PerconaServerMongoDB, *corev1.Secret) {
+// agents. exec handles every "kill 1"; it can mark the container restarted, the
+// way the kubelet does after a real kill.
+func usersTestReconciler(t *testing.T, exec func(r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, pod string) error) (*ReconcilePerconaServerMongoDB, *api.PerconaServerMongoDB, *corev1.Secret) {
 	t.Helper()
 
 	cr := connectionStringTestCluster()
@@ -61,15 +62,13 @@ func usersTestReconciler(t *testing.T, exec func(r *ReconcilePerconaServerMongoD
 	rs.Size = 3
 
 	users := &corev1.Secret{
-		Name:      cr.Spec.Secrets.Users,
-		Namespace: cr.Namespace,
-		Data:      systemUsersData("new-backup-password"),
+		Name: cr.Spec.Secrets.Users, Namespace: cr.Namespace,
+		Data: systemUsersData("new-backup-password"),
 	}
 	internal := &corev1.Secret{
-		Name:      api.InternalUserSecretName(cr),
-		Namespace: cr.Namespace,
+		Name: api.InternalUserSecretName(cr), Namespace: cr.Namespace,
+		Data: getInternalSecretData(cr, &corev1.Secret{Data: systemUsersData("old-backup-password")}),
 	}
-	internal.Data = getInternalSecretData(cr, &corev1.Secret{Data: systemUsersData("old-backup-password")})
 
 	objects := []client.Object{users, internal, fakeStatefulset(cr, rs, rs.Size, "", "mongod")}
 	for _, obj := range fakePodsForRS(cr, rs) {
@@ -77,7 +76,7 @@ func usersTestReconciler(t *testing.T, exec func(r *ReconcilePerconaServerMongoD
 		pod.Spec.Containers = []corev1.Container{{Name: "mongod"}, {Name: naming.ContainerBackupAgent}}
 		pod.Status.ContainerStatuses = append(pod.Status.ContainerStatuses, corev1.ContainerStatus{
 			Name:        naming.ContainerBackupAgent,
-			ContainerID: "containerd://agent-1",
+			ContainerID: "containerd://agent-0",
 			State:       corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
 		})
 		objects = append(objects, pod)
@@ -88,7 +87,7 @@ func usersTestReconciler(t *testing.T, exec func(r *ReconcilePerconaServerMongoD
 	r.clientcmd = &mockClientCmd{
 		execFunc: func(_ context.Context, pod *corev1.Pod, container string, _ []string, _ io.Reader, _, _ io.Writer, _ bool) error {
 			require.Equal(t, naming.ContainerBackupAgent, container)
-			return exec(r, pod.Name)
+			return exec(r, cr, pod.Name)
 		},
 	}
 	return r, cr, users
@@ -100,22 +99,19 @@ func markAgentRestarted(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.
 
 	pod := new(corev1.Pod)
 	require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod))
-	for i := range pod.Status.ContainerStatuses {
-		if pod.Status.ContainerStatuses[i].Name == naming.ContainerBackupAgent {
-			pod.Status.ContainerStatuses[i].RestartCount++
-			pod.Status.ContainerStatuses[i].ContainerID = "containerd://agent-2"
-		}
-	}
+	status := containerStatus(pod, naming.ContainerBackupAgent)
+	status.RestartCount++
+	status.ContainerID = fmt.Sprintf("containerd://agent-%d", status.RestartCount)
 	require.NoError(t, r.client.Status().Update(t.Context(), pod))
 }
 
-func internalUsersData(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) map[string][]byte {
+func getInternalUsersSecret(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) *corev1.Secret {
 	t.Helper()
 
 	got := new(corev1.Secret)
 	key := types.NamespacedName{Name: api.InternalUserSecretName(cr), Namespace: cr.Namespace}
 	require.NoError(t, r.client.Get(t.Context(), key, got))
-	return got.Data
+	return got
 }
 
 // "kill 1" ends the exec session together with the container, so the exec can
@@ -127,9 +123,8 @@ func internalUsersData(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.P
 func TestReconcileUsersExecFailsAfterKill(t *testing.T) {
 	t.Parallel()
 
-	var cr *api.PerconaServerMongoDB
 	killed := map[string]int{}
-	r, cr, users := usersTestReconciler(t, func(r *ReconcilePerconaServerMongoDB, pod string) error {
+	r, cr, users := usersTestReconciler(t, func(r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, pod string) error {
 		killed[pod]++
 		if pod != "cluster-rs0-0" {
 			markAgentRestarted(t, r, cr, pod)
@@ -145,21 +140,23 @@ func TestReconcileUsersExecFailsAfterKill(t *testing.T) {
 	require.NoError(t, r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets))
 	assert.Equal(t, map[string]int{"cluster-rs0-0": 1, "cluster-rs0-1": 1, "cluster-rs0-2": 1}, killed,
 		"every agent is restarted once")
-	assert.Equal(t, getInternalSecretData(cr, users), internalUsersData(t, r, cr),
+	internal := getInternalUsersSecret(t, r, cr)
+	assert.Equal(t, getInternalSecretData(cr, users), internal.Data,
 		"the internal secret holds the credentials that MongoDB now has")
+	assert.NotContains(t, internal.Annotations, naming.AnnotationPendingRestarts)
 }
 
 // When an agent really cannot be restarted, the error is reported, the other
-// agents are still restarted, and the operator keeps the credentials that
-// MongoDB has.
+// agents are still restarted, the operator keeps the credentials that MongoDB
+// has, and the next reconcile restarts the agents again.
 func TestReconcileUsersAgentRestartFails(t *testing.T) {
 	t.Parallel()
 
-	var cr *api.PerconaServerMongoDB
+	broken := true
 	killed := map[string]int{}
-	r, cr, users := usersTestReconciler(t, func(r *ReconcilePerconaServerMongoDB, pod string) error {
+	r, cr, users := usersTestReconciler(t, func(r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, pod string) error {
 		killed[pod]++
-		if pod == "cluster-rs0-1" {
+		if pod == "cluster-rs0-1" && broken {
 			return errors.New("error dialing backend: timeout")
 		}
 		markAgentRestarted(t, r, cr, pod)
@@ -170,6 +167,61 @@ func TestReconcileUsersAgentRestartFails(t *testing.T) {
 	require.ErrorContains(t, err, "cluster-rs0-1")
 	assert.Equal(t, 1, killed["cluster-rs0-0"])
 	assert.Equal(t, 1, killed["cluster-rs0-2"])
-	assert.Equal(t, getInternalSecretData(cr, users), internalUsersData(t, r, cr),
+	internal := getInternalUsersSecret(t, r, cr)
+	assert.Equal(t, getInternalSecretData(cr, users), internal.Data,
 		"the internal secret holds the credentials that MongoDB now has")
+	assert.Equal(t, naming.ContainerBackupAgent, internal.Annotations[naming.AnnotationPendingRestarts])
+
+	broken = false
+	before := killed["cluster-rs0-1"]
+	require.NoError(t, r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets))
+	assert.Equal(t, before+1, killed["cluster-rs0-1"], "the next reconcile retries the restart")
+	assert.NotContains(t, getInternalUsersSecret(t, r, cr).Annotations, naming.AnnotationPendingRestarts)
+}
+
+func TestContainerRestarted(t *testing.T) {
+	t.Parallel()
+
+	running := corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}
+	before := &corev1.ContainerStatus{Name: naming.ContainerBackupAgent, ContainerID: "containerd://a", RestartCount: 2, State: running}
+
+	tests := map[string]struct {
+		before *corev1.ContainerStatus
+		now    corev1.ContainerStatus
+		want   bool
+	}{
+		"no status before the kill": {
+			before: nil,
+			now:    corev1.ContainerStatus{Name: naming.ContainerBackupAgent, RestartCount: 3},
+			want:   false,
+		},
+		"restart count went up": {
+			before: before,
+			now:    corev1.ContainerStatus{Name: naming.ContainerBackupAgent, ContainerID: "containerd://a", RestartCount: 3, State: running},
+			want:   true,
+		},
+		"container replaced": {
+			before: before,
+			now:    corev1.ContainerStatus{Name: naming.ContainerBackupAgent, ContainerID: "containerd://b", RestartCount: 2, State: running},
+			want:   true,
+		},
+		"same container": {
+			before: before,
+			now:    *before,
+			want:   false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			pod := &corev1.Pod{
+				Name: "pod", Namespace: "ns",
+				Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{tt.now}},
+			}
+			r := buildFakeClient(pod)
+			assert.Equal(t, tt.want, r.containerRestarted(t.Context(), pod, naming.ContainerBackupAgent, tt.before))
+		})
+	}
 }
