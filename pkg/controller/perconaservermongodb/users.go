@@ -18,7 +18,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -158,6 +157,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 	}
 
 	// Only the restarts that failed stay pending, the next reconcile retries them.
+	// They are not returned as an error, so the rest of the reconcile, which may
+	// replace a stuck pod, still runs.
 	var failed []string
 	var errs []error
 	for _, t := range restartTargets(pending, pods) {
@@ -169,9 +170,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 
 	setPendingRestarts(&internalSysSecretObj, failed)
 	if err := r.client.Update(ctx, &internalSysSecretObj); err != nil {
-		errs = append(errs, errors.Wrap(err, "update pending restarts"))
+		return errors.Wrap(stderrors.Join(append(errs, err)...), "update pending restarts")
 	}
-	return errors.Wrap(stderrors.Join(errs...), "restart containers")
+	if len(errs) > 0 {
+		logf.FromContext(ctx).Error(stderrors.Join(errs...), "Restart containers, will retry", "pending", failed)
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) podsWithSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB) ([]corev1.Pod, error) {
@@ -254,16 +258,19 @@ func restartTargets(pending []string, pods []corev1.Pod) []containerRestart {
 }
 
 // containerRestartChecks is how many times restartContainer reads a pod to see
-// whether a container restarted although the exec that killed it failed.
+// whether a container restarted although the exec that killed it failed. A
+// restart that is not seen in time stays pending: killing again right away could
+// hit the new container.
 const containerRestartChecks = 5
 
 // restartContainer makes the container read the users secret again. The
-// container reads it when it starts, so one that is not running is left alone.
+// container reads it when it starts, so one that is not running, or not created
+// yet, is left alone.
 func (r *ReconcilePerconaServerMongoDB) restartContainer(ctx context.Context, pod *corev1.Pod, containerName string) error {
 	log := logf.FromContext(ctx)
 
 	before := containerStatus(pod, containerName)
-	if before != nil && before.State.Running == nil {
+	if before == nil || before.State.Running == nil {
 		log.Info("Container is not running, it reads the new credentials when it starts", "pod", pod.Name, "container", containerName)
 		return nil
 	}
@@ -275,11 +282,6 @@ func (r *ReconcilePerconaServerMongoDB) restartContainer(ctx context.Context, po
 	if err != nil && r.containerRestarted(ctx, pod, containerName, before) {
 		log.Info("Container restarted or stopped, ignoring the exec error", "pod", pod.Name, "container", containerName, "error", err.Error())
 		return nil
-	}
-	if err != nil {
-		err = retry.OnError(retry.DefaultBackoff, func(_ error) bool { return true }, func() error {
-			return r.execKill(ctx, pod, containerName)
-		})
 	}
 	return err
 }
@@ -317,7 +319,7 @@ func (r *ReconcilePerconaServerMongoDB) containerRestarted(ctx context.Context, 
 
 		current := new(corev1.Pod)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, current); err != nil {
-			logf.FromContext(ctx).V(1).Info("Get pod", "pod", pod.Name, "error", err.Error())
+			logf.FromContext(ctx).V(1).Info("Get pod to check the container restart", "pod", pod.Name, "error", err.Error())
 			continue
 		}
 

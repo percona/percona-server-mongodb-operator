@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -13,26 +15,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
-	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 )
-
-type fakeUsersMongoProvider struct{}
-
-func (fakeUsersMongoProvider) Mongo(context.Context, *api.PerconaServerMongoDB, *api.ReplsetSpec, api.SystemUserRole, ...mongo.ConfigOption) (mongo.Client, error) {
-	return mongoFake.NewClient(), nil
-}
-
-func (fakeUsersMongoProvider) Mongos(context.Context, *api.PerconaServerMongoDB, api.SystemUserRole, ...mongo.ConfigOption) (mongo.Client, error) {
-	return mongoFake.NewClient(), nil
-}
-
-func (fakeUsersMongoProvider) Standalone(context.Context, *api.PerconaServerMongoDB, api.SystemUserRole, string, bool, ...mongo.ConfigOption) (mongo.Client, error) {
-	return mongoFake.NewClient(), nil
-}
 
 func systemUsersData(backupPassword string) map[string][]byte {
 	return map[string][]byte{
@@ -84,7 +71,7 @@ func usersTestReconciler(t *testing.T, exec func(r *ReconcilePerconaServerMongoD
 	}
 
 	r := buildFakeClient(objects...)
-	r.mongoClientProvider = fakeUsersMongoProvider{}
+	r.mongoClientProvider = &fakeMongoClientProvider{cr: cr, connectionCount: new(atomic.Int32)}
 	r.clientcmd = &mockClientCmd{
 		execFunc: func(_ context.Context, pod *corev1.Pod, container string, _ []string, _ io.Reader, _, _ io.Writer, _ bool) error {
 			require.Equal(t, naming.ContainerBackupAgent, container)
@@ -114,6 +101,18 @@ func stopAgent(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.PerconaSe
 	require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod))
 	status := containerStatus(pod, naming.ContainerBackupAgent)
 	status.State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}
+	require.NoError(t, r.client.Status().Update(t.Context(), pod))
+}
+
+// dropAgentStatus removes the agent status, as for a container not created yet.
+func dropAgentStatus(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, podName string) {
+	t.Helper()
+
+	pod := new(corev1.Pod)
+	require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod))
+	pod.Status.ContainerStatuses = slices.DeleteFunc(pod.Status.ContainerStatuses, func(s corev1.ContainerStatus) bool {
+		return s.Name == naming.ContainerBackupAgent
+	})
 	require.NoError(t, r.client.Status().Update(t.Context(), pod))
 }
 
@@ -158,8 +157,8 @@ func TestReconcileUsersExecFailsAfterKill(t *testing.T) {
 	assert.NotContains(t, internal.Annotations, naming.AnnotationPendingRestarts)
 }
 
-// An agent that is not running reads the new credentials when it starts, so
-// it needs no kill. An exec into it fails with "container not found", and
+// An agent that is not running, or not created yet, reads the new credentials
+// when it starts, so it needs no kill. An exec into it fails with "container not found", and
 // before the fix every reconcile retried it and killed the other agents again,
 // so all agents stayed in CrashLoopBackOff.
 func TestReconcileUsersSkipsStoppedAgent(t *testing.T) {
@@ -175,16 +174,18 @@ func TestReconcileUsersSkipsStoppedAgent(t *testing.T) {
 		return nil
 	})
 	stopAgent(t, r, cr, "cluster-rs0-1")
+	dropAgentStatus(t, r, cr, "cluster-rs0-2")
 
 	require.NoError(t, r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets))
-	assert.Equal(t, map[string]int{"cluster-rs0-0": 1, "cluster-rs0-2": 1}, killed,
-		"only the running agents are restarted")
+	assert.Equal(t, map[string]int{"cluster-rs0-0": 1}, killed,
+		"only the running agent is restarted")
 	assert.NotContains(t, getInternalUsersSecret(t, r, cr).Annotations, naming.AnnotationPendingRestarts)
 }
 
-// When an agent really cannot be restarted, the error is reported, the other
-// agents are still restarted, the operator keeps the credentials that MongoDB
-// has, and the next reconcile restarts only that agent again.
+// When an agent really cannot be restarted, the other agents are still
+// restarted, the operator keeps the credentials that MongoDB has, and the next
+// reconcile restarts only that agent again. The failure is not returned, so the
+// rest of the reconcile, which may replace a stuck pod, still runs.
 func TestReconcileUsersAgentRestartFails(t *testing.T) {
 	t.Parallel()
 
@@ -199,10 +200,9 @@ func TestReconcileUsersAgentRestartFails(t *testing.T) {
 		return nil
 	})
 
-	err := r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets)
-	require.ErrorContains(t, err, "cluster-rs0-1")
-	assert.Equal(t, 1, killed["cluster-rs0-0"])
-	assert.Equal(t, 1, killed["cluster-rs0-2"])
+	require.NoError(t, r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets))
+	assert.Equal(t, map[string]int{"cluster-rs0-0": 1, "cluster-rs0-1": 1, "cluster-rs0-2": 1}, killed,
+		"a failed kill is not repeated in the same reconcile")
 	internal := getInternalUsersSecret(t, r, cr)
 	assert.Equal(t, getInternalSecretData(cr, users), internal.Data,
 		"the internal secret holds the credentials that MongoDB now has")
@@ -214,6 +214,81 @@ func TestReconcileUsersAgentRestartFails(t *testing.T) {
 	before["cluster-rs0-1"]++
 	assert.Equal(t, before, killed, "the next reconcile retries only the failed restart")
 	assert.NotContains(t, getInternalUsersSecret(t, r, cr).Annotations, naming.AnnotationPendingRestarts)
+}
+
+// If the new credentials cannot be stored, no container may restart: it would
+// read a secret that MongoDB does not match yet.
+func TestReconcileUsersStoreFails(t *testing.T) {
+	t.Parallel()
+
+	killed := 0
+	r, cr, _ := usersTestReconciler(t, func(*ReconcilePerconaServerMongoDB, *api.PerconaServerMongoDB, string) error {
+		killed++
+		return nil
+	})
+	r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+			if obj.GetName() == api.InternalUserSecretName(cr) {
+				return errors.New("conflict")
+			}
+			return c.Update(ctx, obj, opts...)
+		},
+	})
+
+	require.ErrorContains(t, r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets), "update internal sys users secret")
+	assert.Zero(t, killed)
+}
+
+func TestRestartTargets(t *testing.T) {
+	t.Parallel()
+
+	agent := naming.ContainerBackupAgent
+	pod := func(name string, containers ...string) corev1.Pod {
+		p := corev1.Pod{Name: name}
+		for _, c := range containers {
+			p.Spec.Containers = append(p.Spec.Containers, corev1.Container{Name: c})
+		}
+		return p
+	}
+	pods := []corev1.Pod{
+		pod("rs0-0", "mongod", agent),
+		pod("rs0-1", "mongod", agent),
+		pod("mongos-0", "mongos"),
+	}
+
+	tests := map[string]struct {
+		pending []string
+		want    []string
+	}{
+		"container on every pod that has it": {
+			pending: []string{agent},
+			want:    []string{agent + "/rs0-0", agent + "/rs0-1"},
+		},
+		"one pod": {
+			pending: []string{agent + "/rs0-1"},
+			want:    []string{agent + "/rs0-1"},
+		},
+		"pod that is gone": {
+			pending: []string{agent + "/rs0-5"},
+			want:    nil,
+		},
+		"each pod once": {
+			pending: []string{agent + "/rs0-1", agent},
+			want:    []string{agent + "/rs0-1", agent + "/rs0-0"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var got []string
+			for _, target := range restartTargets(tt.pending, pods) {
+				got = append(got, target.container+"/"+target.pod.Name)
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
 func TestContainerRestarted(t *testing.T) {

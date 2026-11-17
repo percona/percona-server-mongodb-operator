@@ -274,9 +274,9 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// IsAuthError reports whether err comes from the authentication handshake.
+// isAuthError reports whether err comes from the authentication handshake.
 // That includes network errors during the handshake; see IsAuthenticationFailed.
-func IsAuthError(err error) bool {
+func isAuthError(err error) bool {
 	var authErr *auth.Error
 	return errors.As(err, &authErr)
 }
@@ -300,7 +300,7 @@ func isTransientError(err error) bool {
 		return false
 	}
 
-	if IsAuthError(err) {
+	if isAuthError(err) {
 		return false
 	}
 

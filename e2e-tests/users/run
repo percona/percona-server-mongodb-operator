@@ -47,15 +47,21 @@ fi
 backup_name="backup-local-s3"
 psmdb="some-name"
 
-# Prints "pod uid restartCount" of a container for each cluster pod and checks
-# that all three pods were read.
+# Prints "pod uid restartCount" of a container for each cluster pod, with -1
+# when a pod has no status for the container yet.
 container_restarts() {
-	local container=$1 out
-	out=$(kubectl_bin get pods -l app.kubernetes.io/instance="$psmdb" -o json \
+	local container=$1
+	kubectl_bin get pods -l app.kubernetes.io/instance="$psmdb" -o json \
 		| jq -r --arg c "$container" '.items[] | "\(.metadata.name) \(.metadata.uid) \(
-			[.status.containerStatuses[] | select(.name == $c) | .restartCount] | first)"' | sort)
+			[.status.containerStatuses[] | select(.name == $c) | .restartCount] | first // -1)"' | sort
+}
+
+# Same as container_restarts, and fails unless all three pods were read.
+container_restarts_all() {
+	local out
+	out=$(container_restarts "$1")
 	if [[ $(wc -l <<<"$out") -ne 3 ]]; then
-		echo "ERROR: expected 3 pods with ${container}, got: ${out}" >&2
+		echo "ERROR: expected 3 pods with $1, got: ${out}" >&2
 		exit 1
 	fi
 	echo "$out"
@@ -66,20 +72,27 @@ container_restarts() {
 # restarts from before the change as argument, it also waits until each agent
 # restarted (or its pod was replaced), so it runs with the new credentials.
 wait_users_applied() {
-	local agents_before=$1 agents start=$SECONDS
+	local agents_before=$1 agents start short=0
 
 	wait_for_users_synced "$psmdb"
 	if [[ -n $agents_before ]]; then
 		echo -n "waiting for the backup agents to restart"
+		start=$SECONDS
 		until
-			agents=$(container_restarts backup-agent)
+			agents=$(container_restarts backup-agent || :)
 			awk 'NR == FNR { uid[$1] = $2; n[$1] = $3; next }
 				!($1 in uid) || ($2 == uid[$1] && $3 <= n[$1]) { stale = 1 }
 				END { exit stale }' <(echo "$agents_before") <(echo "$agents")
 		do
-			if ((SECONDS - start >= 300)); then
+			# A short read is not a state: a pod is gone or the API is down.
+			if [[ $(wc -l <<<"$agents") -ne 3 ]]; then
+				short=$((short + 1))
+			else
+				short=0
+			fi
+			if ((SECONDS - start >= 300 || short >= 12)); then
 				echo
-				echo "ERROR: backup agents did not restart in 300s, before: ${agents_before}, now: ${agents}" >&2
+				echo "ERROR: backup agents did not restart in $((SECONDS - start))s, before: ${agents_before}, now: ${agents}" >&2
 				exit 1
 			fi
 			echo -n .
@@ -91,7 +104,7 @@ wait_users_applied() {
 	kubectl_bin wait --for=condition=Ready pod -l app.kubernetes.io/instance="$psmdb" --timeout=300s
 }
 
-mongod_before=$(container_restarts mongod)
+mongod_before=$(container_restarts_all mongod)
 
 desc 'change MONGODB_DATABASE_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpassencrypted"
@@ -103,7 +116,7 @@ check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'change MONGODB_BACKUP_PASSWORD'
-agents=$(container_restarts backup-agent)
+agents=$(container_restarts_all backup-agent)
 patch_secret "some-users" "MONGODB_BACKUP_PASSWORD" "$newpassencrypted"
 wait_users_applied "$agents"
 user=$(getUserData "some-users" "MONGODB_BACKUP_USER")
@@ -112,7 +125,7 @@ check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'change MONGODB_BACKUP_USER'
-agents=$(container_restarts backup-agent)
+agents=$(container_restarts_all backup-agent)
 newnameencrypted=$(echo -n "backup2" | base64)
 patch_secret "some-users" "MONGODB_BACKUP_USER" "$newnameencrypted"
 wait_users_applied "$agents"
@@ -159,7 +172,7 @@ check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'remove users secret'
-agents=$(container_restarts backup-agent)
+agents=$(container_restarts_all backup-agent)
 kubectl_bin delete secret some-users
 wait_users_applied "$agents"
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
@@ -169,7 +182,7 @@ check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 desc 'update all users'
-agents=$(container_restarts backup-agent)
+agents=$(container_restarts_all backup-agent)
 kubectl_bin apply -f "${conf_dir}/secrets.yml"
 wait_users_applied "$agents"
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
@@ -189,7 +202,7 @@ check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 desc 'secret without userAdmin'
-agents=$(container_restarts backup-agent)
+agents=$(container_restarts_all backup-agent)
 kubectl_bin apply -f "${test_dir}/conf/secrets-2.yml"
 wait_users_applied "$agents"
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
@@ -199,7 +212,7 @@ check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 desc 'no mongod restarts during the user changes'
-mongod_after=$(container_restarts mongod)
+mongod_after=$(container_restarts_all mongod)
 if [[ $mongod_after != "$mongod_before" ]]; then
 	echo "ERROR: mongod restarted while system users changed (pod uid restarts), before:" >&2
 	echo "$mongod_before" >&2

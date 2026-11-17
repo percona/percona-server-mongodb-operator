@@ -9,6 +9,7 @@ import (
 	mgo "go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/auth"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/topology"
 
 	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -37,6 +38,18 @@ func TestLivenessDialErrors(t *testing.T) {
 			dialErr: wrap(driver.Error{Code: 18, Message: "Authentication failed."}),
 			alive:   true,
 		},
+		"login rejected, inside a connection error": {
+			dialErr: wrap(topology.ConnectionError{Wrapped: driver.Error{Code: 18, Message: "Authentication failed."}}),
+			alive:   true,
+		},
+		"server error, other code": {
+			dialErr: wrap(mgo.CommandError{Code: 13, Name: "Unauthorized", Message: "command requires authentication"}),
+			alive:   false,
+		},
+		"server shutting down": {
+			dialErr: wrap(driver.Error{Code: 11600, Message: "interrupted at shutdown"}),
+			alive:   false,
+		},
 		"handshake failed without a server reply": {
 			dialErr: wrap(&auth.Error{}),
 			alive:   false,
@@ -47,6 +60,7 @@ func TestLivenessDialErrors(t *testing.T) {
 		},
 	}
 
+	// No t.Parallel: the cases replace the package-level dial.
 	for name, tt := range tests {
 		dial = func(context.Context, *db.Config) (mongo.Client, error) {
 			return nil, tt.dialErr

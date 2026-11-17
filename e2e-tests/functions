@@ -2167,7 +2167,7 @@ wait_for_users_synced() {
 	do
 		state=$(kubectl_bin get psmdb "$cluster" -o jsonpath='{.status.state}: {.status.message}' || :)
 		# An empty read is not a state: the object is gone or the API is down.
-		if [[ -z $state || -z $got ]]; then
+		if [[ -z $state || -z $want || -z $got ]]; then
 			empty=$((empty + 1))
 		else
 			empty=0
