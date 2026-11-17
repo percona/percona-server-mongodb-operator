@@ -664,6 +664,8 @@ func (r *ReconcilePerconaServerMongoDBRestore) restoreGroups(
 	return set.GetDataBearing(), nil
 }
 
+var errNoReadyDataBearingPod = errors.New("no ready data-bearing pod")
+
 // restorePod returns a pod to exec PBM commands in, along with the group it belongs to.
 func (r *ReconcilePerconaServerMongoDBRestore) restorePod(
 	ctx context.Context,
@@ -692,5 +694,5 @@ func (r *ReconcilePerconaServerMongoDBRestore) restorePod(
 		}
 	}
 
-	return nil, nil, errors.Errorf("no ready data-bearing pod in replset %s", rs.Name)
+	return nil, nil, errors.Wrapf(errNoReadyDataBearingPod, "replset %s", rs.Name)
 }

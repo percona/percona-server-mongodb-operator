@@ -211,11 +211,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	meta := backup.BackupMeta{}
 
-	err = retry.OnError(transientErrorBackoff, func(err error) bool {
+	isRetriable := func(err error) bool {
 		return isTransientNetworkError(err) ||
 			isContainerUnavailableError(err) ||
+			errors.Is(err, errNoReadyDataBearingPod) ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
-	}, func() error {
+	}
+
+	err = retry.OnError(transientErrorBackoff, isRetriable, func() error {
 		stdoutBuf.Reset()
 		stderrBuf.Reset()
 
