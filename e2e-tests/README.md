@@ -116,7 +116,7 @@ Tests can also be run one-by-one. Prefer the make target (handles both Python an
 make e2e-test TEST=init-deploy
 ```
 
-HTML and JUnit reports are written to `e2e-tests/reports/` by default. Override or disable with `REPORT_OPTS`:
+HTML and JUnit reports are written to `e2e-tests/reports/` and Allure results to `e2e-tests/allure-results/` by default (see [Allure report](#allure-report)). Override or disable with `REPORT_OPTS`:
 
 ```
 make e2e-test TEST=init-deploy REPORT_OPTS=
@@ -198,6 +198,49 @@ Run tests matching a pattern:
 ```
 uv run pytest e2e-tests/ -k "init"
 ```
+
+### Allure report
+
+`make e2e-test` writes Allure results to `e2e-tests/allure-results/`. Results from several runs add up in that folder; delete it to start a clean report.
+
+To view the report, install the [Allure 2 CLI](https://allurereport.org/docs/install/) (needs Java), then run:
+
+```
+make allure-report
+```
+
+It generates `e2e-tests/allure-report/` and opens it in a browser. History and trends are kept between runs of this target.
+
+What the report contains:
+
+* One Allure test per pytest test case, grouped by e2e test (the test directory). A bash test shows as one test without steps.
+* Steps from the shared helpers in `lib/` and `conftest.py` (deploy operator, apply CR, wait for pods, mongosh calls).
+* On failure: operator logs, Kubernetes resources, events, PBM status and mongod logs. For a bash test, also the last 1000 lines of the script output.
+* Passwords in `user:password@host` and `pwd: ...` are masked in step titles, attachments and kubectl error messages. Other secret formats are not.
+
+When adding code:
+
+* Mark a new shared helper as a step with `@step` from `lib.allure_support`. The title is formatted with the call arguments:
+
+  ```python
+  from lib.allure_support import step
+
+
+  @step("Wait for backup {backup_name} to be {target_state}")
+  def wait_backup(backup_name: str, target_state: str = "ready", timeout: int = 600) -> None: ...
+  ```
+
+* Link a test to Jira with `issue()` from `lib.allure_support`, not `@allure.issue` (it is untyped and fails `make py-check`):
+
+  ```python
+  from lib.allure_support import issue
+
+
+  @issue("K8SPSMDB-1753")
+  def test_upgrade(self) -> None: ...
+  ```
+
+* Attach text with `attach_text()`, which masks passwords, instead of `allure.attach()`.
 
 ## Using environment variables to customize the testing process
 
