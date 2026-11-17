@@ -564,6 +564,13 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		return nil
 	}
 
+	// Health checks of two statefulsets can see the same heartbeats and replace a member of each at once.
+	if other := shrinkingReplsetStatefulSet(sc); other != "" {
+		log.Info("PVC shrink waiting for shrink of another statefulset in the replset", "other", other)
+		revertVCT()
+		return nil
+	}
+
 	isBackup, err := r.isBackupRunning(ctx, sc.cr)
 	if err != nil {
 		return errors.Wrap(err, "check active backups")
@@ -807,6 +814,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// PVC deletion waits for its pod to go away, make sure the pod is being deleted.
 		if pvc.DeletionTimestamp != nil {
 			log.Info("Waiting for PVC to be deleted", "pvc", pvc.Name, "pod", pod.Name)
+			if pod.DeletionTimestamp == nil && isPodReady(pod) && !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
+				return nil
+			}
 			if err := r.client.Delete(ctx, &pod); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrapf(err, "delete pod %s", pod.Name)
 			}
@@ -832,7 +842,12 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 			return nil
 		}
 
-		// Pod not Ready yet (initial sync in progress), wait
+		// The readiness probe can report a member in initial sync as Ready, so wait
+		// for every member, including this one, to be healthy.
+		if !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
+			return nil
+		}
+
 		if !isPodReady(pod) {
 			log.Info("Waiting for pod to become ready", "pod", pod.Name)
 			return nil
@@ -859,12 +874,6 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 				log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				return nil
 			}
-		}
-
-		// A freshly wiped member reports Ready until it receives the replset config,
-		// so wait for every member, including this one, to be healthy.
-		if !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
-			return nil
 		}
 
 		log.Info("Pod shrink complete", "pod", pod.Name)
@@ -904,7 +913,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 		return false
 	}
 
-	rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin)
+	// Don't block the reconcile on retries, e.g. during an election. The next reconcile checks again.
+	rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin, mongo.WithoutRetry())
 	if err != nil {
 		log.Info("PVC shrink waiting: failed to create mongo client for RS health check", "error", err)
 		return false
@@ -921,7 +931,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 		return false
 	}
 
-	member := unhealthyRSMember(rsStatus)
+	replacingHost := r.shrinkReplacingHost(ctx, sc, replacing)
+	member := unhealthyRSMember(rsStatus, replacingHost)
 	if member == nil {
 		if state != nil && state.WaitingFor != "" {
 			state.WaitingFor = ""
@@ -937,34 +948,60 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 	if state != nil && state.WaitingFor != waitingFor {
 		state.WaitingFor = waitingFor
 		sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
-		if !r.isShrinkReplacingMember(ctx, sc, replacing, member) {
+		if replacingHost == "" || member.Name != replacingHost {
 			r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkWaiting", "Wait", "Shrink of %s is waiting: %s", sc.sts.Name, waitingFor)
 		}
 	}
 	return false
 }
 
-func (r *ReconcilePerconaServerMongoDB) isShrinkReplacingMember(ctx context.Context, sc shrinkContext, replacing *corev1.Pod, member *mongo.Member) bool {
+func (r *ReconcilePerconaServerMongoDB) shrinkReplacingHost(ctx context.Context, sc shrinkContext, replacing *corev1.Pod) string {
 	if replacing == nil {
-		return false
+		return ""
 	}
 	host, err := psmdb.MongoHost(ctx, r.client, sc.cr, sc.cr.Spec.ClusterServiceDNSMode, sc.replset, sc.replset.Expose.Enabled, *replacing)
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "get mongo host", "pod", replacing.Name)
-		return false
+		return ""
 	}
-	return member.Name == host
+	return host
 }
 
-func unhealthyRSMember(status mongo.Status) *mongo.Member {
+// unhealthyRSMember returns an unhealthy member, preferring others over the one being replaced.
+func unhealthyRSMember(status mongo.Status, replacingHost string) *mongo.Member {
+	var replacing *mongo.Member
 	for _, member := range status.Members {
 		switch member.State {
 		case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 		default:
+			if replacingHost != "" && member.Name == replacingHost {
+				replacing = member
+				continue
+			}
 			return member
 		}
 	}
-	return nil
+	return replacing
+}
+
+// shrinkingReplsetStatefulSet returns another statefulset of the same replset with a shrink in progress.
+func shrinkingReplsetStatefulSet(sc shrinkContext) string {
+	if !sc.isRSComponent || sc.replset == nil {
+		return ""
+	}
+	for _, name := range []string{
+		naming.MongodStatefulSetName(sc.cr, sc.replset),
+		naming.NonVotingStatefulSetName(sc.cr, sc.replset),
+		naming.HiddenStatefulSetName(sc.cr, sc.replset),
+	} {
+		if name == sc.sts.Name {
+			continue
+		}
+		if _, ok := sc.cr.GetPVCShrinkState(name); ok {
+			return name
+		}
+	}
+	return ""
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
