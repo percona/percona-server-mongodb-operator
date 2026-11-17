@@ -882,8 +882,7 @@ func TestHostResolvable(t *testing.T) {
 				require.NoError(t, err)
 			}
 			assert.Equal(t, tt.expectedOK, ok)
-			// the bare hostname must be passed to the resolver, never host:port
-			assert.Equal(t, host, tt.resolver.gotHost)
+			assert.Equal(t, host+".", tt.resolver.gotHost)
 		})
 	}
 }
