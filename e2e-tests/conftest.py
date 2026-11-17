@@ -773,7 +773,8 @@ def deploy_s3_storage() -> Generator[None]:
         )
 
     logger.info(f"Creating S3 bucket: {bucket}")
-    aws_cli_s3(f"s3 mb s3://{bucket}", endpoint)
+    # The S3 gateway starts after the pod is Ready; retry until it accepts connections.
+    retry(lambda: aws_cli_s3(f"s3 mb s3://{bucket}", endpoint), max_attempts=12, delay=10)
 
     yield
 
