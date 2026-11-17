@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -122,6 +124,20 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return errors.Wrap(err, "manage sys users")
 	}
 
+	// MongoDB has the new credentials now. Store them before restarting any
+	// container: the operator connects with the internal secret, and if it kept
+	// the old credentials after a failed restart, the operator could not log in
+	// again and would never retry, because users are only synced in "ready".
+	// Restarted containers also read their credentials from this secret.
+	internalSysSecretObj.Data = sysUsersSecretObj.Data
+	if cr.CompareVersion("1.19.0") >= 0 {
+		internalSysSecretObj.Data = getInternalSecretData(cr, &sysUsersSecretObj)
+	}
+	err = r.client.Update(ctx, &internalSysSecretObj)
+	if err != nil {
+		return errors.Wrap(err, "update internal sys users secret")
+	}
+
 	if len(containerNames) > 0 {
 		rsPodList, err := r.getMongodPods(ctx, cr)
 		if err != nil {
@@ -154,42 +170,104 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		}
 	}
 
-	internalSysSecretObj.Data = sysUsersSecretObj.Data
-	if cr.CompareVersion("1.19.0") >= 0 {
-		internalSysSecretObj.Data = getInternalSecretData(cr, &sysUsersSecretObj)
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) killContainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
+	log := logf.FromContext(ctx)
+
+	var errs []error
+	for i := range pods {
+		pod := &pods[i]
+		if !hasContainer(pod, containerName) {
+			continue
+		}
+
+		log.Info("Restarting container", "pod", pod.Name, "container", containerName)
+		before := containerStatus(pod, containerName)
+
+		err := retry.OnError(retry.DefaultBackoff, func(_ error) bool { return true }, func() error {
+			err := r.execKill(ctx, pod, containerName)
+			if err == nil {
+				return nil
+			}
+			// "kill 1" ends the exec session together with the container, so the
+			// exec can fail although the container was restarted.
+			if r.containerRestarted(ctx, pod, containerName, before) {
+				log.Info("Container restarted, ignoring the exec error", "pod", pod.Name, "container", containerName, "error", err.Error())
+				return nil
+			}
+			return err
+		})
+		if err != nil {
+			errs = append(errs, errors.Wrapf(err, "restart %s in pod %s", containerName, pod.Name))
+		}
 	}
-	err = r.client.Update(ctx, &internalSysSecretObj)
+
+	return stderrors.Join(errs...)
+}
+
+func (r *ReconcilePerconaServerMongoDB) execKill(ctx context.Context, pod *corev1.Pod, containerName string) error {
+	stderrBuf := &bytes.Buffer{}
+
+	err := r.clientcmd.Exec(ctx, pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
 	if err != nil {
-		return errors.Wrap(err, "update internal sys users secret")
+		return errors.Wrap(err, "exec command in pod")
+	}
+
+	if stderrBuf.Len() != 0 {
+		return errors.Errorf("exec command return error: %s", stderrBuf.String())
 	}
 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) killContainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
-	for _, pod := range pods {
-		for _, c := range pod.Spec.Containers {
-			if c.Name == containerName {
-				logf.FromContext(ctx).Info("Restarting container", "pod", pod.Name, "container", c.Name)
+// containerRestarted reports whether the container stopped or started again
+// since before was taken. The kubelet reports a restart with a delay, so it
+// checks the pod a few times.
+func (r *ReconcilePerconaServerMongoDB) containerRestarted(ctx context.Context, pod *corev1.Pod, containerName string, before *corev1.ContainerStatus) bool {
+	poll := r.podRestartPoll
+	if poll <= 0 {
+		poll = defaultPodRestartPoll
+	}
 
-				err := retry.OnError(retry.DefaultBackoff, func(_ error) bool { return true }, func() error {
-					stderrBuf := &bytes.Buffer{}
+	for range 10 {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(poll):
+		}
 
-					err := r.clientcmd.Exec(ctx, &pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
-					if err != nil {
-						return errors.Wrap(err, "exec command in pod")
-					}
+		current := new(corev1.Pod)
+		if err := r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, current); err != nil {
+			continue
+		}
 
-					if stderrBuf.Len() != 0 {
-						return errors.Errorf("exec command return error: %s", stderrBuf.String())
-					}
+		now := containerStatus(current, containerName)
+		if now == nil || before == nil {
+			continue
+		}
+		if now.State.Running == nil || now.RestartCount != before.RestartCount || now.ContainerID != before.ContainerID {
+			return true
+		}
+	}
 
-					return nil
-				})
-				if err != nil {
-					return errors.Wrap(err, "failed to restart container")
-				}
-			}
+	return false
+}
+
+func hasContainer(pod *corev1.Pod, name string) bool {
+	for _, c := range pod.Spec.Containers {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func containerStatus(pod *corev1.Pod, name string) *corev1.ContainerStatus {
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].Name == name {
+			return &pod.Status.ContainerStatuses[i]
 		}
 	}
 	return nil
