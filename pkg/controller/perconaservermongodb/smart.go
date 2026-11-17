@@ -23,7 +23,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(
@@ -218,13 +217,6 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 			continue
 		}
 
-		// after a failed step down the old primary is a secondary, don't restart it without a new primary
-		if replset.Size > 1 {
-			if err := r.checkReplsetHasPrimary(ctx, cr, replset, pod); err != nil {
-				return errors.Wrapf(err, "can't update secondary pod %s", pod.Name)
-			}
-		}
-
 		log.Info("apply changes to secondary pod", "pod", pod.Name)
 
 		if err := updatePod(&pod); err != nil {
@@ -305,34 +297,8 @@ const (
 	secondaryCatchUpTimeout = 2 * time.Minute
 )
 
-func (r *ReconcilePerconaServerMongoDB) checkReplsetHasPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pod corev1.Pod) error {
-	log := logf.FromContext(ctx)
-
-	client, err := r.standaloneClientWithRole(ctx, cr, rs, api.RoleClusterAdmin, pod)
-	if err != nil {
-		return errors.Wrap(err, "failed to create standalone client")
-	}
-	defer func() {
-		if err := client.Disconnect(ctx); err != nil {
-			log.Error(err, "failed to close connection")
-		}
-	}()
-
-	status, err := client.RSStatus(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get replset status")
-	}
-	for _, m := range status.Members {
-		if m.State == mongo.MemberStatePrimary {
-			return nil
-		}
-	}
-
-	return errors.New("no primary in replset")
-}
-
 func isSSLChanged(sfs *appsv1.StatefulSet, pod *corev1.Pod) bool {
-	for _, key := range []string{"percona.com/ssl-hash", "percona.com/ssl-internal-hash"} {
+	for _, key := range []string{naming.AnnotationSSLHash, naming.AnnotationSSLInternalHash} {
 		if sfs.Spec.Template.Annotations[key] != pod.Annotations[key] {
 			return true
 		}

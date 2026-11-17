@@ -802,23 +802,27 @@ func (client *mongoClient) WaitSecondaryCatchUp(ctx context.Context, maxLag, tim
 	}
 }
 
-// electableSecondaryLag returns the least lagging electable secondary and its lag behind the primary.
 func (client *mongoClient) electableSecondaryLag(ctx context.Context) (string, time.Duration, error) {
 	cfg, err := client.ReadConfig(ctx)
 	if err != nil {
 		return "", 0, errors.Wrap(err, "read replset config")
 	}
 
+	status, err := client.RSStatus(ctx)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "get replset status")
+	}
+
+	return electableSecondaryLag(cfg, status)
+}
+
+// electableSecondaryLag returns the least lagging electable secondary and its lag behind the primary.
+func electableSecondaryLag(cfg RSConfig, status Status) (string, time.Duration, error) {
 	electable := make(map[string]bool, len(cfg.Members))
 	for _, m := range cfg.Members {
 		if !m.ArbiterOnly && !m.Hidden && m.Priority > 0 && m.Votes > 0 {
 			electable[m.Host] = true
 		}
-	}
-
-	status, err := client.RSStatus(ctx)
-	if err != nil {
-		return "", 0, errors.Wrap(err, "get replset status")
 	}
 
 	var primaryOptime time.Time
@@ -840,6 +844,9 @@ func (client *mongoClient) electableSecondaryLag(ctx context.Context) (string, t
 		if lag < bestLag {
 			best, bestLag = m.Name, lag
 		}
+	}
+	if best == "" {
+		return "", 0, errors.New("no electable secondary found")
 	}
 
 	return best, bestLag, nil
