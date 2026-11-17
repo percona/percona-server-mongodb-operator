@@ -248,3 +248,39 @@ func testVol(size string) *VolumeSpec {
 		},
 	}}
 }
+
+func TestInstanceSetDefaultsInheritsVPA(t *testing.T) {
+	cr := testCR(currentCRVersion, TLSModeDisabled)
+	rs := defaultedReplset(t)
+	rs.VPA = &ComponentVPASpec{MaxAllowed: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("8Gi")}}
+
+	t.Run("data-bearing instance inherits a copy", func(t *testing.T) {
+		inst := &InstanceSpec{Name: "hot", Replicas: 3, VolumeSpec: testVol("1Gi")}
+		require.NoError(t, inst.SetDefaults(cr, rs))
+
+		require.NotNil(t, inst.VPA)
+		assert.Equal(t, "8Gi", inst.VPA.MaxAllowed.Memory().String())
+
+		inst.VPA.MaxAllowed[corev1.ResourceMemory] = resource.MustParse("1Gi")
+		assert.Equal(t, "8Gi", rs.VPA.MaxAllowed.Memory().String(), "the replica set's vpa must not be shared")
+	})
+
+	t.Run("declared vpa wins whole", func(t *testing.T) {
+		inst := &InstanceSpec{Name: "hot", Replicas: 3, VolumeSpec: testVol("1Gi"),
+			VPA: &ComponentVPASpec{ObjectName: "hot-vpa"}}
+		require.NoError(t, inst.SetDefaults(cr, rs))
+
+		assert.Equal(t, "hot-vpa", inst.VPA.ObjectName)
+		assert.Empty(t, inst.VPA.MaxAllowed, "fields are not merged from the replica set")
+	})
+
+	t.Run("arbiters inherit nothing", func(t *testing.T) {
+		explicit := &InstanceSpec{Name: "arb", Replicas: 1, RSConfig: &MemberConfigSpec{ArbiterOnly: new(true)}}
+		require.NoError(t, explicit.SetDefaults(cr, rs))
+		assert.Nil(t, explicit.VPA)
+
+		reserved := &InstanceSpec{Name: ReservedGroupArbiter, Replicas: 1}
+		require.NoError(t, reserved.SetDefaults(cr, rs))
+		assert.Nil(t, reserved.VPA, "a reserved arbiter without rsConfig is an arbiter")
+	})
+}

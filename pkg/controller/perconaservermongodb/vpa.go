@@ -19,6 +19,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
@@ -61,76 +62,56 @@ func (r *ReconcilePerconaServerMongoDB) reconcileVPARecommendations(ctx context.
 		Message: "reading VerticalPodAutoscaler recommendations",
 	})
 
+	// live collects the status keys of every component VPA manages, so that
+	// entries of removed groups, replsets or components can be dropped.
+	live := map[string]struct{}{}
+
 	for _, rs := range cr.Spec.Replsets {
 		if rs == nil {
 			continue
 		}
 
-		if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentMongod, rs.Resources, rs.VPA); err != nil {
-			return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentMongod, rs.Name)
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return errors.Wrapf(err, "resolve member groups for replset '%s'", rs.Name)
 		}
 
-		if rs.NonVoting.Enabled {
-			if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentNonVoting, rs.NonVoting.Resources, rs.NonVoting.VPA); err != nil {
-				return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentNonVoting, rs.Name)
-			}
-		}
-
-		if rs.Hidden.Enabled {
-			if err := r.reconcileComponentVPA(ctx, cr, rs.Name, naming.ComponentHidden,
-				rs.Hidden.Resources, rs.Hidden.VPA); err != nil {
-				return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentHidden, rs.Name)
+		// Every data-bearing group is a StatefulSet of its own and is sized from
+		// its own VPA object. Arbiters are never sized from recommendations.
+		for _, g := range set.GetDataBearing() {
+			key := naming.GroupVPAStatusKey(cr, g.STSName, g.DataBearing)
+			live[key] = struct{}{}
+			if err := r.reconcileComponentVPA(ctx, cr, key, g.ContainerName, g.MultiAZ.Resources, g.VPA); err != nil {
+				return errors.Wrapf(err, "failed to reconcile VPA for group '%s' in replset '%s'", g.Name, rs.Name)
 			}
 		}
 	}
 
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		cfg := cr.Spec.Sharding.ConfigsvrReplSet
-		if err := r.reconcileComponentVPA(ctx, cr, cfg.Name, naming.ComponentConfigSrv, cfg.Resources, cfg.VPA); err != nil {
+		key := naming.VPAStatusKey(cfg.Name, naming.ComponentConfigSrv)
+		live[key] = struct{}{}
+		if err := r.reconcileComponentVPA(ctx, cr, key, managedContainer(naming.ComponentConfigSrv), cfg.Resources, cfg.VPA); err != nil {
 			return errors.Wrapf(err, "failed to reconcile VPA for component '%s' in replset '%s'", naming.ComponentConfigSrv, cfg.Name)
 		}
 	}
 
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos != nil {
 		mongos := cr.Spec.Sharding.Mongos
-		if err := r.reconcileComponentVPA(ctx, cr, "", naming.ComponentMongos, mongos.Resources, mongos.VPA); err != nil {
+		key := naming.VPAStatusKey("", naming.ComponentMongos)
+		live[key] = struct{}{}
+		if err := r.reconcileComponentVPA(ctx, cr, key, managedContainer(naming.ComponentMongos), mongos.Resources, mongos.VPA); err != nil {
 			return errors.Wrapf(err, "failed to reconcile VPA for component '%s'", naming.ComponentMongos)
 		}
 	}
 
-	cleanupStaleVPAStatus(cr)
+	cleanupStaleVPAStatus(cr, live)
 
 	return nil
 }
 
-func cleanupStaleVPAStatus(cr *api.PerconaServerMongoDB) {
-	live := map[string]struct{}{}
-	keep := func(rsName, component string) {
-		live[naming.VPAStatusKey(rsName, component)] = struct{}{}
-	}
-
-	for _, rs := range cr.Spec.Replsets {
-		if rs == nil {
-			continue
-		}
-
-		keep(rs.Name, naming.ComponentMongod)
-		if rs.NonVoting.Enabled {
-			keep(rs.Name, naming.ComponentNonVoting)
-		}
-		if rs.Hidden.Enabled {
-			keep(rs.Name, naming.ComponentHidden)
-		}
-	}
-
-	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
-		keep(cr.Spec.Sharding.ConfigsvrReplSet.Name, naming.ComponentConfigSrv)
-	}
-
-	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos != nil {
-		keep("", naming.ComponentMongos)
-	}
-
+// cleanupStaleVPAStatus drops status entries for components VPA no longer manages.
+func cleanupStaleVPAStatus(cr *api.PerconaServerMongoDB, live map[string]struct{}) {
 	for key := range cr.Status.VPAStatus {
 		if _, ok := live[key]; !ok {
 			delete(cr.Status.VPAStatus, key)
@@ -141,16 +122,14 @@ func cleanupStaleVPAStatus(cr *api.PerconaServerMongoDB) {
 func (r *ReconcilePerconaServerMongoDB) reconcileComponentVPA(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
-	rsName, component string,
+	statusKey, container string,
 	declared corev1.ResourceRequirements,
 	vpa *api.ComponentVPASpec,
 ) error {
-	container := managedContainer(component)
 	if container == "" {
 		return nil
 	}
 
-	statusKey := naming.VPAStatusKey(rsName, component)
 	rec, err := r.vpaRecommendationFor(ctx, cr, statusKey, container, vpa)
 	if err != nil {
 		return err

@@ -64,6 +64,10 @@ type Group struct {
 	Env                      []corev1.EnvVar
 	EnvFrom                  []corev1.EnvFromSource
 
+	// VPA is the group's VerticalPodAutoscaler configuration. Always nil for
+	// groups that hold no data.
+	VPA *api.ComponentVPASpec
+
 	// MongoDB configuration
 	Member MemberConfig
 

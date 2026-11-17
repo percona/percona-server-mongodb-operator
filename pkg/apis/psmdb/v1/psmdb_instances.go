@@ -39,6 +39,7 @@ func IsReservedGroupName(name string) bool {
 // InstanceSpec describes one named group of members inside a replica set.
 // +kubebuilder:validation:XValidation:rule="self.?rsConfig.?arbiterOnly.orValue(false) || has(self.volumeSpec)",message="volumeSpec is required for a data-bearing instance"
 // +kubebuilder:validation:XValidation:rule="!self.?rsConfig.?arbiterOnly.orValue(false) || !has(self.volumeSpec)",message="arbiterOnly instance must not declare volumeSpec: arbiters use an emptyDir for the mongod data path"
+// +kubebuilder:validation:XValidation:rule="!self.?rsConfig.?arbiterOnly.orValue(false) || !has(self.vpa)",message="arbiterOnly instance must not declare vpa: arbiters are not sized from VPA recommendations"
 // +kubebuilder:validation:XValidation:rule="!(self.name in ['nv','nonvoting','cfg','mongos','search'])",message="instance name is reserved by the operator: nv, nonvoting, cfg, mongos and search collide with generated object names or component labels (did you mean nonVoting?)"
 type InstanceSpec struct {
 	MultiAZ `json:",inline"`
@@ -73,6 +74,11 @@ type InstanceSpec struct {
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Env                      []corev1.EnvVar            `json:"env,omitempty"`
 	EnvFrom                  []corev1.EnvFromSource     `json:"envFrom,omitempty"`
+
+	// VPA configures how this group is sized from VerticalPodAutoscaler
+	// recommendations. When omitted the group inherits the replica set's vpa.
+	// The default VPA object name is "<statefulset>-vpa".
+	VPA *ComponentVPASpec `json:"vpa,omitempty"`
 }
 
 // MemberConfigSpec exposes the subset of MongoDB replica set member document fields a group controls.
@@ -206,6 +212,14 @@ func (i *InstanceSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) er
 
 	if i.ServiceAccountName == "" {
 		i.ServiceAccountName = rs.ServiceAccountName
+	}
+
+	// objectName is never inherited: CEL rejects it on a replica set with
+	// instances[], since one VPA object targets one StatefulSet.
+	// A reserved arbiter without rsConfig is an arbiter too.
+	isArbiter := i.IsArbiterOnly() || (i.Name == ReservedGroupArbiter && !i.HasMemberConfig())
+	if i.VPA == nil && rs.VPA != nil && !isArbiter {
+		i.VPA = rs.VPA.DeepCopy()
 	}
 
 	i.inheritMultiAZ(rs)

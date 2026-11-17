@@ -875,6 +875,19 @@ var _ = Describe("instances[] CRD validation", func() {
 				instanceMode(cr, dataInstance("hot", 3), arb)
 			},
 			"arbiterOnly instance must not declare volumeSpec"),
+		Entry("an arbiter instance with vpa",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				arb := arbiterInstance("arb")
+				arb.VPA = &psmdbv1.ComponentVPASpec{}
+				instanceMode(cr, dataInstance("hot", 3), arb)
+			},
+			"arbiterOnly instance must not declare vpa"),
+		Entry("a replica-set vpa.objectName alongside instances[]",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3))
+				cr.Spec.Replsets[0].VPA = &psmdbv1.ComponentVPASpec{ObjectName: "shared"}
+			},
+			"vpa.objectName must be absent when instances[] is set"),
 
 		// --- reserved names ----------------------------------------------
 		Entry("a name that collides with a generated object",
@@ -1039,6 +1052,18 @@ var _ = Describe("instances[] CRD validation", func() {
 		Entry("the reserved nonVoting name, which is not the reserved-collision one",
 			func(cr *psmdbv1.PerconaServerMongoDB) {
 				instanceMode(cr, dataInstance("hot", 3), dataInstance(psmdbv1.ReservedGroupNonVoting, 1))
+			}),
+		Entry("a replica-set vpa without objectName, inherited by every instance",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				instanceMode(cr, dataInstance("hot", 3), dataInstance("cold", 1))
+				cr.Spec.Replsets[0].VPA = &psmdbv1.ComponentVPASpec{
+					MaxAllowed: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("8Gi")}}
+			}),
+		Entry("an instance naming its own VPA object",
+			func(cr *psmdbv1.PerconaServerMongoDB) {
+				hot := dataInstance("hot", 3)
+				hot.VPA = &psmdbv1.ComponentVPASpec{ObjectName: "hot-recommendations"}
+				instanceMode(cr, hot)
 			}),
 		Entry("a name at the derived-name budget",
 			func(cr *psmdbv1.PerconaServerMongoDB) {

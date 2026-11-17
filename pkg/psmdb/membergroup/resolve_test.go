@@ -900,3 +900,50 @@ func TestArbiterFollowsMongodGroupConfiguration(t *testing.T) {
 		"and therefore its content, whichever group writes it last")
 	assert.Equal(t, api.MongoConfiguration(mongodOwn), arbiter.Configuration)
 }
+
+func TestResolveCarriesVPA(t *testing.T) {
+	vpa := func(name string) *api.ComponentVPASpec { return &api.ComponentVPASpec{ObjectName: name} }
+
+	t.Run("legacy roles", func(t *testing.T) {
+		rs := legacyRS("rs0", 3)
+		rs.VPA = vpa("rs")
+		rs.NonVoting = api.NonVotingSpec{Enabled: true, Size: 1, VolumeSpec: vol("1Gi"), VPA: vpa("nv")}
+		rs.Hidden = api.HiddenSpec{Enabled: true, Size: 1, VolumeSpec: vol("1Gi"), VPA: vpa("hidden")}
+		rs.Arbiter = api.Arbiter{Enabled: true, Size: 1}
+
+		set, err := Resolve(testCR(), rs)
+		require.NoError(t, err)
+
+		for name, want := range map[string]string{
+			naming.GroupMongod: "rs", naming.GroupNonVoting: "nv", naming.GroupHidden: "hidden",
+		} {
+			g, ok := set.GetByName(name)
+			require.True(t, ok, name)
+			require.NotNil(t, g.VPA, name)
+			assert.Equal(t, want, g.VPA.ObjectName, name)
+		}
+		arb, ok := set.GetByName(naming.GroupArbiter)
+		require.True(t, ok)
+		assert.Nil(t, arb.VPA)
+	})
+
+	t.Run("instances", func(t *testing.T) {
+		hot := inst("hot", 3, nil)
+		hot.VPA = vpa("hot")
+		arb := arbiterInst("arb", 1)
+		arb.VPA = vpa("arb") // CEL rejects this; Resolve must still not hand it out
+
+		set, err := Resolve(testCR(), instanceRS("rs0", hot, arb))
+		require.NoError(t, err)
+
+		g, ok := set.GetByName("hot")
+		require.True(t, ok)
+		require.NotNil(t, g.VPA)
+		assert.Equal(t, "hot", g.VPA.ObjectName)
+		assert.NotSame(t, hot.VPA, g.VPA, "resolved vpa must be a copy")
+
+		a, ok := set.GetByName("arb")
+		require.True(t, ok)
+		assert.Nil(t, a.VPA)
+	})
+}

@@ -73,6 +73,7 @@ func resolveInstances(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Grou
 			ContainerSecurityContext: inst.ContainerSecurityContext.DeepCopy(),
 			Env:                      copySlice(inst.Env),
 			EnvFrom:                  copySlice(inst.EnvFrom),
+			VPA:                      inst.VPA.DeepCopy(),
 			Member:                   member,
 			DataBearing:              !member.ArbiterOnly,
 			PrimaryEligible:          member.Votes > 0 && member.Priority > 0, // configuration only
@@ -84,6 +85,7 @@ func resolveInstances(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Grou
 
 		if !g.DataBearing {
 			g.VolumeSpec = nil
+			g.VPA = nil
 		}
 
 		finishIdentity(cr, rs, &g)
@@ -148,6 +150,7 @@ func resolveLegacy(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Group, 
 		ContainerSecurityContext: rs.ContainerSecurityContext.DeepCopy(),
 		Env:                      copySlice(rs.Env),
 		EnvFrom:                  copySlice(rs.EnvFrom),
+		VPA:                      rs.VPA.DeepCopy(),
 		Member: MemberConfig{
 			Priority: legacyDefaultPriority,
 			Votes:    legacyDefaultVotes,
@@ -195,6 +198,7 @@ func resolveLegacy(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Group, 
 			ContainerSecurityContext: rs.NonVoting.ContainerSecurityContext.DeepCopy(),
 			Env:                      copySlice(rs.Env),
 			EnvFrom:                  copySlice(rs.EnvFrom),
+			VPA:                      rs.NonVoting.VPA.DeepCopy(),
 			Member: MemberConfig{
 				Votes:    0,
 				Priority: 0,
@@ -221,6 +225,7 @@ func resolveLegacy(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Group, 
 			ContainerSecurityContext: rs.Hidden.ContainerSecurityContext.DeepCopy(),
 			Env:                      copySlice(rs.Env),
 			EnvFrom:                  copySlice(rs.EnvFrom),
+			VPA:                      rs.Hidden.VPA.DeepCopy(),
 			Member: MemberConfig{
 				Hidden:   true,
 				Votes:    legacyDefaultVotes,

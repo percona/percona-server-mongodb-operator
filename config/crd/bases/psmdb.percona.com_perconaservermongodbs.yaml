@@ -10768,6 +10768,29 @@ spec:
                                     type: string
                                 type: object
                             type: object
+                          vpa:
+                            properties:
+                              maxAllowed:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                type: object
+                              minAllowed:
+                                additionalProperties:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                  x-kubernetes-int-or-string: true
+                                type: object
+                              objectName:
+                                type: string
+                              stabilizationWindow:
+                                type: string
+                            type: object
                         required:
                         - name
                         - replicas
@@ -10778,6 +10801,9 @@ spec:
                         - message: 'arbiterOnly instance must not declare volumeSpec:
                             arbiters use an emptyDir for the mongod data path'
                           rule: '!self.?rsConfig.?arbiterOnly.orValue(false) || !has(self.volumeSpec)'
+                        - message: 'arbiterOnly instance must not declare vpa: arbiters
+                            are not sized from VPA recommendations'
+                          rule: '!self.?rsConfig.?arbiterOnly.orValue(false) || !has(self.vpa)'
                         - message: 'instance name is reserved by the operator: nv,
                             nonvoting, cfg, mongos and search collide with generated
                             object names or component labels (did you mean nonVoting?)'
@@ -16839,6 +16865,11 @@ spec:
                       an instance named hidden instead'
                     rule: '!has(self.instances) || (!self.?hidden.?enabled.orValue(false)
                       && self.?hidden.?size.orValue(0) == 0)'
+                  - message: 'vpa.objectName must be absent when instances[] is set:
+                      every instance inherits vpa and one VPA object targets one StatefulSet;
+                      set instances[].vpa.objectName instead'
+                    rule: '!has(self.instances) || self.?vpa.?objectName.orValue('''')
+                      == '''''
                 maxItems: 50
                 type: array
               revisionHistoryLimit:
@@ -26827,6 +26858,29 @@ spec:
                                       type: string
                                   type: object
                               type: object
+                            vpa:
+                              properties:
+                                maxAllowed:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  type: object
+                                minAllowed:
+                                  additionalProperties:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                    x-kubernetes-int-or-string: true
+                                  type: object
+                                objectName:
+                                  type: string
+                                stabilizationWindow:
+                                  type: string
+                              type: object
                           required:
                           - name
                           - replicas
@@ -26838,6 +26892,10 @@ spec:
                               arbiters use an emptyDir for the mongod data path'
                             rule: '!self.?rsConfig.?arbiterOnly.orValue(false) ||
                               !has(self.volumeSpec)'
+                          - message: 'arbiterOnly instance must not declare vpa: arbiters
+                              are not sized from VPA recommendations'
+                            rule: '!self.?rsConfig.?arbiterOnly.orValue(false) ||
+                              !has(self.vpa)'
                           - message: 'instance name is reserved by the operator: nv,
                               nonvoting, cfg, mongos and search collide with generated
                               object names or component labels (did you mean nonVoting?)'
@@ -32901,6 +32959,11 @@ spec:
                         an instance named hidden instead'
                       rule: '!has(self.instances) || (!self.?hidden.?enabled.orValue(false)
                         && self.?hidden.?size.orValue(0) == 0)'
+                    - message: 'vpa.objectName must be absent when instances[] is
+                        set: every instance inherits vpa and one VPA object targets
+                        one StatefulSet; set instances[].vpa.objectName instead'
+                      rule: '!has(self.instances) || self.?vpa.?objectName.orValue('''')
+                        == '''''
                   enabled:
                     type: boolean
                   mongos:

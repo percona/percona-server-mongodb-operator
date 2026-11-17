@@ -929,6 +929,7 @@ type PrimaryPreferTagSelectorSpec map[string]string
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?arbiter.?enabled.orValue(false) && self.?arbiter.?size.orValue(0) == 0)",message="arbiter must be absent when instances[] is set: declare an instance with rsConfig.arbiterOnly instead"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?nonvoting.?enabled.orValue(false) && self.?nonvoting.?size.orValue(0) == 0)",message="nonvoting must be absent when instances[] is set: declare an instance named nonVoting instead"
 // +kubebuilder:validation:XValidation:rule="!has(self.instances) || (!self.?hidden.?enabled.orValue(false) && self.?hidden.?size.orValue(0) == 0)",message="hidden must be absent when instances[] is set: declare an instance named hidden instead"
+// +kubebuilder:validation:XValidation:rule="!has(self.instances) || self.?vpa.?objectName.orValue('') == ''",message="vpa.objectName must be absent when instances[] is set: every instance inherits vpa and one VPA object targets one StatefulSet; set instances[].vpa.objectName instead"
 type ReplsetSpec struct {
 	MultiAZ `json:",inline"`
 
