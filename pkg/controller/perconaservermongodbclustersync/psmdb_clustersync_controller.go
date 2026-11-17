@@ -133,6 +133,14 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return reconcile.Result{}, errors.Wrapf(err, "get target cluster %s", targetNN)
 	}
 
+	svr, err := version.Server(ctx, r.clientcmd)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "fetch server version")
+	}
+	if err := target.CheckNSetDefaults(ctx, svr.Platform); err != nil {
+		return reconcile.Result{}, errors.Wrapf(err, "apply defaults to target cluster %s", targetNN)
+	}
+
 	tlsConf, err := r.loadTargetTLS(ctx, target)
 	if err != nil {
 		log.Info("target TLS certificates not usable, surfacing in status", "err", err.Error())
@@ -156,14 +164,6 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return r.requeueWithStatusError(ctx, cr, errors.Errorf(
 			"clustersync lease %s held by %q, not by this CR",
 			naming.ClusterSyncLeaseName(cr.Spec.ClusterName), foreignHolder))
-	}
-
-	svr, err := version.Server(ctx, r.clientcmd)
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "fetch server version")
-	}
-	if err := target.CheckNSetDefaults(ctx, svr.Platform); err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "apply defaults to target cluster %s", targetNN)
 	}
 
 	sourceURI, err := buildSourceURI(ctx, r.client, cr)
