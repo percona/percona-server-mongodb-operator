@@ -2152,7 +2152,7 @@ check_mongo_auth() {
 wait_for_users_synced() {
 	local cluster=$1
 	local timeout=${2:-600}
-	local secret internal want got start=$SECONDS
+	local secret internal want got state errors=0 start=$SECONDS
 
 	secret=$(kubectl_bin get psmdb "$cluster" -o jsonpath='{.spec.secrets.users}')
 	internal="internal-${cluster}-users"
@@ -2163,10 +2163,17 @@ wait_for_users_synced() {
 			| jq -cS --argjson want "${want:-null}" '.data // {} | with_entries(select(.key as $k | $want | has($k)))' || :)
 		[[ -n $want && $want == "$got" ]]
 	do
-		if ((SECONDS - start >= timeout)); then
+		state=$(kubectl_bin get psmdb "$cluster" -o jsonpath='{.status.state}: {.status.message}' || :)
+		# The operator syncs users only in "ready"; an error that lasts a minute will not clear.
+		if [[ $state == error* ]]; then
+			errors=$((errors + 1))
+		else
+			errors=0
+		fi
+		if ((SECONDS - start >= timeout || errors >= 12)); then
 			echo
-			[[ -n $want ]] || echo "ERROR: ${secret} is missing or empty after ${timeout}s" >&2
-			echo "ERROR: ${internal} does not match ${secret} after ${timeout}s, keys that differ:" >&2
+			[[ -n $want ]] || echo "ERROR: ${secret} is missing or empty" >&2
+			echo "ERROR: ${internal} does not match ${secret} after $((SECONDS - start))s, cluster state ${state}, keys that differ:" >&2
 			jq -rn --argjson want "${want:-null}" --argjson got "${got:-null}" \
 				'($want // {}) | keys[] | select($want[.] != ($got // {})[.])' >&2
 			exit 1
