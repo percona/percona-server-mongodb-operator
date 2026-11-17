@@ -2147,33 +2147,42 @@ check_mongo_auth() {
 }
 
 # Waits until the operator has copied every key of the cluster's users secret
-# into its internal copy. The operator does that only after it has changed the
-# users in MongoDB, so a secret change is applied once this returns.
+# into its internal copy. The operator does that right after it has changed the
+# users in MongoDB, so MongoDB has the new users once this returns; containers
+# it restarts for the change may still be restarting.
 wait_for_users_synced() {
 	local cluster=$1
 	local timeout=${2:-600}
-	local secret internal want got state errors=0 start=$SECONDS
+	local secret internal want got state start=$SECONDS empty=0 error_since=""
 
 	secret=$(kubectl_bin get psmdb "$cluster" -o jsonpath='{.spec.secrets.users}')
+	secret=${secret:-percona-server-mongodb-users} # the operator default
 	internal="internal-${cluster}-users"
 	echo -n "waiting for the operator to apply ${secret} to ${internal}"
 	until
-		want=$(kubectl_bin get secret "$secret" -o json 2>/dev/null | jq -cS '.data // empty' || :)
-		got=$(kubectl_bin get secret "$internal" -o json 2>/dev/null \
+		want=$(kubectl_bin get secret "$secret" -o json | jq -cS '.data // empty' || :)
+		got=$(kubectl_bin get secret "$internal" -o json \
 			| jq -cS --argjson want "${want:-null}" '.data // {} | with_entries(select(.key as $k | $want | has($k)))' || :)
 		[[ -n $want && $want == "$got" ]]
 	do
 		state=$(kubectl_bin get psmdb "$cluster" -o jsonpath='{.status.state}: {.status.message}' || :)
+		# An empty read is not a state: the object is gone or the API is down.
+		if [[ -z $state || -z $got ]]; then
+			empty=$((empty + 1))
+		else
+			empty=0
+		fi
 		# The operator syncs users only in "ready"; an error that lasts a minute will not clear.
 		if [[ $state == error* ]]; then
-			errors=$((errors + 1))
-		else
-			errors=0
+			error_since=${error_since:-$SECONDS}
+		elif [[ -n $state ]]; then
+			error_since=""
 		fi
-		if ((SECONDS - start >= timeout || errors >= 12)); then
+		if ((SECONDS - start >= timeout || empty >= 12)) \
+			|| [[ -n $error_since && $((SECONDS - error_since)) -ge 60 ]]; then
 			echo
 			[[ -n $want ]] || echo "ERROR: ${secret} is missing or empty" >&2
-			echo "ERROR: ${internal} does not match ${secret} after $((SECONDS - start))s, cluster state ${state}, keys that differ:" >&2
+			echo "ERROR: ${internal} does not match ${secret} after $((SECONDS - start))s, cluster state '${state}', keys that differ:" >&2
 			jq -rn --argjson want "${want:-null}" --argjson got "${got:-null}" \
 				'($want // {}) | keys[] | select($want[.] != ($got // {})[.])' >&2
 			exit 1
