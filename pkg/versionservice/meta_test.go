@@ -120,6 +120,49 @@ func TestBuildMeta(t *testing.T) {
 			},
 			namespace: "test-namespace",
 		},
+		"instances[] with an arbiter, a non-voting group and group sidecars": {
+			cr: api.PerconaServerMongoDB{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "some-name",
+				},
+				Spec: api.PerconaServerMongoDBSpec{
+					Image:  "percona/percona-server-mongodb:8.0.4-1",
+					Unsafe: api.UnsafeFlags{ReplsetSize: true},
+					Replsets: []*api.ReplsetSpec{
+						{
+							Name: "rs0",
+							Instances: []api.InstanceSpec{
+								{Name: "hot", Replicas: 2, VolumeSpec: fakeVolumeSpec(t)},
+								{
+									Name: "analytics", Replicas: 1, VolumeSpec: fakeVolumeSpec(t),
+									RSConfig: &api.MemberConfigSpec{Votes: new(int32(0)), Priority: new(int32(0))},
+									MultiAZ:  api.MultiAZ{Sidecars: []corev1.Container{{Name: "probe", Image: "busybox"}}},
+								},
+								{
+									Name: "arb", Replicas: 1,
+									RSConfig: &api.MemberConfigSpec{ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))},
+								},
+							},
+						},
+					},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Size: 4,
+				},
+			},
+			want: Meta{
+				Apply:             "disabled",
+				Version:           version.Version(),
+				Platform:          "kubernetes",
+				ClusterSize:       4,
+				EncryptionEnabled: true,
+				ArbiterEnabled:    true,
+				NonVotingEnabled:  true,
+				SidecarsUsed:      true,
+				TLSMode:           string(api.TLSModePrefer),
+			},
+			namespace: "test-namespace",
+		},
 		"Full CR with old Version deployed with Helm": {
 			cr: api.PerconaServerMongoDB{
 				ObjectMeta: metav1.ObjectMeta{
