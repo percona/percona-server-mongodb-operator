@@ -87,7 +87,7 @@ func (r *ReconcilePerconaServerMongoDB) resolver() dnsResolver {
 // A resolver error is returned to the caller; a successful lookup with no
 // addresses returns (false, nil).
 func hostResolvable(ctx context.Context, resolver dnsResolver, host string) (bool, error) {
-	ips, err := resolver.LookupIPAddr(ctx, host)
+	ips, err := resolver.LookupIPAddr(ctx, strings.TrimSuffix(host, ".")+".")
 	if err != nil {
 		return false, err
 	}
@@ -151,11 +151,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 				return api.AppStateInit, nil, nil
 			}
 			// check if the hostname is resolvable yet; DNS may lag behind the service import
-			host := psmdb.GetMCSHost(cr, se.Name)
-			resolved, err := hostResolvable(ctx, r.resolver(), host)
-			if err != nil || !resolved {
-				log.Info("waiting for imported service hostname to resolve to an IP", "replset", replset.Name, "host", host, "error", err)
-				return api.AppStateInit, nil, nil
+			if !cr.Status.Replsets[replset.Name].Initialized {
+				host := psmdb.GetMCSHost(cr, se.Name)
+				resolved, err := hostResolvable(ctx, r.resolver(), host)
+				if err != nil || !resolved {
+					log.Info("waiting for imported service hostname to resolve to an IP", "replset", replset.Name, "host", host, "error", err)
+					return api.AppStateInit, nil, nil
+				}
 			}
 		}
 	}
