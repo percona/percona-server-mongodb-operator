@@ -869,6 +869,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 		log.Info("Pod shrink complete", "pod", pod.Name)
 		state.ProcessedPods = append(state.ProcessedPods, pod.Name)
+		sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 	}
 
 	// All pods in this phase are done

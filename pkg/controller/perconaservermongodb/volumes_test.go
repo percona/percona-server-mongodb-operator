@@ -1607,6 +1607,34 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
 	})
 
+	t.Run("replaced member stays processed when next member is replaced in the same reconcile", func(t *testing.T) {
+		objs := []runtime.Object{cr}
+		for i := range 3 {
+			pod := stsPod(i)
+			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
+			size := resource.MustParse("5Gi")
+			if i == 2 {
+				size = resource.MustParse("3Gi")
+			}
+			objs = append(objs, pod, newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, size, size))
+		}
+		rec := record.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: statusWith("", 0)},
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 2, pvcCount(t, r), "rs0-1 PVC should be deleted")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, []string{stsName + "-2"}, got.ProcessedPods)
+	})
+
 	t.Run("PVC already being deleted is not deleted again", func(t *testing.T) {
 		objs := objects()
 		for _, o := range objs {
