@@ -947,7 +947,7 @@ func TestLogStorageVersionGate(t *testing.T) {
 				},
 			}
 
-			assert.Equal(t, tt.want, cr.LogStorage(tt.storage) != nil)
+			assert.Equal(t, tt.want, (&api.ReplsetSpec{LogStorage: tt.storage}).LogPVC(cr, naming.ComponentMongod) != nil)
 		})
 	}
 }
@@ -967,7 +967,7 @@ func TestAuxiliaryPVC(t *testing.T) {
 	}
 
 	ls := map[string]string{"app.kubernetes.io/component": "mongod"}
-	pvc := auxiliaryPVC(cr, config.MongodLogVolClaimName, cr.LogStorage(logStorageSpec("2Gi")), ls)
+	pvc := auxiliaryPVC(cr, config.MongodLogVolClaimName, (&api.ReplsetSpec{LogStorage: logStorageSpec("2Gi")}).LogPVC(cr, naming.ComponentMongod), ls)
 
 	assert.Equal(t, config.MongodLogVolClaimName, pvc.Name)
 	assert.Equal(t, "test-ns", pvc.Namespace)

@@ -193,35 +193,24 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	canStepDown := component != naming.ComponentNonVoting && component != naming.ComponentHidden
 
 	if podsMissingClaimVolumes(sfs, list.Items) {
-		log.Info("pods are missing a volume claim, updating them bottom-up")
-
 		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
 
-		for _, pod := range list.Items {
-			isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+		if canStepDown {
+			last := list.Items[len(list.Items)-1]
+			isPrimary, err := r.isPodPrimary(ctx, cr, last, replset)
 			if err != nil {
 				return errors.Wrap(err, "is pod primary")
 			}
-
-			if isPrimary && canStepDown && pod.Labels["controller-revision-hash"] != sfs.Status.UpdateRevision {
-				if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
-					return err
-				}
-			}
-
-			log.Info("apply changes to pod", "pod", pod.Name)
-
-			if err := updatePod(&pod); err != nil {
-				return err
+			if !isPrimary {
+				log.Info("pods are missing a volume claim, moving primary to the highest ordinal", "pod", last.Name)
+				return errors.Wrap(r.setPrimary(ctx, cr, replset, last), "set primary")
 			}
 		}
 
-		log.Info("smart update finished for statefulset")
-
-		return nil
+		log.Info("pods are missing a volume claim, updating them from the lowest ordinal")
+	} else {
+		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
 	}
-
-	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
@@ -490,6 +479,10 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 		if err != nil {
 			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
 		}
+	}
+
+	if primaryPod.Name == "" {
+		return nil
 	}
 
 	if err := r.stepDownPod(ctx, cr, rs, primaryPod, sleepSeconds); err != nil {

@@ -17,6 +17,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func logStorageSpec(size string) *api.StorageSpec {
@@ -283,7 +284,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 
 			updatedCR := new(api.PerconaServerMongoDB)
 			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), updatedCR))
-			gotSpec := updatedCR.LogStorage(updatedCR.Spec.Replsets[0].LogStorage).Resources.Requests[corev1.ResourceStorage]
+			gotSpec := updatedCR.Spec.Replsets[0].LogPVC(updatedCR, naming.ComponentMongod).Resources.Requests[corev1.ResourceStorage]
 			assert.Equal(t, tt.wantSpecSize, gotSpec.String(), "log storage request in the CR")
 		})
 	}
@@ -423,6 +424,8 @@ func TestComponentStorage(t *testing.T) {
 
 	cr := &api.PerconaServerMongoDB{
 		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion:    version.Version(),
+			LogCollector: &api.LogCollectorSpec{Enabled: true},
 			Replsets: []*api.ReplsetSpec{{
 				Name:           "rs0",
 				JournalStorage: journal["rs0"],
@@ -460,9 +463,13 @@ func TestComponentStorage(t *testing.T) {
 				naming.LabelKubernetesReplset:   tt.replset,
 			}}
 
-			gotJournal, gotLogs := componentStorage(cr, sts)
-			assert.Same(t, journal[tt.want], gotJournal, "journal")
-			assert.Same(t, logs[tt.want], gotLogs, "logs")
+			if tt.want == "" {
+				assert.Nil(t, journalStorage(cr, sts), "journal")
+				assert.Nil(t, logStorage(cr, sts), "logs")
+				return
+			}
+			assert.Same(t, journal[tt.want].PersistentVolumeClaim, journalStorage(cr, sts), "journal")
+			assert.Same(t, logs[tt.want].PersistentVolumeClaim, logStorage(cr, sts), "logs")
 		})
 	}
 }

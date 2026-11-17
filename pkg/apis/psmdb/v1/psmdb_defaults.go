@@ -413,8 +413,8 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 	for _, replset := range repls {
 		for _, c := range replset.storageComponents() {
-			setDefaultAccessModes(cr.JournalStorage(c.journal))
-			setDefaultAccessModes(cr.LogStorage(c.log))
+			setDefaultAccessModes(storagePVC(cr, c.journal))
+			setDefaultAccessModes(logPVC(cr, c.log))
 		}
 
 		if len(cr.Name+replset.Name) > clusterNameMaxLen {

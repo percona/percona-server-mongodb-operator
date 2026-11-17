@@ -857,7 +857,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 				}
 			},
 			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
-				return cr.JournalStorage(cr.Spec.Replsets[0].JournalStorage)
+				return cr.Spec.Replsets[0].JournalPVC(cr, naming.ComponentMongod)
 			},
 		},
 		"logs": {
@@ -868,11 +868,11 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			mountPath:     psmdbconfig.MongodContainerDataLogsDir,
 			setup:         setAllLogStorage,
 			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
-				return cr.LogStorage(cr.Spec.Replsets[0].LogStorage)
+				return cr.Spec.Replsets[0].LogPVC(cr, naming.ComponentMongod)
 			},
 			untouched: func(cr *api.PerconaServerMongoDB) []*api.PVCSpec {
 				rs := cr.Spec.Replsets[0]
-				return []*api.PVCSpec{cr.LogStorage(rs.NonVoting.LogStorage), cr.LogStorage(rs.Hidden.LogStorage)}
+				return []*api.PVCSpec{rs.LogPVC(cr, naming.ComponentNonVoting), rs.LogPVC(cr, naming.ComponentHidden)}
 			},
 		},
 		"hidden logs": {
@@ -883,11 +883,11 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			mountPath:     psmdbconfig.MongodContainerDataLogsDir,
 			setup:         setAllLogStorage,
 			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
-				return cr.LogStorage(cr.Spec.Replsets[0].Hidden.LogStorage)
+				return cr.Spec.Replsets[0].LogPVC(cr, naming.ComponentHidden)
 			},
 			untouched: func(cr *api.PerconaServerMongoDB) []*api.PVCSpec {
 				rs := cr.Spec.Replsets[0]
-				return []*api.PVCSpec{cr.LogStorage(rs.LogStorage), cr.LogStorage(rs.NonVoting.LogStorage)}
+				return []*api.PVCSpec{rs.LogPVC(cr, naming.ComponentMongod), rs.LogPVC(cr, naming.ComponentNonVoting)}
 			},
 		},
 		"mongos": {

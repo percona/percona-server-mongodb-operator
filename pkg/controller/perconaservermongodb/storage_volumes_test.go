@@ -171,7 +171,7 @@ func TestReconcileAuxiliaryPVCsSkips(t *testing.T) {
 
 			r := buildFakeClient(cr, sts, pod, logPVC)
 
-			pvcSpec := cr.LogStorage(cr.Spec.Replsets[0].LogStorage)
+			pvcSpec := cr.Spec.Replsets[0].LogPVC(cr, naming.ComponentMongod)
 			if tt.noSpec {
 				pvcSpec = nil
 			}

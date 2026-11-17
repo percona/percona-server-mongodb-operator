@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -334,6 +338,136 @@ func TestSmartUpdateUnblocksClaimRollout(t *testing.T) {
 					assert.NoError(t, getErr, "pod %s should be kept", pod.Name)
 				}
 			}
+		})
+	}
+}
+
+type primaryMongoProvider struct {
+	primary string
+	next    string
+	events  []string
+}
+
+func (p *primaryMongoProvider) Mongo(_ context.Context, _ *api.PerconaServerMongoDB, _ *api.ReplsetSpec, _ api.SystemUserRole, _ ...mongo.ConfigOption) (mongo.Client, error) {
+	return &primaryMongoClient{Client: mongoFake.NewClient(), p: p}, nil
+}
+
+func (p *primaryMongoProvider) Mongos(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, _ ...mongo.ConfigOption) (mongo.Client, error) {
+	return mongoFake.NewClient(), nil
+}
+
+func (p *primaryMongoProvider) Standalone(_ context.Context, _ *api.PerconaServerMongoDB, _ api.SystemUserRole, host string, _ bool, _ ...mongo.ConfigOption) (mongo.Client, error) {
+	pod, _, _ := strings.Cut(host, ".")
+	return &primaryMongoClient{Client: mongoFake.NewClient(), p: p, pod: pod}, nil
+}
+
+type primaryMongoClient struct {
+	mongo.Client
+	p   *primaryMongoProvider
+	pod string
+}
+
+func (c *primaryMongoClient) IsMaster(context.Context) (*mongo.IsMasterResp, error) {
+	return &mongo.IsMasterResp{IsMaster: c.pod == c.p.primary}, nil
+}
+
+func (c *primaryMongoClient) Freeze(context.Context, int) error {
+	c.p.events = append(c.p.events, "freeze "+c.pod)
+	return nil
+}
+
+func (c *primaryMongoClient) StepDown(context.Context, int, bool) error {
+	c.p.events = append(c.p.events, "stepdown "+c.p.primary)
+	c.p.primary = c.p.next
+	return nil
+}
+
+func TestSmartUpdateMissingClaims(t *testing.T) {
+	data, journal := config.MongodDataVolClaimName, config.MongodJournalVolClaimName
+
+	tests := map[string]struct {
+		component  string
+		primary    string
+		next       string
+		wantEvents []string
+	}{
+		"moves the primary to the highest ordinal": {
+			component:  naming.ComponentMongod,
+			primary:    "some-name-rs0-0",
+			next:       "some-name-rs0-2",
+			wantEvents: []string{"freeze some-name-rs0-1", "stepdown some-name-rs0-0"},
+		},
+		"updates the primary last": {
+			component: naming.ComponentMongod,
+			primary:   "some-name-rs0-2",
+			next:      "some-name-rs0-0",
+			wantEvents: []string{
+				"delete some-name-rs0-0",
+				"delete some-name-rs0-1",
+				"stepdown some-name-rs0-2",
+				"delete some-name-rs0-2",
+			},
+		},
+		"non-voting members update in ordinal order": {
+			component:  naming.ComponentNonVoting,
+			wantEvents: []string{"delete some-name-rs0-0", "delete some-name-rs0-1", "delete some-name-rs0-2"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			rs := &api.ReplsetSpec{Name: "rs0", Size: 3, LivenessProbe: &api.LivenessProbeExtended{}, TerminationGracePeriodSeconds: new(int64(1))}
+			rs.LivenessProbe.InitialDelaySeconds = 10
+
+			pods := []corev1.Pod{claimRolloutPod(2, data), claimRolloutPod(0, data), claimRolloutPod(1, data)}
+			members := map[string]api.ReplsetMemberStatus{}
+			for _, pod := range pods {
+				pod.Labels[naming.LabelKubernetesComponent] = tt.component
+				members[pod.Name] = api.ReplsetMemberStatus{}
+			}
+
+			cr := &api.PerconaServerMongoDB{
+				Name:      "some-name",
+				Namespace: "some-namespace",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion:      version.Version(),
+					UpdateStrategy: api.SmartUpdateStatefulSetStrategyType,
+					Replsets:       []*api.ReplsetSpec{rs},
+				},
+				Status: api.PerconaServerMongoDBStatus{
+					Replsets: map[string]api.ReplsetStatus{"rs0": {Initialized: true, Members: members}},
+				},
+			}
+
+			sts := claimRolloutSts(3)
+			sts.Labels[naming.LabelKubernetesComponent] = tt.component
+
+			objs := []client.Object{cr, sts}
+			for i := range pods {
+				objs = append(objs, &pods[i])
+			}
+
+			provider := &primaryMongoProvider{primary: tt.primary, next: tt.next}
+			r := buildFakeClient(objs...)
+			r.mongoClientProvider = provider
+			r.client = interceptorClient(t, r.client, func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				if err := c.Delete(ctx, obj, opts...); err != nil {
+					return err
+				}
+				provider.events = append(provider.events, "delete "+obj.GetName())
+
+				ordinal, err := strconv.Atoi(obj.GetLabels()[appsv1.PodIndexLabel])
+				require.NoError(t, err)
+
+				restarted := claimRolloutPod(ordinal, data, journal)
+				restarted.Labels[naming.LabelKubernetesComponent] = tt.component
+				restarted.Labels["controller-revision-hash"] = sts.Status.UpdateRevision
+				restarted.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: naming.ContainerMongod, Ready: true}}
+				return c.Create(ctx, &restarted)
+			})
+
+			require.NoError(t, r.smartUpdate(t.Context(), cr, sts, rs))
+			assert.Equal(t, tt.wantEvents, provider.events)
 		})
 	}
 }

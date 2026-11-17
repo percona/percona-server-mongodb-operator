@@ -155,7 +155,6 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	readinessProbe := replset.ReadinessProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
-	journalStorage, logStorage := ComponentStorage(replset, ls[naming.LabelKubernetesComponent])
 
 	// vpaKey is the status.vpaStatus key for this component, empty when VPA does
 	// not manage it (the arbiter has no VPA configuration).
@@ -194,7 +193,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		volumeSpec = replset.Hidden.VolumeSpec
 	}
 
-	logPVC := cr.LogStorage(logStorage)
+	logPVC := replset.LogPVC(cr, ls[naming.LabelKubernetesComponent])
 	logVol := config.MongodLogVolume()
 	var mongodLogVol *config.LogVolume
 	if logPVC != nil {
@@ -202,7 +201,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		mongodLogVol = &logVol
 	}
 
-	journalPVC := cr.JournalStorage(journalStorage)
+	journalPVC := replset.JournalPVC(cr, ls[naming.LabelKubernetesComponent])
 	var journalMount *corev1.VolumeMount
 	if journalPVC != nil {
 		journalMount = &corev1.VolumeMount{
@@ -887,19 +886,6 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
 	return pvc
-}
-
-// ComponentStorage returns the journal and log storage of a replset component. The arbiter has none.
-func ComponentStorage(rs *api.ReplsetSpec, component string) (journal, logs *api.StorageSpec) {
-	switch component {
-	case naming.ComponentArbiter:
-		return nil, nil
-	case naming.ComponentNonVoting:
-		return rs.NonVoting.JournalStorage, rs.NonVoting.LogStorage
-	case naming.ComponentHidden:
-		return rs.Hidden.JournalStorage, rs.Hidden.LogStorage
-	}
-	return rs.JournalStorage, rs.LogStorage
 }
 
 func auxiliaryPVC(cr *api.PerconaServerMongoDB, name string, storage *api.PVCSpec, ls map[string]string) corev1.PersistentVolumeClaim {

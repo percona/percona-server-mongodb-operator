@@ -23,7 +23,6 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -56,34 +55,31 @@ var (
 
 // journalStorage returns the journal PVC spec for the component sts belongs to.
 func journalStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
-	journal, _ := componentStorage(cr, sts)
-	return cr.JournalStorage(journal)
+	rs := componentReplset(cr, sts)
+	if rs == nil {
+		return nil
+	}
+	return rs.JournalPVC(cr, sts.Labels[naming.LabelKubernetesComponent])
 }
 
 // logStorage returns the log PVC spec for the component sts belongs to.
 func logStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
-	_, logs := componentStorage(cr, sts)
-	return cr.LogStorage(logs)
+	rs := componentReplset(cr, sts)
+	if rs == nil {
+		return nil
+	}
+	return rs.LogPVC(cr, sts.Labels[naming.LabelKubernetesComponent])
 }
 
-func componentStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) (journal, logs *psmdbv1.StorageSpec) {
-	component := sts.Labels[naming.LabelKubernetesComponent]
-
-	var rs *psmdbv1.ReplsetSpec
-	switch component {
+// componentReplset returns the replset whose mongod members sts runs, or nil for other components.
+func componentReplset(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.ReplsetSpec {
+	switch sts.Labels[naming.LabelKubernetesComponent] {
 	case naming.ComponentConfigSrv:
-		rs = cr.Spec.Sharding.ConfigsvrReplSet
+		return cr.Spec.Sharding.ConfigsvrReplSet
 	case naming.ComponentMongod, naming.ComponentNonVoting, naming.ComponentHidden:
-		rs = cr.Spec.Replset(sts.Labels[naming.LabelKubernetesReplset])
-	default:
-		return nil, nil
+		return cr.Spec.Replset(sts.Labels[naming.LabelKubernetesReplset])
 	}
-
-	if rs == nil {
-		return nil, nil
-	}
-
-	return psmdb.ComponentStorage(rs, component)
+	return nil
 }
 
 // reconcileAuxiliaryPVCs keeps the PVCs of a non-data claim in sync with the CR.
@@ -306,7 +302,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 
 			if pvc.Status.Capacity.Storage().Cmp(requested) >= 0 {
 				updatedPVCs++
-				log.V(1).Info("PVC resize finished", "name", pvc.Name, "size", pvc.Status.Capacity.Storage())
+				log.Info("PVC resize finished", "name", pvc.Name, "size", pvc.Status.Capacity.Storage())
 				continue
 			}
 

@@ -2210,21 +2210,49 @@ func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
 
-// LogStorage returns the PVC spec for mongod logs, or nil when logs stay on the
-// data volume. Nothing collects or rotates them with the log collector off, so
-// the volume follows it. The caller resolves storage from the component it is
-// building: replset, non-voting or hidden.
-func (cr *PerconaServerMongoDB) LogStorage(storage *StorageSpec) *PVCSpec {
-	if cr.CompareVersion("1.24.0") < 0 || !cr.IsLogCollectorEnabled() || storage == nil {
-		return nil
-	}
-	return storage.PersistentVolumeClaim
+// Component label values of replset members, mirrored from pkg/naming which imports this package.
+const (
+	componentNonVoting = "nonVoting"
+	componentHidden    = "hidden"
+	componentArbiter   = "arbiter"
+)
+
+// LogPVC returns the PVC spec for mongod logs of the given component, or nil
+// when logs stay on the data volume.
+func (r *ReplsetSpec) LogPVC(cr *PerconaServerMongoDB, component string) *PVCSpec {
+	_, logs := r.componentStorage(component)
+	return logPVC(cr, logs)
 }
 
-// JournalStorage returns the PVC spec for the WiredTiger journal, or nil when
-// the journal stays on the data volume. The caller resolves storage from the
-// component it is building: replset, non-voting or hidden.
-func (cr *PerconaServerMongoDB) JournalStorage(storage *StorageSpec) *PVCSpec {
+// JournalPVC returns the PVC spec for the WiredTiger journal of the given
+// component, or nil when the journal stays on the data volume.
+func (r *ReplsetSpec) JournalPVC(cr *PerconaServerMongoDB, component string) *PVCSpec {
+	journal, _ := r.componentStorage(component)
+	return storagePVC(cr, journal)
+}
+
+// componentStorage returns the journal and log storage of a replset component. The arbiter has none.
+func (r *ReplsetSpec) componentStorage(component string) (journal, logs *StorageSpec) {
+	switch component {
+	case componentArbiter:
+		return nil, nil
+	case componentNonVoting:
+		return r.NonVoting.JournalStorage, r.NonVoting.LogStorage
+	case componentHidden:
+		return r.Hidden.JournalStorage, r.Hidden.LogStorage
+	}
+	return r.JournalStorage, r.LogStorage
+}
+
+// logPVC follows the log collector: with it off nothing collects or rotates the logs.
+func logPVC(cr *PerconaServerMongoDB, storage *StorageSpec) *PVCSpec {
+	if !cr.IsLogCollectorEnabled() {
+		return nil
+	}
+	return storagePVC(cr, storage)
+}
+
+func storagePVC(cr *PerconaServerMongoDB, storage *StorageSpec) *PVCSpec {
 	if cr.CompareVersion("1.24.0") < 0 || storage == nil {
 		return nil
 	}
