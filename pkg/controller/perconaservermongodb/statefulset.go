@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -21,7 +22,10 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 )
+
+var errConfigNotInCache = errors.New("config map is not in the cache yet")
 
 func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 	ctx context.Context,
@@ -36,13 +40,26 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(
 		return nil, errors.Wrapf(err, "get StatefulSet %s for replset %s", group.STSName, rs.Name)
 	}
 
-	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
-	if ok {
-		if err := r.smartUpdate(ctx, cr, sfs, rs, group); err != nil {
-			return nil, errors.Wrap(err, "failed to run smartUpdate")
+	if _, ok := sfs.Annotations[api.AnnotationRestoreInProgress]; ok {
+		log.V(1).Info("Restore in progress, skipping reconciliation of statefulset", "name", sfs.Name)
+		return sfs, nil
+	}
+
+	// During PVC shrink the STS was deleted (cascade=orphan) and must be
+	// recreated with the new VolumeClaimTemplate before pods can be processed.
+	// Ensure the STS exists first, then run the shrink state machine, and skip
+	// smartUpdate/PDB/autoscaling which would conflict with the rolling process.
+	if _, ok := cr.GetPVCShrinkState(sfs.Name); ok {
+		err = r.createOrUpdate(ctx, sfs)
+		if err != nil {
+			return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
 		}
 
-		log.V(1).Info("Restore in progress, skipping reconciliation of statefulset", "name", sfs.Name)
+		if err := r.reconcilePVCs(ctx, cr, sfs, group); err != nil {
+			return nil, errors.Wrapf(err, "reconcile PVCs for %s", sfs.Name)
+		}
+
+		log.V(1).Info("PVC shrink in progress, skipping smartUpdate and PDB reconciliation", "name", sfs.Name)
 		return sfs, nil
 	}
 
@@ -125,6 +142,33 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(
 	mongodCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, group.ConfigName)
 	if err != nil {
 		return nil, errors.Wrap(err, "check if mongod custom configuration exists")
+	}
+
+	// ConfigMap is created earlier and may not be in the cache yet
+	if !mongodCustomConfig.Type.IsUsable() {
+		// even if user doesn't have custom config, we might need to inject something for vector search
+		mongodConfiguration, err := vectorsearch.InjectMongodConfig(string(group.Configuration), cr, rs)
+		if err != nil {
+			return nil, errors.Wrap(err, "inject search setParameters")
+		}
+
+		if mongodConfiguration != "" {
+			err = retry.OnError(retry.DefaultBackoff, func(err error) bool {
+				return errors.Is(err, errConfigNotInCache)
+			}, func() error {
+				mongodCustomConfig, err = r.getCustomConfig(ctx, cr.Namespace, group.ConfigName)
+				if err != nil {
+					return err
+				}
+				if !mongodCustomConfig.Type.IsUsable() {
+					return errConfigNotInCache
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, errors.Wrapf(err, "get mongod custom configuration %s", group.ConfigName)
+			}
+		}
 	}
 
 	logCollectionCustomConfig, err := r.getCustomConfig(ctx, cr.Namespace, logcollector.ConfigMapName(cr.Name))

@@ -11,11 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/yaml"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -23,10 +25,13 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestReconcileStatefulSet(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	const (
@@ -61,6 +66,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Unsafe.ReplsetSize = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
+		t.Fatal(err)
+	}
+
+	caCert, tlsCert, tlsKey, err := tls.Issue(tls.GetCertificateSans(defaultCR))
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -205,13 +215,17 @@ func TestReconcileStatefulSet(t *testing.T) {
 					Name:      crName + "-ssl",
 					Namespace: tt.cr.Namespace,
 					Data: map[string][]byte{
-						"ca.crt":  []byte("fake-ca-cert"),
-						"tls.crt": []byte("fake-tls-cert"),
-						"tls.key": []byte("fake-tls-key"),
+						"ca.crt":  caCert,
+						"tls.crt": tlsCert,
+						"tls.key": tlsKey,
 					},
 				},
 				&corev1.Secret{
 					Name:      crName + "-ssl-internal",
+					Namespace: tt.cr.Namespace,
+				},
+				&corev1.Secret{
+					Name:      tls.CertificatePBMClient(tt.cr).SecretName(),
 					Namespace: tt.cr.Namespace,
 				},
 
@@ -351,6 +365,7 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 	compareSpec := func(got, want appsv1.StatefulSetSpec) {
 		delete(got.Template.Annotations, naming.AnnotationSSLHash)
 		delete(got.Template.Annotations, naming.AnnotationSSLInternalHash)
+		delete(got.Template.Annotations, naming.AnnotationPBMTLSHash)
 		gotBytes, err := yaml.Marshal(got)
 		if err != nil {
 			t.Fatalf("error marshaling got: %v", err)
@@ -371,6 +386,8 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 }
 
 func TestInstanceModeEquivalence(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	const (
@@ -392,6 +409,8 @@ func TestInstanceModeEquivalence(t *testing.T) {
 				Name: crName + "-ssl", Namespace: ns},
 			&corev1.Secret{
 				Name: crName + "-ssl-internal", Namespace: ns},
+			&corev1.Secret{
+				Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: ns},
 		)
 
 		rs := cr.Spec.Replsets[0]
@@ -441,6 +460,8 @@ func TestInstanceModeEquivalence(t *testing.T) {
 	}
 }
 func TestStatefulSetRejectsADataBearingGroupWithoutStorage(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	const (
@@ -467,4 +488,77 @@ func TestStatefulSetRejectsADataBearingGroupWithoutStorage(t *testing.T) {
 	_, err = r.reconcileStatefulSet(ctx, cr, rs, group)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "has no resolved volumeSpec")
+}
+
+func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
+	ctx := context.Background()
+
+	const (
+		ns     = "sts-config-not-in-cache"
+		crName = ns + "-cr"
+	)
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	cr.Spec.Replsets[0].Configuration = "operationProfiling:\n  mode: slowOp\n"
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+	rs := cr.Spec.Replset("rs0")
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+	group, ok := set.GetByName(naming.GroupMongod)
+	require.True(t, ok)
+	configMapName := group.ConfigName
+	objs := []client.Object{
+		cr,
+		&corev1.Secret{
+			Name:      crName + "-ssl",
+			Namespace: ns,
+		},
+		&corev1.Secret{
+			Name:      crName + "-ssl-internal",
+			Namespace: ns,
+		},
+		&corev1.Secret{
+			Name:      tls.CertificatePBMClient(cr).SecretName(),
+			Namespace: ns,
+		},
+		&corev1.ConfigMap{
+			Name:      configMapName,
+			Namespace: ns,
+			Data: map[string]string{
+				"mongod.conf": string(rs.Configuration),
+			},
+		},
+	}
+
+	want, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, group)
+	require.NoError(t, err)
+
+	// staleCache hides the config map from the first `misses` reads
+	staleCache := func(misses int) *ReconcilePerconaServerMongoDB {
+		r := buildFakeClient(objs...)
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == configMapName && misses > 0 {
+					misses--
+					return k8serrors.NewNotFound(corev1.Resource("configmaps"), key.Name)
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+		})
+		return r
+	}
+
+	t.Run("config map appears in cache", func(t *testing.T) {
+		got, err := staleCache(2).getStatefulsetFromReplset(ctx, cr, rs, group)
+		require.NoError(t, err)
+		require.NotEmpty(t, got.Spec.Template.Annotations[naming.AnnotationConfigHash])
+		require.Equal(t, want.Spec, got.Spec)
+	})
+
+	t.Run("config map never appears in cache", func(t *testing.T) {
+		_, err := staleCache(100).getStatefulsetFromReplset(ctx, cr, rs, group)
+		require.ErrorIs(t, err, errConfigNotInCache)
+	})
 }

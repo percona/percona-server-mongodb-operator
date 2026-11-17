@@ -7,6 +7,8 @@ import (
 )
 
 func TestIsAvailable(t *testing.T) {
+	t.Parallel()
+
 	available = true
 	assert.True(t, IsAvailable())
 
@@ -15,6 +17,8 @@ func TestIsAvailable(t *testing.T) {
 }
 
 func TestServiceExport(t *testing.T) {
+	t.Parallel()
+
 	namespace := "test-namespace"
 	name := "test-service"
 	labels := map[string]string{
@@ -29,6 +33,8 @@ func TestServiceExport(t *testing.T) {
 }
 
 func TestServiceExportList(t *testing.T) {
+	t.Parallel()
+
 	seList := ServiceExportList()
 
 	assert.Equal(t, "ServiceExportList", seList.Kind)

@@ -157,24 +157,29 @@ class TestDemandBackupHeterogeneousBasic:
     @pytest.mark.dependency(
         depends=["TestDemandBackupHeterogeneousBasic::test_write_initial_data"]
     )
-    def test_logical_backup(self, config: BackupConfig) -> None:
+    def test_logical_backup(self, test_paths: Paths) -> None:
         """Take a logical backup off whichever group PBM elected"""
-        backup.create_backup(LOGICAL_BACKUP, config.psmdb)
-        backup.wait_backup(LOGICAL_BACKUP)
+        backup.wait_backup(
+            backup.run_backup(test_paths["test_dir"], "local-s3", LOGICAL_BACKUP), timeout=1800
+        )
 
-        assert backup.backup_field(LOGICAL_BACKUP, ".status.type") in ("", "logical")
+        assert backup.backup_field(LOGICAL_BACKUP, ".status.type") == "logical"
         destination = backup.backup_field(LOGICAL_BACKUP, ".status.destination")
         assert destination, "the backup reported no destination"
         logger.info(f"logical backup destination: {destination}")
 
     @pytest.mark.dependency(depends=["TestDemandBackupHeterogeneousBasic::test_logical_backup"])
-    def test_physical_backup(self, config: BackupConfig) -> None:
+    def test_physical_backup(self, test_paths: Paths) -> None:
         """Take a physical backup of the same cluster"""
         logger.info(f"Sleeping {PBM_1265_SETTLE_SECONDS}s before the physical backup (PBM-1265)")
         time.sleep(PBM_1265_SETTLE_SECONDS)
 
-        backup.create_backup(PHYSICAL_BACKUP, config.psmdb, backup_type="physical")
-        backup.wait_backup(PHYSICAL_BACKUP)
+        backup.wait_backup(
+            backup.run_backup(
+                test_paths["test_dir"], "local-s3", PHYSICAL_BACKUP, backup_type="physical"
+            ),
+            timeout=1800,
+        )
 
         assert backup.backup_field(PHYSICAL_BACKUP, ".status.type") == "physical"
 
@@ -216,14 +221,14 @@ class TestDemandBackupHeterogeneousBasic:
         assert count_documents(psmdb_client, config) == 0
 
         restore = f"restore-{LOGICAL_BACKUP}"
-        backup.create_restore(
+        backup.run_restore(
             restore,
             config.psmdb,
             LOGICAL_BACKUP,
             pitr_type="date",
             pitr_date=State.pitr_target,
         )
-        backup.wait_restore(restore)
+        backup.wait_restore(restore, config.psmdb)
         instances.wait_for_instances_running(config.psmdb)
 
         # Both documents: the first from the backup itself, the second only
@@ -249,17 +254,14 @@ class TestDemandBackupHeterogeneousBasic:
         assert count_documents(psmdb_client, config) == 0
 
         restore = f"restore-{PHYSICAL_BACKUP}"
-        backup.create_restore(
+        backup.run_restore(
             restore,
             config.psmdb,
             PHYSICAL_BACKUP,
             pitr_type="date",
             pitr_date=State.pitr_target,
         )
-        # Physical restores go through requested before running, and take long
-        # enough that failing at the first gate is worth a separate wait.
-        backup.wait_restore(restore, target_state="requested", timeout=1200)
-        backup.wait_restore(restore, target_state="ready", timeout=2400)
+        backup.wait_restore(restore, config.psmdb, timeout=3600)
 
         instances.wait_for_instances_running(config.psmdb)
         read_back(psmdb_client, config, test_paths, "find-2.json")

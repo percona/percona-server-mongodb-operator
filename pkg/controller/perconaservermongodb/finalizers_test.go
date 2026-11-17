@@ -2,10 +2,20 @@ package perconaservermongodb
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -13,6 +23,8 @@ import (
 )
 
 func TestCheckFinalizers(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	crName := "check-finalizers"
 	ns := crName + "-ns"
@@ -111,4 +123,73 @@ func TestCheckFinalizers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcileStopsAfterFinalizersRemoved(t *testing.T) {
+	t.Parallel()
+
+	crName := "deleted-cluster"
+	ns := crName + "-ns"
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	cr.Finalizers = []string{naming.FinalizerDeletePVC}
+	cr.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+
+	r := buildFakeClient(cr)
+	r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+	r.crons = NewCronRegistry()
+
+	res, err := r.Reconcile(t.Context(), reconcile.Request{Name: crName, Namespace: ns})
+	require.NoError(t, err)
+	assert.Equal(t, reconcile.Result{}, res)
+
+	err = r.client.Get(t.Context(), types.NamespacedName{Name: crName, Namespace: ns}, &api.PerconaServerMongoDB{})
+	assert.True(t, k8serrors.IsNotFound(err), "expected cr to be deleted, got %v", err)
+
+	stsList := &appsv1.StatefulSetList{}
+	require.NoError(t, r.client.List(t.Context(), stsList, client.InNamespace(ns)))
+	assert.Empty(t, stsList.Items)
+}
+
+func TestDeleteSecretsIgnoresNotFoundOnDelete(t *testing.T) {
+	newCR := func() *api.PerconaServerMongoDB {
+		cr := newTestCR()
+		cr.Spec.Secrets.Users = cr.Name + "-users"
+		return cr
+	}
+	objsFor := func(cr *api.PerconaServerMongoDB) []client.Object {
+		objs := []client.Object{cr}
+		for _, name := range []string{
+			cr.Spec.Secrets.Users,
+			"internal-" + cr.Name,
+			"internal-" + cr.Name + "-users",
+			cr.Name + "-mongodb-encryption-key",
+		} {
+			objs = append(objs, &corev1.Secret{
+				Name: name, Namespace: cr.Namespace,
+			})
+		}
+		return objs
+	}
+
+	t.Run("delete returns NotFound", func(t *testing.T) {
+		cr := newCR()
+		r := buildFakeClient(objsFor(cr)...)
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.DeleteOption) error {
+			return k8serrors.NewNotFound(corev1.Resource("secrets"), obj.GetName())
+		})
+
+		require.NoError(t, r.deleteSecrets(t.Context(), cr))
+	})
+
+	t.Run("delete fails for another reason", func(t *testing.T) {
+		cr := newCR()
+		r := buildFakeClient(objsFor(cr)...)
+		r.client = interceptorClient(t, r.client, func(_ context.Context, _ client.WithWatch, _ client.Object, _ ...client.DeleteOption) error {
+			return errors.New("boom")
+		})
+
+		require.Error(t, r.deleteSecrets(t.Context(), cr))
+	})
 }

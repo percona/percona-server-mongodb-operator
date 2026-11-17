@@ -49,7 +49,8 @@ fi
 
 kubectl_bin config set-context $(kubectl_bin config current-context) --namespace="$namespace"
 
-kubectl_bin get psmdb $cluster -o yaml >$tmp_dir/psmdb.yaml
+# resourceVersion would make the apply fail with a conflict if the operator updates the CR in the meantime
+kubectl_bin get psmdb $cluster -o yaml | yq 'del(.metadata.resourceVersion)' >$tmp_dir/psmdb.yaml
 
 cat $tmp_dir/psmdb.yaml \
 	| $sed -e "s/- host: mydb-rs0-0.mydb-rs0.external.svc.cluster.local/- host: mydb-rs0-0.mydb-rs0.$replica_namespace.svc.cluster.local/" \

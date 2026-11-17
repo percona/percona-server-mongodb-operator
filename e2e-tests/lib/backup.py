@@ -1,21 +1,17 @@
-"""Helpers for PerconaServerMongoDBBackup / PerconaServerMongoDBRestore objects.
-
-Backup and restore objects are built here as dicts and applied through stdin
-rather than templated with sed, which is what the bash harness does. The shapes
-are small and the fields the tests vary (name, type, PITR target) are exactly
-the ones sed was patching, so a dict is both shorter and harder to get wrong.
-"""
+"""Helpers for PerconaServerMongoDBBackup / PerconaServerMongoDBRestore objects."""
 
 import json
 import logging
+import os
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .instances import wait_until
-from .kubectl import kubectl_bin
+from .kubectl import kubectl_bin, wait_cluster_consistency
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +19,79 @@ API_VERSION = "psmdb.percona.com/v1"
 
 # pbm-agent prints this once it has joined the PBM cluster and can take work.
 AGENT_READY_LOG = "listening for the commands"
+
+# PLATFORM -> manifest under e2e-tests/conf (mirrors deploy_volume_snapshot_class in functions)
+_SNAPSHOT_CLASS_FILES = {
+    "aks": "volume-snapshot-class-aks.yaml",
+    "eks": "volume-snapshot-class-ebs.yaml",
+    "openshift": "volume-snapshot-class-ebs.yaml",
+    "gke": "volume-snapshot-class-gke.yaml",
+    "rancher": "volume-snapshot-class-rancher.yaml",
+}
+
+
+def _setup_rancher_backup_storage(
+    conf_dir: str, namespace: str, s3_fullname: str = "s3-storage"
+) -> None:
+    """Point Longhorn's default backup target at the in-cluster S3 fixture."""
+    secret = yaml.safe_load(Path(f"{conf_dir}/s3-secret.yml").read_text())
+    secret["metadata"]["name"] = "s3-secret-longhorn"
+    secret.setdefault("stringData", {})["AWS_ENDPOINTS"] = (
+        f"http://{s3_fullname}-all-in-one.{namespace}.svc.cluster.local:8333"
+    )
+    kubectl_bin("apply", "-n", "longhorn-system", "-f", "-", input_data=yaml.dump(secret))
+
+    kubectl_bin(
+        "-n",
+        "longhorn-system",
+        "patch",
+        "backuptargets.longhorn.io",
+        "default",
+        "--type=merge",
+        "-p",
+        json.dumps(
+            {
+                "spec": {
+                    "backupTargetURL": "s3://operator-testing@us-east-1/",
+                    "credentialSecret": "s3-secret-longhorn",
+                }
+            }
+        ),
+    )
+
+
+def deploy_volume_snapshot_class(conf_dir: str, namespace: str) -> None:
+    """Install the VolumeSnapshotClass matching the platform under test."""
+    platform = os.environ.get("PLATFORM", "")
+    manifest = _SNAPSHOT_CLASS_FILES.get(platform)
+    if not manifest:
+        raise RuntimeError(
+            f"Unsupported Kubernetes environment for volume snapshot class: {platform or 'unset'}"
+        )
+
+    if platform == "rancher":
+        _setup_rancher_backup_storage(conf_dir, namespace)
+
+    kubectl_bin("apply", "-f", f"{conf_dir}/{manifest}")
+
+
+def get_volume_snapshot_class() -> str:
+    """Return the name of the first VolumeSnapshotClass in the cluster."""
+    name = kubectl_bin(
+        "get", "volumesnapshotclass", "-o", "jsonpath={.items[0].metadata.name}", check=False
+    ).strip()
+    if not name:
+        raise RuntimeError("No VolumeSnapshotClass found in the cluster")
+    return name
+
+
+def get_backup_snapshots(backup_name: str) -> list[dict[str, str]]:
+    """Return .status.snapshots of a psmdb-backup, keyed by PBM's replset names."""
+    raw = backup_field(backup_name, ".status.snapshots")
+    if not raw:
+        return []
+    snapshots: list[dict[str, str]] = json.loads(raw)
+    return snapshots
 
 
 def wait_backup_agent(pod: str, timeout: int = 1800) -> None:
@@ -40,28 +109,24 @@ def wait_backup_agent(pod: str, timeout: int = 1800) -> None:
     wait_until(f"pbm-agent in {pod} to be ready", ready, timeout=timeout)
 
 
-def create_backup(
-    name: str, cluster: str, storage: str = "local-s3", backup_type: str | None = None
-) -> None:
-    """Create a backup object. backup_type None means the operator's default (logical)."""
-    spec: dict[str, Any] = {"clusterName": cluster, "storageName": storage}
-    if backup_type:
-        spec["type"] = backup_type
+def run_backup(
+    test_dir: str,
+    storage: str,
+    backup_name: str = "",
+    backup_type: str = "logical",
+) -> str:
+    """Start a backup from the test's conf/backup-<storage>.yml and return its name."""
+    name = backup_name or f"backup-{storage}"
+    manifest = Path(test_dir) / "conf" / f"backup-{storage}.yml"
 
-    logger.info(f"Creating {backup_type or 'logical'} backup {name}")
-    kubectl_bin(
-        "apply",
-        "-f",
-        "-",
-        input_data=yaml.dump(
-            {
-                "apiVersion": API_VERSION,
-                "kind": "PerconaServerMongoDBBackup",
-                "metadata": {"name": name},
-                "spec": spec,
-            }
-        ),
-    )
+    doc = yaml.safe_load(manifest.read_text())
+    doc["metadata"]["name"] = name
+    doc["spec"]["storageName"] = storage
+    doc["spec"]["type"] = backup_type
+
+    logger.info(f"Running backup {name}")
+    kubectl_bin("apply", "-f", "-", input_data=yaml.dump(doc))
+    return name
 
 
 def backup_field(name: str, path: str) -> str:
@@ -70,20 +135,28 @@ def backup_field(name: str, path: str) -> str:
     ).strip()
 
 
-def wait_backup(name: str, target_state: str = "ready", timeout: int = 1800) -> None:
-    """Wait for a backup to reach target_state, failing fast on 'error'."""
-
-    def reached() -> bool:
-        state = backup_field(name, ".status.state")
-        logger.info(f"backup {name}: {state or '<none>'}")
+def wait_backup(backup_name: str, target_state: str = "ready", timeout: int = 600) -> None:
+    """Wait for a psmdb-backup to reach `target_state`, failing fast on error."""
+    logger.info(f"Waiting for psmdb-backup/{backup_name} to reach {target_state} state")
+    deadline = time.monotonic() + timeout
+    state = ""
+    while time.monotonic() < deadline:
+        state = backup_field(backup_name, ".status.state")
+        if state == target_state:
+            logger.info(f"psmdb-backup/{backup_name} is {target_state}")
+            return
         if state == "error":
-            raise AssertionError(f"backup {name} failed: {backup_field(name, '.status.error')}")
-        return state == target_state
+            error = backup_field(backup_name, ".status.error")
+            raise AssertionError(f"psmdb-backup/{backup_name} is in error state: {error}")
+        time.sleep(1)
 
-    wait_until(f"backup {name} to reach {target_state}", reached, timeout=timeout)
+    raise TimeoutError(
+        f"Timeout waiting for psmdb-backup/{backup_name} to reach {target_state} state. "
+        f"Last state: {state or 'unknown'}"
+    )
 
 
-def create_restore(
+def run_restore(
     name: str,
     cluster: str,
     backup_name: str,
@@ -124,24 +197,82 @@ def restore_field(name: str, path: str) -> str:
     ).strip()
 
 
-def wait_restore(name: str, target_state: str = "ready", timeout: int = 1800) -> None:
-    """Wait for a restore to reach target_state, failing fast on 'error'."""
+def wait_restore(
+    restore_name: str,
+    cluster_name: str,
+    target_state: str = "ready",
+    wait_consistency: bool = True,
+    timeout: int = 1780,
+) -> None:
+    """Wait for a psmdb-restore to reach `target_state`, failing fast on error.
 
-    def reached() -> bool:
-        state = restore_field(name, ".status.state")
-        logger.info(f"restore {name}: {state or '<none>'}")
+    `restore_name` is the restore object name, not the backup it restores from.
+    """
+    logger.info(f"Waiting for psmdb-restore/{restore_name} to reach {target_state} state")
+    deadline = time.monotonic() + timeout
+    state = ""
+    while time.monotonic() < deadline:
+        state = restore_field(restore_name, ".status.state")
+        if state == target_state:
+            logger.info(f"psmdb-restore/{restore_name} is {target_state}")
+            break
         if state == "error":
-            raise AssertionError(f"restore {name} failed: {restore_field(name, '.status.error')}")
-        return state == target_state
+            error = restore_field(restore_name, ".status.error")
+            raise AssertionError(f"psmdb-restore/{restore_name} is in error state: {error}")
+        time.sleep(5)
+    else:
+        raise TimeoutError(
+            f"Timeout waiting for psmdb-restore/{restore_name} to reach {target_state} state. "
+            f"Last state: {state or 'unknown'}"
+        )
 
-    wait_until(f"restore {name} to reach {target_state}", reached, timeout=timeout)
+    if wait_consistency:
+        wait_cluster_consistency(cluster_name)
 
 
-def pbm_status(pod: str) -> dict[str, Any]:
-    """Run `pbm status -o json` in a pod's backup-agent container."""
-    out = kubectl_bin("exec", pod, "-c", "backup-agent", "--", "pbm", "status", "-o", "json")
-    status: dict[str, Any] = json.loads(out)
-    return status
+def pbm_status(pod: str, *extra_args: str, check: bool = True) -> str:
+    """Run `pbm status -o json` in a pod's backup-agent container and return the raw output."""
+    return kubectl_bin(
+        "exec",
+        pod,
+        "-c",
+        "backup-agent",
+        "--",
+        "pbm",
+        "status",
+        "-o",
+        "json",
+        *extra_args,
+        check=check,
+    )
+
+
+def wait_for_pbm_operations(
+    cluster_name: str, pod: str | None = None, timeout: int = 2700
+) -> None:
+    """Wait until no PBM operation is running on the cluster.
+
+    `pod` defaults to `<cluster>-rs0-0`. A replica set using instances[] has
+    that pod only if it has a group named `mongod`, so pass a real pod there.
+    """
+    pod = pod or f"{cluster_name}-rs0-0"
+    logger.info(f"Waiting for PBM operations on {cluster_name} to finish (via {pod})")
+    deadline = time.monotonic() + timeout
+    running: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        out = pbm_status(pod, "-s", "running", check=False)
+        try:
+            running = json.loads(out).get("running") or {}
+        except json.JSONDecodeError:
+            running = {"opID": "unknown"}
+        if running.get("opID") is None:
+            logger.info(f"No PBM operation is running on {cluster_name}")
+            return
+        time.sleep(5)
+
+    raise TimeoutError(
+        f"Timeout waiting for PBM operations on {cluster_name} to finish. Last running: {running}"
+    )
 
 
 def latest_oplog_chunk_ts(pod: str) -> int:
@@ -150,9 +281,8 @@ def latest_oplog_chunk_ts(pod: str) -> int:
     0 when PITR has not produced a chunk yet, so callers can poll on it without
     special-casing the empty state.
     """
-    chunks = ((pbm_status(pod).get("backups") or {}).get("pitrChunks") or {}).get(
-        "pitrChunks"
-    ) or []
+    status: dict[str, Any] = json.loads(pbm_status(pod))
+    chunks = ((status.get("backups") or {}).get("pitrChunks") or {}).get("pitrChunks") or []
     if not chunks:
         return 0
     return int(((chunks[-1].get("range") or {}).get("end")) or 0)

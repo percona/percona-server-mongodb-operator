@@ -106,3 +106,15 @@ func PodOrdinal(podName string) (int, bool) {
 	}
 	return ordinal, true
 }
+
+// GroupVPAStatusKey is the status.vpaStatus key for a member group's
+// StatefulSet: the StatefulSet name without the cluster prefix. For the legacy
+// mongod, nonvoting and hidden StatefulSets it equals VPAStatusKey, so a
+// legacy replset rewritten as reserved-name instances keeps its VPA objects
+// and status keys. Groups that hold no data (arbiters) get no key.
+func GroupVPAStatusKey(cr *psmdbv1.PerconaServerMongoDB, stsName string, dataBearing bool) string {
+	if !dataBearing {
+		return ""
+	}
+	return strings.TrimPrefix(stsName, cr.Name+"-")
+}

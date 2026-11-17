@@ -198,7 +198,7 @@ func resolveLegacy(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) ([]Group, 
 			Member: MemberConfig{
 				Votes:    0,
 				Priority: 0,
-				// The role tag legacy attaches today. SetVotes reads it, so it
+				// The role tag legacy attaches today. UpdateVotes reads it, so it
 				// must stay in legacy mode. Instance groups get no role tags.
 				Tags: map[string]string{naming.ComponentNonVoting: "true"},
 			},

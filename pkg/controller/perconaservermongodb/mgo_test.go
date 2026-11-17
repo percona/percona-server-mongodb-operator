@@ -1,6 +1,8 @@
 package perconaservermongodb
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,8 +13,89 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 )
+
+func TestMongoExpression(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		function string
+		argument any
+		expected string
+	}{
+		{
+			name:     "replica set configuration",
+			function: "rs.initiate",
+			argument: map[string]any{
+				"_id": "rs0",
+				"members": []map[string]any{
+					{"_id": 0, "host": "mongo-0:27017", "arbiterOnly": false},
+				},
+				"version": 1,
+			},
+			expected: `rs.initiate({"_id":"rs0","members":[{"_id":0,"arbiterOnly":false,"host":"mongo-0:27017"}],"version":1})`,
+		},
+		{
+			name:     "user credentials with special characters",
+			function: `db.getSiblingDB("admin").createUser`,
+			argument: map[string]any{
+				"user":  "user'Admin",
+				"pwd":   "quote\"back\\slash\n\t$(false);`false`$HOME",
+				"roles": []string{"userAdminAnyDatabase"},
+			},
+			expected: `db.getSiblingDB("admin").createUser({"pwd":"quote\"back\\slash\n\t$(false);` + "`false`" + `$HOME","roles":["userAdminAnyDatabase"],"user":"user'Admin"})`,
+		},
+		{
+			name:     "string argument with special characters",
+			function: "print",
+			argument: `<>&"'\`,
+			expected: `print("\u003c\u003e\u0026\"'\\")`,
+		},
+		{
+			name:     "nil argument",
+			function: "print",
+			expected: "print(null)",
+		},
+		{
+			name:     "empty document",
+			function: "rs.initiate",
+			argument: map[string]any{},
+			expected: "rs.initiate({})",
+		},
+		{
+			name:     "empty array",
+			function: "print",
+			argument: []string{},
+			expected: "print([])",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			expression, err := mongoExpression(tt.function, tt.argument)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, expression)
+		})
+	}
+
+	t.Run("unsupported argument", func(t *testing.T) {
+		t.Parallel()
+
+		expression, err := mongoExpression("rs.initiate", map[string]any{"unsupported": make(chan int)})
+		require.ErrorContains(t, err, "marshal mongo expression argument")
+		assert.Empty(t, expression)
+		var unsupportedTypeErr *json.UnsupportedTypeError
+		assert.ErrorAs(t, err, &unsupportedTypeErr)
+	})
+}
 
 func TestCompareTags(t *testing.T) {
 	t.Parallel()
@@ -261,6 +344,8 @@ func TestShouldSetDefaultRWConcern(t *testing.T) {
 }
 
 func TestGetRoles(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		crVersion string
 		role      api.SystemUserRole
@@ -332,7 +417,72 @@ func TestGetRoles(t *testing.T) {
 	}
 }
 
+func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
+	ctx := context.Background()
+	cr := newTestCR()
+	cr.Spec.ClusterServiceDNSMode = api.DNSModeInternal
+	cr.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
+	rs := cr.Spec.Replsets[0]
+	rs.Size = new(int32(49))
+	objects := fakePodsForRS(cr, rs)
+	objects = append(objects, fakeStatefulset(cr, rs, rs.GetMongodSize(), "", naming.ComponentMongod))
+	r := buildFakeClient(objects...)
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Len(t, pods.Items, 49)
+
+	set, err := membergroup.Resolve(cr, rs)
+	require.NoError(t, err)
+
+	initialConfig := mongo.RSConfig{Version: 1}
+	for i := range pods.Items {
+		member, err := r.getConfigMemberForPod(ctx, cr, rs, set, i, &pods.Items[i])
+		require.NoError(t, err)
+		initialConfig.Members = append(initialConfig.Members, member)
+	}
+	initialConfig.Members.UpdateVotes(ctx, initialConfig.Members, false, "")
+	externalNodes := []*api.ExternalNode{
+		{Host: "external-0.example.com", Port: 27017},
+		{Host: "external-1.example.com", Port: 27017},
+	}
+
+	tests := map[string]struct {
+		externalNodes   int
+		expectedMembers int
+	}{
+		"below limit": {externalNodes: 0, expectedMembers: 49},
+		"at limit":    {externalNodes: 1, expectedMembers: 50},
+		"above limit": {externalNodes: 2, expectedMembers: 50},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			rs.ExternalNodes = externalNodes[:tc.externalNodes]
+			cli := mongoFake.NewClientWithConfig(initialConfig)
+
+			// AddNew adds one member per call; repeat to check the 51st stays excluded.
+			for range 2 {
+				_, _, _, err := r.updateConfigMembers(ctx, cli, cr, rs, set)
+				require.NoError(t, err)
+				config, err := cli.ReadConfig(ctx)
+				require.NoError(t, err)
+
+				var hosts []string
+				for _, member := range config.Members {
+					hosts = append(hosts, member.Host)
+				}
+				assert.Len(t, config.Members, tc.expectedMembers)
+				if tc.externalNodes > 0 {
+					assert.Contains(t, hosts, "external-0.example.com:27017")
+				}
+				assert.NotContains(t, hosts, "external-1.example.com:27017")
+			}
+		})
+	}
+}
+
 func TestCompareRoles(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		x        []mongo.Role
 		y        []mongo.Role
@@ -567,6 +717,8 @@ func TestLiveMembers(t *testing.T) {
 }
 
 func TestIsUnsafePSA(t *testing.T) {
+	t.Parallel()
+
 	arbiter := func(name string, replicas int32) api.InstanceSpec {
 		return api.InstanceSpec{Name: name, Replicas: replicas, RSConfig: &api.MemberConfigSpec{
 			ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}}
@@ -702,6 +854,8 @@ func dataGroup(name string, replicas int32, priority int32) api.InstanceSpec {
 }
 
 func TestBootstrapPod(t *testing.T) {
+	t.Parallel()
+
 	type podSpec struct {
 		group   string
 		ordinal int
@@ -814,6 +968,8 @@ func TestBootstrapPod(t *testing.T) {
 }
 
 func TestBootstrapPodChecksTheGroupsContainer(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	cr := instanceCR(t, "boot-cr", "boot", []api.InstanceSpec{dataGroup("mongod", 1, 2)}, unsafeSize)
@@ -834,4 +990,173 @@ func TestBootstrapPodChecksTheGroupsContainer(t *testing.T) {
 	_, _, err = r.bootstrapPod(ctx, cr, rs, set)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no ready primary-eligible member pod")
+}
+
+func TestRemoveUndesiredMembers(t *testing.T) {
+	t.Parallel()
+
+	const namespace = "psmdb"
+
+	cr := &api.PerconaServerMongoDB{
+		Name: "my-cluster-name", Namespace: namespace,
+		Spec: api.PerconaServerMongoDBSpec{
+			ClusterServiceDNSSuffix: "svc.cluster.local",
+			ClusterServiceDNSMode:   api.DNSModeInternal,
+		},
+	}
+	replset := &api.ReplsetSpec{Name: "rs0"}
+
+	// host derives a member host the same way the operator writes it into the config, so
+	// the cases exercise the matching rather than a hardcoded DNS format.
+	host := func(t *testing.T, podName string) string {
+		t.Helper()
+		h, err := psmdb.MongoHost(context.Background(), nil, cr, cr.Spec.ClusterServiceDNSMode, replset, false, corev1.Pod{
+			Name: podName, Namespace: namespace,
+		})
+		require.NoError(t, err)
+		return h
+	}
+
+	pods := func(names ...string) []corev1.Pod {
+		out := make([]corev1.Pod, 0, len(names))
+		for _, name := range names {
+			out = append(out, corev1.Pod{Name: name, Namespace: namespace})
+		}
+		return out
+	}
+
+	// member describes a replset config entry. An empty pod leaves it untagged, the way the
+	// operator writes arbiters and external nodes; an empty host is derived from the pod.
+	type member struct {
+		pod  string
+		host string
+	}
+
+	resolve := func(t *testing.T, m member) string {
+		t.Helper()
+		if m.host != "" {
+			return m.host
+		}
+		return host(t, m.pod)
+	}
+
+	cases := []struct {
+		name          string
+		pods          []corev1.Pod
+		externalNodes []*api.ExternalNode
+		members       []member
+		// want lists the members expected to survive, in order.
+		want []member
+	}{
+		{
+			name:    "every member has a pod",
+			pods:    pods("rs0-0", "rs0-1", "rs0-2"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+			want:    []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+		},
+		{
+			name:    "members whose pods are gone are dropped",
+			pods:    pods("rs0-0"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}},
+			want:    []member{{pod: "rs0-0"}},
+		},
+		{
+			name:    "hidden member is dropped alongside mongod members",
+			pods:    pods("rs0-0"),
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {pod: "rs0-2"}, {pod: "rs0-hidden-0"}},
+			want:    []member{{pod: "rs0-0"}},
+		},
+		{
+			// MongoHost returns the address a member should have. Mid-transition the config
+			// still holds the old one, and the transition itself steps the primary down, so
+			// recovery can run right then. Matching on the host would drop a live member.
+			name: "member whose host is mid-change is kept",
+			pods: pods("rs0-0", "rs0-1", "rs0-2"),
+			members: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1", host: "rs0-1.old-domain.example.com:27017"},
+				{pod: "rs0-2"},
+			},
+			want: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1", host: "rs0-1.old-domain.example.com:27017"},
+				{pod: "rs0-2"},
+			},
+		},
+		{
+			name: "untagged member is kept while its pod exists",
+			pods: pods("rs0-0", "rs0-arbiter-0"),
+			members: []member{
+				{pod: "rs0-0"},
+				{pod: "rs0-1"},
+				{host: host(t, "rs0-arbiter-0")},
+			},
+			want: []member{{pod: "rs0-0"}, {host: host(t, "rs0-arbiter-0")}},
+		},
+		{
+			name: "untagged member is dropped once its pod is gone",
+			pods: pods("rs0-0"),
+			members: []member{
+				{pod: "rs0-0"},
+				{host: host(t, "rs0-arbiter-0")},
+			},
+			want: []member{{pod: "rs0-0"}},
+		},
+		{
+			name:          "external nodes are kept, they have no pod by definition",
+			pods:          pods("rs0-0"),
+			externalNodes: []*api.ExternalNode{{Host: "external-1", Port: 27017}},
+			members:       []member{{pod: "rs0-0"}, {pod: "rs0-1"}, {host: "external-1:27017"}},
+			want:          []member{{pod: "rs0-0"}, {host: "external-1:27017"}},
+		},
+		{
+			name:    "config is left alone when no member has a pod",
+			pods:    pods("rs0-0"),
+			members: []member{{host: "stale-1:27017"}, {host: "stale-2:27017"}},
+			want:    []member{{host: "stale-1:27017"}, {host: "stale-2:27017"}},
+		},
+		{
+			name:    "no pods at all leaves the config alone",
+			pods:    nil,
+			members: []member{{pod: "rs0-0"}, {pod: "rs0-1"}},
+			want:    []member{{pod: "rs0-0"}, {pod: "rs0-1"}},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rs := replset.DeepCopy()
+			rs.ExternalNodes = c.externalNodes
+
+			cfg := mongo.RSConfig{}
+			for i, m := range c.members {
+				cm := mongo.ConfigMember{
+					ID:       i,
+					Host:     resolve(t, m),
+					Votes:    mongo.DefaultVotes,
+					Priority: mongo.DefaultPriority,
+				}
+				if m.pod != "" {
+					cm.Tags = mongo.ReplsetTags{"podName": m.pod}
+				}
+				cfg.Members = append(cfg.Members, cm)
+			}
+
+			want := make([]string, 0, len(c.want))
+			for _, m := range c.want {
+				want = append(want, resolve(t, m))
+			}
+
+			r := &ReconcilePerconaServerMongoDB{}
+			r.removeUndesiredMembers(context.Background(), cr, rs, c.pods, &cfg)
+
+			got := make([]string, 0, len(cfg.Members))
+			for _, m := range cfg.Members {
+				got = append(got, m.Host)
+			}
+
+			assert.Equal(t, want, got, "members left in config")
+			assert.NotEmptyf(t, cfg.Members, "config must never be left without members")
+		})
+	}
 }

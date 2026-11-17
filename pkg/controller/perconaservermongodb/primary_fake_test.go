@@ -75,15 +75,15 @@ func podNameFromHost(host string) string {
 	return name
 }
 
-func (p *primaryProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole) (mongo.Client, error) {
+func (p *primaryProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	return &primaryFakeClient{provider: p, Client: mongoFake.NewClient()}, nil
 }
 
-func (p *primaryProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole) (mongo.Client, error) {
+func (p *primaryProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	return &primaryFakeClient{provider: p, Client: mongoFake.NewClient()}, nil
 }
 
-func (p *primaryProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool) (mongo.Client, error) {
+func (p *primaryProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	return &primaryFakeClient{provider: p, pod: podNameFromHost(host), Client: mongoFake.NewClient()}, nil
 }
 

@@ -2,12 +2,14 @@ package perconaservermongodbrestore
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -21,6 +23,8 @@ import (
 )
 
 func TestValidate(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	ns := "validate"
@@ -158,6 +162,8 @@ func TestValidate(t *testing.T) {
 }
 
 func TestGetStorageFromBackupSource(t *testing.T) {
+	t.Parallel()
+
 	ns := "get-storage"
 	clusterName := ns + "-cr"
 	restoreName := ns + "-restore"
@@ -218,6 +224,8 @@ func TestGetStorageFromBackupSource(t *testing.T) {
 }
 
 func TestValidatePiTR(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	ns := "validate-pitr"
@@ -458,8 +466,12 @@ func mustParseTime(layout string, value string) time.Time {
 	return time
 }
 
-func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore {
-	s := scheme.Scheme
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	if err := scheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
 
 	s.AddKnownTypes(psmdbv1.SchemeGroupVersion,
 		new(psmdbv1.PerconaServerMongoDB),
@@ -469,6 +481,14 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 		new(psmdbv1.PerconaServerMongoDBRestoreList),
 	)
 
+	metav1.AddToGroupVersion(s, psmdbv1.SchemeGroupVersion)
+
+	return s
+})
+
+func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore {
+	s := testScheme()
+
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
 
 	return &ReconcilePerconaServerMongoDBRestore{
@@ -477,4 +497,41 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 		newPBMFunc: fakeBackup.NewPBM,
 		clientcmd:  fakeClientcmd.New(),
 	}
+}
+
+func TestValidateExternalBackupRejectsInstances(t *testing.T) {
+	t.Parallel()
+
+	r := &ReconcilePerconaServerMongoDBRestore{}
+	bcp := &psmdbv1.PerconaServerMongoDBBackup{
+		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{Type: defs.ExternalBackup},
+	}
+
+	t.Run("instances", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &psmdbv1.PerconaServerMongoDB{
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{{
+					Name:      "rs0",
+					Instances: []psmdbv1.InstanceSpec{{Name: psmdbv1.ReservedGroupMongod, Replicas: 3}},
+				}},
+			},
+		}
+
+		err := r.validateExternalBackup(t.Context(), cluster, bcp)
+		assert.ErrorContains(t, err, "not supported for replset rs0: it uses instances")
+	})
+
+	t.Run("legacy", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &psmdbv1.PerconaServerMongoDB{
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+			},
+		}
+
+		assert.NoError(t, r.validateExternalBackup(t.Context(), cluster, bcp))
+	})
 }

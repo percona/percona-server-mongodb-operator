@@ -11,19 +11,30 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 )
 
+// AppName identifies the operator's connections in mongod logs, currentOp and
+// failCommand failpoints.
+const AppName = "percona-server-mongodb-operator"
+
+func withDefaults(opts []mongo.ConfigOption) []mongo.ConfigOption {
+	return append([]mongo.ConfigOption{
+		mongo.WithAppName(AppName),
+		mongo.WithBackoff(mongo.DefaultBackoff()),
+	}, opts...)
+}
+
 type Credentials struct {
 	Username   string
 	Password   string
 	AuthSource string
 }
 
-func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials) (mongo.Client, error) {
+func MongoClient(ctx context.Context, k8sClient client.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, c Credentials, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	conf, err := MongoConfig(ctx, k8sClient, cr, cr.Spec.ClusterServiceDNSMode, rs, c, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "mongo config")
 	}
 
-	return mongo.Dial(ctx, conf)
+	return mongo.Dial(ctx, conf, withDefaults(opts)...)
 }
 
 func MongoConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, dnsMode api.DNSMode, rs *api.ReplsetSpec, c Credentials, rsExposed bool) (*mongo.Config, error) {
@@ -73,12 +84,12 @@ func MongoConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMon
 	return conf, nil
 }
 
-func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials) (mongo.Client, error) {
+func MongosClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	conf, err := MongosConfig(ctx, k8sclient, cr, c, true, cr.Spec.Sharding.Mongos.Expose.ServicePerPod)
 	if err != nil {
 		return nil, errors.Wrap(err, "get mongos config")
 	}
-	return mongo.Dial(ctx, conf)
+	return mongo.Dial(ctx, conf, withDefaults(opts)...)
 }
 
 func MongosConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMongoDB, c Credentials, useInternalAddr, servicePerPod bool) (*mongo.Config, error) {
@@ -104,7 +115,7 @@ func MongosConfig(ctx context.Context, cl client.Client, cr *api.PerconaServerMo
 	return &conf, nil
 }
 
-func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string, tlsEnabled bool) (mongo.Client, error) {
+func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerMongoDB, c Credentials, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
 	conf := mongo.Config{
 		Hosts:      []string{host},
 		Username:   c.Username,
@@ -122,5 +133,5 @@ func StandaloneClient(ctx context.Context, k8sclient client.Client, cr *api.Perc
 		conf.TLSConf = &tlsCfg
 	}
 
-	return mongo.Dial(ctx, &conf)
+	return mongo.Dial(ctx, &conf, withDefaults(opts)...)
 }

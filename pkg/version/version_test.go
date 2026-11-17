@@ -16,6 +16,8 @@ import (
 )
 
 func TestCRDVersionLabel(t *testing.T) {
+	t.Parallel()
+
 	crdNames := []string{
 		"perconaservermongodbbackups.psmdb.percona.com",
 		"perconaservermongodbrestores.psmdb.percona.com",

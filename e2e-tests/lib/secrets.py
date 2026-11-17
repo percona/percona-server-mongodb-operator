@@ -46,6 +46,15 @@ def get_user_data(secret_name: str, data_key: str) -> str:
     return urllib.parse.quote(secret_data, safe="")
 
 
+def secret_exists(name: str) -> bool:
+    try:
+        kubectl_bin("get", f"secrets/{name}")
+    except subprocess.CalledProcessError:
+        return False
+
+    return True
+
+
 def cloud_secret_exists(conf_dir: Path | str | None = None) -> bool:
     if conf_dir is None:
         conf_dir = Path(__file__).parent.parent / "conf"

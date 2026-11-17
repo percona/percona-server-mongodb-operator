@@ -11,6 +11,8 @@ import (
 )
 
 func TestMongoConfiguration_GetPort(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		conf        MongoConfiguration
 		expectPort  int32
@@ -52,6 +54,8 @@ func TestMongoConfiguration_GetPort(t *testing.T) {
 }
 
 func TestMongoConfiguration_SetPort(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		expectedConf MongoConfiguration
 		actualConf   MongoConfiguration
@@ -84,6 +88,8 @@ func TestMongoConfiguration_SetPort(t *testing.T) {
 }
 
 func TestMongosSpec_GetPort(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		ms       MongosSpec
 		expected int32
@@ -124,6 +130,8 @@ func TestMongosSpec_GetPort(t *testing.T) {
 }
 
 func TestReplsetSpec_GetPort(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		config   MongoConfiguration
 		expected int32
@@ -148,6 +156,8 @@ func TestReplsetSpec_GetPort(t *testing.T) {
 }
 
 func TestReplsetSpec_GetHorizons(t *testing.T) {
+	t.Parallel()
+
 	r := &ReplsetSpec{
 		Horizons: map[string]map[string]string{
 			"pod-0": {
@@ -238,6 +248,8 @@ func TestReplsetSpec_GetHorizons(t *testing.T) {
 }
 
 func TestMongoConfiguration_IsAuthorizationEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		conf     MongoConfiguration
 		expected bool
@@ -301,6 +313,8 @@ func TestMongoConfiguration_IsAuthorizationEnabled(t *testing.T) {
 }
 
 func TestIsExternalVolumeAutoscalingEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		spec     PerconaServerMongoDBSpec
 		expected bool
@@ -351,6 +365,8 @@ func TestIsExternalVolumeAutoscalingEnabled(t *testing.T) {
 }
 
 func TestIsVolumeExpansionEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		spec     PerconaServerMongoDBSpec
 		expected bool
@@ -401,6 +417,8 @@ func TestIsVolumeExpansionEnabled(t *testing.T) {
 }
 
 func TestBackupSpec_MainStorage(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		spec        BackupSpec
 		expected    string
@@ -456,6 +474,8 @@ func TestBackupSpec_MainStorage(t *testing.T) {
 }
 
 func TestMongoConfiguration_IsEncryptionEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		conf        MongoConfiguration
 		expectNil   bool
@@ -507,6 +527,8 @@ func TestMongoConfiguration_IsEncryptionEnabled(t *testing.T) {
 }
 
 func TestKeyFileAuthEnabled(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		cr       *PerconaServerMongoDB
 		expected bool
@@ -582,6 +604,8 @@ func TestKeyFileAuthEnabled(t *testing.T) {
 }
 
 func TestCanRestore(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		spec      PerconaServerMongoDBSpec
 		restore   *PerconaServerMongoDBRestore
@@ -650,6 +674,8 @@ func TestCanRestore(t *testing.T) {
 }
 
 func TestExternalNode_HostPort(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		node     ExternalNode
 		expected string

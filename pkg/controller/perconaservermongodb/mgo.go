@@ -89,12 +89,12 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateError, nil, errors.Wrap(err, "resolve member group")
 	}
 
-	restoreInProgress, err := r.restoreInProgress(ctx, cr, set)
+	physicalRestoreInProgress, err := r.physicalRestoreInProgress(ctx, cr, set)
 	if err != nil {
 		return api.AppStateError, nil, errors.Wrap(err, "check if restore in progress")
 	}
 
-	if restoreInProgress {
+	if physicalRestoreInProgress {
 		return api.AppStateInit, nil, nil
 	}
 
@@ -143,7 +143,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+	// We don't retry if replset is initialized to not delay initialization,
+	// after init we start retrying to not force reconfig replset on a transient error
+	var opts []mongo.ConfigOption
+	if !cr.Status.Replsets[replset.Name].Initialized {
+		opts = append(opts, mongo.WithoutRetry())
+	}
+	cli, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, opts...)
 	if err != nil {
 		if cr.Spec.Unmanaged {
 			return api.AppStateInit, nil, nil
@@ -152,7 +158,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			if errors.As(err, &topology.ServerSelectionError{}) && strings.Contains(err.Error(), "ReplicaSetNoPrimary") {
 				log.Error(err, "FULL CLUSTER CRASH")
 
-				err := r.handleReplicaSetNoPrimary(ctx, cr, replset, set)
+				err := r.handleReplicaSetNoPrimary(ctx, cr, replset, set, pods.Items)
 				if err != nil {
 					return api.AppStateError, nil, errors.Wrap(err, "handle ReplicaSetNoPrimary")
 				}
@@ -206,9 +212,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 		return api.AppStateReady, nil, nil
 	}
-	err = r.createOrUpdateSystemUsers(ctx, cr, replset)
+
+	rstRunning, err := r.isRestoreRunning(ctx, cr)
 	if err != nil {
-		return api.AppStateInit, nil, errors.Wrap(err, "create system users")
+		return api.AppStateInit, nil, errors.Wrap(err, "failed to check running restore")
+	}
+
+	if !rstRunning {
+		err = r.createOrUpdateSystemUsers(ctx, cr, replset)
+		if err != nil {
+			return api.AppStateInit, nil, errors.Wrap(err, "create system users")
+		}
 	}
 
 	// this can happen if cluster is initialized but status update failed
@@ -227,14 +241,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		return api.AppStateInit, nil, nil
 	}
 
-	rstRunning, err := r.isRestoreRunning(ctx, cr)
+	// mongos may not be reachable until it's updated
+	mongosFirst, err := r.shouldUpdateMongosFirst(ctx, cr)
 	if err != nil {
-		return api.AppStateInit, nil, errors.Wrap(err, "failed to check running restore")
+		return api.AppStateError, nil, errors.Wrap(err, "should update mongos first")
 	}
 
 	if cr.Spec.Sharding.Enabled &&
 		cr.Spec.Sharding.Mongos.Size > 0 &&
 		!rstRunning &&
+		!mongosFirst &&
 		replset.ClusterRole == api.ClusterRoleShardSvr {
 
 		rsStatus := cr.Status.Replsets[replset.Name]
@@ -288,7 +304,9 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			rsStatus.AddedAsShard = new(true)
 			cr.Status.Replsets[replset.Name] = rsStatus
 		} else {
-			return api.AppStateInit, nil, nil
+			// Keep the members recorded on init. Smart update waits for them,
+			// and mongos isn't created until smart update finishes.
+			return api.AppStateInit, rsStatus.Members, nil
 		}
 	}
 
@@ -301,9 +319,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	rsMembers, liveMembers, err := r.updateConfigMembers(ctx, cli, cr, replset, set)
+	rsMembers, liveMembers, votesPending, err := r.updateConfigMembers(ctx, cli, cr, replset, set)
 	if err != nil {
 		return api.AppStateError, nil, errors.Wrap(err, "failed to update config members")
+	}
+
+	if votesPending {
+		log.Info("Replset is not ready, voting changes are pending", "replset", replset.Name)
+		return api.AppStateInit, rsMembers, nil
 	}
 
 	if liveMembers == len(pods.Items) {
@@ -490,24 +513,24 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 	cr *api.PerconaServerMongoDB,
 	rs *api.ReplsetSpec,
 	set *membergroup.Set,
-) (map[string]api.ReplsetMemberStatus, int, error) {
+) (map[string]api.ReplsetMemberStatus, int, bool, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
 	unsafePSA := isUnsafePSA(cr, set)
 
 	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "get rs pods")
+		return nil, 0, false, errors.Wrap(err, "get rs pods")
 	}
 
 	cnf, err := cli.ReadConfig(ctx)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "get replset config")
+		return nil, 0, false, errors.Wrap(err, "get replset config")
 	}
 
 	rsStatus, err := cli.RSStatus(ctx)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "get replset status")
+		return nil, 0, false, errors.Wrap(err, "get replset status")
 	}
 
 	members := mongo.ConfigMembers{}
@@ -518,7 +541,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		}
 		member, err := r.getConfigMemberForPod(ctx, cr, rs, set, key, &pods.Items[key])
 		if err != nil {
-			return nil, 0, errors.Wrapf(err, "get config member for pod %s", pods.Items[key].Name)
+			return nil, 0, false, errors.Wrapf(err, "get config member for pod %s", pods.Items[key].Name)
 		}
 		members = append(members, member)
 	}
@@ -530,7 +553,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 
 	memberC := len(members)
 	for i, extNode := range rs.ExternalNodes {
-		if memberC+i+1 >= mongo.MaxMembers {
+		if memberC+i+1 > mongo.MaxMembers {
 			log.Error(errReplsetLimit, "rs", rs.Name)
 			break
 		}
@@ -542,7 +565,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		if member.State == mongo.MemberStatePrimary {
 			log.Info("Stepping down the primary", "member", member.Name)
 			if err := cli.StepDown(ctx, 60, false); err != nil {
-				return nil, 0, errors.Wrap(err, "step down primary")
+				return nil, 0, false, errors.Wrap(err, "step down primary")
 			}
 		}
 
@@ -551,10 +574,10 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		log.Info("Fixing hostname of member", "replset", rs.Name, "id", member.Id, "member", member.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return nil, 0, errors.Wrap(err, "fix member hostname: write mongo config")
+			return nil, 0, false, errors.Wrap(err, "fix member hostname: write mongo config")
 		}
 
-		return nil, 0, nil
+		return nil, 0, false, nil
 	}
 
 	if cnf.Members.FixMemberConfigs(ctx, members) {
@@ -563,7 +586,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		log.Info("Fixing member configurations", "replset", rs.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return nil, 0, errors.Wrap(err, "fix member configurations: write mongo config")
+			return nil, 0, false, errors.Wrap(err, "fix member configurations: write mongo config")
 		}
 	}
 
@@ -576,9 +599,9 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		if err != nil {
 			if strings.Contains(err.Error(), "NodeNotFound") {
 				log.V(1).Info("NodeNotFound error during replset reconfig after removing old members, will retry on next reconcile", "replset", rs.Name)
-				return nil, 0, nil
+				return nil, 0, false, nil
 			}
-			return nil, 0, errors.Wrap(err, "delete: write mongo config")
+			return nil, 0, false, errors.Wrap(err, "delete: write mongo config")
 		}
 	}
 
@@ -588,7 +611,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		log.Info("Removing arbiter members", "replset", rs.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return nil, 0, errors.Wrap(err, "remove arbiter if needed: write mongo config")
+			return nil, 0, false, errors.Wrap(err, "remove arbiter if needed: write mongo config")
 		}
 	} else if cnf.Members.AddNew(ctx, members) {
 		cnf.Version++
@@ -596,7 +619,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		log.Info("Adding new nodes", "replset", rs.Name)
 
 		if err := cli.WriteConfig(ctx, cnf, false); err != nil {
-			return nil, 0, errors.Wrap(err, "add new: write mongo config")
+			return nil, 0, false, errors.Wrap(err, "add new: write mongo config")
 		}
 	}
 
@@ -607,7 +630,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 
 		err = cli.WriteConfig(ctx, cnf, false)
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "update external nodes: write mongo config")
+			return nil, 0, false, errors.Wrap(err, "update external nodes: write mongo config")
 		}
 	}
 
@@ -616,24 +639,20 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(
 		primaryHost = primary.Name
 	}
 
-	pending, err := applyMemberConfig(ctx, cli, &cnf, members, set, unsafePSA, primaryHost)
+	votesPending, err := applyMemberConfig(ctx, cli, &cnf, members, set, unsafePSA, primaryHost)
 	if err != nil {
-		return nil, 0, errors.Wrapf(err, "apply member config: replset %s", rs.Name)
+		return nil, 0, false, errors.Wrapf(err, "apply member config: replset %s", rs.Name)
 	}
 
 	rsStatus, err = cli.RSStatus(ctx)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "unable to get replset members")
+		return nil, 0, false, errors.Wrap(err, "unable to get replset members")
 	}
 
 	rsMembers := make(map[string]api.ReplsetMemberStatus)
 	liveMembers := countLiveMembers(rsStatus, cnf, rs, rsMembers)
 
-	if pending {
-		return rsMembers, 0, nil
-	}
-
-	return rsMembers, liveMembers, nil
+	return rsMembers, liveMembers, votesPending, nil
 }
 
 // number of seconds for the outgoing primary to stay out of the election after a handover.
@@ -644,7 +663,7 @@ const stepDownSeconds = 60
 //
 // The two topology policies converge differently:
 //   - PolicyImplicit derives votes and priorities from the members themselves
-//     via SetVotes, and writes the config in a single reconfiguration.
+//     via UpdateVotes, which also changes at most one member's votes per call.
 //   - PolicyExplicit applies what the user declared per member group through
 //     ApplyMemberConfig, which changes at most one member's votes per call.
 //
@@ -664,10 +683,9 @@ func applyMemberConfig(
 	rsName := set.GetReplsetName()
 
 	if set.GetPolicy() == membergroup.PolicyImplicit {
-		currMembers := append(mongo.ConfigMembers(nil), cnf.Members...)
-		cnf.Members.SetVotes(members, unsafePSA)
-		if reflect.DeepEqual(currMembers, cnf.Members) {
-			return false, nil
+		changed, pending := cnf.Members.UpdateVotes(ctx, members, unsafePSA, primaryHost)
+		if !changed {
+			return pending, nil
 		}
 
 		cnf.Version++
@@ -678,7 +696,7 @@ func applyMemberConfig(
 			return false, errors.Wrap(err, "set votes: write mongo config")
 		}
 
-		return false, nil
+		return pending, nil
 	}
 
 	changed, votePending, stepDownPrimary, err := cnf.Members.ApplyMemberConfig(ctx, members, primaryHost)
@@ -789,13 +807,27 @@ func inShard(ctx context.Context, client mongo.Client, rsName string) (bool, err
 
 var errNoRunningMongodContainers = errors.New("no mongod containers in running state")
 
-func mongoInitAdminUser(user, pwd string) string {
-	return fmt.Sprintf("'db.getSiblingDB(\"admin\").createUser( "+
-		"{"+
-		"user: \"%s\","+
-		"pwd: \"%s\","+
-		"roles: [ \"userAdminAnyDatabase\" ]"+
-		"})'", strings.ReplaceAll(user, "'", `'"'"'`), strings.ReplaceAll(pwd, "'", `'"'"'`))
+// mongoExpression creates a mongodb shell call with a JSON-encoded argument
+func mongoExpression(function string, argument any) (string, error) {
+	arg, err := json.Marshal(argument)
+	if err != nil {
+		return "", errors.Wrap(err, "marshal mongo expression argument")
+	}
+
+	return fmt.Sprintf("%s(%s)", function, arg), nil
+}
+
+func mongoInitAdminUser(user, pwd string) (string, error) {
+	expr, err := mongoExpression(`db.getSiblingDB("admin").createUser`, map[string]any{
+		"user":  user,
+		"pwd":   pwd,
+		"roles": []string{"userAdminAnyDatabase"},
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "create user admin expression")
+	}
+
+	return "'" + strings.ReplaceAll(expr, "'", `'"'"'`) + "'", nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) removeRSFromShard(ctx context.Context, cr *api.PerconaServerMongoDB, rsName string) error {
@@ -923,11 +955,6 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(
 		return nil, nil, errors.Wrapf(err, "get config member for pod %s", pod.Name)
 	}
 
-	memberBytes, err := json.Marshal(member)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "marshall member to json")
-	}
-
 	var errb, outb bytes.Buffer
 
 	err = r.clientcmd.Exec(ctx, pod, group.ContainerName, []string{"mongod", "--version"}, nil, &outb, &errb, false)
@@ -935,38 +962,30 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(
 		return nil, nil, fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
 	}
 
-	mongoCmd := "mongosh"
+	mongoArgs := []string{"mongosh"}
 	if strings.Contains(outb.String(), "v4.4") || strings.Contains(outb.String(), "v5.0") {
-		mongoCmd = "mongo"
+		mongoArgs[0] = "mongo"
 	}
 
 	if cr.TLSEnabled() {
-		mongoCmd += " --tls --tlsCertificateKeyFile /tmp/tls.pem --tlsAllowInvalidCertificates --tlsCAFile /etc/mongodb-ssl/ca.crt"
+		mongoArgs = append(mongoArgs, "--tls", "--tlsCertificateKeyFile", "/tmp/tls.pem", "--tlsAllowInvalidCertificates", "--tlsCAFile", "/etc/mongodb-ssl/ca.crt")
 	}
 
-	mongoCmd += fmt.Sprintf(" --port %d", replset.GetPort())
+	mongoArgs = append(mongoArgs, "--port", fmt.Sprint(replset.GetPort()))
+	mongoCmd := strings.Join(mongoArgs, " ")
 
-	cmd := []string{
-		"sh", "-c",
-		fmt.Sprintf(
-			`
-				cat <<-EOF | %s
-				rs.initiate(
-					{
-						_id: '%s',
-						version: 1,
-						members: [
-							%s,
-						]
-					}
-				)
-				EOF
-			`, mongoCmd, replsetName, memberBytes),
+	replsetInitExpression, err := mongoExpression("rs.initiate", map[string]any{
+		"_id":     replsetName,
+		"version": 1,
+		"members": []mongo.ConfigMember{member},
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "create replset config expression")
 	}
 
 	errb.Reset()
 	outb.Reset()
-	err = r.clientcmd.Exec(ctx, pod, group.ContainerName, cmd, nil, &outb, &errb, false)
+	err = r.clientcmd.Exec(ctx, pod, group.ContainerName, mongoArgs, strings.NewReader(replsetInitExpression+"\n"), &outb, &errb, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 	}
@@ -1038,10 +1057,15 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(
 
 	log.Info("creating user admin", "replset", replsetName, "pod", pod.Name, "user", api.RoleUserAdmin)
 
+	quotedCreateUserExpression, err := mongoInitAdminUser(userAdmin.Username, userAdmin.Password)
+	if err != nil {
+		return err
+	}
+
 	var outb, errb bytes.Buffer
 	cmd := []string{
 		"sh", "-c",
-		fmt.Sprintf(`%s --eval %s`, mongoCmd, mongoInitAdminUser(userAdmin.Username, userAdmin.Password)),
+		fmt.Sprintf(`%s --eval %s`, mongoCmd, quotedCreateUserExpression),
 	}
 
 	err = r.clientcmd.Exec(ctx, pod, group.ContainerName, cmd, nil, &outb, &errb, false)
@@ -1100,26 +1124,40 @@ func isMongoAuthFailure(err error, stdout, stderr string) bool {
 }
 
 // handleReplicaSetNoPrimary recovers a replica set that has lost its primary
-// by rewriting the live configuration with force.
+// by rewriting the live configuration with force from a ready data-bearing
+// member, dropping members that no longer have a pod behind them.
 func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	replset *api.ReplsetSpec,
 	set *membergroup.Set,
+	pods []corev1.Pod,
 ) error {
-	log := logf.FromContext(ctx).WithName("handleReplicaSetNoPrimary")
-
 	pod, _, err := r.getEligibleMemberPod(ctx, cr, replset, set, IsReadyDataBearingPod)
 	if err != nil {
 		return errors.Wrap(err, "get a member to recover from")
 	}
 
-	log.Info("Connecting to pod", "pod", pod.Name, "user", api.RoleClusterAdmin)
-	cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, *pod)
+	if err := r.forceReconfigFromPod(ctx, cr, replset, pods, *pod); err != nil {
+		return errors.Wrap(err, "force reconfig member pod")
+	}
+
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) forceReconfigFromPod(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	pods []corev1.Pod,
+	targetPod corev1.Pod,
+) error {
+	log := logf.FromContext(ctx).WithName("handleReplicaSetNoPrimary")
+	log.Info("Connecting to pod", "pod", targetPod.Name, "user", api.RoleClusterAdmin)
+	cli, err := r.standaloneClientWithRole(ctx, cr, replset, api.RoleClusterAdmin, targetPod)
 	if err != nil {
 		return errors.Wrap(err, "get standalone mongo client")
 	}
-
 	defer func() {
 		if err := cli.Disconnect(ctx); err != nil {
 			log.Error(err, "failed to close connection")
@@ -1131,11 +1169,78 @@ func (r *ReconcilePerconaServerMongoDB) handleReplicaSetNoPrimary(
 		return errors.Wrap(err, "read replset config")
 	}
 
+	// Members whose pods are gone still count towards the voting majority, so they can
+	// hold the surviving members below the quorum needed to elect a primary. Writing the
+	// config back unchanged leaves the replset exactly as it was (even if stuck).
+	r.removeUndesiredMembers(ctx, cr, replset, pods, &cfg)
+
 	if err := cli.WriteConfig(ctx, cfg, true); err != nil {
 		return errors.Wrap(err, "reconfigure replset")
 	}
-
 	return nil
+}
+
+// memberHasPod reports whether a config member still has a backing pod.
+func memberHasPod(member mongo.ConfigMember, podNames, hosts map[string]struct{}) bool {
+	if podName, ok := member.Tags["podName"]; ok {
+		if _, exists := podNames[podName]; exists {
+			return true
+		}
+	}
+
+	_, exists := hosts[member.Host]
+	return exists
+}
+
+// removeUndesiredMembers drops config members that have neither a live pod nor a
+// configured external node behind them. It leaves the config untouched when the hosts can't
+// be resolved or when dropping them would empty the member list, so an incomplete pod list
+// can't wipe the replset: recovery is left to a later reconcile instead.
+func (r *ReconcilePerconaServerMongoDB) removeUndesiredMembers(
+	ctx context.Context,
+	cr *api.PerconaServerMongoDB,
+	replset *api.ReplsetSpec,
+	pods []corev1.Pod,
+	cfg *mongo.RSConfig,
+) {
+	log := logf.FromContext(ctx)
+
+	podNames := make(map[string]struct{}, len(pods))
+	hosts := make(map[string]struct{}, len(pods)+len(replset.ExternalNodes))
+	for _, pod := range pods {
+		podNames[pod.Name] = struct{}{}
+
+		host, err := psmdb.MongoHost(ctx, r.client, cr, cr.Spec.ClusterServiceDNSMode, replset, replset.Expose.Enabled, pod)
+		if err != nil {
+			// Without every host we can't tell which members are orphaned, so keep them all
+			// and fall back to rewriting the config as it is.
+			log.Info("Can't resolve host for pod, keeping every replset member", "pod", pod.Name, "error", err.Error())
+			return
+		}
+		hosts[host] = struct{}{}
+	}
+	for _, extNode := range replset.ExternalNodes {
+		hosts[extNode.HostPort()] = struct{}{}
+	}
+
+	keep := make(mongo.ConfigMembers, 0, len(cfg.Members))
+	drop := make(mongo.ConfigMembers, 0, len(cfg.Members))
+	for _, member := range cfg.Members {
+		if memberHasPod(member, podNames, hosts) {
+			keep = append(keep, member)
+			continue
+		}
+		drop = append(drop, member)
+	}
+
+	if len(drop) == 0 || len(keep) == 0 {
+		return
+	}
+
+	for _, member := range drop {
+		log.Info("Removing member with no pod from replset", "replset", replset.Name, "_id", member.ID, "host", member.Host)
+	}
+	cfg.Members = keep
 }
 
 func getRoles(cr *api.PerconaServerMongoDB, role api.SystemUserRole) []mongo.Role {
@@ -1402,7 +1507,7 @@ func (r *ReconcilePerconaServerMongoDB) createOrUpdateSystemUsers(ctx context.Co
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) restoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, set *membergroup.Set) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) physicalRestoreInProgress(ctx context.Context, cr *api.PerconaServerMongoDB, set *membergroup.Set) (bool, error) {
 	for _, stsName := range set.GetStatefulSetNames() {
 		sts := appsv1.StatefulSet{}
 		nn := types.NamespacedName{Name: stsName, Namespace: cr.Namespace}

@@ -20,6 +20,8 @@ import (
 )
 
 func TestReconcileReplsetServices(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	const ns = "rs-svc"
 	const crName = ns
@@ -118,6 +120,8 @@ func TestReconcileReplsetServices(t *testing.T) {
 }
 
 func TestRemoveOutdatedServices(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	const ns = "rs-svc-outdated"
 	const crName = ns
@@ -325,6 +329,8 @@ func yamlCompare(t *testing.T, ns string, filename string, compare any) {
 }
 
 func TestRemoveStaleExternalDNSAnnotations(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		old      map[string]string
 		desired  map[string]string

@@ -316,7 +316,7 @@ func (i InstanceSpec) IsPrimaryEligible() bool {
 func (i InstanceSpec) IsDataBearing() bool { return !i.IsArbiterOnly() }
 
 // UseImplicitVotePolicy reports whether this replica set keeps the historical vote
-// algorithm (mongo.ConfigMembers.SetVotes). True for a legacy topology, and for
+// algorithm (mongo.ConfigMembers.UpdateVotes). True for a legacy topology, and for
 // an instances[] topology whose groups are all reserved names with no rsConfig
 // at all: such input carries no explicit member intent, so the reserved names
 // still mean what they always meant. Any custom group, or any rsConfig on any

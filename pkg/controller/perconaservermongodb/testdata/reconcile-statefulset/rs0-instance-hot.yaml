@@ -94,7 +94,7 @@ spec:
         - configMapRef:
             name: test-configmap
             optional: true
-        image: perconalab/percona-server-mongodb-operator:main-mongod8.0
+        image: percona/percona-server-mongodb:sometag
         imagePullPolicy: Always
         livenessProbe:
           exec:
@@ -190,6 +190,8 @@ spec:
           value: "5"
         - name: SHARDED
           value: "TRUE"
+        - name: PBM_AGENT_TLS_DIR
+          value: /etc/mongodb-pbm
         - name: POD_NAME
           valueFrom:
             fieldRef:
@@ -198,7 +200,7 @@ spec:
           value: mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true
         - name: PBM_AGENT_TLS_ENABLED
           value: "true"
-        image: perconalab/percona-server-mongodb-operator:main-backup
+        image: percona/percona-backup-mongodb:sometag
         imagePullPolicy: Always
         name: backup-agent
         resources: {}
@@ -214,6 +216,9 @@ spec:
           readOnly: true
         - mountPath: /data/db
           name: mongod-data
+        - mountPath: /etc/mongodb-pbm
+          name: pbm-tls
+          readOnly: true
       - args:
         - fluent-bit
         command:
@@ -229,7 +234,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
-        image: perconalab/fluentbit:main-logcollector
+        image: percona/fluentbit:sometag
         name: logs
         resources:
           requests:
@@ -263,7 +268,11 @@ spec:
               key: MONGODB_CLUSTER_ADMIN_PASSWORD_ESCAPED
               name: internal-reconcile-statefulset-cr-users
               optional: false
-        image: perconalab/fluentbit:main-logcollector
+        - name: MONGODB_TLS_ENABLED
+          value: "true"
+        - name: MONGODB_TLS_INSECURE
+          value: "true"
+        image: percona/fluentbit:sometag
         name: logrotate
         resources:
           requests:
@@ -274,10 +283,13 @@ spec:
           name: mongod-data
         - mountPath: /opt/percona
           name: bin
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
       initContainers:
       - command:
         - /init-entrypoint.sh
-        image: perconalab/percona-server-mongodb-operator:main
+        image: percona/percona-server-mongodb-operator:sometag
         imagePullPolicy: Always
         name: mongo-init
         resources:
@@ -319,6 +331,10 @@ spec:
       - name: users-secret-file
         secret:
           secretName: internal-reconcile-statefulset-cr-users
+      - name: pbm-tls
+        secret:
+          defaultMode: 288
+          secretName: reconcile-statefulset-cr-pbm
   updateStrategy:
     type: OnDelete
   volumeClaimTemplates:

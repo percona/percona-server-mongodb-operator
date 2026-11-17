@@ -264,9 +264,11 @@ write_document 100500
 
 run_backup local-s3-1 backup-local-s3-1 logical
 wait_backup backup-local-s3-1
+wait_for_pbm_operations ${cluster}
 
 run_backup local-s3-2 backup-local-s3-2 logical
 wait_backup backup-local-s3-2
+wait_for_pbm_operations ${cluster}
 
 run_backup local-s3-3 backup-local-s3-3 physical
 wait_backup backup-local-s3-3

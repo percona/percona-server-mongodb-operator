@@ -112,6 +112,17 @@ func (s *Set) GetDataBearingVoterCount() int32 {
 	return n
 }
 
+// GetDataBearingMemberCount counts the members that hold data, voting or not.
+func (s *Set) GetDataBearingMemberCount() int32 {
+	var n int32
+	for i := range s.groups {
+		if s.groups[i].DataBearing {
+			n += s.groups[i].Replicas
+		}
+	}
+	return n
+}
+
 func (s *Set) GetArbiterMemberCount() int32 {
 	var n int32
 	for i := range s.groups {

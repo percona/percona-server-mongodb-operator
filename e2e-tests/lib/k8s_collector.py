@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import json
 import logging
 import os
 import tarfile
@@ -11,6 +12,19 @@ from lib.kubectl import kubectl_bin
 logger = logging.getLogger(__name__)
 
 REPORTS_DIR = os.path.join(os.path.dirname(__file__), "..", "reports")
+OPERATOR_LABEL = "app.kubernetes.io/name=percona-server-mongodb-operator"
+MONGOD_LOG_LINES = 300
+
+
+def is_relevant_mongod_line(line: str) -> bool:
+    """Keep warnings, errors and replication events; drop routine connection and auth noise"""
+    try:
+        entry = json.loads(line)
+    except ValueError:
+        return True
+    if not isinstance(entry, dict):
+        return True
+    return entry.get("s") in ("W", "E", "F") or entry.get("c") in ("REPL", "ELECTION")
 
 
 class K8sCollector:
@@ -26,7 +40,41 @@ class K8sCollector:
 
     def kubectl_ns(self, *args: str) -> str:
         """Run kubectl command with namespace flag"""
-        return kubectl_bin(*args, "-n", self.namespace, check=False, return_stderr=True)
+        return kubectl_bin("-n", self.namespace, *args, check=False, return_stderr=True)
+
+    def seconds_since_created(self, namespace: str) -> int:
+        """Seconds elapsed since the namespace was created, i.e. since the test started"""
+        created = self.kubectl(
+            "get", "namespace", namespace, "-o", "jsonpath={.metadata.creationTimestamp}"
+        ).strip()
+        try:
+            started = datetime.fromisoformat(created)
+        except ValueError:
+            return 3600
+        return int((datetime.now(tz=UTC) - started).total_seconds()) + 60
+
+    def operator_namespaces(self) -> list[str]:
+        """Namespaces of this test that run an operator pod.
+
+        OPERATOR_NS may be set even when a test unsets it and deploys the operator
+        in its own namespace, and multi-cluster tests run a second operator in
+        the "<test>-replica-<id>" namespace.
+        """
+        out = self.kubectl(
+            "get",
+            "pods",
+            "-A",
+            "-l",
+            OPERATOR_LABEL,
+            "-o",
+            'jsonpath={range .items[*]}{.metadata.namespace}{"\\n"}{end}',
+        )
+        running = set(out.split())
+        replica_prefix = self.namespace.rsplit("-", 1)[0] + "-replica-"
+        candidates = [os.environ.get("OPERATOR_NS"), self.namespace] + sorted(
+            ns for ns in running if ns.startswith(replica_prefix)
+        )
+        return [ns for ns in dict.fromkeys(candidates) if ns and ns in running]
 
     def get_names(self, resource_type: str) -> list[str]:
         """Get list of resource names"""
@@ -146,31 +194,112 @@ class K8sCollector:
         )
         sections.append("")
 
+        errors_jsonpath = 'jsonpath={range .items[?(@.status.error)]}{.metadata.name}: {.status.error}{"\\n"}{end}'
+
         sections.append("=== PSMDB Backup ===")
         sections.append(self.kubectl_ns("get", "psmdb-backup") or "(no output)")
+        sections.append(self.kubectl_ns("get", "psmdb-backup", "-o", errors_jsonpath))
         sections.append("")
 
         sections.append("=== PSMDB Restore ===")
         sections.append(self.kubectl_ns("get", "psmdb-restore") or "(no output)")
+        sections.append(self.kubectl_ns("get", "psmdb-restore", "-o", errors_jsonpath))
 
-        # In cluster-wide mode the operator runs in OPERATOR_NS, not the test namespace.
-        operator_ns = os.environ.get("OPERATOR_NS") or self.namespace
-        logs = self.kubectl(
-            "logs",
-            "-n",
-            operator_ns,
-            "-l",
-            "app.kubernetes.io/name=percona-server-mongodb-operator",
-            "--tail=50",
-        )
+        logs = []
+        for ns in self.operator_namespaces():
+            out = self.kubectl(
+                "logs",
+                "-n",
+                ns,
+                "-l",
+                OPERATOR_LABEL,
+                "--tail=-1",
+                f"--since={self.seconds_since_created(ns)}s",
+            )
+            logs.append(f"=== PSMDB Operator Logs (namespace {ns}) ===\n{out or '(no output)'}")
+        if not logs:
+            logs.append("=== PSMDB Operator Logs ===\n(no operator pods found)")
 
         events = self.kubectl_ns("get", "events", "--sort-by=.lastTimestamp")
 
         return {
             "resources": "\n".join(sections),
-            "logs": f"=== PSMDB Operator Logs (namespace {operator_ns}) ===\n{logs or '(no output)'}",
+            "logs": "\n\n".join(logs),
             "events": f"=== Kubernetes Events ===\n{events or '(no output)'}",
+            "pbm": self.capture_pbm(),
+            "mongod": self.capture_mongod(),
         }
+
+    def capture_pbm(self) -> str:
+        """Capture PBM status and logs from one backup-agent per cluster"""
+        pods = self.kubectl_ns(
+            "get",
+            "pods",
+            "-o",
+            'jsonpath={range .items[*]}{.metadata.labels.app\\.kubernetes\\.io/instance}{" "}'
+            '{.metadata.name}{" "}{.spec.initContainers[*].name}{" "}{.spec.containers[*].name}{"\\n"}{end}',
+        )
+
+        agents: dict[str, str] = {}
+        restoring: list[str] = []
+        for line in pods.splitlines():
+            instance, pod, *containers = line.split()
+            if "backup-agent" in containers:
+                agents.setdefault(instance, pod)
+            elif "pbm-init" in containers:
+                # during physical restore pbm-agent runs in the mongod container
+                restoring.append(pod)
+
+        sections = []
+        for instance, pod in agents.items():
+            for cmd in (["pbm", "status"], ["pbm", "logs", "-s", "D", "-t", "200"]):
+                sections.append(f"=== {instance}: {' '.join(cmd)} ({pod}) ===")
+                sections.append(
+                    self.kubectl_ns("exec", pod, "-c", "backup-agent", "--", "timeout", "60", *cmd)
+                    or "(no output)"
+                )
+                sections.append("")
+
+        for pod in restoring:
+            sections.append(f"=== {pod}: /tmp/pbm-agent.log (physical restore) ===")
+            sections.append(
+                self.kubectl_ns(
+                    "exec", pod, "-c", "mongod", "--", "tail", "-n", "200", "/tmp/pbm-agent.log"
+                )
+                or "(no output)"
+            )
+            sections.append("")
+
+        return "\n".join(sections) or "(no backup-agent pods)"
+
+    def capture_mongod(self) -> str:
+        """Capture warnings, errors and replication logs of every mongod container"""
+        pods = self.kubectl_ns(
+            "get",
+            "pods",
+            "-o",
+            'jsonpath={range .items[*]}{.metadata.name}{" "}'
+            '{.status.containerStatuses[?(@.name=="mongod")].restartCount}{"\\n"}{end}',
+        )
+
+        sections = []
+        for line in pods.splitlines():
+            pod, *restarts = line.split()
+            if not restarts:
+                continue
+
+            runs: list[tuple[str, list[str]]] = [("current", [])]
+            if int(restarts[0]) > 0:
+                runs.insert(0, ("previous", ["--previous"]))
+
+            for run, flags in runs:
+                logs = self.kubectl_ns("logs", pod, "-c", "mongod", *flags)
+                relevant = [log for log in logs.splitlines() if is_relevant_mongod_line(log)]
+                sections.append(f"=== {pod}: mongod ({run} container) ===")
+                sections.append("\n".join(relevant[-MONGOD_LOG_LINES:]) or "(no output)")
+                sections.append("")
+
+        return "\n".join(sections) or "(no mongod pods)"
 
     def collect_all(self) -> None:
         """Main collection method"""

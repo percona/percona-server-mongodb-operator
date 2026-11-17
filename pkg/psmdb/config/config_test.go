@@ -8,6 +8,8 @@ import (
 )
 
 func TestVolumeProjection(t *testing.T) {
+	t.Parallel()
+
 	objectName := "test-object"
 	localObj := corev1.LocalObjectReference{
 		Name: objectName,
