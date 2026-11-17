@@ -485,7 +485,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	members := mongo.ConfigMembers{}
 	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", rs.Name)
+			log.Error(errReplsetLimit, "skipping replset member", "rs", rs.Name)
 			break
 		}
 
@@ -505,7 +505,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	memberC := len(members)
 	for i, extNode := range rs.ExternalNodes {
 		if memberC+i+1 > mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", rs.Name)
+			log.Error(errReplsetLimit, "skipping replset member", "rs", rs.Name)
 			break
 		}
 
