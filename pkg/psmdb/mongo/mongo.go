@@ -273,14 +273,19 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
+// IsAuthError reports whether err comes from a failed authentication handshake.
+func IsAuthError(err error) bool {
+	var authErr *auth.Error
+	return errors.As(err, &authErr)
+}
+
 // isTransientError reports whether err is a connection level failure that may succeed on a retry.
 func isTransientError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	var authErr *auth.Error
-	if errors.As(err, &authErr) {
+	if IsAuthError(err) {
 		return false
 	}
 
