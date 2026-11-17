@@ -33,9 +33,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCustomUsers(ctx context.Context
 		return nil
 	}
 
+	rstRunning, err := r.isRestoreRunning(ctx, cr)
+	if err != nil {
+		return errors.Wrap(err, "check running restore")
+	}
+	if rstRunning {
+		return nil
+	}
+
 	log := logf.FromContext(ctx)
 
-	var err error
 	var mongoCli mongo.Client
 	if cr.Spec.Sharding.Enabled {
 		mongoCli, err = r.mongosClientWithRole(ctx, cr, api.RoleUserAdmin)

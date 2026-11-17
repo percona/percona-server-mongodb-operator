@@ -8,7 +8,9 @@ compare() {
 	local uri="$3"
 	local target="$4"
 
-	if [[ $IMAGE_MONGOD =~ 5\.0 ]] && [ -f ${test_dir}/compare/$target-50.json ]; then
+	if [[ $IMAGE_MONGOD =~ 8\.3 ]] && [ -f ${test_dir}/compare/$target-83.json ]; then
+		target=$target-83
+	elif [[ $IMAGE_MONGOD =~ 5\.0 ]] && [ -f ${test_dir}/compare/$target-50.json ]; then
 		target=$target-50
 	fi
 

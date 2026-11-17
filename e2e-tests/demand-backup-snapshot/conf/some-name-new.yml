@@ -95,3 +95,4 @@ spec:
     users: some-users
     ssl: some-name-ssl
     sslInternal: some-name-ssl-internal
+    sslPBM: some-name-pbm

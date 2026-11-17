@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -16,9 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestEnsureSecurityKeys(t *testing.T) {
@@ -439,6 +442,108 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	Context("VPA resource bounds validation", func() {
+		crWithVPA := func(name string, vpa *psmdbv1.VPASpec, replsetVPA *psmdbv1.ComponentVPASpec) *psmdbv1.PerconaServerMongoDB {
+			cr, err := readDefaultCR(name, ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.VPA = vpa
+			cr.Spec.Replsets[0].VPA = replsetVPA
+
+			return cr
+		}
+
+		It("should allow a cr without a vpa section", func() {
+			err := k8sClient.Create(ctx, crWithVPA("psmdb-vpa-absent", nil, nil))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow vpa enabled without bounds", func() {
+			cr := crWithVPA("psmdb-vpa-no-bounds", &psmdbv1.VPASpec{Enabled: true}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow minAllowed without maxAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-min-only", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("4", "4Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow maxAllowed without minAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-max-only", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MaxAllowed: rl("2", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow ordered cpu and memory bounds", func() {
+			cr := crWithVPA("psmdb-vpa-ordered-bounds", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("100m", "256Mi"),
+				MaxAllowed: rl("8", "16Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should allow bounds that are exactly equal", func() {
+			cr := crWithVPA("psmdb-vpa-equal-bounds", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("2", "2Gi"),
+				MaxAllowed: rl("2", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reject cpu minAllowed above cpu maxAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-cpu-inverted", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("4", ""),
+				MaxAllowed: rl("2", ""),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minAllowed must not exceed maxAllowed"))
+		})
+
+		It("should reject memory minAllowed above memory maxAllowed", func() {
+			cr := crWithVPA("psmdb-vpa-memory-inverted", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("", "16Gi"),
+				MaxAllowed: rl("", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minAllowed must not exceed maxAllowed"))
+		})
+
+		It("should reject inverted memory bounds when cpu bounds are ordered", func() {
+			cr := crWithVPA("psmdb-vpa-memory-inverted-only", &psmdbv1.VPASpec{
+				Enabled:    true,
+				MinAllowed: rl("100m", "16Gi"),
+				MaxAllowed: rl("8", "2Gi"),
+			}, nil)
+
+			err := k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("minAllowed must not exceed maxAllowed"))
+		})
+	})
 })
 
 func TestDeleteConfigMapIfExistsIgnoresNotFoundOnDelete(t *testing.T) {
@@ -478,5 +583,61 @@ func TestDeleteConfigMapIfExistsIgnoresNotFoundOnDelete(t *testing.T) {
 		})
 
 		require.Error(t, deleteConfigMapIfExists(t.Context(), cl, cr, cmName))
+	})
+}
+
+func TestHandleShardingToggleConditionNotInCache(t *testing.T) {
+	ctx := context.Background()
+
+	const ns = "sharding-toggle-not-in-cache"
+
+	cr, err := readDefaultCR(ns+"-cr", ns)
+	require.NoError(t, err)
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+	cr.Status.AddCondition(psmdbv1.ClusterCondition{
+		Type:   psmdbv1.AppStateSharding,
+		Status: psmdbv1.ConditionFalse,
+	})
+	staleConditions := slices.Clone(cr.Status.Conditions)
+
+	// staleCache returns the cluster with the old conditions for the first `misses` reads after the status write
+	staleCache := func(misses int) *ReconcilePerconaServerMongoDB {
+		r := buildFakeClient(cr.DeepCopy())
+		r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+		written := false
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if err := c.Get(ctx, key, obj, opts...); err != nil {
+					return err
+				}
+				if cluster, ok := obj.(*psmdbv1.PerconaServerMongoDB); ok && written && misses > 0 {
+					misses--
+					cluster.Status.Conditions = slices.Clone(staleConditions)
+				}
+				return nil
+			},
+			SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+				written = true
+				return c.SubResource(subResourceName).Update(ctx, obj, opts...)
+			},
+		})
+		return r
+	}
+
+	t.Run("condition appears in cache", func(t *testing.T) {
+		r := staleCache(2)
+		c := cr.DeepCopy()
+		require.NoError(t, r.handleShardingToggle(ctx, c))
+		assert.False(t, c.Spec.Pause)
+		assert.True(t, c.Spec.Sharding.Enabled)
+
+		got := new(psmdbv1.PerconaServerMongoDB)
+		require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(cr), got))
+		assert.Equal(t, psmdbv1.ConditionTrue, got.Status.FindCondition(psmdbv1.AppStateSharding).Status)
+	})
+
+	t.Run("condition never appears in cache", func(t *testing.T) {
+		err := staleCache(100).handleShardingToggle(ctx, cr.DeepCopy())
+		require.ErrorIs(t, err, errShardingConditionNotInCache)
 	})
 }

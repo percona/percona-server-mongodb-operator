@@ -144,6 +144,11 @@ func (r *ReconcilePerconaServerMongoDB) disableBalancer(ctx context.Context, cr 
 		return errors.Wrapf(err, "get mongos statefulset %s", msSts.Name)
 	}
 
+	if msSts.Spec.Replicas != nil && *msSts.Spec.Replicas == 0 {
+		log.V(1).Info("mongos is not scaled up yet, skipping balancer disable", "statefulset", msSts.Name)
+		return nil
+	}
+
 	mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 	if err != nil {
 		return errors.Wrap(err, "failed to get mongos connection")

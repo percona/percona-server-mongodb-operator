@@ -15,7 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
-	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -35,6 +35,12 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		WithName("SmartUpdate").
 		WithValues("statefulset", sfs.Name, "replset", replset.Name)
 
+	// Every pod is about to be deleted, so no point rolling
+	if cr.Spec.Pause {
+		log.V(1).Info("cluster is paused, skipping smart update")
+		return nil
+	}
+
 	if replset.Size == 0 {
 		return nil
 	}
@@ -53,7 +59,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	list := corev1.PodList{}
 	if err := r.client.List(ctx,
 		&list,
-		&k8sclient.ListOptions{
+		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(matchLabels),
 		},
@@ -117,7 +123,7 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 			updateRevision = arbiterSfs.Status.UpdateRevision
 		}
 
-		if err := r.applyNWait(ctx, cr, updateRevision, pod, waitLimit); err != nil {
+		if err := r.applyNWait(ctx, cr, replset, updateRevision, pod, waitLimit); err != nil {
 			return errors.Wrap(err, "failed to apply changes")
 		}
 		return nil
@@ -139,7 +145,15 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
-	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok && rsStatus.Members != nil {
+	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
+		// Members are reported only after the replset is reconciled (e.g. added
+		// as a shard). Until then, pods outside the replset have no users and
+		// can't be checked for primary.
+		if len(rsStatus.Members) == 0 {
+			log.Info("can't start/continue 'SmartUpdate': waiting for replset members")
+			return nil
+		}
+
 		for _, pod := range list.Items {
 			if _, ok := rsStatus.Members[pod.Name]; !ok {
 				log.Info("pod is not a member of replset, updating it", "pod", pod.Name, "members", rsStatus.Members)
@@ -214,35 +228,52 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	// Primary can't be one of NonVoting and Hidden members, so we don't need to step down
 	// If the primary is external, we can't match it with a running pod and it'll have an empty name
 	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
-		forceStepDown := replset.Size == 1
-		log.Info("doing step down...", "force", forceStepDown)
-		client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
-		if err != nil {
-			return fmt.Errorf("failed to get mongo client: %v", err)
-		}
+		updateRevision := sfs.Status.UpdateRevision
 
-		defer func() {
-			err := client.Disconnect(ctx)
+		resized := primaryPod.Labels["controller-revision-hash"] == updateRevision
+		if !resized {
+			resized, err = r.tryInPlaceResize(ctx, cr, replset, updateRevision, &primaryPod)
 			if err != nil {
-				log.Error(err, "failed to close connection")
-			}
-		}()
-
-		err = client.StepDown(ctx, 60, forceStepDown)
-		if err != nil {
-			if strings.Contains(err.Error(), "No electable secondaries caught up") {
-				err = client.StepDown(ctx, 60, true)
-				if err != nil {
-					return errors.Wrap(err, "failed to do forced step down")
-				}
-			} else {
-				return errors.Wrap(err, "failed to do step down")
+				return errors.Wrap(err, "in-place resize primary")
 			}
 		}
 
-		log.Info("apply changes to primary pod", "pod", primaryPod.Name)
-		if err := updatePod(&primaryPod); err != nil {
-			return err
+		if resized {
+			log.Info("primary pod is up to date, no step down needed", "pod", primaryPod.Name)
+			if err := r.waitPodRestart(ctx, cr, updateRevision, &primaryPod, waitLimit); err != nil {
+				return errors.Wrap(err, "wait primary pod ready")
+			}
+		} else {
+			forceStepDown := replset.Size == 1
+			log.Info("doing step down...", "force", forceStepDown)
+			cl, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+			if err != nil {
+				return fmt.Errorf("failed to get mongo client: %v", err)
+			}
+
+			defer func() {
+				err := cl.Disconnect(ctx)
+				if err != nil {
+					log.Error(err, "failed to close connection")
+				}
+			}()
+
+			err = cl.StepDown(ctx, 60, forceStepDown)
+			if err != nil {
+				if strings.Contains(err.Error(), "No electable secondaries caught up") {
+					err = cl.StepDown(ctx, 60, true)
+					if err != nil {
+						return errors.Wrap(err, "failed to do forced step down")
+					}
+				} else {
+					return errors.Wrap(err, "failed to do step down")
+				}
+			}
+
+			log.Info("apply changes to primary pod", "pod", primaryPod.Name)
+			if err := r.recreateNWait(ctx, cr, updateRevision, &primaryPod, waitLimit); err != nil {
+				return errors.Wrap(err, "failed to apply changes")
+			}
 		}
 	}
 
@@ -337,7 +368,7 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 	pods := &corev1.PodList{}
 	err = r.client.List(ctx,
 		pods,
-		&k8sclient.ListOptions{
+		&client.ListOptions{
 			Namespace:     cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(sts.Spec.Template.Labels),
 		},
@@ -452,6 +483,10 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	}
 
 	if !k8s.HasStatefulSetChanged(sts, &list) {
+		// Nothing to update first, mongod must not wait for mongos.
+		if err := r.unsetUpdateMongosFirst(ctx, cr); err != nil {
+			return errors.Wrap(err, "unset update mongos first")
+		}
 		return nil
 	}
 
@@ -501,7 +536,7 @@ func (r *ReconcilePerconaServerMongoDB) smartMongosUpdate(ctx context.Context, c
 	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
 
 	for _, pod := range list.Items {
-		if err := r.applyNWait(ctx, cr, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
+		if err := r.applyNWait(ctx, cr, nil, sts.Status.UpdateRevision, &pod, waitLimit); err != nil {
 			return errors.Wrap(err, "failed to apply changes")
 		}
 	}
@@ -536,7 +571,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 	for _, s := range stsList.Items {
 		podList := new(corev1.PodList)
 		if err := r.client.List(ctx, podList,
-			&k8sclient.ListOptions{
+			&client.ListOptions{
 				Namespace:     cr.Namespace,
 				LabelSelector: labels.SelectorFromSet(s.Labels),
 			}); err != nil {
@@ -553,7 +588,7 @@ func (r *ReconcilePerconaServerMongoDB) isStsListUpToDate(ctx context.Context, c
 func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
 	sfsList := appsv1.StatefulSetList{}
 	if err := r.client.List(ctx, &sfsList,
-		&k8sclient.ListOptions{
+		&client.ListOptions{
 			Namespace: cr.Namespace,
 			LabelSelector: labels.SelectorFromSet(map[string]string{
 				naming.LabelKubernetesInstance: cr.Name,
@@ -566,7 +601,21 @@ func (r *ReconcilePerconaServerMongoDB) isAllSfsUpToDate(ctx context.Context, cr
 	return r.isStsListUpToDate(ctx, cr, &sfsList)
 }
 
-func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+	if pod.Labels["controller-revision-hash"] != updateRevision {
+		resized, err := r.tryInPlaceResize(ctx, cr, replset, updateRevision, pod)
+		if err != nil {
+			return errors.Wrap(err, "in-place resize")
+		}
+		if resized {
+			return errors.Wrap(r.waitPodRestart(ctx, cr, updateRevision, pod, waitLimit), "wait pod ready")
+		}
+	}
+
+	return r.recreateNWait(ctx, cr, updateRevision, pod, waitLimit)
+}
+
+func (r *ReconcilePerconaServerMongoDB) recreateNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
 	if pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision {
 		logf.FromContext(ctx).Info("Pod already updated", "pod", pod.Name)
 	} else {

@@ -81,6 +81,10 @@ func (p *fakePBM) Close(ctx context.Context) error {
 	return nil
 }
 
+func (p *fakePBM) HasBackupLock(ctx context.Context, opID string) (bool, error) {
+	return false, nil
+}
+
 func (p *fakePBM) HasLocks(ctx context.Context, predicates ...backup.LockHeaderPredicate) (bool, error) {
 	return false, nil
 }
@@ -91,6 +95,10 @@ func (p *fakePBM) GetRestoreMeta(ctx context.Context, name string) (*restore.Res
 
 func (p *fakePBM) GetBackupMeta(ctx context.Context, bcpName string) (*backup.BackupMeta, error) {
 	return nil, nil
+}
+
+func (p *fakePBM) CancelBackup(ctx context.Context, bcpName string) error {
+	return nil
 }
 
 func (p *fakePBM) FinishBackup(ctx context.Context, bcpName string) error {

@@ -102,6 +102,26 @@ def wait_backup_agent(pod: str, timeout: int = 1800) -> None:
     raise TimeoutError(f"pbm-agent in {pod} was not ready within {timeout}s")
 
 
+def run_backup(
+    test_dir: str,
+    storage: str,
+    backup_name: str = "",
+    backup_type: str = "logical",
+) -> str:
+    """Start a backup from the test's conf/backup-<storage>.yml and return its name."""
+    name = backup_name or f"backup-{storage}"
+    manifest = Path(test_dir) / "conf" / f"backup-{storage}.yml"
+
+    doc = yaml.safe_load(manifest.read_text())
+    doc["metadata"]["name"] = name
+    doc["spec"]["storageName"] = storage
+    doc["spec"]["type"] = backup_type
+
+    logger.info(f"Running backup {name}")
+    kubectl_bin("apply", "-f", "-", input_data=yaml.dump(doc))
+    return name
+
+
 def wait_backup(backup_name: str, target_state: str = "ready", timeout: int = 600) -> None:
     """Wait for a psmdb-backup to reach `target_state`, failing fast on error."""
     logger.info(f"Waiting for psmdb-backup/{backup_name} to reach {target_state} state")

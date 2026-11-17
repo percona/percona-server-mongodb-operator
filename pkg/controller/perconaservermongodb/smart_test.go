@@ -1,6 +1,7 @@
 package perconaservermongodb
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestSortPodsByOrdinal(t *testing.T) {
@@ -114,6 +116,8 @@ func TestSmartMongosUpdateUnsetsMongosFirst(t *testing.T) {
 		"update strategy is not smart": func(cr *api.PerconaServerMongoDB) {
 			cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 		},
+		// e.g. mongos was created after the TLS secrets were recreated
+		"mongos statefulset has no changes": func(cr *api.PerconaServerMongoDB) {},
 	}
 
 	for name, mutate := range tests {
@@ -136,5 +140,46 @@ func TestSmartMongosUpdateUnsetsMongosFirst(t *testing.T) {
 			assert.NotContains(t, stored.Annotations, api.AnnotationUpdateMongosFirst)
 			assert.NotContains(t, cr.Annotations, api.AnnotationUpdateMongosFirst)
 		})
+	}
+}
+
+func TestSmartUpdateWaitsForReplsetMembers(t *testing.T) {
+	ctx := context.Background()
+
+	rs := &api.ReplsetSpec{Name: "rs0", Size: 3, LivenessProbe: new(api.LivenessProbeExtended)}
+	cr := &api.PerconaServerMongoDB{
+		Name:      "some-name",
+		Namespace: "some-namespace",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion:      version.Version(),
+			UpdateStrategy: api.SmartUpdateStatefulSetStrategyType,
+			Replsets:       []*api.ReplsetSpec{rs},
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			Replsets: map[string]api.ReplsetStatus{
+				// Members are dropped from the stored status when the replset
+				// reconciliation returns none, e.g. while waiting to be added as a shard.
+				"rs0": {Initialized: true},
+			},
+		},
+	}
+
+	sts := mockReadyReplsetSts("some-name-rs0", cr.Namespace, cr.Name, rs.Name, "mongod", 3)
+	sts.Status.Replicas = 3
+	sts.Status.UpdateRevision = "new-revision"
+
+	objs := []client.Object{cr, sts}
+	for i := range 3 {
+		pod := mockReadyReplsetPod("some-name-rs0-"+strconv.Itoa(i), cr.Namespace, cr.Name, rs.Name, "mongod")
+		pod.Labels["controller-revision-hash"] = "old-revision"
+		objs = append(objs, pod)
+	}
+
+	r := buildFakeClient(objs...)
+
+	// Pods that haven't joined the replset have no users, so checking them
+	// for primary would fail authentication and block the reconcile.
+	if err := r.smartUpdate(ctx, cr, sts, rs); err != nil {
+		t.Fatalf("smart update should wait for replset members, got error: %v", err)
 	}
 }

@@ -11,6 +11,7 @@ CONTAINER="${CONTAINER:-docker}"
 CATALOG_PLATFORM="${CATALOG_PLATFORM:-linux/amd64,linux/arm64}"
 CATALOG_RENDER_PLATFORM="${CATALOG_RENDER_PLATFORM:-${CATALOG_PLATFORM%%,*}}"
 CATALOG_BUNDLE_LIMIT="${CATALOG_BUNDLE_LIMIT:-2}"
+CATALOG_PREVIOUS_MINORS="${CATALOG_PREVIOUS_MINORS:-}"
 CATALOG_NAMESPACE="${CATALOG_NAMESPACE:-openshift-marketplace}"
 CONFIRM_PUSH="${CONFIRM_PUSH:-1}"
 NAME="${NAME:-percona-server-mongodb-operator}"
@@ -185,7 +186,45 @@ find_previous_versions() {
 			$0 != current && !seen[$0]++ { print }
 		' |
 		sort -t. -k1,1n -k2,2n -k3,3n |
+		select_previous_versions
+}
+
+# Reads versions sorted ascending. With CATALOG_PREVIOUS_MINORS=N keeps every
+# version of the N newest minor lines older than the current one (all their
+# patches), plus older patches of the current minor line; otherwise the newest
+# CATALOG_BUNDLE_LIMIT versions.
+select_previous_versions() {
+	if [[ -z "$CATALOG_PREVIOUS_MINORS" ]]; then
 		tail -n "$CATALOG_BUNDLE_LIMIT"
+		return
+	fi
+
+	# Versions newer than the one being built are not upgrade sources.
+	awk -F. -v current="$BUNDLE_IMAGE_VERSION" -v minors="$CATALOG_PREVIOUS_MINORS" '
+		BEGIN { split(current, c, "."); current_line = c[1] "." c[2] }
+		$1 > c[1] + 0 || ($1 == c[1] + 0 && ($2 > c[2] + 0 || ($2 == c[2] + 0 && $3 > c[3] + 0))) { next }
+		{ versions[++n] = $0; lines[n] = $1 "." $2 }
+		END {
+			for (i = n; i >= 1; i--) {
+				if (lines[i] == current_line) {
+					keep[i] = 1
+					continue
+				}
+				if (lines[i] != last) {
+					count++
+					last = lines[i]
+				}
+				if (count > minors) break
+				keep[i] = 1
+			}
+			for (i = 1; i <= n; i++) if (keep[i]) print versions[i]
+		}
+	'
+}
+
+# Minor lines among the given versions, not counting the current version's line.
+count_previous_minor_lines() {
+	printf '%s\n' "$@" | cut -d. -f1,2 | grep -vxF "${BUNDLE_IMAGE_VERSION%.*}" | sort -u | grep -c .
 }
 
 confirm_build() {
@@ -272,6 +311,31 @@ write_catalog_template() {
 	} >"$CATALOG_TEMPLATE"
 }
 
+# The semver template always generates a channel per minor version: opm falls
+# back to GenerateMinorChannels when both generate options are false. Published
+# catalogs have one channel, so rebuild the channels as a single channel with
+# the edges the bundles declare: olm.skipRange (community) or spec.skips
+# (certified), both covering every older version.
+single_channel_catalog() {
+	jq -s -c \
+		--arg channel "${BUNDLE_PACKAGE_CHANNEL:-stable}" \
+		--arg type "$BUNDLE_TYPE" '
+		def ver: capture("v(?<a>[0-9]+)\\.(?<b>[0-9]+)\\.(?<c>[0-9]+)$") | [.a, .b, .c] | map(tonumber);
+		(map(select(.schema == "olm.bundle")) | sort_by(.name | ver)) as $bundles
+		| [range(0; $bundles | length) as $i
+			| {name: $bundles[$i].name}
+			+ (if $i > 0 then {replaces: $bundles[$i - 1].name} else {} end)
+			+ (if $type == "certified"
+				then (if $i > 1 then {skips: [$bundles[0:$i - 1][].name]} else {} end)
+				else {skipRange: ("<" + ($bundles[$i].name | ver | map(tostring) | join(".")))}
+				end)
+		] as $entries
+		| (map(select(.schema != "olm.channel")
+			| if .schema == "olm.package" then .defaultChannel = $channel else . end)
+			+ [{schema: "olm.channel", package: $bundles[0].package, name: $channel, entries: $entries}])[]
+	'
+}
+
 build_catalog() {
 	local image
 
@@ -285,9 +349,10 @@ build_catalog() {
 	echo "[olm] Rendering ${BUNDLE_TYPE} catalog"
 
 	opm alpha render-template semver \
-		-o yaml \
+		-o json \
 		<"$CATALOG_TEMPLATE" \
-		>"${CATALOG_DIR}/catalog.yaml"
+		>"${TMP_DIR}/catalog-semver.json"
+	single_channel_catalog <"${TMP_DIR}/catalog-semver.json" >"${CATALOG_DIR}/catalog.json"
 
 	echo "[olm] Validating ${BUNDLE_TYPE} catalog"
 	opm validate "$CATALOG_DIR"
@@ -316,6 +381,8 @@ run_build() {
 	[[ -n "$BUNDLE_IMAGE_VERSION" ]] || die "BUNDLE_IMAGE_VERSION is required"
 	[[ "$CATALOG_BUNDLE_LIMIT" =~ ^[0-9]+$ ]] ||
 		die "CATALOG_BUNDLE_LIMIT must be a non-negative integer"
+	[[ -z "$CATALOG_PREVIOUS_MINORS" || "$CATALOG_PREVIOUS_MINORS" =~ ^[1-9][0-9]*$ ]] ||
+		die "CATALOG_PREVIOUS_MINORS must be a positive integer"
 
 	for command in curl tar jq yq opm "$CONTAINER"; do
 		require "$command"
@@ -337,8 +404,17 @@ run_build() {
 		[[ -n "$version" ]] && OLD_VERSIONS+=("$version")
 	done < <(find_previous_versions)
 
-	[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||
-		die "expected ${CATALOG_BUNDLE_LIMIT} previous versions, found ${#OLD_VERSIONS[@]}"
+	# Checked first: an empty array is "unbound" under set -u in bash 3.2 (macOS).
+	[[ "${#OLD_VERSIONS[@]}" -gt 0 || ( -z "$CATALOG_PREVIOUS_MINORS" && "$CATALOG_BUNDLE_LIMIT" -eq 0 ) ]] ||
+		die "no previous versions found in ${GITHUB_REPO}/${OPERATOR_PATH}"
+
+	if [[ -n "$CATALOG_PREVIOUS_MINORS" ]]; then
+		[[ "$(count_previous_minor_lines "${OLD_VERSIONS[@]}")" -eq "$CATALOG_PREVIOUS_MINORS" ]] ||
+			die "expected ${CATALOG_PREVIOUS_MINORS} previous minor lines, found: ${OLD_VERSIONS[*]}"
+	else
+		[[ "${#OLD_VERSIONS[@]}" -eq "$CATALOG_BUNDLE_LIMIT" ]] ||
+			die "expected ${CATALOG_BUNDLE_LIMIT} previous versions, found ${#OLD_VERSIONS[@]}"
+	fi
 
 	confirm_build
 

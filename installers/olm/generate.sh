@@ -326,7 +326,7 @@ build_examples() {
 
 				.spec |= (
 					if has("initImage") then del(.initImage) else . end
-					| .image = $images["mongod8.0"]
+					| .image = $images["mongod8.3"]
 					| insert_after("image"; {"initImage": $images.operator})
 					| if has("initImage") then . else . + {"initImage": $images.operator} end
 					| .pmm.image = $images.pmm3
@@ -453,7 +453,7 @@ prepare_distribution() {
 
 	jq -e '
 		(.images | type == "object") and
-		((["operator", "backup", "logcollector", "mongod8.0", "pmm3"] - (.images | keys)) | length == 0)
+		((["operator", "backup", "logcollector", "mongod8.3", "pmm3"] - (.images | keys)) | length == 0)
 	' >/dev/null <<<"${distribution_data}" \
 		|| abort "Distribution data is missing required images"
 

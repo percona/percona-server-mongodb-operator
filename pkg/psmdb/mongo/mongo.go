@@ -883,17 +883,30 @@ func (m *ConfigMembers) RemoveOld(ctx context.Context, compareWith ConfigMembers
 		cm[member.Host] = struct{}{}
 	}
 
+	removed := false
+	votingRemoved := false
+
 	// going from the end to the starting in order to leave last element with the smallest id
 	for i := len(*m) - 1; i >= 0 && len(*m) > 1; i-- {
 		member := []ConfigMember(*m)[i]
-		if _, ok := cm[member.Host]; !ok {
-			*m = append([]ConfigMember(*m)[:i], []ConfigMember(*m)[i+1:]...)
-			log.Info("Removing old member from replset", "_id", member.ID, "host", member.Host)
-			return true
+		if _, ok := cm[member.Host]; ok {
+			continue
 		}
+
+		// mongodb allows removing only 1 voting member at a time
+		if member.Votes > 0 {
+			if votingRemoved {
+				continue
+			}
+			votingRemoved = true
+		}
+
+		*m = append([]ConfigMember(*m)[:i], []ConfigMember(*m)[i+1:]...)
+		log.Info("Removing old member from replset", "_id", member.ID, "host", member.Host)
+		removed = true
 	}
 
-	return false
+	return removed
 }
 
 func (m *ConfigMembers) FixMemberHostnames(ctx context.Context, compareWith ConfigMembers, rsStatus Status) (member *Member, changes bool) {

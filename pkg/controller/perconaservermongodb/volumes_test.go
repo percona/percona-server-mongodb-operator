@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1127,4 +1128,124 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "primary", got.Phase, "non-stepdown component should skip to primary phase")
 	})
+}
+
+// TestResizeVolumesIfNeeded_IgnoresPVCsWithoutPods covers a replset that was
+// scaled down with autoscaling on. The PVC of the member that went away is kept
+// unless the delete-psmdb-pvc finalizer is set, and nothing ever resizes it
+// because it has no pod. Counting it when working out the size the volumes
+// actually have would leave the operator believing a resize is still owed: it
+// re-annotates the statefulset, finds every PVC it can resize already at the
+// requested size, deletes the statefulset to pick up the template, and starts
+// over, which shows up as the cluster flapping between ready and error.
+func TestResizeVolumesIfNeeded_IgnoresPVCsWithoutPods(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns      = "test-ns"
+		stsName = "my-cluster-rs0"
+	)
+
+	// rs0 went from 3 members to 2 and the surviving volumes have grown to 3Gi
+	requested := resource.MustParse("3Gi")
+	grown := resource.MustParse("3Gi")
+	leftBehind := resource.MustParse("1Gi")
+
+	ls := map[string]string{"app": "test"}
+
+	sts := &appsv1.StatefulSet{
+		Name:      stsName,
+		Namespace: ns,
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					Name: config.MongodDataVolClaimName,
+					Spec: corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	newPVC := func(index int, capacity resource.Quantity) *corev1.PersistentVolumeClaim {
+		return &corev1.PersistentVolumeClaim{
+			Name:      fmt.Sprintf("%s-%s-%d", config.MongodDataVolClaimName, stsName, index),
+			Namespace: ns,
+			Labels:    ls,
+			Spec: corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: capacity.DeepCopy()},
+				},
+			},
+			Status: corev1.PersistentVolumeClaimStatus{
+				Capacity: corev1.ResourceList{corev1.ResourceStorage: capacity.DeepCopy()},
+			},
+		}
+	}
+
+	newPod := func(index int) *corev1.Pod {
+		return &corev1.Pod{
+			Name:      fmt.Sprintf("%s-%d", stsName, index),
+			Namespace: ns,
+			Labels:    ls,
+		}
+	}
+
+	pvcs := []*corev1.PersistentVolumeClaim{
+		newPVC(0, grown),
+		newPVC(1, grown),
+		newPVC(2, leftBehind), // the member that was scaled away
+	}
+
+	cr := &api.PerconaServerMongoDB{
+		Name:      "my-cluster",
+		Namespace: ns,
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			StorageScaling: &api.StorageScalingSpec{
+				EnableVolumeScaling: true,
+			},
+		},
+	}
+
+	objs := []client.Object{cr, sts, newPod(0), newPod(1)}
+	for _, pvc := range pvcs {
+		objs = append(objs, pvc)
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(objs...).
+		WithStatusSubresource(pvcs[0], pvcs[1], pvcs[2]).
+		Build()
+
+	for _, pvc := range pvcs {
+		require.NoError(t, fakeClient.Status().Update(t.Context(), pvc))
+	}
+
+	r := &ReconcilePerconaServerMongoDB{client: fakeClient, scheme: testScheme()}
+
+	pvcSpec := api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+			},
+		},
+	}
+
+	require.NoError(t, r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, pvcSpec))
+
+	updatedSTS := &appsv1.StatefulSet{}
+	require.NoError(t, fakeClient.Get(t.Context(), types.NamespacedName{Name: stsName, Namespace: ns}, updatedSTS))
+	assert.Empty(t, updatedSTS.Annotations[api.AnnotationPVCResizeInProgress],
+		"the volumes in use are already at the requested size, so no resize should start")
+
+	kept := &corev1.PersistentVolumeClaim{}
+	require.NoError(t, fakeClient.Get(t.Context(),
+		types.NamespacedName{Name: pvcs[2].Name, Namespace: ns}, kept))
+	size := kept.Spec.Resources.Requests[corev1.ResourceStorage]
+	assert.Equal(t, "1Gi", size.String(), "a PVC with no pod must be left alone")
 }

@@ -15,6 +15,13 @@ deploy_openldap() {
 	fi
 
 	yq 'select(.metadata.name == "ldap-ca").spec.dnsNames[0]="openldap.'$namespace'.svc.cluster.local"' "$test_dir/conf/openldap.yaml" \
+		| yq 'select(.kind == "Issuer" or .kind == "Certificate")' \
+		| kubectl_bin apply -f -
+
+	# openldap copies the certs once on start, so it must not start before cert-manager is done reissuing ldap-ca
+	wait_certificate ldap-ca
+
+	yq 'select(.kind != "Issuer" and .kind != "Certificate")' "$test_dir/conf/openldap.yaml" \
 		| kubectl_bin apply -f -
 
 	kubectl rollout status deployment/openldap --timeout=600s
