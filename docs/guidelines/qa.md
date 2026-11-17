@@ -16,6 +16,9 @@ both.
 - Logic and rendering are unit tested (`pkg/**/*_test.go`, envtest for
   reconcile behavior). An e2e step that only checks rendering is a finding:
   move it to a unit test.
+- The Python e2e code (`e2e-tests/lib/`, `conftest.py`, the OLM test helpers)
+  is test code: it gets no unit tests. The e2e runs exercise it. A unit test
+  of an e2e helper is a finding.
 - After a restore, failover or upgrade the test reads data back. Pod status
   alone proves nothing.
 - A "nothing changed" claim has a before and after snapshot: pod UIDs,

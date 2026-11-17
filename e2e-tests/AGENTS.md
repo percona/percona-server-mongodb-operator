@@ -49,6 +49,10 @@ check against that.
   upgrades, failover, networking, and integration with Kubernetes and external
   systems. When an e2e test adds a golden-file check for a new field, add or
   point to the unit test that covers the rendering.
+- **No unit tests for the Python e2e code.** `lib/`, `conftest.py` and the
+  OLM test helpers are test code; the e2e runs exercise them. `make py-check`
+  (ruff, mypy, the fixture check) is the only check they get without a
+  cluster.
 - **Every wait has a ceiling** and fails with what it expected and the last
   value it saw. No unbounded `until` loops.
 - **Fail fast on terminal states.** When the watched object reports `Failed`
