@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -167,8 +169,9 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 			require.NoError(t, apis.AddToScheme(s))
 
 			r := &ReconcilePerconaServerMongoDB{
-				client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects...).Build(),
-				scheme: s,
+				client:   fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects...).Build(),
+				scheme:   s,
+				recorder: &record.FakeRecorder{},
 			}
 
 			err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
@@ -759,14 +762,17 @@ func TestShrinkRejectsSingleMember(t *testing.T) {
 	require.NoError(t, clientgoscheme.AddToScheme(s))
 	require.NoError(t, apis.AddToScheme(s))
 
+	rec := record.NewFakeRecorder(10)
 	r := &ReconcilePerconaServerMongoDB{
-		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
-		scheme: s,
+		client:   fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme:   s,
+		recorder: rec,
 	}
 
 	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "single-member replica set has no sync source")
+	assert.Equal(t, []string{"Warning PVCShrinkRejected"}, eventReasons(rec))
 }
 
 func TestShrinkPreflightRevertsVCTWhenBlocked(t *testing.T) {
@@ -1412,26 +1418,44 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		ProcessedPods: []string{},
 	}
 
-	t.Run("secondaries phase keeps PVC while a member is unhealthy", func(t *testing.T) {
-		r := &ReconcilePerconaServerMongoDB{
+	newReconciler := func(p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *record.FakeRecorder) {
+		rec := record.NewFakeRecorder(10)
+		return &ReconcilePerconaServerMongoDB{
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects()...).Build(),
 			scheme:              s,
-			mongoClientProvider: &shrinkMongoProvider{status: hiddenRecovering},
-		}
+			mongoClientProvider: p,
+			recorder:            rec,
+		}, rec
+	}
+
+	t.Run("secondaries phase keeps PVC while a member is unhealthy", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: hiddenRecovering})
+		cr.SetPVCShrinkState(stsName, secondariesState)
 
 		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
 		assert.Equal(t, 3, pvcCount(t, r))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, "rs0-hidden-0")
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, got, false))
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
 	})
 
 	t.Run("secondaries phase deletes PVC when all members are healthy", func(t *testing.T) {
-		r := &ReconcilePerconaServerMongoDB{
-			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects()...).Build(),
-			scheme:              s,
-			mongoClientProvider: &shrinkMongoProvider{status: healthy},
-		}
+		r, rec := newReconciler(&shrinkMongoProvider{status: healthy})
+		state := secondariesState
+		state.WaitingFor = "member rs0-hidden-0 is RECOVERING"
+		cr.SetPVCShrinkState(stsName, state)
 
-		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
 		assert.Equal(t, 2, pvcCount(t, r))
+		assert.Equal(t, []string{"Normal PVCShrinkReplacingMember"}, eventReasons(rec))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.WaitingFor)
 	})
 
 	stepdownState := api.PVCShrinkState{
@@ -1442,11 +1466,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 
 	t.Run("stepdown waits while a member is unhealthy", func(t *testing.T) {
 		p := &shrinkMongoProvider{status: hiddenRecovering, isPrimary: true}
-		r := &ReconcilePerconaServerMongoDB{
-			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects()...).Build(),
-			scheme:              s,
-			mongoClientProvider: p,
-		}
+		r, rec := newReconciler(p)
 		cr.SetPVCShrinkState(stsName, stepdownState)
 
 		require.NoError(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
@@ -1454,15 +1474,12 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		got, ok := cr.GetPVCShrinkState(stsName)
 		require.True(t, ok)
 		assert.Equal(t, "stepdown", got.Phase)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
 	})
 
 	t.Run("stepdown proceeds when all members are healthy", func(t *testing.T) {
 		p := &shrinkMongoProvider{status: healthy, isPrimary: true}
-		r := &ReconcilePerconaServerMongoDB{
-			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects()...).Build(),
-			scheme:              s,
-			mongoClientProvider: p,
-		}
+		r, rec := newReconciler(p)
 		cr.SetPVCShrinkState(stsName, stepdownState)
 
 		require.NoError(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
@@ -1470,5 +1487,36 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		got, ok := cr.GetPVCShrinkState(stsName)
 		require.True(t, ok)
 		assert.Equal(t, "primary", got.Phase)
+		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
 	})
+
+	t.Run("primary phase completes shrink", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: healthy})
+		state := api.PVCShrinkState{
+			Phase:         "primary",
+			TargetSize:    "3Gi",
+			PrimaryPod:    stsName + "-0",
+			ProcessedPods: []string{stsName + "-0", stsName + "-1", stsName + "-2"},
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, true))
+		_, ok := cr.GetPVCShrinkState(stsName)
+		assert.False(t, ok)
+		assert.Equal(t, []string{"Normal PVCShrinkCompleted"}, eventReasons(rec))
+	})
+}
+
+// eventReasons returns "<type> <reason>" of every event recorded so far.
+func eventReasons(rec *record.FakeRecorder) []string {
+	var reasons []string
+	for {
+		select {
+		case e := <-rec.Events:
+			fields := strings.Fields(e)
+			reasons = append(reasons, strings.Join(fields[:2], " "))
+		default:
+			return reasons
+		}
+	}
 }

@@ -600,7 +600,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		if err := r.revertVolumeTemplate(ctx, sc.cr, sc.sts, actual); err != nil {
 			return errors.Wrapf(err, "revert volume template for sts/%s", sc.sts.Name)
 		}
-		return errors.Errorf("PVC shrink rejected for %s: single-member replica set has no sync source", sc.sts.Name)
+		msg := fmt.Sprintf("PVC shrink rejected for %s: single-member replica set has no sync source", sc.sts.Name)
+		r.recorder.Event(sc.cr, corev1.EventTypeWarning, "PVCShrinkRejected", msg)
+		return errors.New(msg)
 	}
 
 	podList := corev1.PodList{}
@@ -632,11 +634,13 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 			if err := r.revertVolumeTemplate(ctx, sc.cr, sc.sts, actual); err != nil {
 				return errors.Wrapf(err, "revert volume template for sts/%s", sc.sts.Name)
 			}
-			return errors.Errorf("PVC shrink rejected: pod %s disk usage exceeds %d%% of target size %s", pod.Name, int(maxUsageRatio*100), requested.String())
+			msg := fmt.Sprintf("PVC shrink rejected: pod %s disk usage exceeds %d%% of target size %s", pod.Name, int(maxUsageRatio*100), requested.String())
+			r.recorder.Event(sc.cr, corev1.EventTypeWarning, "PVCShrinkRejected", msg)
+			return errors.New(msg)
 		}
 	}
 
-	if !r.shrinkRSHealthy(ctx, sc) {
+	if !r.shrinkRSHealthy(ctx, sc, nil) {
 		revertVCT()
 		return nil
 	}
@@ -677,6 +681,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 
 	log.Info("PVC shrink preflight passed, starting shrink operation",
 		"targetSize", requested.String(), "primaryPod", primaryPod)
+	r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkStarted", "Shrinking volumes of %s from %s to %s", sc.sts.Name, actual.String(), requested.String())
 
 	// Store shrink state in CR status
 	sc.cr.SetPVCShrinkState(sc.sts.Name, psmdbv1.PVCShrinkState{
@@ -802,10 +807,11 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// Use Spec.Requests, not Status.Capacity, because storage classes may round capacity up.
 		pvcRequested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 		if pvcRequested.Cmp(targetSize) > 0 {
-			if !r.shrinkRSHealthy(ctx, sc) {
+			if !r.shrinkRSHealthy(ctx, sc, &state) {
 				return nil
 			}
 			log.Info("Deleting PVC for shrink", "pvc", pvc.Name, "pod", pod.Name)
+			r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkReplacingMember", "Deleting PVC %s and pod %s to recreate them with %s", pvc.Name, pod.Name, state.TargetSize)
 			if err := r.client.Delete(ctx, pvc); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrapf(err, "delete PVC %s", pvc.Name)
 			}
@@ -856,6 +862,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	} else {
 		sc.cr.ClearPVCShrinkState(sc.sts.Name)
 		log.Info("PVC shrink completed successfully")
+		r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkCompleted", "Volumes of %s shrunk to %s", sc.sts.Name, state.TargetSize)
 		return nil
 	}
 
@@ -865,7 +872,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 }
 
 // shrinkRSHealthy checks every replset member, including hidden, non-voting and arbiter members from other statefulsets.
-func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc shrinkContext) bool {
+// If state is given, an unhealthy member is recorded in it and reported with a single event until it changes.
+func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState) bool {
 	if !sc.isRSComponent || sc.replset == nil {
 		return true
 	}
@@ -889,12 +897,25 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 		return false
 	}
 
-	if member := unhealthyRSMember(rsStatus); member != nil {
-		log.Info("PVC shrink waiting: member not in healthy state", "member", member.Name, "state", mongo.MemberStateStrings[member.State])
-		return false
+	member := unhealthyRSMember(rsStatus)
+	if member == nil {
+		if state != nil && state.WaitingFor != "" {
+			state.WaitingFor = ""
+			sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
+		}
+		return true
 	}
 
-	return true
+	memberState := mongo.MemberStateStrings[member.State]
+	log.Info("PVC shrink waiting: member not in healthy state", "member", member.Name, "state", memberState)
+
+	waitingFor := fmt.Sprintf("member %s is %s", member.Name, memberState)
+	if state != nil && state.WaitingFor != waitingFor {
+		state.WaitingFor = waitingFor
+		sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
+		r.recorder.Eventf(sc.cr, corev1.EventTypeWarning, "PVCShrinkWaiting", "Shrink of %s is waiting: %s", sc.sts.Name, waitingFor)
+	}
+	return false
 }
 
 func unhealthyRSMember(status mongo.Status) *mongo.Member {
@@ -941,10 +962,11 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 		if !isPrimary {
 			log.Info("Primary already stepped down, advancing to primary phase", "pod", state.PrimaryPod)
 		} else {
-			if !r.shrinkRSHealthy(ctx, sc) {
+			if !r.shrinkRSHealthy(ctx, sc, &state) {
 				return nil
 			}
 			log.Info("Stepping down primary", "pod", state.PrimaryPod)
+			r.recorder.Eventf(sc.cr, corev1.EventTypeNormal, "PVCShrinkStepDown", "Stepping down primary %s", state.PrimaryPod)
 			if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
 				return errors.Wrap(err, "step down primary for PVC shrink")
 			}
