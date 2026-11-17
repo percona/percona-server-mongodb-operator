@@ -131,6 +131,8 @@ type ShardRemoveResp struct {
 type IsMasterResp struct {
 	IsMaster   bool   `bson:"ismaster" json:"ismaster"`
 	IsArbiter  bool   `bson:"arbiterOnly" json:"arbiterOnly"`
+	Secondary  bool   `bson:"secondary" json:"secondary"`
+	SetName    string `bson:"setName" json:"setName"`
 	Msg        string `bson:"msg" json:"msg"`
 	OKResponse `bson:",inline"`
 }

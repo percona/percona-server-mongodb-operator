@@ -47,15 +47,16 @@ func MongodReadinessCheck(ctx context.Context, cnf *db.Config) error {
 		return err
 	}
 
+	cnf.Timeout = time.Second
+	client, err := db.Dial(ctx, cnf)
+	if err != nil {
+		// Authentication fails until users exist: before the replset is initiated
+		// and while initial sync hasn't cloned them yet. isMaster doesn't need auth.
+		log.Info("Failed to connect with credentials, checking isMaster without auth", "error", err)
+		return errors.Wrap(checkReadinessWithoutAuth(ctx, cnf), "check readiness without auth")
+	}
+
 	s, err := func() (status *mongo.Status, err error) {
-		cnf.Timeout = time.Second
-		client, err := db.Dial(ctx, cnf)
-		if err != nil {
-			// The operator waits for the StatefulSet to be ready before initializing the database.
-			// Until then, it is not possible to connect to it.
-			// We should ignore any errors from Dial to allow the cluster to be deployed.
-			return nil, nil
-		}
 		defer func() {
 			if derr := client.Disconnect(ctx); derr != nil && err == nil {
 				err = errors.Wrap(derr, "failed to disconnect")
@@ -100,6 +101,48 @@ func CheckStateForReadiness(rs mongo.Status) error {
 	default:
 		return errors.Errorf("state is unknown %d", rs.MyState)
 	}
+}
+
+func checkReadinessWithoutAuth(ctx context.Context, cnf *db.Config) (err error) {
+	client, err := db.Dial(ctx, unauthenticatedConfig(cnf))
+	if err != nil {
+		return errors.Wrap(err, "dial")
+	}
+	defer func() {
+		if derr := client.Disconnect(ctx); derr != nil && err == nil {
+			err = errors.Wrap(derr, "failed to disconnect")
+		}
+	}()
+
+	resp, err := client.IsMaster(ctx)
+	if err != nil {
+		return err
+	}
+
+	return CheckIsMasterForReadiness(*resp)
+}
+
+// unauthenticatedConfig also drops the replset name: with it, Dial waits out server
+// selection on an uninitiated member before retrying directly, and the probe times out.
+func unauthenticatedConfig(cnf *db.Config) *db.Config {
+	c := *cnf
+	c.Username = ""
+	c.Password = ""
+	c.ReplSetName = ""
+	return &c
+}
+
+func CheckIsMasterForReadiness(resp mongo.IsMasterResp) error {
+	// The operator waits for the StatefulSet to be ready before initiating the replset.
+	if resp.SetName == "" {
+		return nil
+	}
+
+	if resp.IsMaster || resp.Secondary || resp.IsArbiter {
+		return nil
+	}
+
+	return errors.New("member is not primary, secondary or arbiter")
 }
 
 func MongosReadinessCheck(ctx context.Context, cnf *db.Config) (err error) {
