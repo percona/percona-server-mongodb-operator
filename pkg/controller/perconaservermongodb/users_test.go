@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -105,6 +106,17 @@ func markAgentRestarted(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.
 	require.NoError(t, r.client.Status().Update(t.Context(), pod))
 }
 
+// stopAgent puts the agent in CrashLoopBackOff, as after a few quick kills.
+func stopAgent(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, podName string) {
+	t.Helper()
+
+	pod := new(corev1.Pod)
+	require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: podName, Namespace: cr.Namespace}, pod))
+	status := containerStatus(pod, naming.ContainerBackupAgent)
+	status.State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}
+	require.NoError(t, r.client.Status().Update(t.Context(), pod))
+}
+
 func getInternalUsersSecret(t *testing.T, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) *corev1.Secret {
 	t.Helper()
 
@@ -146,9 +158,33 @@ func TestReconcileUsersExecFailsAfterKill(t *testing.T) {
 	assert.NotContains(t, internal.Annotations, naming.AnnotationPendingRestarts)
 }
 
+// An agent that is not running reads the new credentials when it starts, so
+// it needs no kill. An exec into it fails with "container not found", and
+// before the fix every reconcile retried it and killed the other agents again,
+// so all agents stayed in CrashLoopBackOff.
+func TestReconcileUsersSkipsStoppedAgent(t *testing.T) {
+	t.Parallel()
+
+	killed := map[string]int{}
+	r, cr, _ := usersTestReconciler(t, func(r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB, pod string) error {
+		killed[pod]++
+		if pod == "cluster-rs0-1" {
+			return errors.New(`unable to upgrade connection: container not found ("backup-agent")`)
+		}
+		markAgentRestarted(t, r, cr, pod)
+		return nil
+	})
+	stopAgent(t, r, cr, "cluster-rs0-1")
+
+	require.NoError(t, r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets))
+	assert.Equal(t, map[string]int{"cluster-rs0-0": 1, "cluster-rs0-2": 1}, killed,
+		"only the running agents are restarted")
+	assert.NotContains(t, getInternalUsersSecret(t, r, cr).Annotations, naming.AnnotationPendingRestarts)
+}
+
 // When an agent really cannot be restarted, the error is reported, the other
 // agents are still restarted, the operator keeps the credentials that MongoDB
-// has, and the next reconcile restarts the agents again.
+// has, and the next reconcile restarts only that agent again.
 func TestReconcileUsersAgentRestartFails(t *testing.T) {
 	t.Parallel()
 
@@ -170,12 +206,13 @@ func TestReconcileUsersAgentRestartFails(t *testing.T) {
 	internal := getInternalUsersSecret(t, r, cr)
 	assert.Equal(t, getInternalSecretData(cr, users), internal.Data,
 		"the internal secret holds the credentials that MongoDB now has")
-	assert.Equal(t, naming.ContainerBackupAgent, internal.Annotations[naming.AnnotationPendingRestarts])
+	assert.Equal(t, naming.ContainerBackupAgent+"/cluster-rs0-1", internal.Annotations[naming.AnnotationPendingRestarts])
 
 	broken = false
-	before := killed["cluster-rs0-1"]
+	before := maps.Clone(killed)
 	require.NoError(t, r.reconcileUsers(t.Context(), cr, cr.Spec.Replsets))
-	assert.Equal(t, before+1, killed["cluster-rs0-1"], "the next reconcile retries the restart")
+	before["cluster-rs0-1"]++
+	assert.Equal(t, before, killed, "the next reconcile retries only the failed restart")
 	assert.NotContains(t, getInternalUsersSecret(t, r, cr).Annotations, naming.AnnotationPendingRestarts)
 }
 
@@ -204,6 +241,14 @@ func TestContainerRestarted(t *testing.T) {
 			before: before,
 			now:    corev1.ContainerStatus{Name: naming.ContainerBackupAgent, ContainerID: "containerd://b", RestartCount: 2, State: running},
 			want:   true,
+		},
+		"container stopped": {
+			before: before,
+			now: corev1.ContainerStatus{
+				Name: naming.ContainerBackupAgent, ContainerID: "containerd://a", RestartCount: 2,
+				State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+			},
+			want: true,
 		},
 		"same container": {
 			before: before,
