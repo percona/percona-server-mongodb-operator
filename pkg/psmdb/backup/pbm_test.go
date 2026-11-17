@@ -2,13 +2,17 @@ package backup
 
 import (
 	"context"
+	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
+	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake" // nolint
@@ -26,11 +30,123 @@ import (
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	psmdbtls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
+func TestGetMongoURIClientCertificate(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{
+		Name: "pbm-uri-test", Namespace: "pbm-uri-test",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Secrets:   &api.SecretsSpec{SSL: "server-tls"},
+			TLS:       &api.TLSSpec{AllowInvalidCertificates: new(false)},
+		},
+	}
+	_, clientCert, clientKey, err := psmdbtls.Issue(nil)
+	require.NoError(t, err)
+
+	users := &corev1.Secret{
+		Name: api.UserSecretName(cr), Namespace: cr.Namespace,
+		Data: map[string][]byte{
+			"MONGODB_BACKUP_USER":     []byte("backup"),
+			"MONGODB_BACKUP_PASSWORD": []byte("password"),
+		},
+	}
+	server := &corev1.Secret{
+		Name: cr.Spec.Secrets.SSL, Namespace: cr.Namespace,
+		Data: map[string][]byte{
+			"tls.key": []byte("server-key\n"),
+			"tls.crt": []byte("server-cert\n"),
+			"ca.crt":  []byte("server-ca\n"),
+		},
+	}
+	clientCertName := psmdbtls.CertificatePBMClient(cr).Name()
+	clientTLS := &corev1.Secret{
+		Name:        clientCertName,
+		Namespace:   cr.Namespace,
+		Annotations: map[string]string{cm.CertificateNameKey: clientCertName},
+		Data:        map[string][]byte{"tls.key": clientKey, "tls.crt": clientCert},
+	}
+
+	readTLSFiles := func(t *testing.T, secrets ...client.Object) ([]byte, []byte, error) {
+		t.Helper()
+		objects := []client.Object{users, server}
+		objects = append(objects, secrets...)
+		uri, err := getMongoUri(t.Context(), buildFakeClient(t, objects...), cr, []string{"localhost:27017"}, true)
+		if err != nil {
+			return nil, nil, err
+		}
+		u, err := url.Parse(uri)
+		require.NoError(t, err)
+		tlsFile := u.Query().Get("tlsCertificateKeyFile")
+		caFile := u.Query().Get("tlsCAFile")
+		t.Cleanup(func() {
+			_ = os.Remove(tlsFile)
+			_ = os.Remove(caFile)
+		})
+		pem, err := os.ReadFile(tlsFile)
+		require.NoError(t, err)
+		ca, err := os.ReadFile(caFile)
+		require.NoError(t, err)
+		return pem, ca, nil
+	}
+
+	t.Run("missing client certificate fails", func(t *testing.T) {
+		_, _, err := readTLSFiles(t)
+		require.ErrorContains(t, err, "get PBM client TLS secret")
+	})
+	t.Run("issued client certificate uses dedicated identity", func(t *testing.T) {
+		pem, ca, err := readTLSFiles(t, clientTLS)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("custom client secret name", func(t *testing.T) {
+		cr.Spec.Secrets.SSLPBM = "custom-pbm-tls"
+		t.Cleanup(func() { cr.Spec.Secrets.SSLPBM = "" })
+		custom := clientTLS.DeepCopy()
+		custom.Name = cr.Spec.Secrets.SSLPBM
+		pem, ca, err := readTLSFiles(t, custom)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("rotated client certificate refreshes local identity", func(t *testing.T) {
+		_, _, err := readTLSFiles(t, clientTLS)
+		require.NoError(t, err)
+		_, cert, key, err := psmdbtls.Issue(nil)
+		require.NoError(t, err)
+		rotated := clientTLS.DeepCopy()
+		rotated.Data = map[string][]byte{"tls.key": key, "tls.crt": cert}
+		pem, ca, err := readTLSFiles(t, rotated)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), key...), cert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("client certificate without metadata uses dedicated identity", func(t *testing.T) {
+		unannotated := clientTLS.DeepCopy()
+		unannotated.Annotations = nil
+		pem, ca, err := readTLSFiles(t, unannotated)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+	t.Run("manually issued client certificate uses dedicated identity", func(t *testing.T) {
+		manual := clientTLS.DeepCopy()
+		manual.Annotations = nil
+		cr.UID = "cluster-uid"
+		manual.OwnerReferences = []metav1.OwnerReference{{APIVersion: api.SchemeGroupVersion.String(), Kind: "PerconaServerMongoDB", Name: cr.Name, UID: cr.UID, Controller: new(true)}}
+		pem, ca, err := readTLSFiles(t, manual)
+		require.NoError(t, err)
+		require.Equal(t, append(append([]byte(nil), clientKey...), clientCert...), pem)
+		require.Equal(t, []byte("server-ca\n"), ca)
+	})
+}
+
 func TestPBMConfigPriority(t *testing.T) {
+	t.Parallel()
+
 	secret := &corev1.Secret{
 		APIVersion: "/v1",
 		Kind:       "Secret",
@@ -78,6 +194,8 @@ func TestPBMConfigPriority(t *testing.T) {
 }
 
 func TestApplyCustomPBMConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := expectedCR(t)
 	cr.Status.BackupVersion = pbmVersion.Current().Version
 
@@ -158,6 +276,8 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 }
 
 func TestPBMStorageConfig(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -865,6 +985,8 @@ func TestPBMStorageConfig(t *testing.T) {
 }
 
 func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -914,6 +1036,8 @@ func TestPBMStorageOSSUsesSSESecret(t *testing.T) {
 }
 
 func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
+	t.Parallel()
+
 	cr := &api.PerconaServerMongoDB{
 		Name:      "test-cr",
 		Namespace: "test-namespace",
@@ -945,15 +1069,20 @@ func TestPBMStorageOSSRequiresSupportedPBMVersion(t *testing.T) {
 	require.EqualError(t, err, "oss storage requires PBM 2.12.0 or newer")
 }
 
+var testScheme = sync.OnceValue(func() *runtime.Scheme {
+	s := runtime.NewScheme()
+
+	if err := scheme.AddToScheme(s); err != nil {
+		panic(err)
+	}
+
+	return s
+})
+
 func buildFakeClient(t *testing.T, objs ...client.Object) client.WithWatch {
 	t.Helper()
 
-	s := scheme.Scheme
-	if err := scheme.AddToScheme(s); err != nil {
-		t.Fatal(err, "failed to add client-go scheme")
-	}
-
-	return fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).Build()
+	return fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(objs...).Build()
 }
 
 func expectedCR(t *testing.T) *api.PerconaServerMongoDB {
@@ -1014,8 +1143,8 @@ func TestGetMongoUri(t *testing.T) {
 					"MONGODB_BACKUP_PASSWORD": []byte("backup@pass"),
 				},
 			}
-			sans := tls.GetCertificateSans(cr)
-			caCert, tlsCert, tlsKey, err := tls.Issue(sans)
+			sans := psmdbtls.GetCertificateSans(cr)
+			caCert, tlsCert, tlsKey, err := psmdbtls.Issue(sans)
 			require.NoError(t, err)
 
 			sslSecret := &corev1.Secret{
@@ -1027,7 +1156,15 @@ func TestGetMongoUri(t *testing.T) {
 					"tls.key": tlsKey,
 				},
 			}
-			cl := buildFakeClient(t, usersSecret, sslSecret)
+			clientSecret := &corev1.Secret{
+				Name:      psmdbtls.CertificatePBMClient(cr).SecretName(),
+				Namespace: cr.Namespace,
+				Data: map[string][]byte{
+					"tls.crt": tlsCert,
+					"tls.key": tlsKey,
+				},
+			}
+			cl := buildFakeClient(t, usersSecret, sslSecret, clientSecret)
 			t.Cleanup(func() {
 				_ = os.Remove("/tmp/ns-cluster-tls.pem")
 				_ = os.Remove("/tmp/ns-cluster-ca.crt")
@@ -1036,6 +1173,234 @@ func TestGetMongoUri(t *testing.T) {
 			uri, err := getMongoUri(t.Context(), cl, cr, []string{"cluster-rs0-0.cluster-rs0.ns.svc.cluster.local:27017"}, tt.tlsEnabled)
 			require.NoError(t, err)
 			require.Equal(t, tt.expectedURI, uri)
+		})
+	}
+}
+
+// TestPBMStorageConfigMinimalSpec pins down what the operator produces when a
+// user configures only the fields a storage backend cannot work without.
+//
+// TestPBMStorageConfig above always fills in every optional field, so it only
+// ever exercises one half of each option: the half where the user set a value.
+// Defaults live in the other half. Every case here omits the tuning fields
+// (part sizes, retryers, timeouts, encryption) on purpose.
+//
+// The contract being pinned: identity fields map through, tuning fields stay
+// at their zero value, and PBM applies its own defaults later when it builds
+// the client. One consequence of that is a known bug. The OSS connect timeout
+// stays 0 below, and that zero is what the operator reports in the backup
+// status, while the timeout PBM actually uses is 5s (K8SPSMDB-1746). When that
+// is fixed, the oss case here changes to 5s. Making that change visible is the
+// point of the test.
+func TestPBMStorageConfigMinimalSpec(t *testing.T) {
+	t.Parallel()
+
+	cr := &api.PerconaServerMongoDB{
+		Name:      "test-cr",
+		Namespace: "test-namespace",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+		},
+		Status: api.PerconaServerMongoDBStatus{
+			BackupVersion: MinPBMVersionOSS,
+		},
+	}
+
+	secretWith := func(data map[string][]byte) client.Object {
+		return &corev1.Secret{
+			Name:      "test-secret",
+			Namespace: "test-namespace",
+			Data:      data,
+		}
+	}
+
+	awsSecret := secretWith(map[string][]byte{
+		AWSAccessKeySecretKey:       []byte("some-access-key"),
+		AWSSecretAccessKeySecretKey: []byte("some-secret-key"),
+	})
+	ossSecret := secretWith(map[string][]byte{
+		OSSAccessKeySecretKey:       []byte("some-access-key"),
+		OSSSecretAccessKeySecretKey: []byte("some-secret-key"),
+	})
+	azureSecret := secretWith(map[string][]byte{
+		AzureStorageAccountNameSecretKey: []byte("some-storage-account"),
+		AzureStorageAccountKeySecretKey:  []byte("some-storage-key"),
+	})
+	gcsSecret := secretWith(map[string][]byte{
+		GCSClientEmailSecretKey: []byte("serviceaccount@google.com"),
+		GCSPrivateKeySecretKey:  []byte("some-private-key"),
+	})
+	ociSecret := secretWith(map[string][]byte{
+		OCITenancySecretKey:     []byte("some-tenancy"),
+		OCIUserSecretKey:        []byte("some-user"),
+		OCIFingerprintSecretKey: []byte("some-fingerprint"),
+		OCIPrivateKeySecretKey:  []byte("some-private-key"),
+	})
+
+	tests := map[string]struct {
+		secrets  []client.Object
+		stg      api.BackupStorageSpec
+		expected config.StorageConf
+	}{
+		"s3": {
+			secrets: []client.Object{awsSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageS3,
+				S3: api.BackupStorageS3Spec{
+					Bucket:            "operator-testing",
+					Region:            "us-east-1",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.S3,
+				S3: &s3.Config{
+					Bucket: "operator-testing",
+					Region: "us-east-1",
+					Credentials: s3.Credentials{
+						AccessKeyID:     "some-access-key",
+						SecretAccessKey: "some-secret-key",
+					},
+				},
+			},
+		},
+		"minio": {
+			secrets: []client.Object{awsSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageMinio,
+				Minio: api.BackupStorageMinioSpec{
+					Bucket:            "operator-testing",
+					EndpointURL:       "http://minio-service:9000",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.Minio,
+				Minio: &mio.Config{
+					Bucket:   "operator-testing",
+					Endpoint: "http://minio-service:9000",
+					Credentials: mio.Credentials{
+						AccessKeyID:     "some-access-key",
+						SecretAccessKey: "some-secret-key",
+					},
+				},
+			},
+		},
+		"gcs": {
+			secrets: []client.Object{gcsSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageGCS,
+				GCS: api.BackupStorageGCSSpec{
+					Bucket:            "operator-testing",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.GCS,
+				GCS: &gcs.Config{
+					Bucket: "operator-testing",
+					Credentials: gcs.Credentials{
+						ClientEmail: "serviceaccount@google.com",
+						PrivateKey:  "some-private-key",
+					},
+				},
+			},
+		},
+		"azure": {
+			secrets: []client.Object{azureSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageAzure,
+				Azure: api.BackupStorageAzureSpec{
+					Container:         "operator-testing",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.Azure,
+				Azure: &azure.Config{
+					Account:     "some-storage-account",
+					Container:   "operator-testing",
+					Credentials: azure.Credentials{Key: "some-storage-key"},
+				},
+			},
+		},
+		"oss": {
+			secrets: []client.Object{ossSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageOSS,
+				OSS: api.BackupStorageOSSSpec{
+					Bucket:            "operator-testing",
+					Region:            "oss-eu-central-1",
+					EndpointURL:       "https://oss-eu-central-1.aliyuncs.com",
+					CredentialsSecret: "test-secret",
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.OSS,
+				OSS: &oss.Config{
+					Bucket:      "operator-testing",
+					Region:      "oss-eu-central-1",
+					EndpointURL: "https://oss-eu-central-1.aliyuncs.com",
+					Credentials: oss.Credentials{
+						AccessKeyID:     "some-access-key",
+						AccessKeySecret: "some-secret-key",
+					},
+					// K8SPSMDB-1746: reported as 0s, PBM actually uses 5s.
+					ConnectTimeout: 0,
+				},
+			},
+		},
+		"oci": {
+			secrets: []client.Object{ociSecret},
+			stg: api.BackupStorageSpec{
+				Type: api.BackupStorageOCI,
+				OCI: api.BackupStorageOCISpec{
+					Bucket:    "operator-testing",
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Credentials: api.OCICredentialsSpec{
+						Type:       api.AuthTypeUserPrincipal,
+						SecretName: "test-secret",
+					},
+				},
+			},
+			expected: config.StorageConf{
+				Type: storage.OCI,
+				OCI: &oci.Config{
+					Bucket:    "operator-testing",
+					Region:    "us-ashburn-1",
+					Namespace: "some-namespace",
+					Credentials: oci.Credentials{
+						Type: oci.AuthTypeUserPrincipal,
+						UserPrincipal: &oci.UserPrincipalCredentials{
+							Tenancy:     "some-tenancy",
+							User:        "some-user",
+							Fingerprint: "some-fingerprint",
+							PrivateKey:  "some-private-key",
+						},
+					},
+				},
+			},
+		},
+		"filesystem": {
+			secrets: []client.Object{},
+			stg: api.BackupStorageSpec{
+				Type:       api.BackupStorageFilesystem,
+				Filesystem: api.BackupStorageFilesystemSpec{Path: "/mnt/backups"},
+			},
+			expected: config.StorageConf{
+				Type:       storage.Filesystem,
+				Filesystem: &fs.Config{Path: "/mnt/backups"},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cl := buildFakeClient(t, tt.secrets...)
+			got, err := GetPBMStorageConfig(context.Background(), cl, cr, tt.stg)
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, got)
 		})
 	}
 }

@@ -123,7 +123,9 @@ class TestConnectionRetry:
         finally:
             disable_fail_command(psmdb_client, config)
 
-        lines = retry(lambda: retry_lines(operator_logs()[since:]), max_attempts=10, delay=3, condition=bool)
+        lines = retry(
+            lambda: retry_lines(operator_logs()[since:]), max_attempts=10, delay=3, condition=bool
+        )
         logger.info(f"Operator retried {len(lines)} times")
 
         wait_cluster_consistency(config.cluster)

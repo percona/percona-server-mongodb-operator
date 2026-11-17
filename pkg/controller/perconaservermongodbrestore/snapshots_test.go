@@ -24,6 +24,8 @@ import (
 )
 
 func TestGeneratePVCFromSnapshot(t *testing.T) {
+	t.Parallel()
+
 	storageClassName := "fast"
 	spec := corev1.PersistentVolumeClaimSpec{
 		AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -47,6 +49,8 @@ func TestGeneratePVCFromSnapshot(t *testing.T) {
 }
 
 func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
+	t.Parallel()
+
 	oldClassName := "old-class"
 	newClassName := "new-class"
 
@@ -77,6 +81,8 @@ func TestGeneratePVCFromSnapshot_OverwritesExistingSpec(t *testing.T) {
 }
 
 func TestReconcileSnapshotNew(t *testing.T) {
+	t.Parallel()
+
 	podZero := &corev1.Pod{
 		Name:      "my-cluster-rs0-0",
 		Namespace: "default",
@@ -119,6 +125,8 @@ func TestReconcileSnapshotNew(t *testing.T) {
 }
 
 func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -194,7 +202,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, updated.Spec.Replicas)
 		assert.Equal(t, int32(0), *updated.Spec.Replicas)
-		assert.Equal(t, []string{"/opt/percona/pbm-agent"}, updated.Spec.Template.Spec.Containers[0].Command)
+		assert.Equal(t, []string{"bash", "-c", restoreFinishScript, "--"}, updated.Spec.Template.Spec.Containers[0].Command)
 		assert.Equal(t, "restore-finish", updated.Spec.Template.Spec.Containers[0].Args[0])
 		assert.Equal(t, pbmName, updated.Spec.Template.Spec.Containers[0].Args[1])
 		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].LivenessProbe)
@@ -333,7 +341,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 		container := updated.Spec.Template.Spec.Containers[0]
 		assert.Equal(t, "bash", container.Command[0])
-		assert.Contains(t, container.Command[2], "exec /opt/percona/pbm-agent")
+		assert.Contains(t, container.Command[2], restoreFinishScript)
 		assert.Contains(t, container.Command[2], psmdbv1.EncryptionKeyName)
 		assert.Contains(t, container.Args, "--db-config")
 		assert.Contains(t, container.Args, "/etc/pbm-db-config/db_config.yaml")
@@ -359,7 +367,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		assert.True(t, foundMount, "expected pbm-db-config volume mount to be added")
 	})
 
-	t.Run("encryption explicitly disabled uses plain pbm-agent command", func(t *testing.T) {
+	t.Run("encryption explicitly disabled runs pbm-agent without db-config", func(t *testing.T) {
 		noEncCluster := &psmdbv1.PerconaServerMongoDB{
 			Name:      "noenc-cluster",
 			Namespace: ns,
@@ -413,7 +421,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		require.NoError(t, err)
 
 		container := updated.Spec.Template.Spec.Containers[0]
-		assert.Equal(t, []string{"/opt/percona/pbm-agent"}, container.Command)
+		assert.Equal(t, []string{"bash", "-c", restoreFinishScript, "--"}, container.Command)
 		assert.Equal(t, "restore-finish", container.Args[0])
 		assert.Equal(t, pbmName, container.Args[1])
 		assert.NotContains(t, container.Args, "--db-config")
@@ -472,7 +480,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 
 		container := updated.Spec.Template.Spec.Containers[0]
 		assert.Equal(t, "bash", container.Command[0], "encryption enabled by default should use bash wrapper")
-		assert.Contains(t, container.Command[2], "exec /opt/percona/pbm-agent")
+		assert.Contains(t, container.Command[2], restoreFinishScript)
 		assert.Contains(t, container.Args, "--db-config")
 
 		foundVolume := false
@@ -486,6 +494,8 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -562,6 +572,8 @@ func TestScaleUpStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestRestorePVC(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -653,6 +665,8 @@ func TestRestorePVC(t *testing.T) {
 }
 
 func TestRolloutRestoredPVCs(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -826,6 +840,8 @@ func TestRolloutRestoredPVCs(t *testing.T) {
 }
 
 func TestRolloutRestoredPVCsSharded(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 	const ns = "default"
 
@@ -919,6 +935,8 @@ func TestRolloutRestoredPVCsSharded(t *testing.T) {
 }
 
 func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -985,6 +1003,8 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 }
 
 func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	cluster := &psmdbv1.PerconaServerMongoDB{
@@ -1023,6 +1043,8 @@ func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
 
 // Ensure the restore node address arg is built with DefaultMongoPort.
 func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -1078,6 +1100,8 @@ func TestScaleDownStatefulSetsNodeAddressArg(t *testing.T) {
 }
 
 func TestDeleteDBConfigSecrets(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	const ns = "default"
 
@@ -1126,6 +1150,8 @@ func TestDeleteDBConfigSecrets(t *testing.T) {
 }
 
 func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
+	t.Parallel()
+
 	const ns = "default"
 
 	clusterName := "my-cluster"

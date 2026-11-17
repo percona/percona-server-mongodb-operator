@@ -64,5 +64,32 @@ spec:
             journalCompressor: snappy
           indexConfig:
             prefixCompression: true
+  sharding:
+    enabled: true
+    configsvrReplSet:
+      size: 3
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        enabled: false
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 3Gi
+      # The config server runs as "csReplSet" while its spec name stays "cfg", so
+      # PBM records its snapshot under "csReplSet". Restore has to resolve the
+      # snapshot by the MongoDB replset name, not the spec name.
+      configuration: |
+        replication:
+          replSetName: csReplSet
+        security:
+          enableEncryption: false
+    mongos:
+      size: 1
+      affinity:
+        antiAffinityTopologyKey: none
+      expose:
+        type: ClusterIP
   secrets:
     users: some-users

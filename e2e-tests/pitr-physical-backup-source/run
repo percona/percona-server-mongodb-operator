@@ -67,30 +67,36 @@ main() {
 
 	check_recovery "${backup_name_local_s3}-1" date "$time_now" "" "$cluster" backupSource
 
-	desc "delete PSMDB cluster $cluster"
-	kubectl_bin delete psmdb $cluster
-	kubectl_bin delete pvc -l app.kubernetes.io/managed-by=percona-server-mongodb-operator
-	sleep 10
+	full_ver=$(get_mongod_ver_from_image "${IMAGE_MONGOD}")
+	mongo_ver=${full_ver:0:3}
+	if [[ ${mongo_ver} == "8.3" ]]; then
+		echo "Skipping the second-cluster PITR type latest restore using backupSource on MongoDB ${full_ver} due to https://perconadev.atlassian.net/browse/PBM-1863."
+	else
+		desc "delete PSMDB cluster $cluster"
+		kubectl_bin delete psmdb $cluster
+		kubectl_bin delete pvc -l app.kubernetes.io/managed-by=percona-server-mongodb-operator
+		sleep 10
 
-	desc "recreate PSMDB cluster $cluster"
-	desc "create second PSMDB cluster $cluster"
-	apply_cluster $test_dir/conf/$cluster-rs0.yml
+		desc "recreate PSMDB cluster $cluster"
+		desc "create second PSMDB cluster $cluster"
+		apply_cluster $test_dir/conf/$cluster-rs0.yml
 
-	desc 'check if all 3 Pods started'
-	wait_for_running $cluster-rs0 3
-	wait_for_running $cluster-cfg 3 "false"
-	wait_for_running $cluster-rs1 3
-	wait_for_running $cluster-rs2 3
-	sleep 10
+		desc 'check if all 3 Pods started'
+		wait_for_running $cluster-rs0 3
+		wait_for_running $cluster-cfg 3 "false"
+		wait_for_running $cluster-rs1 3
+		wait_for_running $cluster-rs2 3
+		sleep 10
 
-	write_initial_data
-	write_document
+		write_initial_data
+		write_document
 
-	desc 'restore pitr type latest using backupSource'
-	write_document "-2nd"
-	run_backup $backup_name_local_s3 2 physical
-	compare_latest_restorable_time "${cluster}-rs0" "${backup_name_local_s3}-2"
-	check_recovery "${backup_name_local_s3}-2" latest "" "-3rd" "$cluster" backupSource
+		desc 'restore pitr type latest using backupSource'
+		write_document "-2nd"
+		run_backup $backup_name_local_s3 2 physical
+		compare_latest_restorable_time "${cluster}-rs0" "${backup_name_local_s3}-2"
+		check_recovery "${backup_name_local_s3}-2" latest "" "-3rd" "$cluster" backupSource
+	fi
 
 	desc 'disable pitr'
 	kubectl patch psmdb "$cluster" --type='merge' --patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'

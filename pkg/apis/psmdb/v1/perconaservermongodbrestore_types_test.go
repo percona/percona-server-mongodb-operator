@@ -11,6 +11,8 @@ import (
 )
 
 func TestConditionsEqual(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		a        []metav1.Condition
 		b        []metav1.Condition
@@ -98,6 +100,8 @@ func TestConditionsEqual(t *testing.T) {
 }
 
 func TestIsCloningNamespace(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		selective *SelectiveRestoreOpts
 		expected  bool
@@ -141,6 +145,8 @@ func TestIsCloningNamespace(t *testing.T) {
 }
 
 func TestCheckFieldsBackupSourceStorage(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		backupSource *PerconaServerMongoDBBackupStatus
 		expectErr    string
@@ -185,6 +191,8 @@ func TestCheckFieldsBackupSourceStorage(t *testing.T) {
 }
 
 func TestCheckFieldsCloningNamespace(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		backupType defs.BackupType
 		selective  *SelectiveRestoreOpts
@@ -244,6 +252,8 @@ func TestCheckFieldsCloningNamespace(t *testing.T) {
 }
 
 func TestRestoreCheckFieldsBackupSourceOSS(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		restore *PerconaServerMongoDBRestore
 		wantErr string
@@ -292,6 +302,8 @@ func TestRestoreCheckFieldsBackupSourceOSS(t *testing.T) {
 }
 
 func TestRestoreCheckFieldsBackupSourceS3GCS(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		endpointURL string
 		wantErr     string

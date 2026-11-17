@@ -12,12 +12,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -25,6 +23,8 @@ import (
 )
 
 func TestShouldTriggerResize(t *testing.T) {
+	t.Parallel()
+
 	r := &ReconcilePerconaServerMongoDB{}
 
 	tests := []struct {
@@ -152,6 +152,8 @@ func TestShouldTriggerResize(t *testing.T) {
 }
 
 func TestCalculateNewSize(t *testing.T) {
+	t.Parallel()
+
 	r := &ReconcilePerconaServerMongoDB{}
 
 	tests := []struct {
@@ -234,6 +236,8 @@ func TestCalculateNewSize(t *testing.T) {
 }
 
 func TestExtractPodNameFromPVC(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		pvcName   string
@@ -281,6 +285,8 @@ func TestExtractPodNameFromPVC(t *testing.T) {
 }
 
 func TestFindPodByName(t *testing.T) {
+	t.Parallel()
+
 	podList := &corev1.PodList{
 		Items: []corev1.Pod{
 			{
@@ -323,6 +329,8 @@ func TestFindPodByName(t *testing.T) {
 }
 
 func TestUpdateAutoscalingStatus(t *testing.T) {
+	t.Parallel()
+
 	r := &ReconcilePerconaServerMongoDB{}
 
 	tests := map[string]struct {
@@ -493,6 +501,8 @@ func TestUpdateAutoscalingStatus(t *testing.T) {
 }
 
 func TestTriggerResize(t *testing.T) {
+	t.Parallel()
+
 	tests := map[string]struct {
 		cr             *api.PerconaServerMongoDB
 		pvc            *corev1.PersistentVolumeClaim
@@ -665,12 +675,8 @@ func TestTriggerResize(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			s := scheme.Scheme
-			err := apis.AddToScheme(s)
-			require.NoError(t, err)
-
 			fakeClient := fake.NewClientBuilder().
-				WithScheme(s).
+				WithScheme(testScheme()).
 				WithObjects(tt.cr).
 				Build()
 
@@ -688,7 +694,7 @@ func TestTriggerResize(t *testing.T) {
 
 			originalSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 
-			err = r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, &volumeSpec.PersistentVolumeClaim)
+			err := r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, &volumeSpec.PersistentVolumeClaim)
 			require.NoError(t, err)
 
 			updatedSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
@@ -719,6 +725,8 @@ func mountingTemplate(container, claimName, mountPath string) corev1.PodTemplate
 // and non-voting pods name their mongod container after their component, and
 // mongos keeps mongos-logs under /data/db/logs.
 func TestReconcileStorageAutoscalingComponents(t *testing.T) {
+	t.Parallel()
+
 	const (
 		crName    = "test-cluster"
 		namespace = "default"
@@ -908,6 +916,8 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 // alone it is an emptyDir, and with neither it does not exist. None of those
 // may reach the autoscaler, let alone error out.
 func TestResizeMongosPVCsWithoutLogPVC(t *testing.T) {
+	t.Parallel()
+
 	const (
 		crName    = "test-cluster"
 		namespace = "default"
@@ -974,6 +984,8 @@ func TestResizeMongosPVCsWithoutLogPVC(t *testing.T) {
 // TestReconcileStorageAutoscalingNoPVCs makes sure the autoscaler is a no-op
 // when the component's volume is not a PVC, or when no PVC exists for it yet.
 func TestReconcileStorageAutoscalingNoPVCs(t *testing.T) {
+	t.Parallel()
+
 	const (
 		crName    = "test-cluster"
 		namespace = "default"
@@ -1126,6 +1138,8 @@ func fullDiskExec() *mockClientCmd {
 // step over the capacity the PVC has, which is smaller than what the user asked
 // for, and must not replace it.
 func TestAutoscalingKeepsLargerPendingRequest(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	const (
@@ -1177,6 +1191,8 @@ var errPatchRejected = errors.New("patch rejected")
 // never accepted may not be left behind in it: the PVC would be grown past what
 // the CR requests, and the next reconcile would read that as a shrink.
 func TestTriggerResizeRestoresSizeOnPatchFailure(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	const (
@@ -1187,11 +1203,8 @@ func TestTriggerResizeRestoresSizeOnPatchFailure(t *testing.T) {
 	cr := autoscalingCR(crName, namespace, "10Gi")
 	pvcSpec := &cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim
 
-	s := scheme.Scheme
-	require.NoError(t, apis.AddToScheme(s))
-
 	fakeClient := fake.NewClientBuilder().
-		WithScheme(s).
+		WithScheme(testScheme()).
 		WithObjects(cr).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Patch: func(
@@ -1228,6 +1241,8 @@ func TestTriggerResizeRestoresSizeOnPatchFailure(t *testing.T) {
 // It covers the wiring this function owns, that autoscaling runs against the
 // mongos log volume and that the size it asks for is what the resize applies.
 func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	const (
@@ -1360,6 +1375,8 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 // TestReconcileStorageAutoscalingVolumeNotMounted covers a volume no container
 // mounts: there is no path to probe, so autoscaling stays out rather than guess.
 func TestReconcileStorageAutoscalingVolumeNotMounted(t *testing.T) {
+	t.Parallel()
+
 	const (
 		crName    = "test-cluster"
 		namespace = "default"
@@ -1420,6 +1437,8 @@ func TestReconcileStorageAutoscalingVolumeNotMounted(t *testing.T) {
 // one only because mongod and mongos are built before any sidecar. If that build
 // order ever changes, df would run in a sidecar and this test is what says so.
 func TestReconcileStorageAutoscalingPicksOwningContainer(t *testing.T) {
+	t.Parallel()
+
 	ctx := t.Context()
 
 	const (

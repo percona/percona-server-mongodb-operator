@@ -844,7 +844,8 @@ create_s3_bucket() {
 	local bucket=$1
 	local endpoint=$2
 
-	aws_cli_s3 "${endpoint}" s3 mb "s3://${bucket}"
+	# The S3 gateway starts after the pod is Ready; retry until it accepts connections.
+	retry 12 10 aws_cli_s3 "${endpoint}" s3 mb "s3://${bucket}"
 }
 
 aws_cli_s3() {
@@ -1167,6 +1168,7 @@ compare_kubectl() {
 			del(.. | select(has("percona.com/configuration-hash"))."percona.com/configuration-hash") |
 			del(.. | select(has("percona.com/ssl-hash"))."percona.com/ssl-hash") |
 			del(.. | select(has("percona.com/ssl-internal-hash"))."percona.com/ssl-internal-hash") |
+			del(.. | select(has("percona.com/pbm-tls-hash"))."percona.com/pbm-tls-hash") |
 			del(.spec.volumeClaimTemplates[].spec.volumeMode | select(. == "Filesystem")) |
 			del(.. | select(has("healthCheckNodePort")).healthCheckNodePort) |
 			del(.. | select(has("nodePort")).nodePort) |
@@ -1208,6 +1210,31 @@ compare_kubectl() {
 	fi
 
 	log "compare_kubectl: ${resource} OK"
+}
+
+# Prints what keeps a cluster from becoming ready, before a wait gives up.
+print_cluster_diagnostics() {
+	local cluster=$1
+
+	desc "psmdb/${cluster} status"
+	kubectl_bin get psmdb "${cluster}" -o yaml | yq '.status' || true
+	desc "pods"
+	kubectl_bin get pods -o wide || true
+	for pod in $(kubectl_bin get pods -l app.kubernetes.io/instance="${cluster}" --no-headers \
+		| awk '{split($2, c, "/"); if (c[1] != c[2] || $3 != "Running") print $1}'); do
+		desc "describe pod ${pod}"
+		kubectl_bin describe pod "${pod}" || true
+		for container in $(kubectl_bin get pod "${pod}" \
+			-o jsonpath='{range .status.containerStatuses[?(@.restartCount>0)]}{.name}{"\n"}{end}'); do
+			desc "previous logs of ${pod}/${container}"
+			kubectl_bin logs "${pod}" -c "${container}" --previous --tail=100 || true
+		done
+	done
+	desc "events"
+	kubectl_bin get events --sort-by=.lastTimestamp | tail -n 50 || true
+	desc "operator logs"
+	print_operator_logs | tail -n 200 || true
+	collect_physical_restore_logs "${cluster}" || true
 }
 
 run_recovery_check() {
@@ -1255,6 +1282,7 @@ run_recovery_check() {
 			if [[ ${error_time} -ge ${error_grace} ]]; then
 				echo
 				echo "cluster ${cluster} has been in error state for ${error_time}s after physical restore"
+				print_cluster_diagnostics "${cluster}"
 				exit 1
 			fi
 		else
@@ -1265,6 +1293,7 @@ run_recovery_check() {
 		if [[ ${retry} -ge ${max_wait} ]]; then
 			echo
 			echo "max retry count ${retry} reached (state: ${state})"
+			print_cluster_diagnostics "${cluster}"
 			exit 1
 		fi
 		echo -n .
@@ -2713,6 +2742,35 @@ wait_certificate() {
 		kubectl wait --for=condition=Ready "certificate/$certificate" --timeout=60s
 		sleep 1
 	done
+}
+
+verify_cert_san() {
+	local secret_name=$1
+	local expected_san=$2
+
+	local san_list
+	san_list=$(kubectl_bin get secret "${secret_name}" -o jsonpath='{.data.tls\.crt}' \
+		| base64 -d \
+		| openssl x509 -text -noout 2>/dev/null \
+		| grep "DNS:" \
+		| tr ',' '\n' \
+		| sed 's/.*DNS://g' \
+		| xargs)
+
+	if echo "${san_list}" | grep -q "${expected_san}"; then
+		echo "OK: SAN '${expected_san}' found in secret '${secret_name}'"
+	else
+		echo "FAIL: SAN '${expected_san}' NOT found in secret '${secret_name}'"
+		echo "  SANs found: ${san_list}"
+		return 1
+	fi
+}
+
+wait_for_cert_san() {
+	local secret_name=$1
+	local expected_san=$2
+
+	retry 30 10 verify_cert_san "${secret_name}" "${expected_san}"
 }
 
 renew_certificate() {

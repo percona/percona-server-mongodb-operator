@@ -206,6 +206,11 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
 @pytest.fixture(scope="session", autouse=True)
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
+    init_env()
+
+
+def init_env() -> list[str]:
+    """Fill os.environ with e2e defaults and return the managed variable names."""
     git_branch = get_git_branch()
     platform = detect_platform()
 
@@ -226,7 +231,7 @@ def setup_env_vars() -> None:
         "GIT_BRANCH": git_branch,
         "OPERATOR_VERSION": get_cr_version(),
         "IMAGE": f"perconalab/percona-server-mongodb-operator:{git_branch}",
-        "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
+        "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.3",
         "IMAGE_MONGOD_CHAIN": (
             "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
             "perconalab/percona-server-mongodb-operator:main-mongod8.0\n"
@@ -237,7 +242,7 @@ def setup_env_vars() -> None:
         "IMAGE_PMM_CLIENT": "perconalab/pmm-client:3-dev-latest",
         "IMAGE_PMM_SERVER": "perconalab/pmm-server:3-dev-latest",
         "IMAGE_LOGCOLLECTOR": "perconalab/fluentbit:main-logcollector",
-        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:0.9.0",
+        "IMAGE_CLUSTERSYNC": "percona/percona-clustersync-mongodb:1.0.0",
         "IMAGE_AWS_CLI": "docker.io/amazon/aws-cli:2.34.60",
         "CERT_MANAGER_VER": "1.21.0",
         "CHAOS_MESH_VER": "2.7.1",
@@ -262,9 +267,12 @@ def setup_env_vars() -> None:
         if images:
             os.environ[var] = "\n".join(qualify_image(i, registry) for i in images if i)
 
+    os.environ["E2E_ENV_INITIALIZED"] = "1"
+
     logger.info(
         "Environment variables:\n" + "\n".join(f"{key}={os.environ.get(key)}" for key in defaults)
     )
+    return [*defaults, "IMAGE_OPERATOR", "E2E_ENV_INITIALIZED"]
 
 
 @pytest.fixture(scope="class")
@@ -576,6 +584,35 @@ def _delete_cert_manager() -> None:
         time.sleep(2)
 
 
+def _wait_for_cert_manager_webhook(timeout: int = 300) -> None:
+    """Wait until the webhook serves requests, i.e. cainjector has injected its CA bundle."""
+    issuer = """
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: webhook-check
+  namespace: cert-manager
+spec:
+  selfSigned: {}
+"""
+    deadline = time.monotonic() + timeout
+    while True:
+        out = kubectl_bin(
+            "apply",
+            "--dry-run=server",
+            "-f",
+            "-",
+            input_data=issuer,
+            check=False,
+            return_stderr=True,
+        )
+        if "created (server dry run)" in out:
+            return
+        if time.monotonic() >= deadline:
+            raise TimeoutError(f"cert-manager webhook is not ready: {out}")
+        time.sleep(5)
+
+
 @pytest.fixture(scope="class")
 def destroy_cert_manager() -> Callable[[], None]:
     """Delete cert-manager so certificates are issued by the operator, not cert-manager."""
@@ -619,6 +656,7 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
                     "cert-manager",
                     "--timeout=300s",
                 )
+            _wait_for_cert_manager_webhook()
         except Exception:
             _delete_cert_manager()
             raise
@@ -744,6 +782,34 @@ def psmdb_client(test_paths: Paths) -> MongoManager:
     return MongoManager(pod_name)
 
 
+@pytest.fixture(scope="class")
+def psmdb_client_tls(test_paths: Paths) -> MongoManager:
+    """Deploy the TLS client and get the pod name.
+
+    The deployment builds its client PEM from the some-name-ssl secret, so only
+    request this once the cluster owning that secret exists.
+    """
+    kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/client-70-tls.yml")
+    kubectl_bin("rollout", "status", "deployment/psmdb-client", "--timeout=360s")
+
+    result = retry(
+        lambda: kubectl_bin(
+            "get",
+            "pods",
+            "--selector=name=psmdb-client",
+            "-o",
+            "jsonpath={range .items[*]}{.metadata.name}{end}",
+        ),
+        max_attempts=30,
+        delay=2,
+        condition=lambda result: result.strip() != "",
+    )
+
+    pod_name = result.strip()
+    wait_pod(pod_name)
+    return MongoManager(pod_name, tls=True)
+
+
 @pytest.fixture
 def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
     """Tear down a bash-wrapped test after diagnostics are collected."""
@@ -764,3 +830,11 @@ def bash_test_cleanup(test_paths: Paths) -> Generator[None]:
         _delete_cert_manager()
     finally:
         _cleanup_infra(test_paths, namespaces)
+
+
+if __name__ == "__main__":
+    import shlex
+
+    _console.stderr = True
+    for key in init_env():
+        print(f"export {key}={shlex.quote(os.environ.get(key, ''))}")

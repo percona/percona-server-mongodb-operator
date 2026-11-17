@@ -23,6 +23,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
@@ -63,6 +64,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotNew(
 	}
 
 	status.State = psmdbv1.RestoreStateWaiting
+	status.WaitingReason = psmdbv1.RestoreWaitingReasonPreparation
 	return status, nil
 }
 
@@ -92,6 +94,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 
 	if !sfsReady {
 		log.Info("Waiting for statefulsets to be ready before restore", "ready", sfsReady)
+		status.WaitingReason = psmdbv1.RestoreWaitingReasonStatefulSets
 		return status, nil
 	}
 
@@ -167,7 +170,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRequested(
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
+		return isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
@@ -271,6 +274,26 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRunning(
 	return status, nil
 }
 
+// restoreFinishScript runs pbm-agent restore-finish with the container args
+// and keeps the container running after it succeeds.
+//
+// restore-finish is a one-shot command. If it were the container's main
+// process, the container would exit as soon as the restore is done. That kills
+// the operator's `pbm describe-restore` exec in the same container (exit code
+// 137), and the restarted container runs restore-finish again on a datadir
+// that is already restored, which corrupts it. The container must stay up until
+// the operator sees the restore as done and deletes the statefulsets.
+//
+// pbm-agent runs in the background and the shell waits on it so the TERM trap
+// fires immediately: bash is PID 1 and would otherwise ignore SIGTERM, making
+// every pod wait for its full termination grace period. A failed restore-finish
+// still exits non-zero.
+const restoreFinishScript = `trap 'exit 0' TERM
+/opt/percona/pbm-agent "$@" &
+wait $! || exit $?
+sleep infinity &
+wait $!`
+
 func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotRestore(
 	ctx context.Context,
 	cluster *psmdbv1.PerconaServerMongoDB,
@@ -330,7 +353,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 				sfs.Spec.Replicas = new(int32(0))
 
 				// When the pods come up, they should start pbm with the following command:
-				sfs.Spec.Template.Spec.Containers[0].Command = []string{"/opt/percona/pbm-agent"}
+				sfs.Spec.Template.Spec.Containers[0].Command = []string{"bash", "-c", restoreFinishScript, "--"}
 
 				isEncrypted, err := isEncrypted(rs)
 				if err != nil {
@@ -342,7 +365,10 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					status.PBMname,
 					"-c", "/etc/pbm/pbm_config.yaml",
 					"--rs", "$(MONGODB_REPLSET)",
-					"--node", "$(POD_NAME).$(SERVICE_NAME)-$(MONGODB_REPLSET).$(NAMESPACE).svc.cluster.local:" + fmt.Sprintf("%d", psmdbv1.DefaultMongoPort),
+
+					// The result of GetAddr contains the literal "$(POD_NAME)" which will resolve to the actual pod name by the shell at runtime.
+					// It works because we already set a POD_NAME env variable in the pod spec during updateStatefulSetForPhysicalRestore.
+					"--node", psmdb.GetAddr(cluster, "$(POD_NAME)", rs.Name, rs.GetPort()),
 				}
 				if isEncrypted {
 					args = append(args, "--db-config", "/etc/pbm-db-config/db_config.yaml")
@@ -373,7 +399,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 					}
 					sfs.Spec.Template.Spec.Containers[0].Command = []string{
 						"bash", "-c",
-						fmt.Sprintf("cp %s %s && chmod 0600 %s && exec /opt/percona/pbm-agent \"$@\"", srcPath, dstPath, dstPath),
+						fmt.Sprintf("cp %s %s && chmod 0600 %s || exit 1\n%s", srcPath, dstPath, dstPath, restoreFinishScript),
 						"--",
 					}
 				}
@@ -456,7 +482,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) rolloutRestoredPVCs(
 	allInfos := make([]replsetInfo, 0, len(replsets))
 	for _, rs := range replsets {
 		pvcs := make([]pvcInfo, 0)
-		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.Name)
+		snapshot := backup.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName())
 		if snapshot == nil {
 			return false, fmt.Errorf("no snapshots found for replset %s", rs.Name)
 		}
@@ -733,10 +759,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
 	stdoutBuf := &bytes.Buffer{}
 	stderrBuf := &bytes.Buffer{}
 	err := retry.OnError(anotherOpBackoff, func(err error) bool {
-		return strings.Contains(err.Error(), "container is not created or running") ||
+		return isContainerUnavailableError(err) ||
 			strings.Contains(err.Error(), "error dialing backend: No agent available") ||
 			strings.Contains(err.Error(), "unable to upgrade connection") ||
-			strings.Contains(err.Error(), "container not found") ||
 			strings.Contains(err.Error(), "unmarshal PBM describe-restore output")
 	}, func() error {
 		stdoutBuf.Reset()

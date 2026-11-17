@@ -177,13 +177,11 @@ String detectMongoVersion() {
             set -eu
             mongo_image=${IMAGE_MONGOD:-}
             if [ -z "$mongo_image" ]; then
-                assignment=$(sed -n '/^export IMAGE_MONGOD=/{p;q;}' e2e-tests/vars)
-                if [ -z "$assignment" ]; then
-                    echo "IMAGE_MONGOD assignment not found in e2e-tests/vars" >&2
+                mongo_image=$(sed -nE 's#.*"IMAGE_MONGOD": "([^"]+)".*#\\1#p' e2e-tests/conftest.py | head -n1)
+                if [ -z "$mongo_image" ]; then
+                    echo "IMAGE_MONGOD default not found in e2e-tests/conftest.py" >&2
                     exit 1
                 fi
-                eval "$assignment"
-                mongo_image=$IMAGE_MONGOD
             fi
 
             mongo_version=$(printf '%s\n' "$mongo_image" | sed -nE 's#.*(:main-mongod|:)([0-9]+[.][0-9]+)([.-].*)?$#\\2#p')
@@ -930,23 +928,37 @@ pipeline {
                         }
                         makeReport()
                         normalizeReports()
-                        
+
+                        // pytest_html_merger needs at least one real pytest-html report. When every test
+                        // was already passed in a previous build, only placeholders exist and it fails.
+                        def hasHtmlReports = sh(returnStatus: true, script: "grep -qs 'Report generated on ' e2e-tests/reports/*.html") == 0
+
                         sh """
                             export PATH="\$HOME/.local/bin:\$PATH"
-                            uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
                             uv run junitparser merge --glob 'e2e-tests/reports/*.xml' ${reportXml}
                         """
-                        formatReportDuration(reportHtml)
                         junit testResults: reportXml, healthScaleFactor: 1.0
-                        archiveArtifacts "${reportXml}, ${reportHtml}"
-                        pushReportFile()
-
-                        def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
-                        currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
+                        archiveArtifacts "${reportXml}"
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${reportUrl})\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\n"
+
+                        if (hasHtmlReports) {
+                            sh """
+                                export PATH="\$HOME/.local/bin:\$PATH"
+                                uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
+                            """
+                            formatReportDuration(reportHtml)
+                            archiveArtifacts "${reportHtml}"
+                            pushReportFile()
+
+                            def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
+                            currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
+                            TestsReport = TestsReport + "Test report: [report](${reportUrl})\r\n"
+                        } else {
+                            echo "No pytest-html reports in e2e-tests/reports, skipping the HTML report merge"
+                        }
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")

@@ -12,6 +12,8 @@ import (
 )
 
 func TestSetSafeDefaultPre116(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		replset  *api.ReplsetSpec
 		expected *api.ReplsetSpec
@@ -242,6 +244,8 @@ func TestSetSafeDefaultPre116(t *testing.T) {
 }
 
 func TestSetSafeDefault(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		replset     *api.ReplsetSpec
 		expectedErr string

@@ -4,10 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -70,6 +72,14 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
+var testPVCUsageBackoff = wait.Backoff{
+	Steps:    defaultPVCUsageBackoff.Steps,
+	Duration: time.Millisecond,
+	Factor:   defaultPVCUsageBackoff.Factor,
+}
+
+const testPodRestartPoll = time.Millisecond
+
 // nolint:all
 func reconciler() *ReconcilePerconaServerMongoDB {
 	cli, err := clientcmd.NewClient(cfg)
@@ -86,6 +96,8 @@ func reconciler() *ReconcilePerconaServerMongoDB {
 		restConfig:             cfg,
 		newPBM:                 backup.NewPBM,
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
+		pvcUsageBackoff:        testPVCUsageBackoff,
+		podRestartPoll:         testPodRestartPoll,
 		serverVersion: &version.ServerVersion{
 			Platform: version.PlatformKubernetes,
 		},
@@ -106,6 +118,9 @@ func readDefaultCR(name, namespace string) (*psmdbv1.PerconaServerMongoDB, error
 
 	cr.Name = name
 	cr.Namespace = namespace
-	cr.Spec.InitImage = "perconalab/percona-server-mongodb-operator:main"
+	cr.Spec.Image = "percona/percona-server-mongodb:sometag"
+	cr.Spec.Backup.Image = "percona/percona-backup-mongodb:sometag"
+	cr.Spec.LogCollector.Image = "percona/fluentbit:sometag"
+	cr.Spec.InitImage = "percona/percona-server-mongodb-operator:sometag"
 	return cr, nil
 }
