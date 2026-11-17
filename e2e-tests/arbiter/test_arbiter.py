@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import pytest
 from lib.config import apply_cluster, compare_kubectl
-from lib.kubectl import kubectl_bin, wait_certificates_ready, wait_for_running, wait_pod
+from lib.kubectl import kubectl_bin, wait_for_running, wait_pod
 from lib.mongo import MongoManager
 from lib.utils import Paths
 
@@ -44,7 +44,6 @@ class TestArbiter:
         """Create cluster and check arbiter started with expected config"""
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster}.yml")
 
-        wait_certificates_ready(["arbiter-ca-cert", "arbiter-ssl", "arbiter-ssl-internal"])
         wait_pod(f"{config.cluster}-arbiter-0")
         wait_for_running(config.cluster, 2, False)
 

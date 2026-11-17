@@ -5,6 +5,7 @@ import re
 import subprocess
 import time
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
@@ -17,6 +18,9 @@ TRANSIENT_ERRORS = re.compile(
     r"|etcdserver: request timed out|the server is currently unable to handle the request"
     r"|Unable to connect to the server|connection reset by peer"
 )
+
+# keep in sync with recreate_failed_certificates in e2e-tests/functions
+CERT_KEY_MISMATCH = "CSR not signed by referenced private key"
 
 
 def _read_manifest(source: str) -> str | None:
@@ -110,11 +114,19 @@ def kubectl_bin(
     return result.stdout
 
 
-def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, timeout: int) -> None:
+def _wait_for(
+    what: str,
+    resource: list[str],
+    jsonpath: str,
+    expected: str,
+    timeout: int,
+    every_10s: Callable[[], None] | None = None,
+) -> None:
     """Poll `kubectl get` until the jsonpath value equals `expected`, else raise TimeoutError."""
     logger.info(f"Waiting for {what} to be ready...")
     deadline = time.time() + timeout
     status = ""
+    attempt = 0
     while time.time() < deadline:
         status = kubectl_bin(
             "get", *resource, "-o", f"jsonpath={jsonpath}", check=False, return_stderr=True
@@ -122,11 +134,32 @@ def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, time
         if status == expected:
             logger.info(f"{what} is ready")
             return
+        attempt += 1
+        if every_10s and attempt % 10 == 0:
+            every_10s()
         time.sleep(1)
 
     raise TimeoutError(
         f"Timeout waiting for {what} to be ready. Last status: {status or 'unknown'}"
     )
+
+
+def recreate_failed_certificates() -> None:
+    """Delete Certificates that hit cert-manager's private key race so the operator recreates them.
+
+    cert-manager can generate two private keys for one Certificate ("CSR not signed by
+    referenced private key") and then back off for up to an hour.
+    """
+    out = kubectl_bin("get", "certificate", "-o", "json", check=False)
+    if not out.strip():
+        return
+    for cert in json.loads(out).get("items", []):
+        for cond in cert.get("status", {}).get("conditions", []):
+            message = cond.get("message", "")
+            if cond["type"] == "Issuing" and CERT_KEY_MISMATCH in message:
+                name = cert["metadata"]["name"]
+                logger.warning(f"Certificate {name} failed to issue, recreating it: {message}")
+                kubectl_bin("delete", "certificate", name, "--ignore-not-found")
 
 
 def wait_pod(pod_name: str, timeout: int = 360) -> None:
@@ -137,6 +170,7 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
         "{.status.phase} {.status.conditions[?(@.type=='Ready')].status}",
         "Running True",
         timeout,
+        every_10s=recreate_failed_certificates,
     )
 
 
@@ -176,40 +210,6 @@ def wait_for_running(
     time.sleep(10)
     if check_cluster_readyness:
         _wait_cluster_ready(cluster_name.replace(f"-{rs_name}", ""), timeout)
-
-
-def wait_certificates_ready(names: list[str], timeout: int = 600) -> None:
-    """Wait for cert-manager Certificates to be ready, re-issuing any whose issuance failed.
-
-    cert-manager can race and generate two private keys for one Certificate right after it
-    starts ("CSR not signed by referenced private key"). It then backs off for up to an hour,
-    so delete the Certificate and let the operator recreate it.
-    """
-    logger.info(f"Waiting for certificates {', '.join(names)} to be ready...")
-    deadline = time.time() + timeout
-    pending = list(names)
-    while pending:
-        for name in list(pending):
-            out = kubectl_bin(
-                "get", "certificate", name, "-o", "json", "--ignore-not-found", check=False
-            )
-            if not out.strip():
-                continue
-            status = json.loads(out).get("status", {})
-            conditions = {c["type"]: c for c in status.get("conditions", [])}
-            if conditions.get("Ready", {}).get("status") == "True":
-                pending.remove(name)
-            elif status.get("lastFailureTime"):
-                logger.warning(
-                    f"Certificate {name} failed to issue, recreating it: "
-                    f"{conditions.get('Issuing', {}).get('message', '')}"
-                )
-                kubectl_bin("delete", "certificate", name, "--ignore-not-found")
-        if pending and time.time() >= deadline:
-            raise TimeoutError(f"Timeout waiting for certificates: {', '.join(pending)}")
-        if pending:
-            time.sleep(5)
-    logger.info("Certificates are ready")
 
 
 def wait_for_delete(resource: str, timeout: int = 180) -> None:

@@ -401,6 +401,9 @@ wait_pod() {
 		sleep 1
 		echo -n .
 		let retry+=1
+		if [ $((retry % 10)) -eq 0 ]; then
+			recreate_failed_certificates
+		fi
 		if [ $retry -ge 360 ]; then
 			kubectl_bin describe pod/$pod
 			kubectl_bin logs $pod
@@ -416,6 +419,18 @@ wait_pod() {
 	done
 	echo ".OK"
 	set_debug
+}
+
+# cert-manager can generate two private keys for one Certificate ("CSR not signed by referenced
+# private key") and then back off for up to an hour. Delete such Certificates so the operator
+# recreates them. Keep in sync with recreate_failed_certificates in e2e-tests/lib/kubectl.py.
+recreate_failed_certificates() {
+	local cert
+	for cert in $(kubectl get certificate -o json 2>/dev/null \
+		| jq -r '.items[] | select(any(.status.conditions[]?; .type == "Issuing" and ((.message // "") | contains("CSR not signed by referenced private key")))) | .metadata.name'); do
+		echo "Certificate ${cert} failed to issue, recreating it"
+		kubectl_bin delete certificate "${cert}" --ignore-not-found
+	done
 }
 
 wait_cron() {
