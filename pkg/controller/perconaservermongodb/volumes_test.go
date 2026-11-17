@@ -1595,3 +1595,44 @@ func TestResizeVolumesIfNeeded_IgnoresPVCsWithoutPods(t *testing.T) {
 	size := kept.Spec.Resources.Requests[corev1.ResourceStorage]
 	assert.Equal(t, "1Gi", size.String(), "a PVC with no pod must be left alone")
 }
+
+func TestNewShrinkContextResolvesTheGroup(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	cr.Spec.Sharding.Enabled = false
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = new(int32(0))
+	rs.VolumeSpec = nil
+	rs.Arbiter = api.Arbiter{}
+	rs.NonVoting = api.NonVotingSpec{}
+	rs.Hidden = api.HiddenSpec{}
+	rs.Instances = []api.InstanceSpec{
+		{Name: "hot", Replicas: 3, VolumeSpec: sizedVol("5Gi"),
+			RSConfig: &api.MemberConfigSpec{Priority: new(int32(10))}},
+		{Name: "analytics", Replicas: 1, VolumeSpec: sizedVol("5Gi"),
+			RSConfig: &api.MemberConfigSpec{Votes: new(int32(0)), Priority: new(int32(0))}},
+	}
+
+	for name, want := range map[string]struct {
+		stepdown  bool
+		container string
+	}{
+		"hot":       {stepdown: true, container: naming.ContainerMongod},
+		"analytics": {stepdown: false, container: naming.ContainerMongod},
+	} {
+		t.Run(name, func(t *testing.T) {
+			g := resolveGroup(t, cr, rs, name)
+			sts := newStatefulSet(cr.Namespace, g.STSName, g.Labels, resource.MustParse("5Gi"))
+
+			sc, err := newShrinkContext(cr, sts, g.Labels, config.MongodDataVolClaimName, g.VolumeSpec.PersistentVolumeClaim)
+			require.NoError(t, err)
+			require.NotNil(t, sc.group)
+			assert.Equal(t, name, sc.group.Name)
+			assert.True(t, sc.isRSComponent)
+			assert.Equal(t, want.stepdown, sc.needsStepdown,
+				"a custom group's component label is its name; stepdown follows whether it can hold the primary")
+			assert.Equal(t, want.container, sc.group.ContainerName)
+		})
+	}
+}

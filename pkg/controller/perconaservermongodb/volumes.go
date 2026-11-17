@@ -483,29 +483,33 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 }
 
 type shrinkContext struct {
-	cr            *psmdbv1.PerconaServerMongoDB
-	sts           *appsv1.StatefulSet
-	ls            map[string]string
-	claimName     string
-	pvcSpec       psmdbv1.PVCSpec
-	component     string
-	replset       *psmdbv1.ReplsetSpec
+	cr        *psmdbv1.PerconaServerMongoDB
+	sts       *appsv1.StatefulSet
+	ls        map[string]string
+	claimName string
+	pvcSpec   psmdbv1.PVCSpec
+	component string
+	replset   *psmdbv1.ReplsetSpec
+	// group is the member group the StatefulSet belongs to; nil for mongos.
+	group         *membergroup.Group
 	isRSComponent bool
+	// needsStepdown is true for groups that may hold the primary. Whether
+	// one of this group's pods actually does is decided in the preflight.
 	needsStepdown bool
 }
 
-func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
-	ctx context.Context,
+// newShrinkContext gathers what the shrink phases need to know about the
+// StatefulSet being shrunk.
+func newShrinkContext(
 	cr *psmdbv1.PerconaServerMongoDB,
 	sts *appsv1.StatefulSet,
 	ls map[string]string,
 	claimName string,
 	pvcSpec psmdbv1.PVCSpec,
-	state psmdbv1.PVCShrinkState,
-) error {
+) (shrinkContext, error) {
 	component, ok := sts.Labels[naming.LabelKubernetesComponent]
 	if !ok {
-		return errors.New("missing component label")
+		return shrinkContext{}, errors.New("missing component label")
 	}
 
 	replsetName, _ := sts.Labels[naming.LabelKubernetesReplset]
@@ -523,7 +527,38 @@ func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 		component:     component,
 		replset:       replset,
 		isRSComponent: component != naming.ComponentMongos,
-		needsStepdown: component == naming.ComponentMongod || component == naming.ComponentConfigSrv,
+	}
+
+	// A custom instances[] group's component label is its own name, so whether
+	// it can hold the primary comes from its resolved member configuration.
+	if sc.isRSComponent && replset != nil {
+		set, err := membergroup.Resolve(cr, replset)
+		if err != nil {
+			return shrinkContext{}, errors.Wrapf(err, "resolve member groups for %s", replset.Name)
+		}
+		group, ok := set.GetByLabels(sts.Labels)
+		if !ok {
+			return shrinkContext{}, errors.Errorf("no member group of %s matches statefulset %s", replset.Name, sts.Name)
+		}
+		sc.group = &group
+		sc.needsStepdown = group.PrimaryEligible
+	}
+
+	return sc, nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	sts *appsv1.StatefulSet,
+	ls map[string]string,
+	claimName string,
+	pvcSpec psmdbv1.PVCSpec,
+	state psmdbv1.PVCShrinkState,
+) error {
+	sc, err := newShrinkContext(cr, sts, ls, claimName, pvcSpec)
+	if err != nil {
+		return err
 	}
 
 	// Route to the correct phase
@@ -635,6 +670,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 	}
 
 	containerName := naming.MongodContainerName(sc.component)
+	if sc.group != nil {
+		containerName = sc.group.ContainerName
+	}
 	mountPath := ""
 	if sc.component == naming.ComponentMongos {
 		containerName = naming.ContainerMongos
@@ -663,6 +701,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 	}
 
 	// RS health check (skip for mongos)
+	rsHasPrimary := false
 	if sc.isRSComponent && sc.replset != nil {
 		rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin)
 		if err != nil {
@@ -689,11 +728,15 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 				revertVCT()
 				return nil
 			}
+			if member.StateStr == "PRIMARY" {
+				rsHasPrimary = true
+			}
 		}
 	}
 
-	// Disable balancer for sharded clusters when shrinking shard or configsvr
-	if sc.cr.Spec.Sharding.Enabled && (sc.component == naming.ComponentMongod || sc.component == naming.ComponentConfigSrv) {
+	// Disable balancer for sharded clusters when shrinking a group of a shard
+	// or the config server that can hold the primary
+	if sc.cr.Spec.Sharding.Enabled && sc.needsStepdown {
 		if err := r.disableBalancer(ctx, sc.cr); err != nil {
 			return errors.Wrap(err, "disable balancer for PVC shrink")
 		}
@@ -715,7 +758,10 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		}
 	}
 
-	if sc.isRSComponent && sc.needsStepdown && primaryPod == "" {
+	// The primary may live in a sibling group or on an external node, in which
+	// case this group has nothing to step down. Wait only while the replica
+	// set has no primary at all.
+	if sc.isRSComponent && sc.needsStepdown && primaryPod == "" && !rsHasPrimary {
 		log.Info("PVC shrink waiting: could not identify primary pod")
 		revertVCT()
 		return nil
