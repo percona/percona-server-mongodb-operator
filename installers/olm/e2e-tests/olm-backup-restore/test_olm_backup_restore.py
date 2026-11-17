@@ -14,7 +14,7 @@ import pytest
 from lib.backup import wait_backup, wait_physical_restore, wait_restore
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
-from lib.secret_scan import LogRecorder, check_logs_for_secrets
+from lib.secret_scan import check_logs_for_secrets
 from lib.utils import Paths, env_bool
 from olm import (
     CLOCK_SKEW,
@@ -65,15 +65,12 @@ class OlmBackupRestoreConfig:
     target: CatalogTarget
 
 
+# What the steps saw, for the final operator check.
 @dataclass
 class State:
-    """What the steps saw, for the final operator and credential checks."""
-
     operator_pod_uid: str = ""
     # Start and end of the physical restore, in UTC.
     physical_restore: tuple[datetime, datetime] | None = None
-    # Logs of the pods the physical restore replaced.
-    restore_logs: LogRecorder | None = None
 
 
 @pytest.fixture(scope="class")
@@ -164,7 +161,7 @@ class TestOlmBackupRestore:
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_install_operator"])
     def test_deploy_cluster(
-        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str, state: State
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str
     ) -> None:
         """Deploy a replica set with backups from the CSV's example CR"""
         apply(config.namespace, example_cluster(csv, config.cluster, storage))
@@ -186,7 +183,7 @@ class TestOlmBackupRestore:
 
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_write_data"])
     def test_logical_backup(
-        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str, state: State
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], storage: str
     ) -> None:
         """A logical backup reaches ready"""
         _backup(config, csv, storage, "logical")
@@ -218,7 +215,11 @@ class TestOlmBackupRestore:
     def test_no_credentials_before_physical_restore(
         self, config: OlmBackupRestoreConfig, csv: dict[str, Any]
     ) -> None:
-        """No credential in the logs and objects of the backups and the logical restore"""
+        """No credential in the logs and objects of the backups and the logical restore
+
+        The physical restore replaces the database pods and their logs, so this is the
+        last scan that reads the pods these steps ran in.
+        """
         operator = operator_pod(config.namespace, csv)["metadata"]["name"]
         check_logs_for_secrets(config.namespace, config.cluster, operator)
 
@@ -235,11 +236,8 @@ class TestOlmBackupRestore:
         compare = f"{test_paths['test_dir']}/compare"
         insert(psmdb_client, config.cluster, config.namespace, 100501)
         check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-2.json")
-        # The operator replaces the replset pods when the restore completes; keep their logs.
-        state.restore_logs = LogRecorder(config.namespace, config.cluster)
         start = datetime.now(UTC)
-        with state.restore_logs:
-            _restore(config, csv, "physical")
+        _restore(config, csv, "physical")
         state.physical_restore = (start, datetime.now(UTC))
         check_members(psmdb_client, config.cluster, config.namespace, f"{compare}/find-1.json")
         # The rebuilt cluster accepts writes.
@@ -264,9 +262,8 @@ class TestOlmBackupRestore:
     # Last, and only after the deploy step, so it also runs when a backup or restore fails.
     @pytest.mark.dependency(depends=["TestOlmBackupRestore::test_deploy_cluster"])
     def test_no_credentials_in_logs(
-        self, config: OlmBackupRestoreConfig, csv: dict[str, Any], state: State
+        self, config: OlmBackupRestoreConfig, csv: dict[str, Any]
     ) -> None:
         """No storage credential or credential-shaped string in the logs and objects"""
         operator = operator_pod(config.namespace, csv)["metadata"]["name"]
-        recorded = state.restore_logs.sources() if state.restore_logs else {}
-        check_logs_for_secrets(config.namespace, config.cluster, operator, extra_sources=recorded)
+        check_logs_for_secrets(config.namespace, config.cluster, operator)

@@ -36,7 +36,6 @@ from olm import (
     resolve_target,
     teardown,
     wait_reconciled,
-    wait_until,
     warning_events,
 )
 
@@ -57,10 +56,9 @@ class OlmDefaultInstallConfig:
     target: CatalogTarget
 
 
+# What the install and deploy steps saw, for the final checks.
 @dataclass
 class State:
-    """What the install and deploy steps saw, for the final checks."""
-
     operator_pod_uid: str = ""
     pods: dict[str, tuple[str, int]] = field(default_factory=dict)
     events: dict[str, int] = field(default_factory=dict)
@@ -139,7 +137,7 @@ def _components(example: dict[str, Any]) -> set[str]:
     return names
 
 
-def _progress(namespace: str, cluster: str) -> tuple[dict[str, str], str]:
+def _read_cluster_status(namespace: str, cluster: str) -> tuple[dict[str, str], str]:
     """(state, ready/size per component and message of the cluster, ""), or ({}, kubectl
     error) when the cluster cannot be read."""
     raw = kubectl_bin(
@@ -168,6 +166,53 @@ def _cluster_ready(progress: dict[str, str], components: set[str]) -> bool:
         return False
     counts = [progress["ready"], *(progress[name] for name in components)]
     return all(ready == size != "0" for ready, size in (c.split("/") for c in counts))
+
+
+def _wait_cluster_ready(namespace: str, cluster: str, components: set[str]) -> dict[str, str]:
+    """Wait until the cluster and every component in `components` are ready; return the
+    last status read.
+
+    Fails after CLUSTER_READY_TIMEOUT, after ERROR_GRACE seconds in a row in `error`
+    (a conflict the operator retries does not count), or after MAX_EMPTY_READS failed
+    reads in a row.
+    """
+    logger.info(f"Waiting for cluster {cluster} to be ready with {sorted(components)}")
+    deadline = time.monotonic() + CLUSTER_READY_TIMEOUT
+    empty_reads = 0
+    error_since: float | None = None
+    progress: dict[str, str] = {}
+    while time.monotonic() < deadline:
+        progress, read_error = _read_cluster_status(namespace, cluster)
+        if not progress:
+            empty_reads += 1
+            assert empty_reads < MAX_EMPTY_READS, (
+                f"psmdb/{cluster} could not be read {empty_reads} times in a row: "
+                f"{read_error or 'empty output'}"
+            )
+        elif _cluster_ready(progress, components):
+            return progress
+        else:
+            empty_reads = 0
+            message = progress.get("message", "")
+            if progress.get("state") != "error" or any(
+                pattern.search(message) for pattern in ALLOWED_OPERATOR_ERRORS
+            ):
+                error_since = None
+            elif error_since is None:
+                error_since = time.monotonic()
+                logger.warning(
+                    f"Cluster {cluster} reported an error, waiting up to {ERROR_GRACE}s for "
+                    f"the operator to recover: {message}"
+                )
+            elif time.monotonic() - error_since >= ERROR_GRACE:
+                raise AssertionError(
+                    f"Cluster {cluster} has been in error state for {ERROR_GRACE}s: {progress}"
+                )
+        time.sleep(5)
+    raise TimeoutError(
+        f"Timeout after {CLUSTER_READY_TIMEOUT}s waiting for cluster {cluster} to be ready. "
+        f"Last status: {progress}"
+    )
 
 
 def _db_pods(namespace: str, cluster: str) -> dict[str, tuple[str, int]]:
@@ -223,45 +268,8 @@ class TestOlmDefaultInstall:
         kubectl_bin("apply", "-n", config.namespace, "-f", "-", input_data=json.dumps(example))
 
         components = _components(example)
-        empty_reads = 0
-        error_since: float | None = None
-
-        def fetch() -> dict[str, str]:
-            nonlocal empty_reads, error_since
-            progress, read_error = _progress(config.namespace, cluster)
-            if not progress:
-                empty_reads += 1
-                assert empty_reads < MAX_EMPTY_READS, (
-                    f"psmdb/{cluster} could not be read {empty_reads} times in a row: "
-                    f"{read_error or 'empty output'}"
-                )
-                return progress
-            empty_reads = 0
-            message = progress.get("message", "")
-            # A conflict on a concurrent update is retried by the operator, not an error.
-            if progress.get("state") != "error" or any(
-                pattern.search(message) for pattern in ALLOWED_OPERATOR_ERRORS
-            ):
-                error_since = None
-            elif error_since is None:
-                error_since = time.monotonic()
-                logger.warning(
-                    f"Cluster {cluster} reported an error, waiting up to {ERROR_GRACE}s for "
-                    f"the operator to recover: {message}"
-                )
-            elif time.monotonic() - error_since >= ERROR_GRACE:
-                raise AssertionError(
-                    f"Cluster {cluster} has been in error state for {ERROR_GRACE}s: {progress}"
-                )
-            return progress
-
         start = time.monotonic()
-        progress = wait_until(
-            f"cluster {cluster} to be ready with {sorted(components)}",
-            fetch,
-            lambda progress: _cluster_ready(progress, components),
-            timeout=CLUSTER_READY_TIMEOUT,
-        )
+        progress = _wait_cluster_ready(config.namespace, cluster, components)
         state.pods = _db_pods(config.namespace, cluster)
         # Warning events from the start-up are expected; new ones from here on are not.
         state.events = {

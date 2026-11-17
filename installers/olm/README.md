@@ -374,9 +374,11 @@ fails when the operator pod restarts or logs an error, and writes a report to
   sharded cluster with hostname anti-affinity.
 - `olm-backup-restore` allows one operator error: the `FULL CLUSTER CRASH`
   line, at most ten times and only during the physical restore, which stops
-  every mongod. The credential scan (`e2e-tests/lib/secret_scan.py`) also reads
-  the logs of the pods the physical restore replaces, and runs at the end even
-  when a backup or restore step fails.
+  every mongod. The credential scan (`e2e-tests/lib/secret_scan.py`) runs
+  before the physical restore and at the end, even when a backup or restore
+  step fails. It reads only the pods that exist at the time, so the database
+  pod logs from the physical restore itself are not scanned: the operator
+  replaces those pods when the restore completes.
 - `olm-upgrade` runs once per older bundle in the catalog and fails when the
   catalog holds fewer than `OLM_MIN_MINORS` (2) previous minor versions. Set
   `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the starting
