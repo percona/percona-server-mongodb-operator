@@ -237,7 +237,7 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 	sfs.Labels = sfsSpec.Template.Labels
 	sfs.Spec = sfsSpec
 
-	sslAnn, err := r.sslAnnotation(ctx, cr)
+	sslAnn, err := r.sslAnnotation(ctx, cr, ls[naming.LabelKubernetesComponent])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get ssl annotations")
 	}

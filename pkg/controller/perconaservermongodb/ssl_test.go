@@ -425,7 +425,7 @@ func TestSSLAnnotation(t *testing.T) {
 
 			objs := append([]client.Object{cr}, tt.objects...)
 			r := buildFakeClient(objs...)
-			annotation, err := r.sslAnnotation(t.Context(), cr)
+			annotation, err := r.sslAnnotation(t.Context(), cr, naming.ComponentMongod)
 			if tt.wantTLSNotReady {
 				require.ErrorIs(t, err, errTLSNotReady)
 				return
@@ -456,7 +456,7 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 
 	// First call without secrets - TLSSecretsReady should be false
 	r := buildFakeClient(cr)
-	_, err := r.sslAnnotation(t.Context(), cr)
+	_, err := r.sslAnnotation(t.Context(), cr, naming.ComponentMongod)
 	require.NoError(t, err)
 	assert.False(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 
@@ -479,7 +479,7 @@ func TestSSLAnnotation_UserProvidedOnly_ConditionRemovedAfterRestore(t *testing.
 	}
 
 	r2 := buildFakeClient(cr, sslSecret, sslInternalSecret)
-	_, err = r2.sslAnnotation(t.Context(), cr)
+	_, err = r2.sslAnnotation(t.Context(), cr, naming.ComponentMongod)
 	require.NoError(t, err)
 	assert.True(t, cr.Status.IsStatusConditionTrue(api.ConditionTypeTLSSecretsReady))
 }
@@ -1143,4 +1143,57 @@ func interceptorClient(t *testing.T, c client.Client, del func(context.Context, 
 	require.True(t, ok, "interceptor.NewClient needs a client.WithWatch, got %T", c)
 
 	return interceptor.NewClient(watcher, interceptor.Funcs{Delete: del})
+}
+
+func TestSSLAnnotation_RestartsOnlyOnCAChange(t *testing.T) {
+	secrets := func(ca, leaf string) []client.Object {
+		data := func(prefix string) map[string][]byte {
+			return map[string][]byte{
+				"ca.crt":  []byte(ca),
+				"tls.crt": []byte(prefix + leaf),
+				"tls.key": []byte(prefix + leaf + "-key"),
+			}
+		}
+		return []client.Object{
+			&corev1.Secret{Name: "test-cluster-ssl", Namespace: "test-ns", Data: data("")},
+			&corev1.Secret{Name: "test-cluster-ssl-internal", Namespace: "test-ns", Data: data("internal-")},
+		}
+	}
+
+	tests := []struct {
+		name         string
+		crVersion    string
+		mongoVersion string
+		component    string
+		next         []client.Object
+		wantRestart  bool
+	}{
+		{name: "leaf re-issued with new SANs", mongoVersion: "8.0.32-14", component: naming.ComponentMongod, next: secrets("ca-1", "leaf-2"), wantRestart: false},
+		{name: "leaf re-issued, mongos", mongoVersion: "8.0.32-14", component: naming.ComponentMongos, next: secrets("ca-1", "leaf-2"), wantRestart: false},
+		{name: "CA changed", mongoVersion: "8.0.32-14", component: naming.ComponentMongod, next: secrets("ca-2", "leaf-2"), wantRestart: true},
+		{name: "leaf re-issued, MongoDB without rotateCertificates", mongoVersion: "4.4.29-28", component: naming.ComponentMongod, next: secrets("ca-1", "leaf-2"), wantRestart: true},
+		{name: "leaf re-issued, old crVersion", crVersion: "1.23.0", mongoVersion: "8.0.32-14", component: naming.ComponentMongod, next: secrets("ca-1", "leaf-2"), wantRestart: true},
+		{name: "leaf re-issued, arbiter", mongoVersion: "8.0.32-14", component: naming.ComponentArbiter, next: secrets("ca-1", "leaf-2"), wantRestart: true},
+		{name: "leaf re-issued, mongot", mongoVersion: "8.0.32-14", component: naming.ComponentSearch, next: secrets("ca-1", "leaf-2"), wantRestart: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			annotation := func(objs []client.Object) map[string]string {
+				cr := newTestCR()
+				if tt.crVersion != "" {
+					cr.Spec.CRVersion = tt.crVersion
+				}
+				cr.Status.MongoVersion = tt.mongoVersion
+				r := buildFakeClient(append([]client.Object{cr}, objs...)...)
+				ann, err := r.sslAnnotation(t.Context(), cr, tt.component)
+				require.NoError(t, err)
+				return ann
+			}
+			before := annotation(secrets("ca-1", "leaf-1"))
+			after := annotation(tt.next)
+			for _, key := range []string{naming.AnnotationSSLHash, naming.AnnotationSSLInternalHash} {
+				assert.Equal(t, tt.wantRestart, before[key] != after[key], key)
+			}
+		})
+	}
 }

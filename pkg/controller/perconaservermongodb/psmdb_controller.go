@@ -459,6 +459,12 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	// Runs before the replsets and mongos are reconciled, so that their
+	// failures can't keep pods on certificates the operator can't verify.
+	if err := r.rotateTLSInPlace(ctx, cr); err != nil {
+		log.Error(err, "failed to rotate TLS certificates in place")
+	}
+
 	err = r.ensureSecurityKeys(ctx, cr)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -1638,7 +1644,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 		return errors.Wrapf(err, "create template spec for mongos")
 	}
 
-	sslAnn, err := r.sslAnnotation(ctx, cr)
+	sslAnn, err := r.sslAnnotation(ctx, cr, naming.ComponentMongos)
 	if err != nil {
 		if errors.Is(err, errTLSNotReady) {
 			return nil
@@ -1764,7 +1770,9 @@ func (r *ReconcilePerconaServerMongoDB) currentSSLAnnotation(ctx context.Context
 	return annotation, nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB) (map[string]string, error) {
+// sslAnnotation returns the TLS hashes for the pod template of the given
+// component. A change of these hashes restarts the pods.
+func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *api.PerconaServerMongoDB, component string) (map[string]string, error) {
 	annotation := make(map[string]string)
 
 	annotation[naming.AnnotationSSLHash] = ""
@@ -1776,6 +1784,18 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		}
 		secretString := fmt.Sprintln(secret.Data)
 		return fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
+	}
+
+	// Components that reload leaf certificates in place (renewals, added
+	// SANs) need a restart only when the CA changes.
+	getServerHash := getHash
+	if tlsRotatedInPlace(cr, component) {
+		getServerHash = func(secret *corev1.Secret) string {
+			if secret == nil {
+				return ""
+			}
+			return getHash(&corev1.Secret{Data: map[string][]byte{"ca.crt": secret.Data["ca.crt"]}})
+		}
 	}
 
 	getSecret := func(name string) (*corev1.Secret, error) {
@@ -1816,7 +1836,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
-	annotation[naming.AnnotationSSLHash] = getHash(sslSecret)
+	annotation[naming.AnnotationSSLHash] = getServerHash(sslSecret)
 	if cr.CompareVersion("1.24.0") >= 0 && cr.TLSEnabled() && cr.Spec.Backup.Enabled {
 		name := tls.CertificatePBMClient(cr).SecretName()
 		secret, err := getSecret(name)
@@ -1863,7 +1883,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLInternalSecretName(cr))
 	}
-	annotation[naming.AnnotationSSLInternalHash] = getHash(sslInternalSecret)
+	annotation[naming.AnnotationSSLInternalHash] = getServerHash(sslInternalSecret)
 
 	cr.Status.AddCondition(api.ClusterCondition{
 		Status: api.ConditionTrue,

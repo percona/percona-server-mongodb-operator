@@ -185,14 +185,14 @@ func (r *ReconcilePerconaServerMongoDB) doAllStsHasLatestTLS(ctx context.Context
 		return false, errors.Wrap(err, "failed to get statefulset list")
 	}
 
-	sslAnn, err := r.sslAnnotation(ctx, cr)
-	if err != nil {
-		if errors.Is(err, errTLSNotReady) {
-			return false, nil
-		}
-		return false, errors.Wrap(err, "failed to get ssl annotations")
-	}
 	for _, sts := range sfsList.Items {
+		sslAnn, err := r.sslAnnotation(ctx, cr, sts.Labels[naming.LabelKubernetesComponent])
+		if err != nil {
+			if errors.Is(err, errTLSNotReady) {
+				return false, nil
+			}
+			return false, errors.Wrap(err, "failed to get ssl annotations")
+		}
 		for k, v := range sslAnn {
 			if sts.Spec.Template.Annotations[k] != v {
 				return false, nil
