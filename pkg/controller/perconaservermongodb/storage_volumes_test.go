@@ -316,10 +316,10 @@ func TestKeepClaimTemplateMeta(t *testing.T) {
 	t.Parallel()
 
 	vct := func(name string, labels, annotations map[string]string) corev1.PersistentVolumeClaim {
-		pvc := corev1.PersistentVolumeClaim{}
-		pvc.Name = name
-		pvc.Labels = labels
-		pvc.Annotations = annotations
+		pvc := corev1.PersistentVolumeClaim{
+			Name:        name,
+			Labels:      labels,
+			Annotations: annotations}
 		return pvc
 	}
 
