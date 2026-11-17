@@ -3,6 +3,8 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"maps"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
@@ -1393,12 +1396,18 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		{Name: "rs0-hidden-0", State: mongo.MemberStateRecovering},
 	}}
 
+	stsPod := func(i int) *corev1.Pod {
+		podLabels := maps.Clone(labels)
+		podLabels[appsv1.PodIndexLabel] = strconv.Itoa(i)
+		return newPod(cr.Namespace, fmt.Sprintf("%s-%d", stsName, i), podLabels)
+	}
+
 	objects := func() []runtime.Object {
 		objs := []runtime.Object{cr}
 		for i := range 3 {
 			podName := fmt.Sprintf("%s-%d", stsName, i)
 			objs = append(objs,
-				newPod(cr.Namespace, podName, labels),
+				stsPod(i),
 				newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+podName, labels, resource.MustParse("5Gi"), resource.MustParse("5Gi")),
 			)
 		}
@@ -1504,6 +1513,121 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		_, ok := cr.GetPVCShrinkState(stsName)
 		assert.False(t, ok)
 		assert.Equal(t, []string{"Normal PVCShrinkCompleted"}, eventReasons(rec))
+	})
+
+	// Pods already recreated with the new size and Ready: the readiness probe reports a freshly
+	// wiped member Ready until it receives the replset config, so shrink must check the member state.
+	host := func(podName string) string {
+		h, err := psmdb.MongoHost(t.Context(), nil, cr, cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, *newPod(cr.Namespace, podName, labels))
+		require.NoError(t, err)
+		return h
+	}
+	replaced := func(t *testing.T, p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *record.FakeRecorder) {
+		objs := []runtime.Object{cr}
+		for i := range 3 {
+			pod := stsPod(i)
+			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
+			objs = append(objs, pod, newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, resource.MustParse("3Gi"), resource.MustParse("3Gi")))
+		}
+		rec := record.NewFakeRecorder(10)
+		return &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            rec,
+		}, rec
+	}
+	statusWith := func(syncing string, state mongo.MemberState) mongo.Status {
+		status := mongo.Status{}
+		for i := range 3 {
+			name := host(fmt.Sprintf("%s-%d", stsName, i))
+			st := mongo.MemberStateSecondary
+			if i == 0 {
+				st = mongo.MemberStatePrimary
+			}
+			if name == syncing {
+				st = state
+			}
+			status.Members = append(status.Members, &mongo.Member{Name: name, State: st})
+		}
+		return status
+	}
+
+	t.Run("replaced member is not done while in initial sync", func(t *testing.T) {
+		syncing := host(stsName + "-2")
+		r, rec := replaced(t, &shrinkMongoProvider{status: statusWith(syncing, mongo.MemberStateStartup2)})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.ProcessedPods)
+		assert.Contains(t, got.WaitingFor, "STARTUP2")
+		assert.Empty(t, eventReasons(rec), "syncing member being replaced is expected, no warning")
+	})
+
+	t.Run("replaced member is done once it is secondary", func(t *testing.T) {
+		r, _ := replaced(t, &shrinkMongoProvider{status: statusWith("", 0)})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase)
+		assert.ElementsMatch(t, []string{stsName + "-1", stsName + "-2"}, got.ProcessedPods)
+	})
+
+	t.Run("primary phase does not complete while last member is in initial sync", func(t *testing.T) {
+		syncing := host(stsName + "-0")
+		status := statusWith(syncing, mongo.MemberStateStartup2)
+		status.Members[1].State = mongo.MemberStatePrimary
+		r, rec := replaced(t, &shrinkMongoProvider{status: status})
+		state := api.PVCShrinkState{
+			Phase:         "primary",
+			TargetSize:    "3Gi",
+			PrimaryPod:    stsName + "-0",
+			ProcessedPods: []string{stsName + "-1", stsName + "-2"},
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, true))
+		_, ok := cr.GetPVCShrinkState(stsName)
+		assert.True(t, ok, "shrink must not complete")
+		assert.Empty(t, eventReasons(rec))
+	})
+
+	t.Run("other unhealthy member while waiting for replaced member emits warning", func(t *testing.T) {
+		r, rec := replaced(t, &shrinkMongoProvider{status: hiddenRecovering})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.ProcessedPods)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
+	})
+
+	t.Run("PVC already being deleted is not deleted again", func(t *testing.T) {
+		objs := objects()
+		for _, o := range objs {
+			if pvc, ok := o.(*corev1.PersistentVolumeClaim); ok && pvc.Name == config.MongodDataVolClaimName+"-"+stsName+"-2" {
+				now := metav1.Now()
+				pvc.DeletionTimestamp = &now
+				pvc.Finalizers = []string{"kubernetes.io/pvc-protection"}
+			}
+		}
+		rec := record.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: healthy},
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 3, pvcCount(t, r))
+		assert.Empty(t, eventReasons(rec))
 	})
 }
 

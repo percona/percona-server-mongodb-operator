@@ -23,6 +23,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
@@ -640,7 +641,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		}
 	}
 
-	if !r.shrinkRSHealthy(ctx, sc, nil) {
+	if !r.shrinkRSHealthy(ctx, sc, nil, nil) {
 		revertVCT()
 		return nil
 	}
@@ -803,11 +804,20 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 			return nil
 		}
 
+		// PVC deletion waits for its pod to go away, make sure the pod is being deleted.
+		if pvc.DeletionTimestamp != nil {
+			log.Info("Waiting for PVC to be deleted", "pvc", pvc.Name, "pod", pod.Name)
+			if err := r.client.Delete(ctx, &pod); err != nil && !k8serrors.IsNotFound(err) {
+				return errors.Wrapf(err, "delete pod %s", pod.Name)
+			}
+			return nil
+		}
+
 		// If PVC was provisioned with the old (larger) request, delete it and the pod.
 		// Use Spec.Requests, not Status.Capacity, because storage classes may round capacity up.
 		pvcRequested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 		if pvcRequested.Cmp(targetSize) > 0 {
-			if !r.shrinkRSHealthy(ctx, sc, &state) {
+			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
 			}
 			log.Info("Deleting PVC for shrink", "pvc", pvc.Name, "pod", pod.Name)
@@ -851,7 +861,12 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 			}
 		}
 
-		// Pod is ready and healthy, mark as processed
+		// A freshly wiped member reports Ready until it receives the replset config,
+		// so wait for every member, including this one, to be healthy.
+		if !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
+			return nil
+		}
+
 		log.Info("Pod shrink complete", "pod", pod.Name)
 		state.ProcessedPods = append(state.ProcessedPods, pod.Name)
 	}
@@ -873,7 +888,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 // shrinkRSHealthy checks every replset member, including hidden, non-voting and arbiter members from other statefulsets.
 // If state is given, an unhealthy member is recorded in it and reported with a single event until it changes.
-func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState) bool {
+// No event is emitted when the unhealthy member is the replacing pod, since it's expected to be syncing.
+func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, replacing *corev1.Pod) bool {
 	if !sc.isRSComponent || sc.replset == nil {
 		return true
 	}
@@ -913,9 +929,23 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 	if state != nil && state.WaitingFor != waitingFor {
 		state.WaitingFor = waitingFor
 		sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
-		r.recorder.Eventf(sc.cr, corev1.EventTypeWarning, "PVCShrinkWaiting", "Shrink of %s is waiting: %s", sc.sts.Name, waitingFor)
+		if !r.isShrinkReplacingMember(ctx, sc, replacing, member) {
+			r.recorder.Eventf(sc.cr, corev1.EventTypeWarning, "PVCShrinkWaiting", "Shrink of %s is waiting: %s", sc.sts.Name, waitingFor)
+		}
 	}
 	return false
+}
+
+func (r *ReconcilePerconaServerMongoDB) isShrinkReplacingMember(ctx context.Context, sc shrinkContext, replacing *corev1.Pod, member *mongo.Member) bool {
+	if replacing == nil {
+		return false
+	}
+	host, err := psmdb.MongoHost(ctx, r.client, sc.cr, sc.cr.Spec.ClusterServiceDNSMode, sc.replset, sc.replset.Expose.Enabled, *replacing)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "get mongo host", "pod", replacing.Name)
+		return false
+	}
+	return member.Name == host
 }
 
 func unhealthyRSMember(status mongo.Status) *mongo.Member {
@@ -962,7 +992,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 		if !isPrimary {
 			log.Info("Primary already stepped down, advancing to primary phase", "pod", state.PrimaryPod)
 		} else {
-			if !r.shrinkRSHealthy(ctx, sc, &state) {
+			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
 			}
 			log.Info("Stepping down primary", "pod", state.PrimaryPod)
