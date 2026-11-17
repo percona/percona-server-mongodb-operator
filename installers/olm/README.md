@@ -366,78 +366,21 @@ check is skipped when `OLM_TARGET_CHANNEL` picks another channel.
 
 `make tests` runs each test against both catalogs; use `make tests/community`
 or `make tests/certified` for one. `OLM_TESTS` takes several names separated by
-spaces. The sections below describe each test in detail.
+spaces. Every test installs the target CSV with a Manual-approval Subscription,
+fails when the operator pod restarts or logs an error, and writes a report to
+`e2e-tests/reports/`. Notes on each test:
 
-### olm-default-install
-
-Runs once per bundle type. It installs the target CSV with a Manual-approval
-Subscription and applies the first `alm-examples` entry of the CSV unchanged:
-the PerconaServerMongoDB that the OpenShift console prefills when a user clicks
-Create. Today that is a sharded cluster (`rs0`, `cfg` and `mongos`, three pods
-each, with hostname anti-affinity) with backups enabled and no storage. The
-test fails at the start when the cluster has fewer than three schedulable
-worker nodes. It waits up to 15 minutes for `ready` with every component ready,
-and fails earlier when the cluster stays in `error` for 2 minutes (the operator
-retries an error) or cannot be read 6 times in a row. It then writes a document
-through the mongos Service and reads it back. It changes
-`spec.upgradeOptions.schedule` and waits for `status.observedGeneration`, so the
-operator has reconciled the cluster before the final checks: once the cluster
-is ready, no DB pod may be replaced or restarted and no Warning event may come
-up, and the operator pod must not restart or log errors.
-
-### olm-backup-restore
-
-Runs once per bundle type. It installs the target CSV with a Manual-approval
-Subscription, deploys SeaweedFS (the S3 storage of the shared harness) in the
-test project and a replica set with backups from the bundle's example CR, and
-writes data. It then takes a logical and a physical backup, built from the
-bundle's example objects. Before each restore it writes one more document;
-after the restore every member (direct connection to each pod) must return only
-the data as of the backup, and the cluster must accept writes again. For the
-physical restore it also waits for the `percona.com/resync-pbm` annotation, the
-StatefulSet rebuild and the PBM resync. The operator pod must not restart or
-log errors during the run. The only exception is the `FULL CLUSTER CRASH` line,
-which the operator logs while the physical restore stops every mongod: it is
-allowed at most ten times, and only between the start and the end of the
-physical restore.
-
-The logs of the operator and database pods, the backup and restore objects,
-the events and the cluster object are scanned for the storage credentials and
-for credential-shaped strings (`e2e-tests/lib/secret_scan.py`) before the
-physical restore and at the end of the run. A finding fails the test with the
-source, line and rule, with the match masked. The operator replaces the
-database pods when the physical restore completes, so their logs are read
-every 15 seconds during the restore, and the logs of the replaced pods are
-scanned at the end too. The final scan also runs when a backup or restore step
-fails.
-
-### olm-upgrade
-
-Runs once for every bundle in the catalog older than the target. Each run
-installs that bundle with a Manual-approval Subscription (`startingCSV`) on the
-target's channel, deploys a replica set with backups from the bundle's example
-CR, writes data and takes a logical backup. It then approves only the
-InstallPlan straight to the target and deletes any other pending one, such as
-one for a newer patch, so each starting version is upgraded directly, without
-changing the channel, as users do. In a catalog with a channel per minor
-version, the test moves the Subscription to the target's channel first. After
-the upgrade it checks that:
-
-- only the target CSV is left and the operator runs its image;
-- the operator pod stays Ready and is not replaced or restarted, and its logs
-  and the namespace's Warning events have no new errors, both right after the
-  upgrade and after a 3-minute soak;
-- the operator reconciled the cluster (`status.observedGeneration`), the cluster
-  stayed `ready`, and no DB pod was recreated or restarted;
-- the data written before the upgrade is readable on every member (direct
-  connection to each pod), and new writes succeed;
-- the target operator restores the backup taken by the starting one: every
-  member returns only the pre-upgrade data, and new writes succeed.
-
-`make tests` fails when the catalog holds fewer than two previous minor
-versions, not counting the target's own minor line. Set `OLM_MIN_MINORS` to
-change that number. Set `OLM_FROM_CSVS` to a space-separated list of CSV names
-to choose the starting bundles.
+- `olm-default-install` needs three schedulable worker nodes: the example is a
+  sharded cluster with hostname anti-affinity.
+- `olm-backup-restore` allows one operator error: the `FULL CLUSTER CRASH`
+  line, at most ten times and only during the physical restore, which stops
+  every mongod. The credential scan (`e2e-tests/lib/secret_scan.py`) also reads
+  the logs of the pods the physical restore replaces, and runs at the end even
+  when a backup or restore step fails.
+- `olm-upgrade` runs once per older bundle in the catalog and fails when the
+  catalog holds fewer than `OLM_MIN_MINORS` (2) previous minor versions. Set
+  `OLM_FROM_CSVS` to a space-separated list of CSV names to choose the starting
+  bundles.
 
 ## Running by hand and in a pipeline
 

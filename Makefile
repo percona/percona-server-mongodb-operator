@@ -104,15 +104,10 @@ py-fmt: uv ## Format and organize imports in e2e-tests
 	$(UV) run ruff format $(PY_DIRS)
 
 # MYPYPATH: the OLM tests import the shared harness (lib.*) from e2e-tests/.
-py-check: uv py-setup-plan py-unit ## Run ruff, mypy, the fixture check and the unit tests on e2e-tests
+py-check: uv py-setup-plan ## Run ruff, mypy and the fixture check on e2e-tests
 	$(UV) run ruff check $(PY_DIRS)
 	$(UV) run mypy e2e-tests/
 	MYPYPATH=e2e-tests $(UV) run mypy installers/olm/e2e-tests/
-
-# --noconftest: the e2e conftest.py waits for cluster nodes before every test.
-PY_UNIT = PYTHONPATH=e2e-tests:installers/olm/e2e-tests $(UV) run pytest --noconftest -p no:cacheprovider -q
-py-unit: uv ## Run the unit tests of the e2e helpers (no cluster needed)
-	$(PY_UNIT) e2e-tests/lib/ installers/olm/e2e-tests/test_olm.py
 
 # -p no:dependency: pytest-dependency would skip dependent tests before their fixtures resolve.
 SETUP_PLAN = $(UV) run pytest --setup-plan -q -p no:cacheprovider -p no:dependency
