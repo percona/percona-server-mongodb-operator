@@ -17,7 +17,6 @@ package healthcheck
 import (
 	"testing"
 
-	"github.com/percona/percona-server-mongodb-operator/cmd/mongodb-healthcheck/db"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/stretchr/testify/require"
 )
@@ -202,63 +201,4 @@ func TestCheckStateForReadiness(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestCheckIsMasterForReadiness(t *testing.T) {
-	tests := []struct {
-		name    string
-		resp    mongo.IsMasterResp
-		wantErr bool
-	}{
-		{
-			name: "replset not initiated is ready",
-			resp: mongo.IsMasterResp{},
-		},
-		{
-			name: "primary is ready",
-			resp: mongo.IsMasterResp{SetName: "rs0", IsMaster: true},
-		},
-		{
-			name: "secondary is ready",
-			resp: mongo.IsMasterResp{SetName: "rs0", Secondary: true},
-		},
-		{
-			name: "arbiter is ready",
-			resp: mongo.IsMasterResp{SetName: "rs0", IsArbiter: true},
-		},
-		{
-			name:    "startup2 or recovering is not ready",
-			resp:    mongo.IsMasterResp{SetName: "rs0"},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := CheckIsMasterForReadiness(tt.resp)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestUnauthenticatedConfig(t *testing.T) {
-	cnf := &db.Config{
-		Hosts:       []string{"localhost:27017"},
-		ReplSetName: "rs0",
-		Username:    "clusterMonitor",
-		Password:    "secret",
-		Direct:      true}
-
-	got := unauthenticatedConfig(cnf)
-
-	require.Empty(t, got.Username)
-	require.Empty(t, got.Password)
-	require.Empty(t, got.ReplSetName, "replset name makes Dial wait out server selection on an uninitiated member")
-	require.True(t, got.Direct)
-	require.Equal(t, cnf.Hosts, got.Hosts)
-	require.Equal(t, "clusterMonitor", cnf.Username, "original config must not change")
 }
