@@ -45,14 +45,20 @@ if [[ $actual_tag != "$tag_value" ]]; then
 fi
 
 backup_name="backup-local-s3"
+psmdb="some-name"
+
+# A users secret change is applied once the operator has copied it to the
+# internal secret. The operator restarts the backup agents for a backup user
+# change, so wait for the cluster and every container to be ready after that.
+wait_users_applied() {
+	wait_for_users_synced "$psmdb"
+	wait_cluster_consistency "$psmdb"
+	kubectl_bin wait --for=condition=Ready pod -l app.kubernetes.io/instance="$psmdb" --timeout=300s
+}
 
 desc 'change MONGODB_DATABASE_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_DATABASE_ADMIN_PASSWORD" "$newpassencrypted"
-sleep 25
-
-psmdb="some-name"
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 
 user=$(getUserData "some-users" "MONGODB_DATABASE_ADMIN_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
@@ -61,9 +67,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'change MONGODB_BACKUP_PASSWORD'
 patch_secret "some-users" "MONGODB_BACKUP_PASSWORD" "$newpassencrypted"
-sleep 25
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_BACKUP_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -72,10 +76,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 desc 'change MONGODB_BACKUP_USER'
 newnameencrypted=$(echo -n "backup2" | base64)
 patch_secret "some-users" "MONGODB_BACKUP_USER" "$newnameencrypted"
-sleep 25
-
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_BACKUP_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -87,9 +88,7 @@ wait_backup "$backup_name"
 
 desc 'change MONGODB_USER_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_USER_ADMIN_PASSWORD" "$newpassencrypted"
-sleep 25
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -98,9 +97,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 desc 'change MONGODB_USER_ADMIN_USER'
 newnameencrypted=$(echo -n "userAdmin2" | base64)
 patch_secret "some-users" "MONGODB_USER_ADMIN_USER" "$newnameencrypted"
-sleep 25
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -108,9 +105,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'change MONGODB_CLUSTER_ADMIN_PASSWORD'
 patch_secret "some-users" "MONGODB_CLUSTER_ADMIN_PASSWORD" "$newpassencrypted"
-sleep 25
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_CLUSTER_ADMIN_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -118,9 +113,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'change MONGODB_CLUSTER_MONITOR_PASSWORD'
 patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_PASSWORD" "$newpassencrypted"
-sleep 25
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_CLUSTER_MONITOR_USER")
 check_mongo_auth "$user:$newpass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$newpass@$cluster-1.$cluster.$namespace"
@@ -128,9 +121,7 @@ check_mongo_auth "$user:$newpass@$cluster-2.$cluster.$namespace"
 
 desc 'remove users secret'
 kubectl_bin delete secret some-users
-sleep 35
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
 pass=$(getUserData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
 check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
@@ -139,9 +130,7 @@ check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 desc 'update all users'
 kubectl_bin apply -f "${conf_dir}/secrets.yml"
-sleep 35
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
 pass=$(getUserData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
 check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
@@ -151,9 +140,7 @@ check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 newmonitorusername="newmonitorusername"
 desc 'update monitor user username'
 patch_secret "some-users" "MONGODB_CLUSTER_MONITOR_USER" "$(echo -n "$newmonitorusername" | base64)"
-sleep 35
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_CLUSTER_MONITOR_USER")
 pass=$(getUserData "some-users" "MONGODB_CLUSTER_MONITOR_PASSWORD")
 check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
@@ -162,14 +149,22 @@ check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
 
 desc 'secret without userAdmin'
 kubectl_bin apply -f "${test_dir}/conf/secrets-2.yml"
-sleep 25
-wait_cluster_consistency $psmdb
-sleep 15
+wait_users_applied
 user=$(getUserData "some-users" "MONGODB_USER_ADMIN_USER")
 pass=$(getUserData "some-users" "MONGODB_USER_ADMIN_PASSWORD")
 check_mongo_auth "$user:$pass@$cluster-0.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-1.$cluster.$namespace"
 check_mongo_auth "$user:$pass@$cluster-2.$cluster.$namespace"
+
+desc 'no mongod restarts during the user changes'
+restarted=$(kubectl_bin get pods -l app.kubernetes.io/instance="$psmdb" -o json \
+	| jq -r '.items[] | .metadata.name as $pod | .status.containerStatuses[]
+		| select(.name == "mongod" and .restartCount > 0) | "\($pod): \(.restartCount)"')
+if [[ -n $restarted ]]; then
+	echo "ERROR: mongod restarted while system users changed:" >&2
+	echo "$restarted" >&2
+	exit 1
+fi
 
 destroy "$namespace"
 
