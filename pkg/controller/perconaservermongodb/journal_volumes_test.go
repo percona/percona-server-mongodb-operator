@@ -213,6 +213,7 @@ func TestReconcileJournalPVCs(t *testing.T) {
 	tests := map[string]struct {
 		requested    string
 		autoscaling  bool
+		external     bool
 		pvcSize      string
 		wantErr      error
 		wantSize     string
@@ -232,6 +233,13 @@ func TestReconcileJournalPVCs(t *testing.T) {
 			wantSize:     "3Gi",
 			wantSpecSize: "3Gi",
 		},
+		"keeps the request when an external autoscaler grew the PVCs": {
+			requested:    "1Gi",
+			external:     true,
+			pvcSize:      "3Gi",
+			wantSize:     "3Gi",
+			wantSpecSize: "1Gi",
+		},
 	}
 
 	for name, tt := range tests {
@@ -244,6 +252,9 @@ func TestReconcileJournalPVCs(t *testing.T) {
 			cr.Spec.Replsets[0].JournalStorage = journalSpec(tt.requested)
 			if tt.autoscaling {
 				cr.Spec.StorageScaling = &api.StorageScalingSpec{EnableVolumeScaling: true}
+			}
+			if tt.external {
+				cr.Spec.StorageScaling = &api.StorageScalingSpec{EnableExternalAutoscaling: true}
 			}
 
 			ls := naming.MongodLabels(cr, cr.Spec.Replsets[0])

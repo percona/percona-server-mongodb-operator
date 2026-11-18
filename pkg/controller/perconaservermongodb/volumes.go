@@ -109,6 +109,10 @@ func (r *ReconcilePerconaServerMongoDB) reconcileAuxiliaryPVCs(ctx context.Conte
 		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", sts.Name, "claim", claimName)
 	}
 
+	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
+		return nil
+	}
+
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	if err := r.client.List(ctx, pvcList, &client.ListOptions{
 		Namespace:     sts.Namespace,

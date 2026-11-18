@@ -327,8 +327,8 @@ spec:
           0\necho \"migrating journal from $src to $dst\"\nfind \"$dst\" -mindepth
           1 -maxdepth 1 ! -name lost+found -exec rm -rf {} +\nfind \"$src\" -mindepth
           1 -maxdepth 1 -exec cp -a {} \"$dst\"/ \\;\nsync\nfor f in \"$src\"/*; do\n\t[
-          -e \"$f\" ] || continue\n\tname=$(basename \"$f\")\n\tif [ \"$(wc -c < \"$f\")\"
-          != \"$(wc -c 2>/dev/null < \"$dst/$name\")\" ]; then\n\t\techo \"size mismatch
+          -e \"$f\" ] || continue\n\tname=$(basename \"$f\")\n\tsrc_size=$(wc -c < \"$f\")\n\tdst_size=$(wc
+          -c < \"$dst/$name\")\n\tif [ \"$src_size\" != \"$dst_size\" ]; then\n\t\techo \"size mismatch
           for $name, keeping the original journal\"\n\t\texit 1\n\tfi\ndone\nmv \"$src\"
           \"$moved\"\nmkdir \"$src\"\nrm -rf \"$moved\"\necho \"journal migrated to
           $dst\"\n"

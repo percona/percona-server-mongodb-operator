@@ -202,7 +202,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	component := sfs.Labels[naming.LabelKubernetesComponent]
 	canStepDown := component != naming.ComponentNonVoting && component != naming.ComponentHidden
 
-	if podsMissingClaimVolumes(sfs, list.Items) {
+	missingClaims := podsMissingClaimVolumes(sfs, list.Items)
+	if missingClaims {
 		log.Info("pods are missing a volume claim, updating them from the lowest ordinal")
 		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
 	} else {
@@ -215,7 +216,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		if err != nil {
 			return errors.Wrap(err, "is pod primary")
 		}
-		if isPrimary {
+		if isPrimary && missingClaims && podsMissingClaimVolumes(sfs, []corev1.Pod{pod}) {
+			if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+				return err
+			}
+		} else if isPrimary {
 			primaryPod = pod
 			log.Info("primary pod detected", "pod", pod.Name)
 			continue

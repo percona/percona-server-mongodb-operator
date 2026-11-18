@@ -78,7 +78,9 @@ sync
 for f in "$src"/*; do
 	[ -e "$f" ] || continue
 	name=$(basename "$f")
-	if [ "$(wc -c < "$f")" != "$(wc -c 2>/dev/null < "$dst/$name")" ]; then
+	src_size=$(wc -c < "$f")
+	dst_size=$(wc -c < "$dst/$name")
+	if [ "$src_size" != "$dst_size" ]; then
 		echo "size mismatch for $name, keeping the original journal"
 		exit 1
 	fi

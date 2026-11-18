@@ -5,6 +5,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
@@ -21,6 +22,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -440,4 +442,45 @@ func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
 		_, err := staleCache(100).getStatefulsetFromReplset(ctx, cr, rs, naming.MongodLabels(cr, rs))
 		require.ErrorIs(t, err, errConfigNotInCache)
 	})
+}
+
+func TestReconcileStatefulSetFinishedResize(t *testing.T) {
+	ctx := t.Context()
+
+	const (
+		ns     = "sts-finished-resize"
+		crName = ns + "-cr"
+	)
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+	rs := cr.Spec.Replset("rs0")
+	ls := naming.MongodLabels(cr, rs)
+	objs := []client.Object{
+		cr,
+		&corev1.Secret{Name: crName + "-ssl", Namespace: ns},
+		&corev1.Secret{Name: crName + "-ssl-internal", Namespace: ns},
+		&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: ns},
+	}
+
+	sts, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, ls)
+	require.NoError(t, err)
+	sts.Annotations = map[string]string{
+		api.AnnotationPVCResizeInProgress: time.Now().Format(time.RFC3339),
+		api.AnnotationPVCResizeClaim:      config.MongodDataVolClaimName,
+	}
+
+	pod := newPod(ns, sts.Name+"-0", ls)
+	size := rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+	pvc := newPVC(ns, config.MongodDataVolClaimName+"-"+pod.Name, ls, size, size)
+
+	r := buildFakeClient(append(objs, sts, pod, pvc)...)
+
+	_, err = r.reconcileStatefulSet(ctx, cr, rs, ls)
+	require.NoError(t, err)
+
+	err = r.client.Get(ctx, client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
+	require.True(t, k8serrors.IsNotFound(err), "statefulset must be rebuilt on the next reconcile, got %v", err)
 }

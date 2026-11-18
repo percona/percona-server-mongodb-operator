@@ -403,15 +403,16 @@ func TestSmartUpdateMissingClaims(t *testing.T) {
 		next       string
 		wantEvents []string
 	}{
-		"updates a low ordinal primary last": {
+		"steps down a low ordinal primary before updating it": {
 			component: naming.ComponentMongod,
 			primary:   "some-name-rs0-0",
 			next:      "some-name-rs0-1",
 			wantEvents: []string{
-				"delete some-name-rs0-1",
-				"delete some-name-rs0-2",
 				"stepdown some-name-rs0-0",
 				"delete some-name-rs0-0",
+				"stepdown some-name-rs0-1",
+				"delete some-name-rs0-1",
+				"delete some-name-rs0-2",
 			},
 		},
 		"external primary updates every pod in ordinal order": {

@@ -131,7 +131,7 @@ func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) 
 }
 
 func JournalVolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
-	return VolumeSnapshotName(bcp, rsName+"-journal")
+	return VolumeSnapshotName(bcp, rsName) + "-journal"
 }
 
 func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) types.NamespacedName {

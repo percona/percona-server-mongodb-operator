@@ -105,11 +105,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	// annotation, as it may have been set during reconcilePVCs and the local
 	// sfs object would be stale.
 	currentSts := new(appsv1.StatefulSet)
-	if err := r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, currentSts); err == nil {
+	err = r.client.Get(ctx, types.NamespacedName{Name: sfs.Name, Namespace: sfs.Namespace}, currentSts)
+	switch {
+	case err == nil:
 		if _, ok := currentSts.Annotations[api.AnnotationPVCResizeInProgress]; ok {
 			log.V(1).Info("PVC resize in progress, skipping reconciliation of statefulset", "name", sfs.Name)
 			return sfs, nil
 		}
+	case k8sErrors.IsNotFound(err) && sfs.ResourceVersion != "":
+		log.V(1).Info("statefulset deleted for PVC resize, recreating it on the next reconcile", "name", sfs.Name)
+		return sfs, nil
 	}
 
 	err = r.createOrUpdate(ctx, sfs)
