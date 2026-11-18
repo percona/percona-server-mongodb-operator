@@ -105,6 +105,15 @@ func (r *ReconcilePerconaServerMongoDBRestore) validateExternalBackup(
 		return nil
 	}
 
+	// Snapshot restores scale down, swap PVCs and scale up only the legacy
+	// mongod/nonVoting/hidden/arbiter statefulsets. Instance groups would be
+	// silently left out, so reject them until snapshots.go is group-aware.
+	for _, rs := range cluster.GetAllReplsets() {
+		if rs.InstanceMode() {
+			return errors.Errorf("restoring from volume snapshots is not supported for replset %s: it uses instances", rs.Name)
+		}
+	}
+
 	if len(bcp.Status.Snapshots) > 0 {
 		for _, rs := range cluster.GetAllReplsets() {
 			if bcp.Status.Snapshots.GetSnapshotInfo(rs.MongoReplsetName()) == nil {

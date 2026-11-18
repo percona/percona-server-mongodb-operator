@@ -59,11 +59,11 @@ func MongodContainerName(component string) string {
 }
 
 func MongodStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
-	return fmt.Sprintf("%s-%s", cr.Name, rs.Name)
+	return GroupStatefulSetName(cr, rs, GroupMongod)
 }
 
 func MongodCustomConfigName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
-	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentMongod)
+	return GroupConfigMapName(cr, rs, GroupMongod)
 }
 
 func MongosStatefulSetName(cr *psmdbv1.PerconaServerMongoDB) string {
@@ -83,31 +83,31 @@ func MongosCustomConfigName(cr *psmdbv1.PerconaServerMongoDB) string {
 }
 
 func NonVotingStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
-	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentNonVotingShort)
+	return GroupStatefulSetName(cr, rs, GroupNonVoting)
 }
 
 func NonVotingPodName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, idx int) string {
-	return fmt.Sprintf("%s-%d", NonVotingStatefulSetName(cr, rs), idx)
+	return GroupPodName(cr, rs, GroupNonVoting, idx)
 }
 
 func NonVotingConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
-	return NonVotingStatefulSetName(cr, rs)
+	return GroupConfigMapName(cr, rs, GroupNonVoting)
 }
 
 func HiddenStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
-	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentHidden)
+	return GroupStatefulSetName(cr, rs, GroupHidden)
 }
 
 func HiddenConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
-	return HiddenStatefulSetName(cr, rs)
+	return GroupConfigMapName(cr, rs, GroupHidden)
 }
 
 func HiddenPodName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, idx int) string {
-	return fmt.Sprintf("%s-%d", HiddenStatefulSetName(cr, rs), idx)
+	return GroupPodName(cr, rs, GroupHidden, idx)
 }
 
 func ArbiterStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
-	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentArbiter)
+	return GroupStatefulSetName(cr, rs, GroupArbiter)
 }
 
 func HookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, component string) string {
@@ -128,10 +128,6 @@ func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
 	hash := fmt.Sprintf("%x", md5.Sum([]byte(bcp.Spec.ClusterName+bcp.Name+rsName)))
 	return fmt.Sprintf("%s-%s-%s", bcp.Name, strings.ToLower(rsName), hash[:5])
-}
-
-func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) types.NamespacedName {
-	return types.NamespacedName{Name: cr.Name + "-" + rsName, Namespace: cr.Namespace}
 }
 
 func MongosNamespacedName(cr *psmdbv1.PerconaServerMongoDB) types.NamespacedName {

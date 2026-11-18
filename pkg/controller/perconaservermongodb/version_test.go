@@ -81,7 +81,7 @@ func fakeCR(t *testing.T, name, namespace string) *api.PerconaServerMongoDB {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},

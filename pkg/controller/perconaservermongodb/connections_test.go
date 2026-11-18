@@ -48,7 +48,7 @@ func TestConnectionLeaks(t *testing.T) {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},
@@ -86,7 +86,7 @@ func TestConnectionLeaks(t *testing.T) {
 			cr: updateResource(cr.DeepCopy(), func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.Sharding.Enabled = true
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 				cr.Spec.Sharding.Mongos = &api.MongosSpec{
@@ -101,7 +101,7 @@ func TestConnectionLeaks(t *testing.T) {
 				cr.Spec.UpdateStrategy = appsv1.RollingUpdateStatefulSetStrategyType
 				cr.Spec.Sharding.Enabled = true
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 				cr.Spec.Sharding.Mongos = &api.MongosSpec{
@@ -117,7 +117,7 @@ func TestConnectionLeaks(t *testing.T) {
 
 			obj := []client.Object{}
 			obj = append(obj, cr,
-				fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, updatedRevision, ""),
+				fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].GetMongodSize(), updatedRevision, ""),
 				fakeStatefulset(cr, &api.ReplsetSpec{Name: "deleted-sts"}, 0, "", ""),
 			)
 
@@ -135,7 +135,7 @@ func TestConnectionLeaks(t *testing.T) {
 				if err := cr.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 					t.Fatal(err)
 				}
-				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Sharding.ConfigsvrReplSet.Size, updatedRevision, ""))
+				obj = append(obj, fakeStatefulset(cr, cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Sharding.ConfigsvrReplSet.GetMongodSize(), updatedRevision, ""))
 				allPods = append(allPods, fakePodsForRS(cr, cr.Spec.Sharding.ConfigsvrReplSet)...)
 			}
 
@@ -289,7 +289,7 @@ func fakePodsForRS(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) []client.O
 	if rs.Name == api.ConfigReplSetName {
 		ls[naming.LabelKubernetesComponent] = api.ConfigReplSetName
 	}
-	for i := 0; i < int(rs.Size); i++ {
+	for i := 0; i < int(rs.GetMongodSize()); i++ {
 		pods = append(pods, fakePod(fmt.Sprintf("%s-%s-%d", cr.Name, rs.Name, i), cr.Namespace, ls, "mongod"))
 	}
 	return pods
@@ -344,6 +344,13 @@ func fakeStatefulset(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, size int
 		Name:      fmt.Sprintf("%s-%s", cr.Name, rs.Name),
 		Namespace: cr.Namespace,
 		Labels:    ls,
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: api.SchemeGroupVersion.String(),
+			Kind:       "PerconaServerMongoDB",
+			Name:       cr.Name,
+			UID:        cr.UID,
+			Controller: new(true),
+		}},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &size,
 			Selector: &metav1.LabelSelector{

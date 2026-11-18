@@ -14,6 +14,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -59,11 +60,26 @@ func BuildMeta(ctx context.Context, cl client.Client, cr *api.PerconaServerMongo
 		if len(rs.Sidecars) > 0 {
 			vm.SidecarsUsed = true
 		}
-		if rs.Arbiter.Enabled {
-			vm.ArbiterEnabled = true
+
+		// Member roles come from the resolved groups, so a topology declared
+		// through instances[] is counted the same as the legacy blocks.
+		set, err := membergroup.Resolve(cr, rs)
+		if err != nil {
+			return Meta{}, errors.Wrapf(err, "resolve member groups for replset %s", rs.Name)
 		}
-		if rs.NonVoting.Enabled {
-			vm.NonVotingEnabled = true
+		for _, g := range set.GetAll() {
+			if g.Replicas == 0 {
+				continue
+			}
+			if g.Member.ArbiterOnly {
+				vm.ArbiterEnabled = true
+			}
+			if g.DataBearing && g.Member.Votes == 0 {
+				vm.NonVotingEnabled = true
+			}
+			if len(g.MultiAZ.Sidecars) > 0 {
+				vm.SidecarsUsed = true
+			}
 		}
 		encryptionEnabled, err := rs.IsEncryptionEnabled()
 		if err != nil {

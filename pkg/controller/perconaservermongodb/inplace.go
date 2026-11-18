@@ -20,6 +20,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
@@ -55,6 +56,26 @@ func managedContainer(component string) string {
 		return naming.ContainerMongos
 	}
 	return ""
+}
+
+// vpaContainerForPod returns the VPA-managed container of a pod, or "" when VPA
+// does not size it. Replset pods are matched to their member group, whose
+// component label is the group name for a custom instances[] group; pods
+// outside a replset (mongos, replset nil) are matched by component.
+func vpaContainerForPod(cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, pod *corev1.Pod) (string, error) {
+	if replset == nil {
+		return managedContainer(pod.Labels[naming.LabelKubernetesComponent]), nil
+	}
+
+	set, err := membergroup.Resolve(cr, replset)
+	if err != nil {
+		return "", errors.Wrapf(err, "resolve member groups for %s", replset.Name)
+	}
+	group, ok := set.GetByLabels(pod.Labels)
+	if !ok || !group.DataBearing {
+		return "", nil
+	}
+	return group.ContainerName, nil
 }
 
 func findContainer(containers []corev1.Container, name string) *corev1.Container {
@@ -160,7 +181,10 @@ func (r *ReconcilePerconaServerMongoDB) planInPlaceResize(
 		return nil, "Kubernetes server is older than 1.33", nil
 	}
 
-	container := managedContainer(pod.Labels[naming.LabelKubernetesComponent])
+	container, err := vpaContainerForPod(cr, replset, pod)
+	if err != nil {
+		return nil, "", err
+	}
 	if container == "" {
 		return nil, "component is not managed by VPA", nil
 	}

@@ -290,8 +290,8 @@ spec:
 #        volumeMode: Filesystem
 #        accessModes:
 #          - ReadWriteOnce
-    podDisruptionBudget:
-      maxUnavailable: 1
+#    podDisruptionBudget:
+#      maxUnavailable: 1
 #      minAvailable: 0
 #    splitHorizons:
 #      my-cluster-name-rs0-0:
@@ -383,8 +383,6 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-      podDisruptionBudget:
-        maxUnavailable: 1
 #        minAvailable: 0
       resources:
         limits:
@@ -450,8 +448,6 @@ spec:
 #        rack: rack-22
 #      nodeSelector:
 #        disktype: ssd
-      podDisruptionBudget:
-        maxUnavailable: 1
 #        minAvailable: 0
       resources:
         limits:
@@ -627,8 +623,8 @@ spec:
 #        command: ["/bin/sh"]
 #        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
 #        name: rs-sidecar-1
-      podDisruptionBudget:
-        maxUnavailable: 1
+#      podDisruptionBudget:
+#        maxUnavailable: 1
       expose:
         enabled: false
         type: ClusterIP
@@ -754,8 +750,8 @@ spec:
 #        command: ["/bin/sh"]
 #        args: ["-c", "while true; do echo echo $(date -u) 'test' >> /dev/null; sleep 5;done"]
 #        name: rs-sidecar-1
-      podDisruptionBudget:
-        maxUnavailable: 1
+#      podDisruptionBudget:
+#        maxUnavailable: 1
       resources:
         limits:
           cpu: "600m"

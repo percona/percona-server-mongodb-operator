@@ -498,3 +498,40 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 		clientcmd:  fakeClientcmd.New(),
 	}
 }
+
+func TestValidateExternalBackupRejectsInstances(t *testing.T) {
+	t.Parallel()
+
+	r := &ReconcilePerconaServerMongoDBRestore{}
+	bcp := &psmdbv1.PerconaServerMongoDBBackup{
+		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{Type: defs.ExternalBackup},
+	}
+
+	t.Run("instances", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &psmdbv1.PerconaServerMongoDB{
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{{
+					Name:      "rs0",
+					Instances: []psmdbv1.InstanceSpec{{Name: psmdbv1.ReservedGroupMongod, Replicas: 3}},
+				}},
+			},
+		}
+
+		err := r.validateExternalBackup(t.Context(), cluster, bcp)
+		assert.ErrorContains(t, err, "not supported for replset rs0: it uses instances")
+	})
+
+	t.Run("legacy", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := &psmdbv1.PerconaServerMongoDB{
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0"}},
+			},
+		}
+
+		assert.NoError(t, r.validateExternalBackup(t.Context(), cluster, bcp))
+	})
+}

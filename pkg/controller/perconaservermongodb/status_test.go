@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 
@@ -22,6 +23,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	faketls "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -80,6 +82,12 @@ func mockReadyReplsetSts(name, namespace, crName, rsName, component string, repl
 			naming.LabelKubernetesReplset:   rsName,
 			naming.LabelKubernetesComponent: component,
 		},
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: api.SchemeGroupVersion.String(),
+			Kind:       "PerconaServerMongoDB",
+			Name:       crName,
+			Controller: new(true),
+		}},
 		Status: appsv1.StatefulSetStatus{
 			ReadyReplicas:     replicas,
 			UpdatedReplicas:   replicas,
@@ -133,7 +141,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -153,7 +161,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -174,7 +182,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -206,7 +214,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -238,7 +246,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -271,7 +279,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -311,7 +319,7 @@ func TestUpdateStatus(t *testing.T) {
 					Replsets: []*api.ReplsetSpec{
 						{
 							Name: "rs0",
-							Size: 3,
+							Size: new(int32(3)),
 						},
 					},
 					Sharding: api.Sharding{
@@ -407,7 +415,7 @@ func TestConnectionEndpoint(t *testing.T) {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},
@@ -474,7 +482,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -493,7 +501,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -513,7 +521,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -533,7 +541,7 @@ func TestConnectionEndpoint(t *testing.T) {
 					},
 				}
 				cr.Spec.Sharding.ConfigsvrReplSet = &api.ReplsetSpec{
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				}
 			}),
@@ -626,6 +634,28 @@ func fakeSvc(name, namespace string, svcType corev1.ServiceType, ip, hostname st
 	}
 }
 
+// builds the group's StatefulSet and its pods with the set
+// rolling out updateRevision and every pod still labeled podRevision.
+func groupAtRevision(
+	cr *api.PerconaServerMongoDB,
+	rs *api.ReplsetSpec,
+	g membergroup.Group,
+	updateRevision, podRevision string,
+	updatedReplicas int32,
+) []client.Object {
+	sts := groupSTS(cr, rs, g, g.Replicas, g.Replicas)
+	sts.Status.UpdateRevision = updateRevision
+	sts.Status.UpdatedReplicas = updatedReplicas
+
+	objs := []client.Object{sts}
+	for i := range int(g.Replicas) {
+		pod := groupPod(cr, rs, g, i)
+		pod.Labels["controller-revision-hash"] = podRevision
+		objs = append(objs, pod)
+	}
+	return objs
+}
+
 func TestIsAwaitingSmartUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -643,7 +673,7 @@ func TestIsAwaitingSmartUpdate(t *testing.T) {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name:       "rs0",
-					Size:       3,
+					Size:       new(int32(3)),
 					VolumeSpec: fakeVolumeSpec(t),
 				},
 			},
@@ -660,14 +690,38 @@ func TestIsAwaitingSmartUpdate(t *testing.T) {
 			MongoImage:         "percona/percona-server-mongodb:4.0",
 		},
 	}
-	sts := fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].Size, "some-revision", "mongod")
+	sts := fakeStatefulset(cr, cr.Spec.Replsets[0], cr.Spec.Replsets[0].GetMongodSize(), "some-revision", "mongod")
 	pods := fakePodsForRS(cr, cr.Spec.Replsets[0])
+
+	// An instances[] topology with a second group:w
+	instCR := instanceCR(t, "psmdb-inst", "psmdb", []api.InstanceSpec{voting("mongod", 1), voting("hot", 1)},
+		unsafeSize, func(c *api.PerconaServerMongoDB) {
+			c.Spec.UpdateStrategy = api.SmartUpdateStatefulSetStrategyType
+		})
+	instRS := instCR.Spec.Replsets[0]
+	instMongod := resolveGroup(t, instCR, instRS, "mongod")
+	instHot := resolveGroup(t, instCR, instRS, "hot")
+
+	// The missing-StatefulSet case below only proves anything if the absent
+	// group is enumerated before the present one.
+	instSet, err := membergroup.Resolve(instCR, instRS)
+	require.NoError(t, err)
+	require.Equal(t, []string{instHot.STSName, instMongod.STSName}, instSet.GetStatefulSetNames())
+
+	unsharded, err := readDefaultCR("psmdb-unsharded", "psmdb")
+	require.NoError(t, err)
+	unsharded.Spec.UpdateStrategy = api.SmartUpdateStatefulSetStrategyType
+	require.NoError(t, unsharded.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+	unsharded.Spec.Sharding.Enabled = false
+	unshardedCfg := unsharded.Spec.Sharding.ConfigsvrReplSet
+	unshardedCfgGroup := resolveGroup(t, unsharded, unshardedCfg, naming.GroupMongod)
 
 	testCases := []struct {
 		desc     string
 		expected bool
 		mock     func(cl client.Client) error
 		cluster  *api.PerconaServerMongoDB
+		objects  []client.Object
 	}{
 		{
 			desc:     "smart update is disabled",
@@ -728,14 +782,39 @@ func TestIsAwaitingSmartUpdate(t *testing.T) {
 			},
 			cluster: cr.DeepCopy(),
 		},
+		{
+			desc:     "a pending update in a non-base group is seen",
+			expected: true,
+			cluster:  instCR,
+			objects: slices.Concat(
+				groupAtRevision(instCR, instRS, instMongod, "rev-2", "rev-2", 1),
+				groupAtRevision(instCR, instRS, instHot, "rev-2", "rev-1", 0),
+			),
+		},
+		{
+			desc:     "a missing statefulset does not hide a pending update in another group",
+			expected: true,
+			cluster:  instCR,
+			objects:  groupAtRevision(instCR, instRS, instMongod, "rev-2", "rev-1", 0),
+		},
+		{
+			desc:     "a configsvr statefulset is not enumerated while sharding is disabled",
+			expected: false,
+			cluster:  unsharded,
+			objects:  groupAtRevision(unsharded, unshardedCfg, unshardedCfgGroup, "rev-2", "rev-1", 0),
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			// Setup mocks
-			objs := []client.Object{}
-			objs = append(objs, tc.cluster, sts)
-			objs = append(objs, pods...)
+			objs := []client.Object{tc.cluster}
+			if tc.objects != nil {
+				objs = append(objs, tc.objects...)
+			} else {
+				objs = append(objs, sts)
+				objs = append(objs, pods...)
+			}
 			r := buildFakeClient(objs...)
 			if tc.mock != nil {
 				err := tc.mock(r.client)
@@ -762,7 +841,7 @@ func TestImageUpgradeCondition(t *testing.T) {
 		Name:      clusterName,
 		Namespace: namespace,
 		Spec: api.PerconaServerMongoDBSpec{
-			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: 1}},
+			Replsets: []*api.ReplsetSpec{{Name: "rs0", Size: new(int32(1))}},
 		},
 	}
 

@@ -22,6 +22,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 // rl builds a ResourceList from cpu/memory quantity strings.
@@ -805,7 +806,7 @@ func TestVPAStatusRecordsWhyNoRecommendation(t *testing.T) {
 	// so that an absent entry means "not configured" rather than "silently broken".
 	r := vpaReaderWith(t)
 	cr := vpaTestCR(true)
-	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: new(int32(3))}}
 
 	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
 
@@ -817,7 +818,7 @@ func TestVPAStatusRecordsWhyNoRecommendation(t *testing.T) {
 
 func TestVPAStatusMessageExplainsOffMode(t *testing.T) {
 	cr := vpaTestCR(true)
-	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: new(int32(3))}}
 
 	// No VPA object yet, so the component says the object is missing.
 	require.NoError(t, vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr))
@@ -840,7 +841,7 @@ func TestVPAStatusMessageExplainsOffMode(t *testing.T) {
 func TestVPAStatusMessageClearsWhenApplying(t *testing.T) {
 	cr := vpaTestCR(true)
 	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
-	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+	cr.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: new(int32(3))}}
 
 	// First pass: no object, so the component records why.
 	require.NoError(t, vpaReaderWith(t).reconcileVPARecommendations(t.Context(), cr))
@@ -865,7 +866,7 @@ func windowedCR(mode api.VPAUpdateMode) *api.PerconaServerMongoDB {
 	cr.Spec.VPA.UpdateMode = mode
 	cr.Spec.VPA.StabilizationWindow = metav1.Duration{Duration: time.Hour}
 	cr.Spec.Replsets = []*api.ReplsetSpec{{
-		Name: "rs0", Size: 3,
+		Name: "rs0", Size: new(int32(3)),
 		Resources: corev1.ResourceRequirements{Requests: rl("", "1Gi"), Limits: rl("", "4Gi")},
 	}}
 	return cr
@@ -1259,4 +1260,48 @@ func TestRecordVPAStatus(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReconcileVPAPerInstanceGroup(t *testing.T) {
+	cr := vpaTestCR(true)
+	cr.Spec.CRVersion = version.Version()
+	cr.Spec.VPA.UpdateMode = api.VPAUpdateModeAuto
+	vol := &api.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+	cr.Spec.Replsets = []*api.ReplsetSpec{{
+		Name: "rs0",
+		Instances: []api.InstanceSpec{
+			{Name: "hot", Replicas: 3, VolumeSpec: vol,
+				MultiAZ: api.MultiAZ{Resources: corev1.ResourceRequirements{Requests: rl("1", "1Gi")}}},
+			{Name: "cold", Replicas: 2, VolumeSpec: vol,
+				RSConfig: &api.MemberConfigSpec{Votes: new(int32(0)), Priority: new(int32(0))},
+				VPA:      &api.ComponentVPASpec{ObjectName: "cold-recommendations"}},
+			{Name: "arb", Replicas: 1,
+				RSConfig: &api.MemberConfigSpec{ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}},
+		},
+	}}
+	// An entry from before the replset moved to instances[] must be dropped.
+	cr.Status.VPAStatus = map[string]api.VPAComponentStatus{"rs0": {Message: "stale"}}
+
+	r := vpaReaderWith(t,
+		vpaObject("some-name-rs0-hot-vpa", map[string]corev1.ResourceList{naming.ContainerMongod: rl("2", "2Gi")}),
+		vpaObject("cold-recommendations", map[string]corev1.ResourceList{naming.ContainerMongod: rl("500m", "512Mi")}),
+	)
+	require.NoError(t, r.reconcileVPARecommendations(t.Context(), cr))
+
+	hot, ok := cr.Status.VPAStatus["rs0-hot"]
+	require.True(t, ok, "each data-bearing group is sized from its own VPA object")
+	require.NotNil(t, hot.Applied)
+	assert.Equal(t, "2", hot.Applied.Requests.Cpu().String())
+
+	cold, ok := cr.Status.VPAStatus["rs0-cold"]
+	require.True(t, ok)
+	require.NotNil(t, cold.Applied, "a group's own objectName is honoured")
+	assert.Equal(t, "512Mi", cold.Applied.Requests.Memory().String())
+
+	assert.NotContains(t, cr.Status.VPAStatus, "rs0", "the legacy key has no group behind it any more")
+	assert.NotContains(t, cr.Status.VPAStatus, "rs0-arb", "arbiters are not sized from VPA")
+	assert.Len(t, cr.Status.VPAStatus, 2)
+
+	// The StatefulSet builder reads the same key back.
+	assert.Equal(t, "rs0-hot", naming.GroupVPAStatusKey(cr, naming.GroupStatefulSetName(cr, cr.Spec.Replsets[0], "hot"), true))
 }

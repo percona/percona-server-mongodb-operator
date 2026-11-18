@@ -5,14 +5,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
-func PodDisruptionBudget(spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string) *policyv1.PodDisruptionBudget {
+func PodDisruptionBudget(spec *api.PodDisruptionBudgetSpec, name, namespace string, labels map[string]string) *policyv1.PodDisruptionBudget {
 	return &policyv1.PodDisruptionBudget{
 		APIVersion: "policy/v1",
 		Kind:       "PodDisruptionBudget",
-		Name:       labels[naming.LabelKubernetesInstance] + "-" + labels[naming.LabelKubernetesComponent] + "-" + labels[naming.LabelKubernetesReplset],
+		Name:       name,
 		Namespace:  namespace,
 		Labels:     labels,
 		Spec: policyv1.PodDisruptionBudgetSpec{

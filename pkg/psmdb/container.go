@@ -12,10 +12,12 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 )
 
 type containerFnParams struct {
 	replset                  *api.ReplsetSpec
+	group                    membergroup.Group
 	name                     string
 	resources                corev1.ResourceRequirements
 	ikeyName                 string
@@ -31,6 +33,7 @@ type containerFnParams struct {
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, params containerFnParams) (corev1.Container, error) {
 	var (
 		replset                  = params.replset
+		group                    = params.group
 		name                     = params.name
 		resources                = params.resources
 		ikeyName                 = params.ikeyName
@@ -134,7 +137,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		MountPath: "/etc/users-secret",
 	})
 
-	if cr.CompareVersion("1.22.0") >= 0 && replset.HookScript.Specified() {
+	if cr.CompareVersion("1.22.0") >= 0 && group.MultiAZ.HookScript.Specified() {
 		volumes = append(volumes, corev1.VolumeMount{
 			Name:      config.HookscriptVolClaimName,
 			MountPath: config.HookscriptMountPath,

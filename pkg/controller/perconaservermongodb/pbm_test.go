@@ -802,7 +802,7 @@ func TestReconcileBackupVersionNoReadyPods(t *testing.T) {
 					Enabled: true,
 					Image:   "percona/percona-backup-mongodb:latest",
 				},
-				Replsets: []*psmdbv1.ReplsetSpec{{Name: rsName, Size: 3}},
+				Replsets: []*psmdbv1.ReplsetSpec{{Name: rsName, Size: new(int32(3))}},
 			},
 			Status: psmdbv1.PerconaServerMongoDBStatus{Ready: 1},
 		}
@@ -839,7 +839,7 @@ func TestReconcileBackupVersionNoReadyPods(t *testing.T) {
 			require.NoError(t, r.reconcileBackupVersion(ctx, cr))
 
 			assert.Empty(t, sink.errors, "a missing backup agent is not an error")
-			assert.Equal(t, []recordedLog{{level: 1, msg: "no ready pods to get pbm-agent version"}}, sink.infos)
+			assert.Equal(t, []recordedLog{{level: 1, msg: "no pod available to read the pbm-agent version"}}, sink.infos)
 			assert.Empty(t, cr.Status.BackupVersion)
 		})
 	}

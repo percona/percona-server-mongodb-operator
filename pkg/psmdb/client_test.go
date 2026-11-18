@@ -108,7 +108,7 @@ func TestMongoConfigURIFromReplsetAddrs(t *testing.T) {
 			}
 			rs := cr.Spec.Replsets[0]
 			if tt.replsetSize > 0 {
-				rs.Size = tt.replsetSize
+				rs.Size = new(int32(tt.replsetSize))
 			}
 
 			stsLabels := naming.RSLabels(cr, rs)
@@ -120,7 +120,7 @@ func TestMongoConfigURIFromReplsetAddrs(t *testing.T) {
 					Labels:    stsLabels,
 				},
 			}
-			for i := range rs.Size {
+			for i := range rs.GetMongodSize() {
 				pod := clientTestPod(cr, fmt.Sprintf("cluster-rs0-%d", i), naming.RSLabels(cr, rs))
 				pod.Labels[naming.LabelKubernetesComponent] = naming.ComponentMongod
 				objects = append(objects, pod, &corev1.Service{
@@ -211,7 +211,7 @@ func TestMongoConfigSkipsTerminatingPods(t *testing.T) {
 
 	cr := clientTestCluster()
 	rs := cr.Spec.Replsets[0]
-	rs.Size = 2
+	rs.Size = new(int32(2))
 
 	stsLabels := naming.RSLabels(cr, rs)
 	stsLabels[naming.LabelKubernetesComponent] = naming.ComponentMongod
@@ -374,7 +374,7 @@ func clientTestCluster() *api.PerconaServerMongoDB {
 			Replsets: []*api.ReplsetSpec{
 				{
 					Name: "rs0",
-					Size: 1,
+					Size: new(int32(1)),
 				},
 			},
 		},

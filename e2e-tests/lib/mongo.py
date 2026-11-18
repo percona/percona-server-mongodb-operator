@@ -38,18 +38,30 @@ class MongoManager:
         timeout: int = 30,
         check: bool = True,
         replica_set: str | None = None,
+        direct: bool = False,
     ) -> str:
         """Execute mongosh command in PSMDB client container.
 
         `replica_set` defaults to the name guessed from the URI; pass "" to drop the
         parameter entirely, which is what mongos needs.
-        """
-        if replica_set is None:
-            replica_set = "cfg" if "cfg" in uri else "rs0"
 
+        With direct, the connection is pinned to the host in the URI instead of
+        being handed to replica set discovery. Discovery routes reads by the
+        topology the seed reports, so it is the wrong tool for asserting what a
+        particular member holds -- and for a hidden member, which never appears
+        in that topology, it does not reach it at all.
+        """
         params = [] if self.tls else ["ssl=false"]
-        if replica_set:
-            params.append(f"replicaSet={replica_set}")
+        if direct:
+            if replica_set:
+                raise ValueError("direct and replica_set are mutually exclusive")
+            params += ["directConnection=true", "readPreference=secondaryPreferred"]
+            driver = "mongodb"
+        else:
+            if replica_set is None:
+                replica_set = "cfg" if "cfg" in uri else "rs0"
+            if replica_set:
+                params.append(f"replicaSet={replica_set}")
         query = f"?{'&'.join(params)}" if params else ""
         connection_string = f"{driver}://{uri}{suffix}/admin{query}"
 
@@ -153,8 +165,13 @@ class MongoManager:
         retries: int = 3,
         retry_delay: int = 10,
         replica_set: str | None = None,
+        direct: bool = False,
     ) -> None:
-        """Compare MongoDB command output"""
+        """Compare MongoDB command output.
+
+        With direct, the read is served by the host in the URI rather than by
+        whichever member replica set discovery picks.
+        """
         full_cmd = f"{collection}.{command}"
         if sort:
             full_cmd = f"{collection}.{command}.{sort}"
@@ -168,7 +185,9 @@ class MongoManager:
 
         def _compare() -> None:
             result = json.loads(
-                self.run_mongosh(mongo_expr, uri, "mongodb", replica_set=replica_set)
+                self.run_mongosh(
+                    mongo_expr, uri, "mongodb", replica_set=replica_set, direct=direct
+                )
             )
             logger.info(f"MongoDB output: {result}")
             diff = DeepDiff(expected, result)

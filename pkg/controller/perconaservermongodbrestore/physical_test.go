@@ -17,6 +17,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/membergroup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -170,8 +171,12 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				Name:      sts.Name,
 				Namespace: sts.Namespace,
 			}
+			group := membergroup.Group{
+				STSName:       sts.Name,
+				ContainerName: naming.ContainerMongod,
+			}
 
-			err = r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
+			err = r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, group, 27017)
 			assert.NoError(t, err)
 
 			updatedSTS := &appsv1.StatefulSet{}
@@ -562,7 +567,7 @@ func TestCheckStatefulSetForPhysicalRestore(t *testing.T) {
 			}
 			r := fakeReconciler(objs...)
 
-			ready, err := r.checkStatefulSetForPhysicalRestore(t.Context(), cluster, rs, naming.ComponentMongod)
+			ready, err := r.checkStatefulSetForPhysicalRestore(t.Context(), cluster, rs, membergroup.Group{STSName: naming.MongodStatefulSetName(cluster, rs), ContainerName: naming.ContainerMongod})
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantReady, ready)
 		})

@@ -10,10 +10,12 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
@@ -156,4 +158,33 @@ func TestInPlaceDisabledReasonMentionsTheDeclaredCRVersion(t *testing.T) {
 	reason := inPlaceDisabledReason(cr)
 	assert.Contains(t, reason, "1.23.0", "name the version the cluster actually declares")
 	assert.Contains(t, reason, "1.24.0", "name the version it needs")
+}
+
+func TestVPAContainerForPod(t *testing.T) {
+	cr := &api.PerconaServerMongoDB{Name: "some-name", Namespace: "ns"}
+	cr.Spec.CRVersion = version.Version()
+	vol := &api.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+	rs := &api.ReplsetSpec{Name: "rs0", Instances: []api.InstanceSpec{
+		{Name: "hot", Replicas: 3, VolumeSpec: vol},
+		{Name: "arb", Replicas: 1,
+			RSConfig: &api.MemberConfigSpec{ArbiterOnly: new(true), Votes: new(int32(1)), Priority: new(int32(0))}},
+	}}
+
+	pod := func(component string) *corev1.Pod {
+		return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{naming.LabelKubernetesComponent: component},
+		}}
+	}
+
+	got, err := vpaContainerForPod(cr, rs, pod("hot"))
+	require.NoError(t, err)
+	assert.Equal(t, naming.ContainerMongod, got, "a custom group's component label is its name, not mongod")
+
+	got, err = vpaContainerForPod(cr, rs, pod("arb"))
+	require.NoError(t, err)
+	assert.Empty(t, got, "arbiters are not managed by VPA")
+
+	got, err = vpaContainerForPod(cr, nil, pod(naming.ComponentMongos))
+	require.NoError(t, err)
+	assert.Equal(t, naming.ContainerMongos, got)
 }

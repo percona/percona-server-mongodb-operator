@@ -1,0 +1,71 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: heterogeneous
+spec:
+  image:
+  imagePullPolicy: Always
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    configuration: |
+      operationProfiling:
+        mode: slowOp
+        slowOpThresholdMs: 100
+    instances:
+    - name: inst1
+      replicas: 3
+      rsConfig:
+        votes: 1
+        priority: 2
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: inst2
+      replicas: 3
+      rsConfig:
+        votes: 0
+        priority: 0
+        tags:
+          workload: analytics
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: arbiter
+      replicas: 1
+      rsConfig:
+        arbiterOnly: true
+        votes: 1
+        priority: 0
+    - name: nonVoting
+      replicas: 1
+      rsConfig:
+        votes: 0
+        priority: 0
+        tags:
+          nonVoting: "true"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+    - name: hidden
+      replicas: 1
+      rsConfig:
+        hidden: true
+        votes: 1
+        priority: 0
+        tags:
+          hidden: "true"
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 1Gi
+  secrets:
+    users: some-users
