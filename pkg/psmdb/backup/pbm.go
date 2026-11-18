@@ -15,7 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -210,7 +209,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 	}
 
 	murl += fmt.Sprintf("?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s", tlsPemFile, caCertFile)
-	if cr.CompareVersion("1.24.0") < 0 || ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
+	if cr.InvalidCertificatesAllowed() {
 		murl += "&tlsInsecure=true"
 	}
 
