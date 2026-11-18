@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -641,6 +642,28 @@ func TestHandleShardingToggleConditionNotInCache(t *testing.T) {
 		err := staleCache(100).handleShardingToggle(ctx, cr.DeepCopy())
 		require.ErrorIs(t, err, errShardingConditionNotInCache)
 	})
+
+	withoutBackups := func() *psmdbv1.PerconaServerMongoDB {
+		c := cr.DeepCopy()
+		c.Spec.Backup.Enabled = false
+		return c
+	}
+
+	t.Run("backups disabled, condition appears in cache", func(t *testing.T) {
+		r := staleCache(2)
+		c := withoutBackups()
+		require.NoError(t, r.handleShardingToggle(ctx, c))
+		assert.False(t, c.Spec.Pause)
+
+		got := new(psmdbv1.PerconaServerMongoDB)
+		require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(cr), got))
+		assert.Equal(t, psmdbv1.ConditionTrue, got.Status.FindCondition(psmdbv1.AppStateSharding).Status)
+	})
+
+	t.Run("backups disabled, condition never appears in cache", func(t *testing.T) {
+		err := staleCache(100).handleShardingToggle(ctx, withoutBackups())
+		require.ErrorIs(t, err, errShardingConditionNotInCache)
+	})
 }
 
 // The documented way to toggle sharding without a pause: disable backups, toggle sharding, enable backups.
@@ -682,5 +705,48 @@ func TestHandleShardingToggleWithBackupsDisabled(t *testing.T) {
 	assert.Equal(t, psmdbv1.ConditionFalse, cr.Status.FindCondition(psmdbv1.AppStateSharding).Status)
 	// Toggling sharding removes the PBM collections, so PBM must be reconfigured once backups are back.
 	assert.Empty(t, cr.Status.BackupConfigHash)
+
+	// Both are written before the reconcile goes on to change the topology.
+	got := new(psmdbv1.PerconaServerMongoDB)
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(cr), got))
+	assert.Equal(t, psmdbv1.ConditionFalse, got.Status.FindCondition(psmdbv1.AppStateSharding).Status)
+	assert.Empty(t, got.Status.BackupConfigHash)
+
 	step(true, false)
+}
+
+// Disabling sharding with several replsets running is rejected, so the condition must keep the current topology.
+func TestHandleShardingToggleWithBackupsDisabledRejected(t *testing.T) {
+	ctx := context.Background()
+
+	const ns = "sharding-toggle-rejected"
+
+	cr, err := readDefaultCR(ns+"-cr", ns)
+	require.NoError(t, err)
+	cr.Spec.Backup.Enabled = false
+	cr.Spec.Sharding.Enabled = false
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+	cr.Status.AddCondition(psmdbv1.ClusterCondition{
+		Type:   psmdbv1.AppStateSharding,
+		Status: psmdbv1.ConditionTrue,
+	})
+	cr.Status.BackupConfigHash = "some-hash"
+
+	newSts := func(name string, labels map[string]string) *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{
+			Name:      cr.Name + "-" + name,
+			Namespace: ns,
+			Labels:    labels,
+		}
+	}
+	r := buildFakeClient(cr.DeepCopy(),
+		newSts(psmdbv1.ConfigReplSetName, nil),
+		newSts("rs0", naming.MongodLabels(cr, &psmdbv1.ReplsetSpec{Name: "rs0"})),
+		newSts("rs1", naming.MongodLabels(cr, &psmdbv1.ReplsetSpec{Name: "rs1"})),
+	)
+	r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+
+	require.ErrorContains(t, r.handleShardingToggle(ctx, cr), "failed to disable sharding")
+	assert.Equal(t, psmdbv1.ConditionTrue, cr.Status.FindCondition(psmdbv1.AppStateSharding).Status)
+	assert.Equal(t, "some-hash", cr.Status.BackupConfigHash)
 }

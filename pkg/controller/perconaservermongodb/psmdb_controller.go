@@ -672,13 +672,20 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 	// Without backups the toggle needs no pause, but the condition must follow the spec.
 	// Otherwise enabling backups later is taken for a toggle and pauses the cluster.
 	if !cr.Spec.Backup.Enabled {
-		if condition != nil && condition.Status != getShardingStatus(cr) {
-			condition.Status = getShardingStatus(cr)
-			condition.LastTransitionTime = metav1.NewTime(time.Now())
-			// toggling sharding status removes all PBM collections, so we need to reconfigure
-			cr.Status.BackupConfigHash = ""
+		if condition == nil || condition.Status == getShardingStatus(cr) {
+			return nil
 		}
-		return nil
+		// Don't record a topology that checkConfiguration rejects: the cluster keeps the old one.
+		if err := r.checkConfiguration(ctx, cr); err != nil {
+			return err
+		}
+
+		condition.Status = getShardingStatus(cr)
+		condition.LastTransitionTime = metav1.NewTime(time.Now())
+		// toggling sharding status removes all PBM collections, so we need to reconfigure
+		cr.Status.BackupConfigHash = ""
+
+		return r.writeShardingCondition(ctx, cr, condition.Status)
 	}
 
 	if condition == nil {
@@ -729,6 +736,11 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 	condition.Status = getShardingStatus(cr)
 	condition.LastTransitionTime = metav1.NewTime(time.Now())
 
+	return r.writeShardingCondition(ctx, cr, condition.Status)
+}
+
+// writeShardingCondition writes the status and waits until the cache has the sharding condition.
+func (r *ReconcilePerconaServerMongoDB) writeShardingCondition(ctx context.Context, cr *api.PerconaServerMongoDB, status api.ConditionStatus) error {
 	if err := r.writeStatus(ctx, cr); err != nil {
 		return errors.Wrap(err, "write status")
 	}
@@ -742,7 +754,7 @@ func (r *ReconcilePerconaServerMongoDB) handleShardingToggle(ctx context.Context
 		if err := r.client.Get(ctx, client.ObjectKeyFromObject(cr), c); err != nil {
 			return errors.Wrap(err, "get cluster")
 		}
-		if cond := c.Status.FindCondition(api.AppStateSharding); cond == nil || cond.Status != condition.Status {
+		if cond := c.Status.FindCondition(api.AppStateSharding); cond == nil || cond.Status != status {
 			return errShardingConditionNotInCache
 		}
 		return nil
