@@ -154,6 +154,12 @@ def recreate_failed_certificates() -> None:
     if not out.strip():
         return
     for cert in json.loads(out).get("items", []):
+        if not any(
+            owner.get("kind") == "PerconaServerMongoDB"
+            and owner.get("apiVersion", "").startswith("psmdb.percona.com/")
+            for owner in cert.get("metadata", {}).get("ownerReferences", [])
+        ):
+            continue
         for cond in cert.get("status", {}).get("conditions", []):
             message = cond.get("message", "")
             if cond["type"] == "Issuing" and CERT_KEY_MISMATCH in message:
