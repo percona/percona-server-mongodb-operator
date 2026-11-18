@@ -124,3 +124,80 @@ func TestElectableSecondaryLag(t *testing.T) {
 		})
 	}
 }
+
+func TestElectableOptimes(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	cfg := mongo.RSConfig{Members: mongo.ConfigMembers{
+		{Host: "rs0-0", Priority: 1, Votes: 1},
+		{Host: "rs0-1", Priority: 1, Votes: 1},
+		{Host: "rs0-2", Priority: 1, Votes: 1},
+		{Host: "hidden-0", Hidden: true, Votes: 1},
+	}}
+	status := mongo.Status{Members: []*mongo.Member{
+		{Name: "rs0-0", State: mongo.MemberStatePrimary, Health: mongo.MemberHealthUp, OptimeDate: now},
+		{Name: "rs0-1", State: mongo.MemberStateSecondary, Health: mongo.MemberHealthUp, OptimeDate: now.Add(-time.Second)},
+		// unreachable member keeps the last optime the primary saw, it must still be tracked
+		{Name: "rs0-2", State: mongo.MemberStateSecondary, Health: mongo.MemberHealthDown, OptimeDate: now.Add(-time.Minute)},
+		{Name: "hidden-0", State: mongo.MemberStateSecondary, Health: mongo.MemberHealthUp, OptimeDate: now},
+	}}
+
+	assert.Equal(t, map[string]time.Time{
+		"rs0-1": now.Add(-time.Second),
+		"rs0-2": now.Add(-time.Minute),
+	}, mongo.ElectableOptimes(cfg, status))
+}
+
+func TestSecondaryProgressed(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		name string
+		prev map[string]time.Time
+		cur  map[string]time.Time
+		want bool
+	}{
+		{
+			name: "first sample",
+			prev: nil,
+			cur:  map[string]time.Time{"rs0-1": now},
+			want: false,
+		},
+		{
+			name: "no member moved",
+			prev: map[string]time.Time{"rs0-1": now, "rs0-2": now},
+			cur:  map[string]time.Time{"rs0-1": now, "rs0-2": now},
+			want: false,
+		},
+		{
+			name: "one member moved",
+			prev: map[string]time.Time{"rs0-1": now, "rs0-2": now},
+			cur:  map[string]time.Time{"rs0-1": now, "rs0-2": now.Add(time.Second)},
+			want: true,
+		},
+		{
+			name: "member went back",
+			prev: map[string]time.Time{"rs0-1": now},
+			cur:  map[string]time.Time{"rs0-1": now.Add(-time.Second)},
+			want: false,
+		},
+		{
+			name: "new member is not progress",
+			prev: map[string]time.Time{"rs0-1": now},
+			cur:  map[string]time.Time{"rs0-1": now, "rs0-2": now.Add(time.Second)},
+			want: false,
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, mongo.SecondaryProgressed(tt.prev, tt.cur))
+		})
+	}
+}

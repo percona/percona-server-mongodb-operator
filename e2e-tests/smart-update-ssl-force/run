@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# After an SSL change smart update skips the lag check and falls back
-# to a forced step down, so the primary is restarted even if secondaries lag.
+# After an SSL change smart update forces the step down only when
+# secondaries stop applying oplog, as a cert change may break replication.
 
 set -o errexit
 
@@ -99,9 +99,22 @@ renew_certificate "${cluster}-ssl-internal"
 sleep 10
 operator_replicas 1
 
-desc 'primary must be stepped down with force and restarted while secondaries lag'
-wait_operator_log '"sslChanged": true'
-wait_operator_log 'doing forced step down'
+desc 'operator must wait while secondaries do not apply oplog'
+wait_operator_log 'waiting for secondary to catch up'
+waiting_since=$(date +%s)
+if [[ $(pod_uid "${initial_primary}") != "${initial_primary_uid}" ]]; then
+	echo "ERROR: ${initial_primary} was restarted before replication stall was detected"
+	exit 1
+fi
+
+desc 'primary must be stepped down with force once replication is stalled'
+wait_operator_log 'replication stalled after SSL change, doing forced step down'
+stalled_after=$(($(date +%s) - waiting_since))
+if [[ ${stalled_after} -lt 25 ]]; then
+	echo "ERROR: forced step down ${stalled_after}s after the wait started, stall timeout is 30s"
+	exit 1
+fi
+wait_operator_log '"force": true, "sslChanged": true'
 
 set +o xtrace
 retry=0
@@ -115,11 +128,6 @@ until [[ $(pod_uid "${initial_primary}" || :) != "${initial_primary_uid}" ]]; do
 	sleep 1
 done
 set_debug
-
-if operator_log | grep -q 'waiting for secondary to catch up'; then
-	echo "ERROR: lag check must be skipped after SSL change"
-	exit 1
-fi
 
 desc 'release all members'
 wait_pod "${initial_primary}"

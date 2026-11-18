@@ -127,7 +127,7 @@ func (c *fakeMongoClient) StepDown(ctx context.Context, seconds int, force bool)
 	return nil
 }
 
-func (c *fakeMongoClient) WaitSecondaryCatchUp(ctx context.Context, maxLag, timeout time.Duration) error {
+func (c *fakeMongoClient) WaitSecondaryCatchUp(ctx context.Context, maxLag, stallTimeout, timeout time.Duration) error {
 	return nil
 }
 

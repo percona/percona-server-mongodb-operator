@@ -101,8 +101,8 @@ apply_cluster ${conf}/${rs}-failpoint.yml
 
 wait_operator_log 'waiting for secondary to catch up'
 
-desc 'operator must give up after catch up timeout'
-wait_operator_log 'no electable secondary caught up in' 900
+desc 'operator must give up when secondaries do not apply oplog'
+wait_operator_log 'no electable secondary applied oplog in'
 check_primary_untouched
 
 desc 'operator must retry and keep waiting'
