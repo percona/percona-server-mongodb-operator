@@ -268,8 +268,10 @@ func TestSmartUpdateUnblocksClaimRollout(t *testing.T) {
 		pods        []corev1.Pod
 		objs        []client.Object
 		pvcShrink   bool
+		primary     string
 		wantErrMsg  string
 		wantDeleted []string
+		wantEvents  []string
 	}{
 		"running backup keeps the pod": {
 			pods: []corev1.Pod{claimRolloutPod(0, data), claimRolloutPod(1, data)},
@@ -288,6 +290,13 @@ func TestSmartUpdateUnblocksClaimRollout(t *testing.T) {
 			pods:        []corev1.Pod{claimRolloutPod(0, data), claimRolloutPod(1, data)},
 			wantErrMsg:  "wait pod restart: reach pod wait limit",
 			wantDeleted: []string{"some-name-rs0-0"},
+		},
+		"primary missing the claim is stepped down before it is recreated": {
+			pods:        []corev1.Pod{claimRolloutPod(0, data), claimRolloutPod(1, data)},
+			primary:     "some-name-rs0-0",
+			wantErrMsg:  "wait pod restart: reach pod wait limit",
+			wantDeleted: []string{"some-name-rs0-0"},
+			wantEvents:  []string{"stepdown some-name-rs0-0"},
 		},
 		"all pods present waits for replset members": {
 			pods: []corev1.Pod{claimRolloutPod(0, data), claimRolloutPod(1, data), claimRolloutPod(2, data)},
@@ -321,7 +330,9 @@ func TestSmartUpdateUnblocksClaimRollout(t *testing.T) {
 			for i := range tc.pods {
 				objs = append(objs, &tc.pods[i])
 			}
+			provider := &primaryMongoProvider{primary: tc.primary}
 			r := buildFakeClient(objs...)
+			r.mongoClientProvider = provider
 
 			err := r.smartUpdate(t.Context(), cr, sts, rs)
 			if tc.wantErrMsg != "" {
@@ -338,6 +349,7 @@ func TestSmartUpdateUnblocksClaimRollout(t *testing.T) {
 					assert.NoError(t, getErr, "pod %s should be kept", pod.Name)
 				}
 			}
+			assert.Equal(t, tc.wantEvents, provider.events)
 		})
 	}
 }
@@ -391,11 +403,20 @@ func TestSmartUpdateMissingClaims(t *testing.T) {
 		next       string
 		wantEvents []string
 	}{
-		"moves the primary to the highest ordinal": {
+		"updates a low ordinal primary last": {
+			component: naming.ComponentMongod,
+			primary:   "some-name-rs0-0",
+			next:      "some-name-rs0-1",
+			wantEvents: []string{
+				"delete some-name-rs0-1",
+				"delete some-name-rs0-2",
+				"stepdown some-name-rs0-0",
+				"delete some-name-rs0-0",
+			},
+		},
+		"external primary updates every pod in ordinal order": {
 			component:  naming.ComponentMongod,
-			primary:    "some-name-rs0-0",
-			next:       "some-name-rs0-2",
-			wantEvents: []string{"freeze some-name-rs0-1", "stepdown some-name-rs0-0"},
+			wantEvents: []string{"delete some-name-rs0-0", "delete some-name-rs0-1", "delete some-name-rs0-2"},
 		},
 		"updates the primary last": {
 			component: naming.ComponentMongod,

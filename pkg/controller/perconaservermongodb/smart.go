@@ -151,6 +151,16 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 			return err
 		}
 
+		isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
+		}
+		if isPrimary {
+			if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+				return err
+			}
+		}
+
 		log.Info("statefulset can't create missing pods until this pod has its volume claims, recreating it", "pod", pod.Name)
 
 		return r.recreateNWait(ctx, cr, sfs.Status.UpdateRevision, &pod, waitLimit)
@@ -193,21 +203,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	canStepDown := component != naming.ComponentNonVoting && component != naming.ComponentHidden
 
 	if podsMissingClaimVolumes(sfs, list.Items) {
-		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
-
-		if canStepDown {
-			last := list.Items[len(list.Items)-1]
-			isPrimary, err := r.isPodPrimary(ctx, cr, last, replset)
-			if err != nil {
-				return errors.Wrap(err, "is pod primary")
-			}
-			if !isPrimary {
-				log.Info("pods are missing a volume claim, moving primary to the highest ordinal", "pod", last.Name)
-				return errors.Wrap(r.setPrimary(ctx, cr, replset, last), "set primary")
-			}
-		}
-
 		log.Info("pods are missing a volume claim, updating them from the lowest ordinal")
+		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
 	} else {
 		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
 	}
