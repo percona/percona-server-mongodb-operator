@@ -102,11 +102,19 @@ Rules:
   `deploy/crd.yaml`, `deploy/bundle.yaml`, `deploy/cw-bundle.yaml` and
   `e2e-tests/version-service/conf/crd.yaml`. CI fails on drift (job
   `manifests` in `.github/workflows/reviewdog.yml`).
-- Defaults and cross-field validation go into `CheckNSetDefaults` or a
-  `validate*` function it calls, not into the reconciler.
+- Validation of a new field that needs only the object itself goes into a
+  CEL rule (`+kubebuilder:validation:XValidation`), so the API server
+  rejects a bad spec on apply. Validation that depends on `crVersion` or on
+  other objects goes into `CheckNSetDefaults` or a `validate*` function it
+  calls, never into the reconciler. Do not add a CEL rule to an existing
+  field: it rejects existing CRs on their next update, whatever their
+  `crVersion`.
+- Defaults go into `CheckNSetDefaults`.
 - Gate new behavior with `cr.CompareVersion("<version>") >= 0`, using the
   version that ships it (`pkg/version/version.txt`). Clusters keep their old
-  behavior until the user raises `crVersion`.
+  behavior until the user raises `crVersion`. This always applies to a
+  change of the StatefulSet pod template (containers, init scripts, args,
+  volumes), since it restarts every pod.
 - Document the field as a commented example in `deploy/cr.yaml`. The Helm
   chart (`percona-helm-charts`) and the user docs (`k8spsmdb-docs`) live in
   their own repos; the PR checklist asks for both.

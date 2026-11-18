@@ -90,6 +90,10 @@ The review skill `review-go-style` applies this file.
   (`perconaservermongodb/suite_test.go`,
   `perconaservermongodbrestore/suite_test.go`); everything else is a plain
   test.
+- A new CEL rule or validation marker gets an envtest case that applies one
+  CR the rule accepts and one it rejects, and checks the error message
+  (pattern: `pkg/controller/ps/controller_test.go` in
+  percona-server-mysql-operator).
 - Reuse the fake clients and mocks the package already has instead of
   building new ones.
 - Load the example CR with `readDefaultCR`, which reads `deploy/cr.yaml`, so

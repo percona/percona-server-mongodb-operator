@@ -137,6 +137,8 @@ when missing, unless marked otherwise.
 - envtest specs: `Eventually` and `Consistently` with an explicit timeout and
   interval sized for a reconcile; objects deleted in `AfterEach` or
   `DeferCleanup`; no shared state between `It` blocks without `Ordered`.
+- A new CEL rule or validation marker is tested in envtest with a CR it
+  accepts and one it rejects (`go-style.md`, "Tests").
 - Files in `testdata/` are expected outputs. A change there is intentional
   and explained in the PR.
 - `go-style.md` lists the test frameworks and helpers in use.

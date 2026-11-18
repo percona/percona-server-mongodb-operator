@@ -20,7 +20,18 @@ message. If both are missing, ask for one.
 - Check `docs/enhancements/` for a proposal on the same topic.
 - Read `docs/guidelines/architecture.md` for the constraints that apply.
 
-## 2. Pick the plan format
+## 2. Challenge the approach
+
+Before picking a solution, write down:
+
+- the problem in one sentence, without naming a solution;
+- the assumptions the ticket and the obvious fix make (a new CR field is
+  needed, the controller must do it, it must work on every `crVersion`),
+  each marked keep, drop or ask the user;
+- the smallest change that solves the problem with only the kept
+  assumptions. Each addition beyond it needs a reason.
+
+## 3. Pick the plan format
 
 Write an enhancement proposal when the change does any of the following:
 
@@ -38,13 +49,13 @@ or where the user keeps notes); only its short form goes into the Problem,
 Cause and Solution fields of `.github/pull_request_template.md`, as the root
 `AGENTS.md` describes.
 
-## 3. Ask instead of guessing
+## 4. Ask instead of guessing
 
 Ask the user in numbered rounds. Each question lists the options you see and
 marks the one you recommend. Stop when you can write every acceptance
 criterion without guessing. Record the answers in the plan as decisions.
 
-## 4. Write the plan
+## 5. Write the plan
 
 The plan contains:
 
@@ -62,7 +73,7 @@ The plan contains:
   versions;
 - decisions taken and open questions.
 
-## 5. Hand over
+## 6. Hand over
 
 Show the plan and wait for the user to agree before implementing. Then use
 the `implement` skill.
