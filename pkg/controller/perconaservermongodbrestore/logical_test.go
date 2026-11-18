@@ -285,7 +285,7 @@ func TestRestorePBMConfig(t *testing.T) {
 	}
 	newCluster := func(crVersion string, storages map[string]psmdbv1.BackupStorageSpec) *psmdbv1.PerconaServerMongoDB {
 		return &psmdbv1.PerconaServerMongoDB{
-			ObjectMeta: metav1.ObjectMeta{Name: "cluster2", Namespace: "pitr"},
+			Name: "cluster2", Namespace: "pitr",
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
 				CRVersion: crVersion,
 				Backup: psmdbv1.BackupSpec{
