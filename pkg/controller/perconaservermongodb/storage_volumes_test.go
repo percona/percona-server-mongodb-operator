@@ -17,6 +17,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
@@ -312,51 +313,23 @@ func TestRecreateStsForStorageNeedsSmartUpdate(t *testing.T) {
 	}
 }
 
-func TestKeepClaimTemplateMeta(t *testing.T) {
+func TestReconcileMongosStatefulsetLogStorageNeedsSmartUpdate(t *testing.T) {
 	t.Parallel()
 
-	vct := func(name string, labels, annotations map[string]string) corev1.PersistentVolumeClaim {
-		pvc := corev1.PersistentVolumeClaim{
-			Name:        name,
-			Labels:      labels,
-			Annotations: annotations}
-		return pvc
-	}
+	const ns = "mongos-log-storage"
 
 	tests := map[string]struct {
-		desired []corev1.PersistentVolumeClaim
-		current []corev1.PersistentVolumeClaim
-		want    []corev1.PersistentVolumeClaim
+		strategy    appsv1.StatefulSetUpdateStrategyType
+		wantDeleted bool
+		wantErr     error
 	}{
-		"replset labels changed": {
-			desired: []corev1.PersistentVolumeClaim{
-				vct(config.MongodLogVolClaimName, map[string]string{"team": "new"}, map[string]string{"a": "new"}),
-			},
-			current: []corev1.PersistentVolumeClaim{
-				vct(config.MongodLogVolClaimName, map[string]string{"team": "old"}, map[string]string{"a": "old"}),
-			},
-			want: []corev1.PersistentVolumeClaim{
-				vct(config.MongodLogVolClaimName, map[string]string{"team": "old"}, map[string]string{"a": "old"}),
-			},
+		"smart update recreates": {
+			strategy:    api.SmartUpdateStatefulSetStrategyType,
+			wantDeleted: true,
 		},
-		"new claim keeps desired metadata": {
-			desired: []corev1.PersistentVolumeClaim{
-				vct(config.MongodJournalVolClaimName, map[string]string{"team": "new"}, nil),
-			},
-			current: []corev1.PersistentVolumeClaim{
-				vct(config.MongodDataVolClaimName, nil, nil),
-			},
-			want: []corev1.PersistentVolumeClaim{
-				vct(config.MongodJournalVolClaimName, map[string]string{"team": "new"}, nil),
-			},
-		},
-		"statefulset not created yet": {
-			desired: []corev1.PersistentVolumeClaim{
-				vct(config.MongodLogVolClaimName, map[string]string{"team": "new"}, nil),
-			},
-			want: []corev1.PersistentVolumeClaim{
-				vct(config.MongodLogVolClaimName, map[string]string{"team": "new"}, nil),
-			},
+		"rolling update with pods is rejected": {
+			strategy: appsv1.RollingUpdateStatefulSetStrategyType,
+			wantErr:  errStorageChangeNeedsSmartUpdate,
 		},
 	}
 
@@ -364,11 +337,25 @@ func TestKeepClaimTemplateMeta(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			sts := &appsv1.StatefulSet{}
-			sts.Spec.VolumeClaimTemplates = tt.desired
+			cr, err := readDefaultCR("some-cluster", ns)
+			require.NoError(t, err)
+			require.True(t, cr.Spec.Sharding.Enabled)
+			cr.Spec.UpdateStrategy = tt.strategy
+			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("2Gi").PersistentVolumeClaim}
 
-			keepClaimTemplateMeta(sts, tt.current)
-			assert.Equal(t, tt.want, sts.Spec.VolumeClaimTemplates)
+			sts := psmdb.MongosStatefulset(cr)
+			sts.Status.Replicas = 3
+			r := buildFakeClient(cr, sts)
+
+			err = r.reconcileMongosStatefulset(t.Context(), cr)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
+			assert.Equal(t, tt.wantDeleted, k8serrors.IsNotFound(err), "statefulset deleted, got %v", err)
 		})
 	}
 }

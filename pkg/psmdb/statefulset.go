@@ -480,12 +480,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 
 		if journalPVC != nil {
 			volumeClaimTemplates = append(volumeClaimTemplates,
-				auxiliaryPVC(cr, config.MongodJournalVolClaimName, journalPVC, customLabels))
+				auxiliaryPVC(cr, config.MongodJournalVolClaimName, journalPVC))
 		}
 
 		if logPVC != nil {
 			volumeClaimTemplates = append(volumeClaimTemplates,
-				auxiliaryPVC(cr, config.MongodLogVolClaimName, logPVC, customLabels))
+				auxiliaryPVC(cr, config.MongodLogVolClaimName, logPVC))
 		}
 
 		if cr.CompareVersion("1.21.0") >= 0 {
@@ -888,16 +888,10 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 	return pvc
 }
 
-func auxiliaryPVC(cr *api.PerconaServerMongoDB, name string, storage *api.PVCSpec, ls map[string]string) corev1.PersistentVolumeClaim {
-	labels := map[string]string{}
-	maps.Copy(labels, storage.Labels)
-	maps.Copy(labels, ls)
-
+func auxiliaryPVC(cr *api.PerconaServerMongoDB, name string, storage *api.PVCSpec) corev1.PersistentVolumeClaim {
 	pvc := corev1.PersistentVolumeClaim{
-		Name:        name,
-		Namespace:   cr.Namespace,
-		Labels:      labels,
-		Annotations: storage.Annotations,
+		Name:      name,
+		Namespace: cr.Namespace,
 	}
 
 	if storage.PersistentVolumeClaimSpec != nil {

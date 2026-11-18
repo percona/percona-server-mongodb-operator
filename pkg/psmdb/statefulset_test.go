@@ -966,16 +966,12 @@ func TestAuxiliaryPVC(t *testing.T) {
 		},
 	}
 
-	ls := map[string]string{"app.kubernetes.io/component": "mongod"}
-	pvc := auxiliaryPVC(cr, config.MongodLogVolClaimName, (&api.ReplsetSpec{LogStorage: logStorageSpec("2Gi")}).LogPVC(cr, naming.ComponentMongod), ls)
+	pvc := auxiliaryPVC(cr, config.MongodLogVolClaimName, (&api.ReplsetSpec{LogStorage: logStorageSpec("2Gi")}).LogPVC(cr, naming.ComponentMongod))
 
 	assert.Equal(t, config.MongodLogVolClaimName, pvc.Name)
 	assert.Equal(t, "test-ns", pvc.Namespace)
-	assert.Equal(t, map[string]string{
-		"custom-label":                "custom",
-		"app.kubernetes.io/component": "mongod",
-	}, pvc.Labels)
-	assert.Equal(t, map[string]string{"custom-annotation": "custom"}, pvc.Annotations)
+	assert.Empty(t, pvc.Labels, "labels go to the PVCs through fixVolumeLabels, a template change would be rejected")
+	assert.Empty(t, pvc.Annotations)
 	assert.Equal(t, resource.MustParse("2Gi"), pvc.Spec.Resources.Requests[corev1.ResourceStorage])
 }
 

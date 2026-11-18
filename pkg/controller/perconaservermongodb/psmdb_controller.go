@@ -1559,11 +1559,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	if err == nil && cr.CompareVersion("1.23.1") >= 0 {
 		currentVCT = sts.Spec.VolumeClaimTemplates
-		hasLogVCT := k8sutils.HasVolumeClaimTemplate(sts, psmdbconfig.MongosLogVolClaimName)
-		wantLogVCT := cr.Spec.Sharding.Mongos.LogStorage() != nil
-		if hasLogVCT != wantLogVCT {
-			log.Info("Recreating mongos statefulset to change log storage")
-			return client.IgnoreNotFound(k8sutils.OrphanDeleteStatefulSet(ctx, r.client, sts))
+		recreated, err := r.recreateStsForClaims(ctx, cr, sts, map[string]bool{
+			psmdbconfig.MongosLogVolClaimName: cr.Spec.Sharding.Mongos.LogStorage() != nil,
+		})
+		if err != nil || recreated {
+			return err
 		}
 
 		if _, ok := sts.Annotations[api.AnnotationPVCResizeInProgress]; ok {

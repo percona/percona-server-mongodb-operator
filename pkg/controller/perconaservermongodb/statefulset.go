@@ -181,7 +181,7 @@ func (r *ReconcilePerconaServerMongoDB) hasJournalPVCs(ctx context.Context, sfs 
 	}), nil
 }
 
-var errStorageChangeNeedsSmartUpdate = errors.New("changing logStorage or journalStorage on running pods requires updateStrategy SmartUpdate")
+var errStorageChangeNeedsSmartUpdate = errors.New("adding or removing log or journal storage on running pods requires updateStrategy SmartUpdate")
 
 func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
 	if cr.CompareVersion("1.24.0") < 0 {
@@ -197,16 +197,29 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 		return false, client.IgnoreNotFound(err)
 	}
 
+	return r.recreateStsForClaims(ctx, cr, current, map[string]bool{
+		psmdbconfig.MongodLogVolClaimName:     logStorage(cr, sfs) != nil,
+		psmdbconfig.MongodJournalVolClaimName: journalStorage(cr, sfs) != nil,
+	})
+}
+
+// recreateStsForClaims orphan-deletes current when a claim template has to be added or removed.
+func (r *ReconcilePerconaServerMongoDB) recreateStsForClaims(ctx context.Context, cr *api.PerconaServerMongoDB, current *appsv1.StatefulSet, wantClaims map[string]bool) (bool, error) {
 	// orphan deletion keeps the object until its finalizer is processed
 	if current.DeletionTimestamp != nil {
 		return true, nil
 	}
 
-	logChanged := k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodLogVolClaimName) != (logStorage(cr, sfs) != nil)
-	journalChanged := k8s.HasVolumeClaimTemplate(current, psmdbconfig.MongodJournalVolClaimName) != (journalStorage(cr, sfs) != nil)
-	if !logChanged && !journalChanged {
+	var changed []string
+	for claim, want := range wantClaims {
+		if k8s.HasVolumeClaimTemplate(current, claim) != want {
+			changed = append(changed, claim)
+		}
+	}
+	if len(changed) == 0 {
 		return false, nil
 	}
+	slices.Sort(changed)
 
 	// only SmartUpdate recreates pods that miss a new claim, the statefulset controller can't add volumes to them
 	if cr.Spec.UpdateStrategy != api.SmartUpdateStatefulSetStrategyType && current.Status.Replicas > 0 {
@@ -220,24 +233,9 @@ func (r *ReconcilePerconaServerMongoDB) recreateStsForStorageIfNeeded(ctx contex
 		return false, err
 	}
 
-	logf.FromContext(ctx).Info("Recreating statefulset to change storage", "statefulset", sfs.Name,
-		"logStorage", logChanged, "journalStorage", journalChanged)
+	logf.FromContext(ctx).Info("Recreating statefulset to change storage", "statefulset", current.Name, "claims", changed)
 
 	return true, nil
-}
-
-// keepClaimTemplateMeta keeps the labels and annotations of existing claim templates, which are immutable.
-// fixVolumeLabels applies changes to the PVCs instead.
-func keepClaimTemplateMeta(sfs *appsv1.StatefulSet, current []corev1.PersistentVolumeClaim) {
-	for i := range sfs.Spec.VolumeClaimTemplates {
-		vct := &sfs.Spec.VolumeClaimTemplates[i]
-		idx := slices.IndexFunc(current, func(c corev1.PersistentVolumeClaim) bool { return c.Name == vct.Name })
-		if idx < 0 {
-			continue
-		}
-		vct.Labels = current[idx].Labels
-		vct.Annotations = current[idx].Annotations
-	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, ls map[string]string) (*appsv1.StatefulSet, error) {
@@ -362,10 +360,8 @@ func (r *ReconcilePerconaServerMongoDB) getStatefulsetFromReplset(ctx context.Co
 		return nil, errors.Wrapf(err, "create StatefulSet.Spec %s", sfs.Name)
 	}
 
-	currentVCT := sfs.Spec.VolumeClaimTemplates
 	sfs.Labels = sfsSpec.Template.Labels
 	sfs.Spec = sfsSpec
-	keepClaimTemplateMeta(sfs, currentVCT)
 
 	sslAnn, err := r.sslAnnotation(ctx, cr)
 	if err != nil {
