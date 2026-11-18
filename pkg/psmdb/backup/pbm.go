@@ -210,7 +210,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 	}
 
 	murl += fmt.Sprintf("?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s", tlsPemFile, caCertFile)
-	if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
+	if cr.CompareVersion("1.24.0") < 0 || ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
 		murl += "&tlsInsecure=true"
 	}
 
