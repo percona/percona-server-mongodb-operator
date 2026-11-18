@@ -12,10 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/ctrl"
 	"github.com/percona/percona-backup-mongodb/pbm/oplog"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestGetRestoreCmd(t *testing.T) {
@@ -264,5 +267,92 @@ func TestGetRestoreCmd(t *testing.T) {
 		cmd, err := getRestoreCmd(ctx, pbmc, cr, restoreName, backupName)
 		assert.ErrorIs(t, err, boom)
 		assert.Equal(t, ctrl.Cmd{}, cmd)
+	})
+}
+
+func TestRestorePBMConfig(t *testing.T) {
+	t.Parallel()
+
+	s3Storage := func(prefix string) psmdbv1.BackupStorageSpec {
+		return psmdbv1.BackupStorageSpec{
+			Type: psmdbv1.BackupStorageS3,
+			S3: psmdbv1.BackupStorageS3Spec{
+				Bucket: "operator-testing",
+				Prefix: prefix,
+				Region: "us-east-1",
+			},
+		}
+	}
+	newCluster := func(crVersion string, storages map[string]psmdbv1.BackupStorageSpec) *psmdbv1.PerconaServerMongoDB {
+		return &psmdbv1.PerconaServerMongoDB{
+			ObjectMeta: metav1.ObjectMeta{Name: "cluster2", Namespace: "pitr"},
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				CRVersion: crVersion,
+				Backup: psmdbv1.BackupSpec{
+					Enabled:  true,
+					Storages: storages,
+					PITR:     psmdbv1.PITRSpec{Enabled: true},
+				},
+			},
+			Status: psmdbv1.PerconaServerMongoDBStatus{BackupVersion: "2.17.0"},
+		}
+	}
+	pbmConfigWith := func(t *testing.T, cluster *psmdbv1.PerconaServerMongoDB, stg psmdbv1.BackupStorageSpec) *config.Config {
+		cfg, err := backup.GetPBMConfig(t.Context(), fakeReconciler().client, cluster, stg)
+		require.NoError(t, err)
+		return &cfg
+	}
+
+	t.Run("main storage was changed by the restore", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := newCluster(version.Version(), map[string]psmdbv1.BackupStorageSpec{"local-s3": s3Storage("pitr-prefix-2")})
+		r := fakeReconciler(cluster)
+		pbmc := NewMockPBM(gomock.NewController(t))
+
+		gomock.InOrder(
+			pbmc.EXPECT().GetConfig(gomock.Any()).Return(pbmConfigWith(t, cluster, s3Storage("pitr-prefix-1")), nil),
+			pbmc.EXPECT().GetNSetConfig(gomock.Any(), r.client, cluster).Return(nil),
+			pbmc.EXPECT().ResyncMainStorageAndWait(gomock.Any()).Return(nil),
+		)
+
+		require.NoError(t, r.restorePBMConfig(t.Context(), pbmc, cluster))
+	})
+
+	t.Run("main storage is unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := newCluster(version.Version(), map[string]psmdbv1.BackupStorageSpec{"local-s3": s3Storage("pitr-prefix-2")})
+		r := fakeReconciler(cluster)
+		pbmc := NewMockPBM(gomock.NewController(t))
+
+		gomock.InOrder(
+			pbmc.EXPECT().GetConfig(gomock.Any()).Return(pbmConfigWith(t, cluster, s3Storage("pitr-prefix-2")), nil),
+			pbmc.EXPECT().SetConfigVar(gomock.Any(), "pitr.enabled", "true").Return(nil),
+		)
+
+		require.NoError(t, r.restorePBMConfig(t.Context(), pbmc, cluster))
+	})
+
+	t.Run("no main storage", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := newCluster(version.Version(), nil)
+		r := fakeReconciler(cluster)
+		pbmc := NewMockPBM(gomock.NewController(t))
+
+		require.NoError(t, r.restorePBMConfig(t.Context(), pbmc, cluster))
+	})
+
+	t.Run("crVersion before 1.24.0", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := newCluster("1.23.0", map[string]psmdbv1.BackupStorageSpec{"local-s3": s3Storage("pitr-prefix-2")})
+		r := fakeReconciler(cluster)
+		pbmc := NewMockPBM(gomock.NewController(t))
+
+		pbmc.EXPECT().SetConfigVar(gomock.Any(), "pitr.enabled", "true").Return(nil)
+
+		require.NoError(t, r.restorePBMConfig(t.Context(), pbmc, cluster))
 	})
 }
