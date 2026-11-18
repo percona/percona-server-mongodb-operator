@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1398,6 +1399,8 @@ type shrinkMongoProvider struct {
 	stepDowns    int
 	rsDials      int
 	rsRetryDials int
+	dialErr      error
+	statusErr    error
 }
 
 func (p *shrinkMongoProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
@@ -1408,6 +1411,9 @@ func (p *shrinkMongoProvider) Mongo(ctx context.Context, cr *api.PerconaServerMo
 	}
 	if conf.Backoff != nil {
 		p.rsRetryDials++
+	}
+	if p.dialErr != nil {
+		return nil, p.dialErr
 	}
 	return &shrinkMongoClient{Client: mongoFake.NewClient(), p: p}, nil
 }
@@ -1426,6 +1432,9 @@ type shrinkMongoClient struct {
 }
 
 func (c *shrinkMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
+	if c.p.statusErr != nil {
+		return mongo.Status{}, c.p.statusErr
+	}
 	return c.p.status, nil
 }
 
@@ -1770,18 +1779,51 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 			}
 		}
 		p := &shrinkMongoProvider{status: healthy}
+		rec := events.NewFakeRecorder(10)
 		r := &ReconcilePerconaServerMongoDB{
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
 			scheme:              s,
 			mongoClientProvider: p,
-			recorder:            &events.FakeRecorder{},
+			recorder:            rec,
 		}
-		cr.SetPVCShrinkState(stsName, secondariesState)
+		state := secondariesState
+		state.WaitingFor = "member rs0-hidden-0 is RECOVERING"
+		cr.SetPVCShrinkState(stsName, state)
 
-		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
 		assert.Equal(t, 3, pvcCount(t, r))
 		assert.Zero(t, p.rsDials, "replset client has no hosts without the statefulset")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "statefulset is being recreated", got.WaitingFor)
+		assert.Empty(t, eventReasons(rec), "every shrink waits for the statefulset, no warning")
 	})
+
+	for name, p := range map[string]*shrinkMongoProvider{
+		"connection failure": {status: healthy, dialErr: errors.New("auth failed")},
+		"RS status failure":  {status: healthy, statusErr: errors.New("no primary")},
+	} {
+		t.Run(name+" is recorded as waiting reason", func(t *testing.T) {
+			r, rec := newReconciler(p)
+			state := secondariesState
+			state.WaitingFor = "member rs0-hidden-0 is RECOVERING"
+			cr.SetPVCShrinkState(stsName, state)
+
+			require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
+			assert.Equal(t, 3, pvcCount(t, r))
+
+			got, ok := cr.GetPVCShrinkState(stsName)
+			require.True(t, ok)
+			assert.NotEqual(t, state.WaitingFor, got.WaitingFor, "stale member reason must be replaced")
+			assert.NotEmpty(t, got.WaitingFor)
+			assert.NotContains(t, got.WaitingFor, "auth failed", "raw errors would change the reason on every reconcile")
+			assert.NotContains(t, got.WaitingFor, "no primary", "raw errors would change the reason on every reconcile")
+
+			require.NoError(t, r.shrinkProcessPods(t.Context(), sc, got, false))
+			assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
+		})
+	}
 
 	t.Run("PVC already being deleted is not deleted again", func(t *testing.T) {
 		objs := objects()

@@ -910,6 +910,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 	// client can't find its pods and would spend the reconcile retrying localhost.
 	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{}); err != nil {
 		log.Info("PVC shrink waiting: statefulset is not recreated yet", "error", err)
+		r.setShrinkWaiting(sc, state, "statefulset is being recreated", false)
 		return false
 	}
 
@@ -917,6 +918,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 	rsClient, err := r.mongoClientWithRole(ctx, sc.cr, sc.replset, psmdbv1.RoleClusterAdmin, mongo.WithoutRetry())
 	if err != nil {
 		log.Info("PVC shrink waiting: failed to create mongo client for RS health check", "error", err)
+		r.setShrinkWaiting(sc, state, "failed to connect to replset", true)
 		return false
 	}
 	defer func() {
@@ -928,16 +930,14 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 	rsStatus, err := rsClient.RSStatus(ctx)
 	if err != nil {
 		log.Info("PVC shrink waiting: failed to get RS status", "error", err)
+		r.setShrinkWaiting(sc, state, "failed to get replset status", true)
 		return false
 	}
 
 	replacingHost := r.shrinkReplacingHost(ctx, sc, replacing)
 	member := unhealthyRSMember(rsStatus, replacingHost)
 	if member == nil {
-		if state != nil && state.WaitingFor != "" {
-			state.WaitingFor = ""
-			sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
-		}
+		r.setShrinkWaiting(sc, state, "", false)
 		return true
 	}
 
@@ -945,14 +945,21 @@ func (r *ReconcilePerconaServerMongoDB) shrinkRSHealthy(ctx context.Context, sc 
 	log.Info("PVC shrink waiting: member not in healthy state", "member", member.Name, "state", memberState)
 
 	waitingFor := fmt.Sprintf("member %s is %s", member.Name, memberState)
-	if state != nil && state.WaitingFor != waitingFor {
-		state.WaitingFor = waitingFor
-		sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
-		if replacingHost == "" || member.Name != replacingHost {
-			r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkWaiting", "Wait", "Shrink of %s is waiting: %s", sc.sts.Name, waitingFor)
-		}
-	}
+	r.setShrinkWaiting(sc, state, waitingFor, replacingHost == "" || member.Name != replacingHost)
 	return false
+}
+
+// setShrinkWaiting records why the shrink is waiting. The reason is kept short and stable,
+// so a Warning is emitted only when it changes.
+func (r *ReconcilePerconaServerMongoDB) setShrinkWaiting(sc shrinkContext, state *psmdbv1.PVCShrinkState, reason string, warn bool) {
+	if state == nil || state.WaitingFor == reason {
+		return
+	}
+	state.WaitingFor = reason
+	sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
+	if warn {
+		r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkWaiting", "Wait", "Shrink of %s is waiting: %s", sc.sts.Name, reason)
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkReplacingHost(ctx context.Context, sc shrinkContext, replacing *corev1.Pod) string {
