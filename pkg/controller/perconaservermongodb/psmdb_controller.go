@@ -60,7 +60,10 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/versionservice"
 )
 
-const eventRegardingNameIndex = "regarding.name"
+const (
+	controllerName          = "psmdb-controller"
+	eventRegardingNameIndex = "regarding.name"
+)
 
 func eventRegardingNameIndexer(o client.Object) []string {
 	evt, ok := o.(*eventsv1.Event)
@@ -119,12 +122,12 @@ func newReconciler(ctx context.Context, mgr manager.Manager) (reconcile.Reconcil
 		apiReader:              mgr.GetAPIReader(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
-		reconcileIn:            util.ReconcileInterval(logf.Log.WithName("psmdb-controller"), "RECONCILE_INTERVAL"),
+		reconcileIn:            util.ReconcileInterval(logf.Log.WithName(controllerName), "RECONCILE_INTERVAL"),
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
-		recorder:               mgr.GetEventRecorder("psmdb-controller"),
+		recorder:               mgr.GetEventRecorder(controllerName),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
 		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
 
@@ -165,7 +168,7 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
 		For(&api.PerconaServerMongoDB{}).
-		Named("psmdb-controller").
+		Named(controllerName).
 		Complete(r)
 }
 
