@@ -68,11 +68,12 @@ The review skill `review-go-style` applies this file.
 
 ## Naming
 
-- `cr` is the CR a function reconciles (`*api.PerconaServerMongoDB`). Backup
-  and restore CRs passed into cluster code are `bcp` and `restore`.
-- Import aliases: `api` for `pkg/apis/psmdb/v1`, `corev1`, `metav1`,
-  `k8serrors`, `logf`. The controller-runtime `client` package keeps its
-  name; a client variable is `cl`.
+- `cr` is the CR a function reconciles (`*psmdbv1.PerconaServerMongoDB`).
+  Backup and restore CRs passed into cluster code are `bcp` and `restore`.
+- Import aliases: `psmdbv1` for `pkg/apis/psmdb/v1` in new files; a file
+  that already imports it as `api` keeps that alias. Also `corev1`,
+  `metav1`, `k8serrors`, `logf`. The controller-runtime `client` package
+  keeps its name; a client variable is `cl`.
 - Receivers: `r` for reconcilers. On API types, use the receiver name the
   type already uses.
 - Packages are lowercase single words. File names may use underscores

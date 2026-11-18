@@ -87,7 +87,7 @@ Rules:
   bypasses the cache). The code base has no typed clientset.
 - Commands inside pods run through `clientcmd.Client.Exec`.
 - MongoDB connections come from `MongoClientProvider` (`connections.go`),
-  which reads credentials from the users Secret (`api.UserSecretName(cr)`)
+  which reads credentials from the users Secret (`psmdbv1.UserSecretName(cr)`)
   and dials through `pkg/psmdb/mongo`. Inject the provider in tests; do not
   build a client inline.
 - cert-manager is reached through `pkg/psmdb/tls` (`NewCertManagerController`,
