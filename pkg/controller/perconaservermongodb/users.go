@@ -379,6 +379,9 @@ func renameUser(ctx context.Context, c mongo.Client, currName, newName, pass str
 
 	switch {
 	case newUser != nil:
+		if currUser != nil && !compareRoles(currUser.Roles, newUser.Roles) {
+			return errors.Errorf("cannot rename %s to existing user %s with different roles", currName, newName)
+		}
 		if err := c.UpdateUserPass(ctx, "admin", newName, pass); err != nil {
 			return errors.Wrap(err, "change password")
 		}
