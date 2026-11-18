@@ -17,9 +17,11 @@ Contribution rules (CLA, Jira, branches, review) are in
 
 - `pkg/`: operator code. `pkg/apis/psmdb/v1` holds the CRD types,
   `pkg/controller/*` the reconcilers.
-- `deploy/`: generated manifests (`crd.yaml`, `rbac.yaml`, `operator.yaml`,
-  bundles) and the example `cr.yaml`. `crVersion` in `deploy/cr.yaml` is the
-  version e2e tests treat as current.
+- `deploy/`: manifests and the example `cr.yaml`. `make manifests` generates
+  `crd.yaml`, `bundle.yaml` and `cw-bundle.yaml`, and sets the operator image
+  in `operator.yaml` and `cw-operator.yaml`. `rbac.yaml` and `cw-rbac.yaml`
+  are edited by hand; the code has no `+kubebuilder:rbac` markers.
+  `crVersion` in `deploy/cr.yaml` is the version e2e tests treat as current.
 - `pkg/version/version.txt`: the operator version.
 - `e2e-tests/`: end-to-end tests against a real cluster.
 - `installers/olm/`: OLM bundle and catalog tooling.
@@ -42,7 +44,8 @@ These are the checks CI runs on every PR. Run the ones that match your change.
 | Change | Command |
 | ------ | ------- |
 | Go code | `make test` (unit and envtest), golangci-lint |
-| CRD types or RBAC markers | `make generate manifests`, then commit the generated files |
+| CRD types (`pkg/apis/`) | `make generate manifests`, then commit the generated files |
+| RBAC | edit `deploy/rbac.yaml` and `deploy/cw-rbac.yaml`, then `make manifests` to rebuild the bundles |
 | Python under `e2e-tests/` | `make py-fmt` and `make py-check` (ruff and mypy) |
 | Shell scripts | `shellcheck`, and `shfmt -bn -ci -s` (the CI formatter flags) |
 
@@ -87,6 +90,12 @@ diffs with known defects; rerun it when a guideline or a review skill changes.
 | `review-go-style` | review a diff against `docs/guidelines/go-style.md` |
 | `review-qa` | review tests against `docs/guidelines/qa.md` |
 | `test-plan` | write a manual test plan for a change, and list what the tests already cover |
+
+To run a skill in Claude Code, type its name as a command, for example
+`/review-qa` or `/plan K8SPSMDB-1234`. In any other agent, name the file:
+"Follow `.agents/skills/review-qa/SKILL.md` and review this branch against
+`main`." Reviews cost tokens: run them before asking for a human review, not
+after every small commit.
 
 ## Commands
 
