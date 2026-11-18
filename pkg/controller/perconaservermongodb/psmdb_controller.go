@@ -226,6 +226,9 @@ type ReconcilePerconaServerMongoDB struct {
 
 	lockers lockStore
 
+	// dnsResolver resolves hostnames when checking imported multi-cluster
+	// services. Defaults to net.DefaultResolver; overridable in tests.
+	dnsResolver     dnsResolver
 	pvcUsageBackoff wait.Backoff
 	podRestartPoll  time.Duration
 }
