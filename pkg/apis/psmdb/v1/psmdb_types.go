@@ -2173,7 +2173,7 @@ type LogCollectorSpec struct {
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
-// StorageSpec defines a dedicated PVC for an auxiliary mongod volume.
+// StorageSpec defines a dedicated PVC for an extra mongod volume.
 type StorageSpec struct {
 	// PersistentVolumeClaim specifies the PVC backing the volume. When set, the
 	// data is written to a dedicated volume instead of the mongod data volume.
@@ -2210,11 +2210,11 @@ func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
 }
 
-// Component label values of replset members, mirrored from pkg/naming which imports this package.
+// Component label values of replset members, aliased in pkg/naming.
 const (
-	componentNonVoting = "nonVoting"
-	componentHidden    = "hidden"
-	componentArbiter   = "arbiter"
+	ComponentNonVoting = "nonVoting"
+	ComponentHidden    = "hidden"
+	ComponentArbiter   = "arbiter"
 )
 
 // LogPVC returns the PVC spec for mongod logs of the given component, or nil
@@ -2234,11 +2234,11 @@ func (r *ReplsetSpec) JournalPVC(cr *PerconaServerMongoDB, component string) *PV
 // componentStorage returns the journal and log storage of a replset component. The arbiter has none.
 func (r *ReplsetSpec) componentStorage(component string) (journal, logs *StorageSpec) {
 	switch component {
-	case componentArbiter:
+	case ComponentArbiter:
 		return nil, nil
-	case componentNonVoting:
+	case ComponentNonVoting:
 		return r.NonVoting.JournalStorage, r.NonVoting.LogStorage
-	case componentHidden:
+	case ComponentHidden:
 		return r.Hidden.JournalStorage, r.Hidden.LogStorage
 	}
 	return r.JournalStorage, r.LogStorage

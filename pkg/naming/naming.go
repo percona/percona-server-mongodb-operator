@@ -25,10 +25,10 @@ const (
 const (
 	ComponentMongod         = "mongod"
 	ComponentMongos         = "mongos"
-	ComponentNonVoting      = "nonVoting"
+	ComponentNonVoting      = psmdbv1.ComponentNonVoting
 	ComponentNonVotingShort = "nv"
-	ComponentHidden         = "hidden"
-	ComponentArbiter        = "arbiter"
+	ComponentHidden         = psmdbv1.ComponentHidden
+	ComponentArbiter        = psmdbv1.ComponentArbiter
 	ComponentSearch         = "search"
 	ComponentConfigSrv      = "cfg"
 )

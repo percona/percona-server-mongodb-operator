@@ -952,7 +952,7 @@ func TestLogStorageVersionGate(t *testing.T) {
 	}
 }
 
-func TestAuxiliaryPVC(t *testing.T) {
+func TestExtraPVC(t *testing.T) {
 	t.Parallel()
 
 	cr := &api.PerconaServerMongoDB{
@@ -966,7 +966,7 @@ func TestAuxiliaryPVC(t *testing.T) {
 		},
 	}
 
-	pvc := auxiliaryPVC(cr, config.MongodLogVolClaimName, (&api.ReplsetSpec{LogStorage: logStorageSpec("2Gi")}).LogPVC(cr, naming.ComponentMongod))
+	pvc := extraPVC(cr, config.MongodLogVolClaimName, (&api.ReplsetSpec{LogStorage: logStorageSpec("2Gi")}).LogPVC(cr, naming.ComponentMongod))
 
 	assert.Equal(t, config.MongodLogVolClaimName, pvc.Name)
 	assert.Equal(t, "test-ns", pvc.Namespace)

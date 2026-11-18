@@ -74,7 +74,7 @@ func mongosLogPVC(cr *api.PerconaServerMongoDB) corev1.PersistentVolumeClaim {
 	maps.Copy(labels, storage.Labels)
 	maps.Copy(labels, naming.MongosLabels(cr))
 
-	pvc := auxiliaryPVC(cr, config.MongosLogVolClaimName, storage)
+	pvc := extraPVC(cr, config.MongosLogVolClaimName, storage)
 	pvc.Labels = labels
 	pvc.Annotations = storage.Annotations
 

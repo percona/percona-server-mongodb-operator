@@ -235,7 +235,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 		"rejects a shrink and reverts the request": {
 			requested:    "1Gi",
 			pvcSize:      "3Gi",
-			wantErr:      errAuxiliaryShrink,
+			wantErr:      errExtraPVCShrink,
 			wantLogSize:  "3Gi",
 			wantSpecSize: "3Gi",
 		},
@@ -265,7 +265,7 @@ func TestReconcileLogPVCs(t *testing.T) {
 
 			r := buildFakeClient(cr, sts, pod, logPVC, dataPVC)
 
-			err = r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, logStorage(cr, sts))
+			err = r.reconcileExtraPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, logStorage(cr, sts))
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 			} else {
@@ -343,7 +343,7 @@ func TestReconcileLogPVCsDuringDataResize(t *testing.T) {
 			stale := sts.DeepCopy()
 			stale.Annotations = nil
 
-			require.NoError(t, r.reconcileAuxiliaryPVCs(t.Context(), cr, stale, ls, config.MongodLogVolClaimName, logStorage(cr, stale)))
+			require.NoError(t, r.reconcileExtraPVCs(t.Context(), cr, stale, ls, config.MongodLogVolClaimName, logStorage(cr, stale)))
 
 			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
 			if tt.wantStsExists {

@@ -37,11 +37,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 		return errors.Wrap(err, "resize volumes if needed")
 	}
 
-	if err := r.reconcileAuxiliaryPVCs(ctx, cr, sts, ls, config.MongodLogVolClaimName, logStorage(cr, sts)); err != nil {
+	if err := r.reconcileExtraPVCs(ctx, cr, sts, ls, config.MongodLogVolClaimName, logStorage(cr, sts)); err != nil {
 		return errors.Wrap(err, "reconcile log PVCs")
 	}
 
-	if err := r.reconcileAuxiliaryPVCs(ctx, cr, sts, ls, config.MongodJournalVolClaimName, journalStorage(cr, sts)); err != nil {
+	if err := r.reconcileExtraPVCs(ctx, cr, sts, ls, config.MongodJournalVolClaimName, journalStorage(cr, sts)); err != nil {
 		return errors.Wrap(err, "reconcile journal PVCs")
 	}
 
@@ -49,7 +49,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 }
 
 var (
-	errAuxiliaryShrink    = errors.New("shrinking is not supported")
+	errExtraPVCShrink     = errors.New("shrinking is not supported")
 	errMissingStorageSpec = errors.New("missing storage spec")
 )
 
@@ -82,9 +82,9 @@ func componentReplset(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet)
 	return nil
 }
 
-// reconcileAuxiliaryPVCs keeps the PVCs of a non-data claim in sync with the CR.
+// reconcileExtraPVCs keeps the PVCs of a non-data claim in sync with the CR.
 // Shrinking is not supported.
-func (r *ReconcilePerconaServerMongoDB) reconcileAuxiliaryPVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec *psmdbv1.PVCSpec) error {
+func (r *ReconcilePerconaServerMongoDB) reconcileExtraPVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec *psmdbv1.PVCSpec) error {
 	if pvcSpec == nil || pvcSpec.PersistentVolumeClaimSpec == nil {
 		return nil
 	}
@@ -128,7 +128,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileAuxiliaryPVCs(ctx context.Conte
 		if err := r.revertVolumeTemplate(ctx, cr, sts, claimName, actual); err != nil {
 			return errors.Wrapf(err, "revert %s volume template for sts/%s", claimName, sts.Name)
 		}
-		return errors.Wrapf(errAuxiliaryShrink, "%s: requested storage (%s) is less than actual storage (%s)", claimName, requested.String(), actual.String())
+		return errors.Wrapf(errExtraPVCShrink, "%s: requested storage (%s) is less than actual storage (%s)", claimName, requested.String(), actual.String())
 	}
 
 	return r.resizeVolumesIfNeeded(ctx, cr, sts, ls, claimName, *pvcSpec)

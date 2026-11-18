@@ -115,7 +115,7 @@ func TestRecreateStsForStorageDeleteErrors(t *testing.T) {
 	}
 }
 
-func TestReconcileAuxiliaryPVCsSkips(t *testing.T) {
+func TestReconcileExtraPVCsSkips(t *testing.T) {
 	t.Parallel()
 
 	const ns = "aux-pvcs"
@@ -176,7 +176,7 @@ func TestReconcileAuxiliaryPVCsSkips(t *testing.T) {
 			if tt.noSpec {
 				pvcSpec = nil
 			}
-			require.NoError(t, r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, pvcSpec))
+			require.NoError(t, r.reconcileExtraPVCs(t.Context(), cr, sts, ls, config.MongodLogVolClaimName, pvcSpec))
 
 			got := new(corev1.PersistentVolumeClaim)
 			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(logPVC), got))

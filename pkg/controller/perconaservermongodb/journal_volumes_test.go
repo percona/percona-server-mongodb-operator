@@ -229,7 +229,7 @@ func TestReconcileJournalPVCs(t *testing.T) {
 		"rejects a shrink and reverts the request": {
 			requested:    "1Gi",
 			pvcSize:      "3Gi",
-			wantErr:      errAuxiliaryShrink,
+			wantErr:      errExtraPVCShrink,
 			wantSize:     "3Gi",
 			wantSpecSize: "3Gi",
 		},
@@ -269,7 +269,7 @@ func TestReconcileJournalPVCs(t *testing.T) {
 
 			r := buildFakeClient(cr, sts, pod, journalPVC, dataPVC)
 
-			err = r.reconcileAuxiliaryPVCs(t.Context(), cr, sts, ls, config.MongodJournalVolClaimName, journalStorage(cr, sts))
+			err = r.reconcileExtraPVCs(t.Context(), cr, sts, ls, config.MongodJournalVolClaimName, journalStorage(cr, sts))
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 			} else {
