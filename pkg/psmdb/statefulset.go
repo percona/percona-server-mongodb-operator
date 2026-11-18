@@ -794,7 +794,7 @@ func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabl
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
 			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
 			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt", config.SSLDir)
-			if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
+			if cr.CompareVersion("1.24.0") < 0 || ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
 				uri += "&tlsInsecure=true"
 			}
 		}
