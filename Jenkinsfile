@@ -161,7 +161,8 @@ boolean publishAllureReport() {
         return true
     } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
         throw exc
-    } catch (exc) {
+    } catch (Throwable exc) {
+        // Throwable: a missing plugin raises NoSuchMethodError, which is not an Exception.
         echo "Warning: failed to publish the Allure report: ${exc}"
         return false
     }
@@ -980,7 +981,7 @@ pipeline {
                             echo "No pytest-html reports in e2e-tests/reports, skipping the HTML report merge"
                         }
                         if (allurePublished) {
-                            TestsReport = TestsReport + "Allure report: [allure](${env.BUILD_URL}allure/)\r\n"
+                            TestsReport = TestsReport + "Allure report: [allure](${env.BUILD_URL}allure/) (tests that ran and finished in this build only; see the table above for timeouts)\r\n"
                         }
                         pullRequest.comment(TestsReport)
                     }

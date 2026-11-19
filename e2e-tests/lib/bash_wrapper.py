@@ -18,10 +18,14 @@ READER_GRACE_SECONDS = 5
 
 
 def _pump(stream: IO[str], tail: deque[str]) -> None:
+    # Keep draining even when the console write fails: a full pipe would block bash.
     for line in stream:
-        sys.stdout.write(line)
-        sys.stdout.flush()
         tail.append(line)
+        try:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+        except (OSError, ValueError, UnicodeError):
+            pass
 
 
 def run_bash_test(test_name: str) -> None:
