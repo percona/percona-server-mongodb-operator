@@ -49,12 +49,17 @@ check against that.
   upgrades, failover, networking, and integration with Kubernetes and external
   systems. When an e2e test adds a golden-file check for a new field, add or
   point to the unit test that covers the rendering.
+- **No unit tests for the Python e2e code.** `lib/`, `conftest.py` and the
+  OLM test helpers are test code; the e2e runs exercise them. `make py-check`
+  (ruff, mypy, the fixture check) is the only check they get without a
+  cluster.
 - **Every wait has a ceiling** and fails with what it expected and the last
   value it saw. No unbounded `until` loops.
 - **Fail fast on terminal states.** When the watched object reports `Failed`
   or `Error`, stop with its message instead of waiting out the timeout.
 - **Treat an empty read as unknown.** A `kubectl_bin(..., check=False)` that
-  returns `""` is not a state; retry it or skip that sample.
+  returns `""` is not a state; retry it or skip that sample. When every sample
+  is empty, fail: the object is gone or the API is down.
 - **No sleeps for readiness.** Poll the condition. Sleeps that encode real
   time (a soak, a PITR window, a known upstream bug workaround) stay, with a
   comment saying why.
