@@ -52,7 +52,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSearch(ctx context.Context, cr 
 		return errors.Wrapf(err, "reconcile mongot Service %s", svc.Name)
 	}
 
-	sslAnnotations, err := r.sslAnnotation(ctx, cr.DeepCopy() /* sslAnnotation mutates status conditions */)
+	sslAnnotations, err := r.sslAnnotation(ctx, cr.DeepCopy() /* sslAnnotation mutates status conditions */, naming.ComponentSearch)
 	if err != nil {
 		return errors.Wrap(err, "get ssl annotations")
 	}

@@ -69,6 +69,20 @@ func WithoutRetry() ConfigOption {
 	}
 }
 
+// WithTLSServerName verifies the server certificate against name instead of
+// the host being dialed. It allows reaching a pod by its IP when the
+// certificate only covers DNS names.
+func WithTLSServerName(name string) ConfigOption {
+	return func(conf *DialConfig) {
+		if conf.TLSConf == nil {
+			return
+		}
+		tlsConf := conf.TLSConf.Clone()
+		tlsConf.ServerName = name
+		conf.TLSConf = tlsConf
+	}
+}
+
 // DefaultBackoff is the retry policy for callers which expect the connection
 // to succeed. Every attempt is additionally bounded by the connect timeout, so
 // Dial gives up after ~80s at worst.
