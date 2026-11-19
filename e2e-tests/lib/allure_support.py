@@ -18,7 +18,43 @@ import pytest
 _PASSWORD = re.compile(r":[^:@/\s]+@(?!sha256:)")
 # The pwd value runs to the next , or } so that shell-escaped quotes in xtrace
 # output ('\''secret'\'') are masked too.
-_PWD_FIELD = re.compile(r"""(\bpwd['"]?\s*:\s*)[^,}\n]+""")
+_PWD_FIELD = re.compile(r"""(\bpwd['"]?[ \t]*:[ \t]*)[^,}\n]+""")
+# Names of keys that hold a secret. Bounded runs keep matching linear on long
+# dotted or hyphenated words.
+_KEY = (
+    r"[\w.-]{0,64}?(?:password|passwd|(?<![a-z])pass(?![a-z0-9_])|secret|token|access[_-]?key|account[_-]?key"
+    r"|api[_-]?key|private[_-]?key|unseal[_-]?key|\.key|-key|credentials(?![a-z]))[\w.-]{0,64}"
+)
+# A quoted value may hold spaces; a bare value runs to the next space or delimiter.
+_VALUE = r"""(?:'[^'\n]*'|"[^"\n]*"|[^\s'",;{}\[\]]+)"""
+# KEY=value anywhere: env and xtrace lines, --from-literal=token=..., password=...
+_SECRET_ASSIGN = re.compile(rf"""(?i)(\b{_KEY}['"]?[ \t]*=(?!=)[ \t]*)({_VALUE})""")
+# key: value only where a key starts (line start, list item, xtrace "+ ", after { or ,),
+# so error text like "get users secret: <cause>" keeps its cause. Never crosses lines.
+_SECRET_FIELD = re.compile(
+    rf"""(?im)((?:^[ \t]*(?:[-+][ \t]+)?|[{{,][ \t]*)['"]?{_KEY}['"]?[ \t]*:[ \t]*)({_VALUE})"""
+)
+# Keys that name a secret instead of holding one, for example secretName: my-secret,
+# the CR field credentialsSecret: my-s3-secret (camelCase ending in Secret), or values
+# that are not secrets (token_status_code=401, TOKEN_TTL: 24h).
+_SECRET_REFERENCE = re.compile(
+    r"(?i:name|ref|path|file|type|version|status|code|ttl|\.py)$|[a-z]Secrets?$|^(?i:secrets?)$"
+)
+# --password value, mongosh -p value, Authorization: Bearer value, vault operator unseal value.
+_SECRET_ARG = re.compile(
+    r"(?i)(--[\w-]{0,40}password[ \t]+|\bmongo(?:sh)?\b[^\n]{0,200}?[ \t]-p[ \t]+|\bbearer[ \t]+"
+    rf"|\bunseal[ \t]+)({_VALUE})"
+)
+# Tokens with a known shape: AWS access key IDs, Vault tokens, Grafana service account tokens.
+_KNOWN_TOKEN = re.compile(
+    r"\b(?:(?:AKIA|ASIA)[0-9A-Z]{16}|hvs\.[A-Za-z0-9_-]{20,}|glsa_[A-Za-z0-9_]{20,})\b"
+)
+_PRIVATE_KEY = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.DOTALL
+)
+# File paths under well-known roots are not secrets (--tls-key=/etc/tls/tls.key).
+# Other values that start with / stay masked: base64 keys can start with /.
+_FILE_PATH = re.compile(r"/(?:dev|etc|tmp|var|opt|home|data|usr|run|proc|mnt|srv|root|certs?)/")
 _MAX_VALUE_LEN = 80
 
 # Failure diagnostics from K8sCollector.capture_summary(), in report order.
@@ -31,8 +67,28 @@ _SUMMARY_TITLES = {
 }
 
 
+def _mask_secret_field(match: re.Match[str]) -> str:
+    prefix, value = match.group(1), match.group(2)
+    key = prefix.strip().lstrip("-+{,").strip().strip("'\"").rstrip("=:").strip().strip("'\"")
+    # Also skip pytest log prefixes such as lib.secrets:secrets.py:96.
+    if (
+        _SECRET_REFERENCE.search(key)
+        or value.startswith(("***", "<", "$"))
+        or _FILE_PATH.match(value.strip("'\""))
+        or ".py:" in value
+    ):
+        return match.group(0)
+    quote = value[0] if value[0] in "'\"" and len(value) > 1 and value[-1] == value[0] else ""
+    return f"{prefix}{quote}***{quote}"
+
+
 def mask(text: str) -> str:
-    """Hide passwords in connection strings and in mongosh createUser calls."""
+    """Hide passwords, keys and tokens in text that goes to the report."""
+    text = _PRIVATE_KEY.sub("***", text)
+    text = _KNOWN_TOKEN.sub("***", text)
+    text = _SECRET_ARG.sub(_mask_secret_field, text)
+    text = _SECRET_ASSIGN.sub(_mask_secret_field, text)
+    text = _SECRET_FIELD.sub(_mask_secret_field, text)
     return _PWD_FIELD.sub(r"\1***", _PASSWORD.sub(":***@", text))
 
 

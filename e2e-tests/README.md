@@ -216,7 +216,13 @@ What the report contains:
 * One Allure test per pytest test case, grouped by e2e test (the test directory). A bash test shows as one test without steps.
 * Steps from the shared helpers in `lib/` and `conftest.py` (deploy operator, apply CR, wait for pods, mongosh calls).
 * On failure: operator logs, Kubernetes resources, events, PBM status and mongod logs. For a bash test, also the last 1000 lines of the script output.
-* Passwords in `user:password@host` and `pwd: ...` are masked in step titles, attachments and kubectl error messages. They are not masked in the failure traceback, which shows the values of function arguments, and other secret formats are not masked.
+* Secrets are masked in step titles, attachments and kubectl error messages:
+  * `user:password@host` and `pwd: ...`;
+  * `KEY=value` anywhere, and `key: value` at the start of a line or a JSON field, when the key names a password, secret, token, credentials or a key (for example `AWS_SECRET_ACCESS_KEY=`, `secretAccessKey:`, `tls.key:`);
+  * `--password ...`, `mongosh -p ...`, `Bearer ...`, `vault operator unseal ...`;
+  * AWS access key IDs, Vault and Grafana tokens, PEM private keys (from the BEGIN line on; a key cut before its BEGIN line is not masked).
+
+  Keys that only name a Secret (`secret`, `secretName`, `credentialsSecret`) stay visible, and so do values that are file paths under `/etc`, `/tmp` and similar roots, `<...>` placeholders and `$VAR` references. Not masked: the failure traceback (it shows the values of function arguments), positional arguments such as `admin:pass` passed to a script function, and multi-line YAML values.
 
 When adding code:
 
