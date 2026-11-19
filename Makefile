@@ -47,8 +47,10 @@ manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle
 
 # Run a single e2e test via pytest (native Python or bash wrapper).
 # Usage: make e2e-test TEST=init-deploy
-# Optional: REPORT_OPTS=... to override HTML/JUnit report flags
-REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml --alluredir=e2e-tests/allure-results
+# Optional: REPORT_OPTS=... to override HTML/JUnit/Allure report flags
+# Optional: ALLURE_RESULTS_DIR=... to write Allure results elsewhere (for example one folder per test)
+ALLURE_RESULTS_DIR ?= e2e-tests/allure-results
+REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml --alluredir=$(ALLURE_RESULTS_DIR)
 
 .PHONY: e2e-test
 e2e-test: uv ## Run a single e2e test via pytest (TEST=<name>)
@@ -65,10 +67,10 @@ endif
 .PHONY: allure-report
 allure-report: ## Open the Allure report for the collected e2e results (needs the allure CLI)
 	@if [ -d e2e-tests/allure-report/history ]; then \
-		rm -rf e2e-tests/allure-results/history; \
-		cp -R e2e-tests/allure-report/history e2e-tests/allure-results/history; \
+		rm -rf $(ALLURE_RESULTS_DIR)/history; \
+		cp -R e2e-tests/allure-report/history $(ALLURE_RESULTS_DIR)/history; \
 	fi
-	allure generate --clean -o e2e-tests/allure-report e2e-tests/allure-results
+	allure generate --clean -o e2e-tests/allure-report $(ALLURE_RESULTS_DIR)
 	allure open e2e-tests/allure-report
 
 ##@ Build
