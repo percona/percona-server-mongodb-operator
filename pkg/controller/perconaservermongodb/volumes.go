@@ -29,7 +29,7 @@ import (
 )
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
-	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
+	if err := r.fixVolumeLabels(ctx, sts, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
@@ -41,7 +41,19 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 }
 
 func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
-	return strings.HasPrefix(pvc.Name, claimName+"-"+sts.Name)
+	prefix := claimName + "-" + sts.Name + "-"
+	ordinal, ok := strings.CutPrefix(pvc.Name, prefix)
+	if !ok || ordinal == "" {
+		return false
+	}
+
+	for _, digit := range ordinal {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func maxPVCCapacity(pvcs []corev1.PersistentVolumeClaim, claimName string, sts *appsv1.StatefulSet) resource.Quantity {
@@ -931,17 +943,22 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, pvcSpec psmdbv1.PVCSpec) error {
+func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, pvcSpec psmdbv1.PVCSpec) error {
+	// PVCs inherit labels from volumeClaimTemplates, not from the StatefulSet selector. The template
+	// intentionally omits mutable metadata, so identify claims by name before applying the labels.
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
-		Namespace:     sts.Namespace,
-		LabelSelector: labels.SelectorFromSet(ls),
+		Namespace: sts.Namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "list PVCs")
 	}
 
 	for _, pvc := range pvcList.Items {
+		if !validatePVCName(config.MongodDataVolClaimName, pvc, sts) {
+			continue
+		}
+
 		orig := pvc.DeepCopy()
 
 		if pvc.Labels == nil {
@@ -961,7 +978,7 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 		patch := client.MergeFrom(orig)
 
 		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
+			return errors.Wrapf(err, "patch PVC %s", pvc.Name)
 		}
 	}
 

@@ -26,6 +26,49 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
+func TestValidatePVCName(t *testing.T) {
+	sts := &appsv1.StatefulSet{
+		Name: "some-name-rs0",
+	}
+
+	tests := []struct {
+		name    string
+		pvcName string
+		want    bool
+	}{
+		{
+			name:    "matching StatefulSet ordinal",
+			pvcName: "mongod-data-some-name-rs0-0",
+			want:    true,
+		},
+		{
+			name:    "hidden StatefulSet with overlapping prefix",
+			pvcName: "mongod-data-some-name-rs0-hidden-0",
+			want:    false,
+		},
+		{
+			name:    "non-voting StatefulSet with overlapping prefix",
+			pvcName: "mongod-data-some-name-rs0-nv-0",
+			want:    false,
+		},
+		{
+			name:    "non-numeric suffix",
+			pvcName: "mongod-data-some-name-rs0-other",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pvc := corev1.PersistentVolumeClaim{
+				Name: tt.pvcName,
+			}
+
+			assert.Equal(t, tt.want, validatePVCName(config.MongodDataVolClaimName, pvc, sts))
+		})
+	}
+}
+
 func TestReconcilePersistentVolumes(t *testing.T) {
 	t.Parallel()
 
@@ -312,6 +355,22 @@ func newStatefulSet(namespace, name string, labels map[string]string, storage re
 		Namespace: namespace,
 		Labels:    labels,
 		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "mongod",
+							Image: "percona/percona-server-mongodb",
+						},
+					},
+				},
+			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					Name: config.MongodDataVolClaimName,
