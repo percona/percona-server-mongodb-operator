@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"reflect"
 	"slices"
 	"sort"
@@ -67,6 +68,32 @@ func shouldSetDefaultRWConcern(cr *api.PerconaServerMongoDB, replset *api.Replse
 	return replset.Arbiter.Enabled || externalArbiterFound || cr.Spec.DefaultRWConcern != nil
 }
 
+// dnsResolver resolves hostnames to IP addresses. It is satisfied by
+// *net.Resolver and can be replaced in tests.
+type dnsResolver interface {
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+}
+
+// resolver returns the configured DNS resolver, falling back to the default
+// system resolver when none is set.
+func (r *ReconcilePerconaServerMongoDB) resolver() dnsResolver {
+	if r.dnsResolver != nil {
+		return r.dnsResolver
+	}
+	return net.DefaultResolver
+}
+
+// hostResolvable reports whether host resolves to at least one IP address.
+// A resolver error is returned to the caller; a successful lookup with no
+// addresses returns (false, nil).
+func hostResolvable(ctx context.Context, resolver dnsResolver, host string) (bool, error) {
+	ips, err := resolver.LookupIPAddr(ctx, strings.TrimSuffix(host, ".")+".")
+	if err != nil {
+		return false, err
+	}
+	return len(ips) > 0, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, map[string]api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
@@ -122,6 +149,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			if !imported {
 				log.Info("waiting for service import", "replset", replset.Name, "serviceExport", se.Name)
 				return api.AppStateInit, nil, nil
+			}
+			// check if the hostname is resolvable yet; DNS may lag behind the service import
+			if !cr.Status.Replsets[replset.Name].Initialized {
+				host := psmdb.GetMCSHost(cr, se.Name)
+				resolved, err := hostResolvable(ctx, r.resolver(), host)
+				if err != nil || !resolved {
+					log.Info("waiting for imported service hostname to resolve to an IP", "replset", replset.Name, "host", host, "error", err)
+					return api.AppStateInit, nil, nil
+				}
 			}
 		}
 	}
@@ -449,7 +485,7 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	members := mongo.ConfigMembers{}
 	for key, pod := range pods.Items {
 		if key >= mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", rs.Name)
+			log.Error(errReplsetLimit, "skipping replset member", "rs", rs.Name)
 			break
 		}
 
@@ -468,8 +504,8 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	memberC := len(members)
 	for i, extNode := range rs.ExternalNodes {
-		if memberC+i+1 >= mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", rs.Name)
+		if memberC+i+1 > mongo.MaxMembers {
+			log.Error(errReplsetLimit, "skipping replset member", "rs", rs.Name)
 			break
 		}
 
