@@ -18,6 +18,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"go.mongodb.org/mongo-driver/v2/mongo/readpref"
 	"go.mongodb.org/mongo-driver/v2/mongo/writeconcern"
+	"go.mongodb.org/mongo-driver/v2/x/mongo/driver"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/auth"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/connstring"
 	"go.mongodb.org/mongo-driver/v2/x/mongo/driver/topology"
@@ -273,14 +274,33 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
+// isAuthError reports whether err comes from the authentication handshake.
+// That includes network errors during the handshake; see IsAuthenticationFailed.
+func isAuthError(err error) bool {
+	var authErr *auth.Error
+	return errors.As(err, &authErr)
+}
+
+// errCodeAuthenticationFailed is the server error code for wrong credentials.
+const errCodeAuthenticationFailed = 18
+
+// IsAuthenticationFailed reports whether the server rejected the credentials.
+func IsAuthenticationFailed(err error) bool {
+	var serverErr mongo.ServerError
+	if errors.As(err, &serverErr) && serverErr.HasErrorCode(errCodeAuthenticationFailed) {
+		return true
+	}
+	var driverErr driver.Error
+	return errors.As(err, &driverErr) && driverErr.Code == errCodeAuthenticationFailed
+}
+
 // isTransientError reports whether err is a connection level failure that may succeed on a retry.
 func isTransientError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	var authErr *auth.Error
-	if errors.As(err, &authErr) {
+	if isAuthError(err) {
 		return false
 	}
 

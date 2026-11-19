@@ -7,6 +7,10 @@ const (
 	AnnotationPBMTLSHash      = perconaPrefix + "pbm-tls-hash"
 	AnnotationSSLInternalHash = perconaPrefix + "ssl-internal-hash"
 	AnnotationConfigHash      = perconaPrefix + "configuration-hash"
+
+	// AnnotationPendingRestarts on the internal users secret lists the containers
+	// that must still restart to read changed system user credentials.
+	AnnotationPendingRestarts = perconaPrefix + "pending-restarts"
 )
 
 const AnnotationKubectlRestartedAt = "kubectl.kubernetes.io/restartedAt"

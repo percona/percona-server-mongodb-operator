@@ -27,12 +27,25 @@ import (
 
 var ErrNoReplsetConfigStr = "(NotYetInitialized) no replset config has been received"
 
+// dial is replaced in tests.
+var dial = db.Dial
+
+// A rejected login means the server answered, so it is alive. The probe reads
+// its credentials from the mounted users secret, which the kubelet refreshes
+// up to a minute after the operator changes a system user in MongoDB, and a
+// restart would not fix them.
+const authFailedMsg = "Authentication failed, skipping liveness check"
+
 func HealthCheckMongosLiveness(ctx context.Context, cnf *db.Config) (err error) {
 	log := logf.FromContext(ctx).WithName("HealthCheckMongosLiveness")
 	ctx = logf.IntoContext(ctx, log)
 
-	client, err := db.Dial(ctx, cnf)
+	client, err := dial(ctx, cnf)
 	if err != nil {
+		if mongo.IsAuthenticationFailed(err) {
+			log.Info(authFailedMsg, "error", err.Error())
+			return nil
+		}
 		return errors.Wrap(err, "connection error")
 	}
 	defer func() {
@@ -58,8 +71,12 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config) (_ *mongo.Me
 	log := logf.FromContext(ctx).WithName("HealthCheckMongodLiveness")
 	ctx = logf.IntoContext(ctx, log)
 
-	client, err := db.Dial(ctx, cnf)
+	client, err := dial(ctx, cnf)
 	if err != nil {
+		if mongo.IsAuthenticationFailed(err) {
+			log.Info(authFailedMsg, "error", err.Error())
+			return nil, nil
+		}
 		return nil, errors.Wrap(err, "connection error")
 	}
 	defer func() {
