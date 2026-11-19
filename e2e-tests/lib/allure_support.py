@@ -143,9 +143,15 @@ def attach_text(content: str, name: str) -> None:
     allure.attach(mask(content), name=name, attachment_type=allure.attachment_type.TEXT)
 
 
-def set_title(title: str) -> None:
-    """Set the display name of the current test."""
-    allure.dynamic.title(title)  # type: ignore[no-untyped-call]
+def name_bash_test(test_name: str) -> None:
+    """Give a bash test run by the wrapper its own name and identity in the report.
+
+    Every bash test runs as the same pytest test (test_bash_wrapper), so Allure
+    would treat them as one test and show all but the last as its retries. A
+    hidden parameter with the test name makes the history id unique per test.
+    """
+    allure.dynamic.title(test_name)  # type: ignore[no-untyped-call]
+    allure.dynamic.parameter("test", test_name, mode=allure.parameter_mode.HIDDEN)
 
 
 def _results_dir(config: pytest.Config) -> str | None:
