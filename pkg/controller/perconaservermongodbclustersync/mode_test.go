@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
@@ -16,6 +17,7 @@ func TestNextAction(t *testing.T) {
 		specMode   api.ClusterSyncMode
 		state      api.ClusterSyncState
 		hasStarted bool
+		syncFailed bool
 		wantAction modeAction
 		wantMirror bool
 	}{
@@ -122,19 +124,94 @@ func TestNextAction(t *testing.T) {
 			wantAction: actionNone,
 			wantMirror: false,
 		},
-		"failed with spec=paused does not resume": {
+		"failed with spec=paused mirrors without calling pause": {
 			statusMode: api.ClusterSyncModeRunning,
 			specMode:   api.ClusterSyncModePaused,
 			state:      api.ClusterSyncStateFailed,
 			hasStarted: true,
-			wantAction: actionPause,
+			wantAction: actionNone,
+			wantMirror: true,
+		},
+		"failed and already paused stays put": {
+			statusMode: api.ClusterSyncModePaused,
+			specMode:   api.ClusterSyncModePaused,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			wantAction: actionNone,
+			wantMirror: false,
+		},
+		"failed with spec=finalized from running neither finalizes nor mirrors": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModeFinalized,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			wantAction: actionNone,
+			wantMirror: false,
+		},
+		"failed with spec=finalized from paused neither finalizes nor mirrors": {
+			statusMode: api.ClusterSyncModePaused,
+			specMode:   api.ClusterSyncModeFinalized,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			wantAction: actionNone,
+			wantMirror: false,
+		},
+		"failed initial sync with spec=running does not resume": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModeRunning,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			syncFailed: true,
+			wantAction: actionNone,
+			wantMirror: false,
+		},
+		"failed initial sync from paused to running does not resume": {
+			statusMode: api.ClusterSyncModePaused,
+			specMode:   api.ClusterSyncModeRunning,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			syncFailed: true,
+			wantAction: actionNone,
+			wantMirror: false,
+		},
+		"failed initial sync with spec=paused still mirrors": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModePaused,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			syncFailed: true,
+			wantAction: actionNone,
+			wantMirror: true,
+		},
+		"failed replication from paused to running resumes from failure": {
+			statusMode: api.ClusterSyncModePaused,
+			specMode:   api.ClusterSyncModeRunning,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: true,
+			wantAction: actionResume,
+			wantMirror: false,
+		},
+		"recreated CR on a failed checkpoint starts a new run": {
+			statusMode: "",
+			specMode:   api.ClusterSyncModeRunning,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: false,
+			wantAction: actionStart,
+			wantMirror: true,
+		},
+		"recreated CR on a failed checkpoint with spec=paused mirrors only": {
+			statusMode: "",
+			specMode:   api.ClusterSyncModePaused,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: false,
+			wantAction: actionNone,
 			wantMirror: true,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			gotAction, gotMirror := nextAction(tc.statusMode, tc.specMode, tc.state, tc.hasStarted)
+			gotAction, gotMirror := nextAction(tc.statusMode, tc.specMode, tc.state, tc.hasStarted, tc.syncFailed)
 			assert.Equal(t, tc.wantAction, gotAction, "action")
 			assert.Equal(t, tc.wantMirror, gotMirror, "mirror")
 		})
@@ -165,6 +242,45 @@ func TestSkipAction(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tc.want, skipAction(tc.action, tc.state))
+		})
+	}
+}
+
+func TestInitialSyncFailed(t *testing.T) {
+	t.Parallel()
+
+	started := &metav1.Time{}
+	notDone := &api.ClusterSyncInitialSync{ClonedSizeBytes: 47992004}
+	done := &api.ClusterSyncInitialSync{Completed: true}
+
+	tests := map[string]struct {
+		status api.PerconaServerMongoDBClusterSyncStatus
+		want   bool
+	}{
+		"failed during clone after start": {
+			status: api.PerconaServerMongoDBClusterSyncStatus{State: api.ClusterSyncStateFailed, StartedAt: started, InitialSync: notDone},
+			want:   true,
+		},
+		"failed after initial sync completed": {
+			status: api.PerconaServerMongoDBClusterSyncStatus{State: api.ClusterSyncStateFailed, StartedAt: started, InitialSync: done},
+		},
+		"failed on pcsm without initialSync": {
+			status: api.PerconaServerMongoDBClusterSyncStatus{State: api.ClusterSyncStateFailed, StartedAt: started},
+		},
+		"failed before this CR started pcsm": {
+			status: api.PerconaServerMongoDBClusterSyncStatus{State: api.ClusterSyncStateFailed, InitialSync: notDone},
+		},
+		"running clone": {
+			status: api.PerconaServerMongoDBClusterSyncStatus{State: api.ClusterSyncStateRunning, StartedAt: started, InitialSync: notDone},
+		},
+		"paused clone": {
+			status: api.PerconaServerMongoDBClusterSyncStatus{State: api.ClusterSyncStatePaused, StartedAt: started, InitialSync: notDone},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, initialSyncFailed(&tc.status))
 		})
 	}
 }

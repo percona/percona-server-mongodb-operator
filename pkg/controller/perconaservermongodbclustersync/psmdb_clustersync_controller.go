@@ -8,7 +8,6 @@ import (
 	"slices"
 	"time"
 
-	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +32,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
+	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -511,7 +511,13 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		applyObservedStatus(newStatus, observed, cr.Generation)
 	}
 
-	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil)
+	syncFailed := initialSyncFailed(newStatus)
+	if syncFailed && !initialSyncFailed(&cr.Status) {
+		log.Info("PCSM initial sync failed and cannot be resumed, recreate the ClusterSync to start over",
+			"error", newStatus.Error)
+	}
+
+	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil, syncFailed)
 	if action != actionNone {
 		if skipAction(action, newStatus.State) {
 			log.Info("PCSM already in matching state, skipping transition",
@@ -605,9 +611,30 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 	s.LagTimeSeconds = observed.LagTimeSeconds
 	s.Error = observed.Error
 
+	s.InitialSync = nil
+	if is := observed.InitialSync; is != nil {
+		s.InitialSync = &psmdbv1.ClusterSyncInitialSync{
+			Completed:               is.Completed,
+			ClonedSizeBytes:         is.ClonedSizeBytes,
+			EstimatedCloneSizeBytes: is.EstimatedCloneSizeBytes,
+		}
+	}
+
 	if s.StartedAt == nil && s.State == psmdbv1.ClusterSyncStateRunning {
 		now := metav1.Now()
 		s.StartedAt = &now
+	}
+
+	if initialSyncFailed(s) {
+		meta.SetStatusCondition(&s.Conditions, metav1.Condition{
+			Type:               psmdbv1.ConditionClusterSyncInitialSyncFailed,
+			Status:             metav1.ConditionTrue,
+			Reason:             "InitialSyncNotResumable",
+			Message:            "PCSM initial sync failed and cannot be resumed; delete and recreate the ClusterSync to start a new sync",
+			ObservedGeneration: generation,
+		})
+	} else {
+		meta.RemoveStatusCondition(&s.Conditions, psmdbv1.ConditionClusterSyncInitialSyncFailed)
 	}
 
 	runningStatus := metav1.ConditionFalse
