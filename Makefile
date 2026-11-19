@@ -66,6 +66,8 @@ endif
 
 .PHONY: allure-report
 allure-report: ## Open the Allure report for the collected e2e results (needs the allure CLI)
+	$(if $(ALLURE_RESULTS_DIR),,$(error ALLURE_RESULTS_DIR is empty))
+	@command -v allure >/dev/null || { echo "allure not found: install the Allure 2 CLI (https://allurereport.org/docs/install/)"; exit 1; }
 	@if [ -d e2e-tests/allure-report/history ]; then \
 		rm -rf $(ALLURE_RESULTS_DIR)/history; \
 		cp -R e2e-tests/allure-report/history $(ALLURE_RESULTS_DIR)/history; \

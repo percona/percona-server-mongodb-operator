@@ -216,7 +216,7 @@ What the report contains:
 * One Allure test per pytest test case, grouped by e2e test (the test directory). A bash test shows as one test without steps.
 * Steps from the shared helpers in `lib/` and `conftest.py` (deploy operator, apply CR, wait for pods, mongosh calls).
 * On failure: operator logs, Kubernetes resources, events, PBM status and mongod logs. For a bash test, also the last 1000 lines of the script output.
-* Passwords in `user:password@host` and `pwd: ...` are masked in step titles, attachments and kubectl error messages. Other secret formats are not.
+* Passwords in `user:password@host` and `pwd: ...` are masked in step titles, attachments and kubectl error messages. They are not masked in the failure traceback, which shows the values of function arguments, and other secret formats are not masked.
 
 When adding code:
 
