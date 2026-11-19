@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 import yaml
+from lib.allure_support import add_labels, step, write_environment
 from lib.arch import helm_arch_set_args, helm_arch_set_string_args
 from lib.cli import helm_bin, oc_bin
 from lib.kubectl import (
@@ -75,6 +76,10 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     Path(_NAMESPACE_FILE).unlink(missing_ok=True)
 
 
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    write_environment(session.config)
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption("--test-name", action="store", default=None, help="Bash test name to run")
 
@@ -83,6 +88,7 @@ def pytest_collection_modifyitems(
     session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
 ) -> None:
     """Rename bash wrapper tests to show actual test name."""
+    add_labels(config, items)
     test_name = config.getoption("--test-name")
     if not test_name:
         return
@@ -322,6 +328,7 @@ def _wait_for_project_delete(project: str, timeout: int = 180) -> None:
 
 @pytest.fixture(scope="class")
 def create_namespace() -> Callable[[str], str]:
+    @step("Create namespace {namespace}")
     def _create_namespace(namespace: str) -> str:
         """Create kubernetes namespace and clean up if exists."""
 
@@ -401,6 +408,7 @@ def _delete_namespace_crs(ns: str) -> None:
         _kubectl_quietly("delete", kind, "--all", "-n", ns, "--ignore-not-found", "--wait=false")
 
 
+@step("Clean up the test environment")
 def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
     """Best-effort teardown: strip finalizers, fire-and-forget deletes, never hang."""
     logger.info("Cleaning up test environment")
@@ -451,6 +459,7 @@ def create_infra(
     global _current_namespace
     created_namespaces: list[str] = []
 
+    @step("Create test infrastructure for {test_name}")
     def _create_infra(test_name: str) -> str:
         """Create the necessary infrastructure for the tests."""
         global _current_namespace
@@ -531,6 +540,7 @@ def _cert_manager_url() -> str:
     return f"https://github.com/cert-manager/cert-manager/releases/download/v{os.environ.get('CERT_MANAGER_VER')}/cert-manager.yaml"
 
 
+@step("Delete cert-manager")
 def _delete_cert_manager() -> None:
     """Remove cert-manager before another test can use its stale API resources."""
     if env_bool("RANCHER"):
@@ -637,6 +647,7 @@ def destroy_cert_manager() -> Callable[[], None]:
 def deploy_cert_manager() -> Generator[Callable[..., None]]:
     """Deploy Cert Manager and clean up after tests."""
 
+    @step("Deploy cert-manager")
     def _deploy(*extra_args: str) -> None:
         if env_bool("RANCHER"):
             logger.info("Rancher cluster detected, skipping cert-manager deployment")

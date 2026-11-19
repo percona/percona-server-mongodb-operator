@@ -148,6 +148,26 @@ EOF
     }
 }
 
+// Publishes the Allure report of the tests run in this build. It is kept with the build in
+// Jenkins (not uploaded to S3) and removed by the build retention. A publishing problem
+// does not fail the build. Returns true when the report was published.
+boolean publishAllureReport() {
+    if (sh(returnStatus: true, script: 'ls e2e-tests/allure-results/*-result.json >/dev/null 2>&1') != 0) {
+        echo 'No Allure results in e2e-tests/allure-results, skipping the Allure report'
+        return false
+    }
+    try {
+        allure includeProperties: false, results: [[path: 'e2e-tests/allure-results']]
+        return true
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (Throwable exc) {
+        // Throwable: a missing plugin raises NoSuchMethodError, which is not an Exception.
+        echo "Warning: failed to publish the Allure report: ${exc}"
+        return false
+    }
+}
+
 void pushReportFile() {
     echo "Push ${reportHtml} to S3!"
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
@@ -939,6 +959,7 @@ pipeline {
                         """
                         junit testResults: reportXml, healthScaleFactor: 1.0
                         archiveArtifacts "${reportXml}"
+                        def allurePublished = publishAllureReport()
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
@@ -958,6 +979,9 @@ pipeline {
                             TestsReport = TestsReport + "Test report: [report](${reportUrl})\r\n"
                         } else {
                             echo "No pytest-html reports in e2e-tests/reports, skipping the HTML report merge"
+                        }
+                        if (allurePublished) {
+                            TestsReport = TestsReport + "Allure report: [allure](${env.BUILD_URL}allure/) (tests that ran and finished in this build only; see the table above for timeouts)\r\n"
                         }
                         pullRequest.comment(TestsReport)
                     }

@@ -6,6 +6,7 @@ from typing import Any
 
 from pytest_html import extras
 
+from lib.allure_support import attach_summary, mask
 from lib.k8s_collector import K8sCollector
 from lib.kubectl import kubectl_bin
 
@@ -186,7 +187,9 @@ def generate_report(namespace: str) -> list[Any]:
         </div>
         """
 
-    summary = K8sCollector(namespace).capture_summary()
+    # Masked once for both the HTML report and Allure (exact secret values: K8SPSMDB-1940).
+    summary = {key: mask(text) for key, text in K8sCollector(namespace).capture_summary().items()}
+    attach_summary(summary)
 
     return [
         extras.html(
