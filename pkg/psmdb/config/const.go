@@ -15,11 +15,15 @@ const (
 	MinWiredTigerCacheSizeGB float64 = 0.25
 
 	// MongodDataVolClaimName is a PVC Claim name
-	MongodDataVolClaimName = "mongod-data"
-	MongosLogVolClaimName  = "mongos-logs"
+	MongodDataVolClaimName    = "mongod-data"
+	MongodLogVolClaimName     = "mongod-logs"
+	MongodJournalVolClaimName = "mongod-journal"
+	MongosLogVolClaimName     = "mongos-logs"
 	// MongodContainerDataDir is a mongo data path in container
 	MongodContainerDataDir     = "/data/db"
 	MongodContainerDataLogsDir = "/data/db/logs"
+	MongodContainerJournalDir  = "/data/db/journal"
+	JournalMigrationDir        = "/mnt/journal"
 	BinVolumeName              = "bin"
 	BinMountPath               = "/opt/percona"
 
@@ -195,6 +199,13 @@ func MongodLogVolume() LogVolume {
 	return LogVolume{
 		Name:      MongodDataVolClaimName,
 		MountPath: MongodContainerDataDir,
+	}
+}
+
+func MongodPVCLogVolume() LogVolume {
+	return LogVolume{
+		Name:      MongodLogVolClaimName,
+		MountPath: MongodContainerDataLogsDir,
 	}
 }
 

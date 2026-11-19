@@ -1242,3 +1242,210 @@ func TestCreateOrUpdateDBConfigSecret(t *testing.T) {
 		assert.True(t, strings.Contains(content, "vault.example.com"))
 	})
 }
+
+func TestRolloutRestoredPVCsJournal(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name:      "my-cluster",
+		Namespace: ns,
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			Replsets: []*psmdbv1.ReplsetSpec{{Name: "rs0", Size: 2}},
+		},
+	}
+	rs := cluster.Spec.Replsets[0]
+	restore := &psmdbv1.PerconaServerMongoDBRestore{Name: "my-restore", Namespace: ns}
+
+	claim := func(name string) corev1.PersistentVolumeClaim {
+		return corev1.PersistentVolumeClaim{
+			Name: name,
+			Spec: corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}},
+		}
+	}
+	sts := func(claims ...string) *appsv1.StatefulSet {
+		sfs := &appsv1.StatefulSet{Name: naming.MongodStatefulSetName(cluster, rs), Namespace: ns}
+		for _, c := range claims {
+			sfs.Spec.VolumeClaimTemplates = append(sfs.Spec.VolumeClaimTemplates, claim(c))
+		}
+		return sfs
+	}
+	backup := func(journalSnapshot string) *psmdbv1.PerconaServerMongoDBBackup {
+		return &psmdbv1.PerconaServerMongoDBBackup{
+			Name:      "my-backup",
+			Namespace: ns,
+			Status: psmdbv1.PerconaServerMongoDBBackupStatus{
+				Snapshots: psmdbv1.SnapshotInfos{
+					{ReplsetName: "rs0", SnapshotName: "snapshot-rs0", JournalSnapshotName: journalSnapshot},
+				},
+			},
+		}
+	}
+	journalPVC := func(pod int) string {
+		return config.MongodJournalVolClaimName + "-" + rs.PodName(cluster, pod)
+	}
+
+	tests := map[string]struct {
+		sts             *appsv1.StatefulSet
+		backup          *psmdbv1.PerconaServerMongoDBBackup
+		existing        []client.Object
+		wantErr         string
+		wantJournalFrom *string
+	}{
+		"journal restored from its snapshot": {
+			sts:             sts(config.MongodDataVolClaimName, config.MongodJournalVolClaimName),
+			backup:          backup("journal-rs0"),
+			wantJournalFrom: new("journal-rs0"),
+		},
+		"live journal replaced with an empty one when the backup has none": {
+			sts:    sts(config.MongodDataVolClaimName, config.MongodJournalVolClaimName),
+			backup: backup(""),
+			existing: []client.Object{&corev1.PersistentVolumeClaim{
+				Name:      journalPVC(0),
+				Namespace: ns,
+			}},
+			wantJournalFrom: new(""),
+		},
+		"no journal claim template leaves journal pvcs alone": {
+			sts:    sts(config.MongodDataVolClaimName),
+			backup: backup(""),
+		},
+		"journal snapshot without journal storage is rejected": {
+			sts:     sts(config.MongodDataVolClaimName),
+			backup:  backup("journal-rs0"),
+			wantErr: "backup has a journal snapshot for replset rs0 but " + rs.PodName(cluster, 0) + " has no journalStorage",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := fakeReconciler(append([]client.Object{cluster, tt.sts, restore, tt.backup}, tt.existing...)...)
+			status := &psmdbv1.PerconaServerMongoDBRestoreStatus{}
+
+			var done bool
+			var err error
+			for range 2 {
+				done, err = r.rolloutRestoredPVCs(t.Context(), cluster, restore, tt.backup, status)
+				if err != nil || done {
+					break
+				}
+			}
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, done)
+
+			for pod := range int(rs.Size) {
+				pvc := &corev1.PersistentVolumeClaim{}
+				err := r.client.Get(t.Context(), types.NamespacedName{Name: journalPVC(pod), Namespace: ns}, pvc)
+				if tt.wantJournalFrom == nil {
+					assert.True(t, k8sErrors.IsNotFound(err), "unexpected journal pvc %s", journalPVC(pod))
+					continue
+				}
+				require.NoError(t, err)
+				assert.Equal(t, restore.Name, pvc.Annotations[naming.AnnotationRestoreName])
+				if *tt.wantJournalFrom == "" {
+					assert.Nil(t, pvc.Spec.DataSource)
+					continue
+				}
+				require.NotNil(t, pvc.Spec.DataSource)
+				assert.Equal(t, *tt.wantJournalFrom, pvc.Spec.DataSource.Name)
+			}
+		})
+	}
+}
+
+func TestScaleDownStatefulSetsMountsJournal(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name:      "my-cluster",
+		Namespace: ns,
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			Replsets: []*psmdbv1.ReplsetSpec{{
+				Name:          "rs0",
+				Size:          1,
+				Configuration: psmdbv1.MongoConfiguration("security:\n  enableEncryption: false"),
+			}},
+		},
+	}
+	rs := cluster.Spec.Replsets[0]
+
+	tests := map[string]struct {
+		claims    []string
+		mounts    []corev1.VolumeMount
+		wantMount bool
+	}{
+		"journal claim template gets mounted": {
+			claims:    []string{config.MongodDataVolClaimName, config.MongodJournalVolClaimName},
+			wantMount: true,
+		},
+		"existing journal mount is not duplicated": {
+			claims:    []string{config.MongodDataVolClaimName, config.MongodJournalVolClaimName},
+			mounts:    []corev1.VolumeMount{{Name: config.MongodJournalVolClaimName, MountPath: config.MongodContainerJournalDir}},
+			wantMount: true,
+		},
+		"no journal claim template": {
+			claims: []string{config.MongodDataVolClaimName},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			stsName := naming.MongodStatefulSetName(cluster, rs)
+			sfs := &appsv1.StatefulSet{
+				Name:      stsName,
+				Namespace: ns,
+				Spec: appsv1.StatefulSetSpec{
+					Replicas: new(int32(1)),
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": stsName}},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": stsName}},
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{{Name: "mongod", VolumeMounts: tt.mounts}},
+						},
+					},
+				},
+			}
+			for _, c := range tt.claims {
+				sfs.Spec.VolumeClaimTemplates = append(sfs.Spec.VolumeClaimTemplates, corev1.PersistentVolumeClaim{Name: c})
+			}
+			r := fakeReconciler(cluster, sfs)
+
+			_, err := r.scaleDownStatefulSetsForSnapshotRestore(t.Context(), cluster, &psmdbv1.PerconaServerMongoDBRestoreStatus{PBMname: "pbm-restore"})
+			require.NoError(t, err)
+
+			updated := &appsv1.StatefulSet{}
+			require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: stsName, Namespace: ns}, updated))
+			var journalMounts []corev1.VolumeMount
+			for _, m := range updated.Spec.Template.Spec.Containers[0].VolumeMounts {
+				if m.Name == config.MongodJournalVolClaimName {
+					journalMounts = append(journalMounts, m)
+				}
+			}
+			if !tt.wantMount {
+				assert.Empty(t, journalMounts)
+				return
+			}
+			require.Len(t, journalMounts, 1)
+			assert.Equal(t, config.MongodContainerJournalDir, journalMounts[0].MountPath)
+		})
+	}
+}
+
+func TestGeneratePVCFromSnapshotWithoutSnapshot(t *testing.T) {
+	t.Parallel()
+
+	pvc := &corev1.PersistentVolumeClaim{}
+	generatePVCFromSnapshot(pvc, nil, corev1.PersistentVolumeClaimSpec{}, "", "my-restore")
+
+	assert.Nil(t, pvc.Spec.DataSource)
+	assert.Equal(t, "my-restore", pvc.Annotations[naming.AnnotationRestoreName])
+}
