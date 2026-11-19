@@ -17,10 +17,11 @@ Contribution rules (CLA, Jira, branches, review) are in
 
 - `pkg/`: operator code. `pkg/apis/psmdb/v1` holds the CRD types,
   `pkg/controller/*` the reconcilers.
-- `deploy/`: manifests and the example `cr.yaml`. `make manifests` generates
-  `crd.yaml`, `bundle.yaml` and `cw-bundle.yaml`, and sets the operator image
-  in `operator.yaml` and `cw-operator.yaml`. `rbac.yaml` and `cw-rbac.yaml`
-  are edited by hand; the code has no `+kubebuilder:rbac` markers.
+- `deploy/`: manifests and the example `cr.yaml`. `make generate manifests`
+  generates `crd.yaml`, `bundle.yaml` and `cw-bundle.yaml`, and sets the
+  operator image in `operator.yaml` and `cw-operator.yaml`; `make manifests`
+  alone misses new CRD fields. `rbac.yaml` and `cw-rbac.yaml` are edited by
+  hand; the code has no `+kubebuilder:rbac` markers.
   `crVersion` in `deploy/cr.yaml` is the version e2e tests treat as current.
 - `pkg/version/version.txt`: the operator version.
 - `e2e-tests/`: end-to-end tests against a real cluster.
