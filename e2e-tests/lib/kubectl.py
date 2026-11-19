@@ -5,6 +5,8 @@ import re
 import subprocess
 import time
 import urllib.request
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
@@ -110,33 +112,111 @@ def kubectl_bin(
     return result.stdout
 
 
-def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, timeout: int) -> None:
-    """Poll `kubectl get` until the jsonpath value equals `expected`, else raise TimeoutError."""
+# Container waiting reasons that do not fix themselves. A wait fails once one of them has
+# lasted FATAL_GRACE seconds, instead of running into its full timeout. The grace period
+# covers short-lived cases such as a registry rate limit or a secret created a bit later.
+FATAL_WAIT_REASONS = frozenset(
+    {
+        "ErrImagePull",
+        "ImagePullBackOff",
+        "InvalidImageName",
+        "CreateContainerConfigError",
+        "CreateContainerError",
+    }
+)
+FATAL_GRACE = 120
+PROBLEM_CHECK_INTERVAL = 10
+
+
+@dataclass(frozen=True)
+class Problem:
+    """What a wait found wrong with the resource. `fatal` means it will not recover."""
+
+    detail: str
+    fatal: bool = False
+
+
+def _wait_for(
+    what: str,
+    resource: list[str],
+    jsonpath: str,
+    expected: str,
+    timeout: int,
+    find_problem: Callable[[], Problem | None] | None = None,
+) -> None:
+    """Poll `kubectl get` until the jsonpath value equals `expected`.
+
+    Raises TimeoutError after `timeout` seconds, or RuntimeError once `find_problem`
+    has reported a fatal problem for FATAL_GRACE seconds. Both errors carry the last
+    status and the last problem seen.
+    """
     logger.info(f"Waiting for {what} to be ready...")
-    deadline = time.time() + timeout
+    start = time.monotonic()
+    deadline = start + timeout
     status = ""
-    while time.time() < deadline:
+    problem: Problem | None = None
+    fatal_since: float | None = None
+    next_check = start + PROBLEM_CHECK_INTERVAL
+    while time.monotonic() < deadline:
         status = kubectl_bin(
             "get", *resource, "-o", f"jsonpath={jsonpath}", check=False, return_stderr=True
         ).strip("'\n ")
         if status == expected:
-            logger.info(f"{what} is ready")
+            logger.info(f"{what} is ready after {time.monotonic() - start:.0f}s")
             return
+        now = time.monotonic()
+        if find_problem and now >= next_check:
+            next_check = now + PROBLEM_CHECK_INTERVAL
+            problem = find_problem()
+            if problem and problem.fatal:
+                fatal_since = fatal_since or now
+                if now - fatal_since >= FATAL_GRACE:
+                    raise RuntimeError(
+                        f"{what} cannot become ready, stopped after {now - start:.0f}s: "
+                        f"{problem.detail}. Last status: {status or 'unknown'}"
+                    )
+            else:
+                fatal_since = None
         time.sleep(1)
 
+    detail = f". Last problem: {problem.detail}" if problem else ""
     raise TimeoutError(
-        f"Timeout waiting for {what} to be ready. Last status: {status or 'unknown'}"
+        f"Timeout waiting for {what} to be ready after {timeout}s. "
+        f"Last status: {status or 'unknown'}{detail}"
     )
 
 
+def _pod_problem(pod_name: str) -> Problem | None:
+    """Report the containers of a pod that are waiting, and whether any reason is fatal."""
+    out = kubectl_bin("get", "pod", pod_name, "-o", "json", check=False)
+    try:
+        status = json.loads(out).get("status", {})
+    except json.JSONDecodeError:
+        return None
+    waiting = []
+    fatal = False
+    for container in status.get("initContainerStatuses", []) + status.get("containerStatuses", []):
+        state = container.get("state", {}).get("waiting")
+        if not state or state.get("reason") in (None, "PodInitializing", "ContainerCreating"):
+            continue
+        reason = state["reason"]
+        fatal = fatal or reason in FATAL_WAIT_REASONS
+        message = state.get("message", "")
+        waiting.append(f"{container.get('name')}: {reason}" + (f" ({message})" if message else ""))
+    if not waiting:
+        return None
+    return Problem("; ".join(waiting), fatal)
+
+
 def wait_pod(pod_name: str, timeout: int = 360) -> None:
-    """Wait for pod to be ready."""
+    """Wait for pod to be ready. Fails early when a container cannot start."""
     _wait_for(
         f"pod/{pod_name}",
         ["pod", pod_name],
         "{.status.phase} {.status.conditions[?(@.type=='Ready')].status}",
         "Running True",
         timeout,
+        find_problem=lambda: _pod_problem(pod_name),
     )
 
 

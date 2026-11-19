@@ -43,7 +43,7 @@ These are the checks CI runs on every PR. Run the ones that match your change.
 | ------ | ------- |
 | Go code | `make test` (unit and envtest), golangci-lint |
 | CRD types or RBAC markers | `make generate manifests`, then commit the generated files |
-| Python under `e2e-tests/` | `make py-fmt` and `make py-check` (ruff and mypy) |
+| Python under `e2e-tests/` | `make py-fmt`, `make py-check` (ruff and mypy) and `make py-unit` (harness unit tests) |
 | Shell scripts | `shellcheck`, and `shfmt -bn -ci -s` (the CI formatter flags) |
 
 ## Conventions

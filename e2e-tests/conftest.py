@@ -147,7 +147,7 @@ def pytest_report_teststatus(
 
 @pytest.hookimpl(trylast=True)
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
-    """Print a clear separator around call-phase results so they aren't buried in logs."""
+    """Print a separator with the step duration around call-phase results."""
     if report.when != "call":
         return
     if report.passed:
@@ -159,7 +159,7 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     else:
         return
     sep = "=" * 100
-    _console.print(f"\n{sep}\n[{status}] {report.nodeid}\n{sep}\n")
+    _console.print(f"\n{sep}\n[{status} {report.duration:.0f}s] {report.nodeid}\n{sep}\n")
 
 
 def _get_current_namespace() -> str | None:

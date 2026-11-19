@@ -158,6 +158,7 @@ make py-deps          # Install Python dependencies (locked versions)
 make py-update-deps   # Update Python dependencies
 make py-fmt           # Format code and organize imports with ruff
 make py-check         # Run ruff linter and mypy type checks
+make py-unit          # Run the harness unit tests in lib/tests (no cluster needed)
 make e2e-test TEST=<name>  # Run a single e2e test (Python or bash via pytest)
 ```
 

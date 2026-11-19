@@ -37,3 +37,6 @@ jobs:
         run: |
           uv run mypy e2e-tests/
           MYPYPATH=e2e-tests uv run mypy installers/olm/e2e-tests/
+
+      - name: Run harness unit tests
+        run: uv run pytest --noconftest -p no:cacheprovider e2e-tests/lib/tests
