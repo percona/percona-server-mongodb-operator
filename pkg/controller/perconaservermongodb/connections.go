@@ -20,17 +20,18 @@ type MongoClientProvider interface {
 
 func (r *ReconcilePerconaServerMongoDB) getMongoClientProvider() MongoClientProvider {
 	if r.mongoClientProvider == nil {
-		return &mongoClientProvider{r.client}
+		return &mongoClientProvider{k8sclient: r.client, apiReader: r.apiReader}
 	}
 	return r.mongoClientProvider
 }
 
 type mongoClientProvider struct {
 	k8sclient client.Client
+	apiReader client.Reader
 }
 
 func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
+	c, err := getInternalCredentials(ctx, p.apiReader, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
@@ -39,7 +40,7 @@ func (p *mongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMo
 }
 
 func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
+	c, err := getInternalCredentials(ctx, p.apiReader, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
@@ -48,7 +49,7 @@ func (p *mongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerM
 }
 
 func (p *mongoClientProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	c, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
+	c, err := getInternalCredentials(ctx, p.apiReader, cr, role)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get credentials")
 	}
