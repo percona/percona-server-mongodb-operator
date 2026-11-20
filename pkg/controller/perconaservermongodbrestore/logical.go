@@ -34,6 +34,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 	if err != nil {
 		log.Info("Waiting for pbm-agent.")
 		status.State = psmdbv1.RestoreStateWaiting
+		status.WaitingReason = psmdbv1.RestoreWaitingReasonPBMAgent
 		return status, nil
 	}
 	defer func() {
@@ -56,6 +57,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 		if isBlockedByPITR {
 			log.Info("Waiting for PITR to be disabled.")
 			status.State = psmdbv1.RestoreStateWaiting
+			status.WaitingReason = psmdbv1.RestoreWaitingReasonPITR
 			return status, nil
 		}
 

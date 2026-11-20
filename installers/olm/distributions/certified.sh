@@ -68,6 +68,7 @@ set_image_ref() {
 	local tag="$4"
 	local digest_var
 	local digest
+	local dev_image
 
 	digest_var="REDHAT_IMAGE_DIGEST_$(digest_key "${key}")"
 	digest="${!digest_var:-}"
@@ -76,13 +77,22 @@ set_image_ref() {
 		digest="$(catalog_digest "${repository}" "${tag}")" || digest=""
 	fi
 
+	# A development bundle of an unreleased version has no certified images yet:
+	# use the development image of e2e-tests/release_versions, as community does.
+	# require_release_image has checked that the key is set.
+	if [[ -z ${digest} && ${BUNDLE_DEV_IMAGES:-0} == "1" ]]; then
+		dev_image="${!key}"
+		log "No Red Hat digest for ${repository}:${tag}; using the development image ${dev_image}"
+		qualified_image "${dev_image}"
+		return
+	fi
+
 	if [[ -z "${digest}" ]]; then
 		if [[ "${BUNDLE_SKIP_DIGEST_FAILURE:-0}" != "1" ]]; then
 			abort "unable to resolve digest for ${redhat_registry}/${repository}:${tag}; set BUNDLE_SKIP_DIGEST_FAILURE=1 to continue with <DIGEST>"
 		fi
 
 		digest="<DIGEST>"
-		redhat_missing_digests+=("${name}:${redhat_registry}/${repository}:${tag}")
 	fi
 
 	if [[ "${digest}" != "<DIGEST>" ]]; then
@@ -136,7 +146,13 @@ add_related_image() {
 
 	validate_certified_tag "${key}" "${tag}" "${source_tag}"
 
-	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")"
+	# set_image_ref runs in a subshell: its abort only ends that subshell, and
+	# it cannot update redhat_missing_digests. Both are handled here.
+	image="$(set_image_ref "${key}" "${name}" "${repository}" "${tag}")" || exit $?
+	[[ -n ${image} ]] || abort "empty image reference for ${name}"
+	if [[ ${image} == *"@<DIGEST>" ]]; then
+		redhat_missing_digests+=("${name}:${redhat_registry}/${repository}:${tag}")
+	fi
 
 	log "Related image ${name}: ${image}"
 
