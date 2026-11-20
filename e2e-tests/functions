@@ -427,7 +427,10 @@ wait_pod() {
 recreate_failed_certificates() {
 	local cert
 	for cert in $(kubectl get certificate -o json 2>/dev/null \
-		| jq -r '.items[] | select(any(.status.conditions[]?; .type == "Issuing" and ((.message // "") | contains("CSR not signed by referenced private key")))) | .metadata.name'); do
+		| jq -r '.items[]
+			| select(any(.metadata.ownerReferences[]?; .kind == "PerconaServerMongoDB" and (.apiVersion // "" | startswith("psmdb.percona.com/"))))
+			| select(any(.status.conditions[]?; .type == "Issuing" and ((.message // "") | contains("CSR not signed by referenced private key"))))
+			| .metadata.name'); do
 		echo "Certificate ${cert} failed to issue, recreating it"
 		kubectl_bin delete certificate "${cert}" --ignore-not-found
 	done
