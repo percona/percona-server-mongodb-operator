@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -23,6 +22,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func (r *ReconcilePerconaServerMongoDB) smartUpdate(
@@ -245,7 +245,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 			}
 		} else {
 			forceStepDown := replset.Size == 1
-			log.Info("doing step down...", "force", forceStepDown)
+			sslChanged := isSSLChanged(sfs, &primaryPod)
+
 			cl, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
 			if err != nil {
 				return fmt.Errorf("failed to get mongo client: %v", err)
@@ -258,16 +259,24 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 				}
 			}()
 
-			err = cl.StepDown(ctx, 60, forceStepDown)
-			if err != nil {
-				if strings.Contains(err.Error(), "No electable secondaries caught up") {
-					err = cl.StepDown(ctx, 60, true)
-					if err != nil {
-						return errors.Wrap(err, "failed to do forced step down")
-					}
-				} else {
-					return errors.Wrap(err, "failed to do step down")
+			if !forceStepDown {
+				err := cl.WaitSecondaryCatchUp(ctx, maxStepDownLag, replicationStallTimeout, secondaryCatchUpTimeout)
+				// a cert change may break replication until the primary is restarted too
+				if sslChanged && errors.Is(err, mongo.ErrReplicationStalled) {
+					log.Info("replication stalled after SSL change, doing forced step down", "reason", err.Error())
+					r.recorder.Eventf(cr, corev1.EventTypeWarning, "ForcedStepDown",
+						"Replset %s: replication stalled after SSL change, forcing step down of %s: %v", replset.Name, primaryPod.Name, err)
+					forceStepDown = true
+				} else if err != nil {
+					r.recorder.Eventf(cr, corev1.EventTypeWarning, "SecondaryNotCaughtUp",
+						"Replset %s: smart update postponed, primary %s is not stepped down: %v", replset.Name, primaryPod.Name, err)
+					return errors.Wrap(err, "wait secondary catch up")
 				}
+			}
+
+			log.Info("doing step down...", "force", forceStepDown, "sslChanged", sslChanged)
+			if err := cl.StepDown(ctx, 60, forceStepDown); err != nil {
+				return errors.Wrap(err, "failed to do step down")
 			}
 
 			log.Info("apply changes to primary pod", "pod", primaryPod.Name)
@@ -280,6 +289,21 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	log.Info("smart update finished for statefulset")
 
 	return nil
+}
+
+const (
+	maxStepDownLag          = 10 * time.Second
+	replicationStallTimeout = 30 * time.Second
+	secondaryCatchUpTimeout = 2 * time.Minute
+)
+
+func isSSLChanged(sfs *appsv1.StatefulSet, pod *corev1.Pod) bool {
+	for _, key := range []string{naming.AnnotationSSLHash, naming.AnnotationSSLInternalHash} {
+		if sfs.Spec.Template.Annotations[key] != pod.Annotations[key] {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {

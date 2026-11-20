@@ -1,0 +1,32 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: smart-update-lag
+spec:
+  image:
+  imagePullPolicy: Always
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    apply: Disabled
+  replsets:
+  - name: rs0
+    affinity:
+      antiAffinityTopologyKey: none
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1G
+      requests:
+        cpu: 100m
+        memory: 0.1G
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 1Gi
+    size: 3
+    configuration: |
+      setParameter:
+        enableTestCommands: 1
+  secrets:
+    users: some-users
