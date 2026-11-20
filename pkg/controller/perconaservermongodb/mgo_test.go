@@ -468,6 +468,21 @@ func TestCompareRoles(t *testing.T) {
 			},
 			expected: false,
 		},
+		"order is different across databases": {
+			x: []mongo.Role{
+				{DB: "admin", Role: "readWrite"},
+				{DB: "local", Role: "backup"},
+				{DB: "admin", Role: "clusterMonitor"},
+				{DB: "config", Role: "read"},
+			},
+			y: []mongo.Role{
+				{DB: "config", Role: "read"},
+				{DB: "admin", Role: "clusterMonitor"},
+				{DB: "local", Role: "backup"},
+				{DB: "admin", Role: "readWrite"},
+			},
+			expected: true,
+		},
 	}
 
 	for name, tt := range tests {
