@@ -2082,10 +2082,7 @@ apply_cluster() {
 			| kubectl_bin apply -f -
 	else
 		cat_config "$1" \
-			| yq eval '
-				del(.spec.backup.tasks.[1]) |
-				del(.spec.backup.tasks.[1]) |
-				del(.spec.backup.tasks.[1])' - \
+			| yq eval 'del(.spec.backup.tasks[] | select(key > 0))' - \
 			| kubectl_bin apply -f -
 	fi
 }

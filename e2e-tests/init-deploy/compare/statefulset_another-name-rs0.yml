@@ -272,6 +272,9 @@ spec:
               name: mongod-data
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /etc/users-secret
+              name: users-secret-file
+              readOnly: true
       dnsPolicy: ClusterFirst
       initContainers:
         - command:

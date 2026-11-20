@@ -211,6 +211,9 @@ spec:
               name: mongos-logs
             - mountPath: /opt/percona
               name: bin
+            - mountPath: /etc/users-secret
+              name: users-secret-file
+              readOnly: true
             - mountPath: /etc/mongodb-ssl
               name: ssl
               readOnly: true

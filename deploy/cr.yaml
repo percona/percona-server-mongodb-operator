@@ -1094,10 +1094,11 @@ spec:
 #      configuration: |
 #        /data/db/logs/mongod.full.log {
 #           daily
-#           maxsize 100M
+#           maxsize 500M
 #           rotate 7
 #           missingok
-#           nocompress
+#           compress
+#           delaycompress
 #           notifempty
 #           copytruncate
 #           sharedscripts
@@ -1116,7 +1117,7 @@ spec:
 #                   cat "$tls_dir/tls.key" "$tls_dir/tls.crt" >"$tls_pem" || exit 1
 #               fi
 #               if ! mongosh "$uri" \
-#                   ${tls_pem:+--tls $tls_allow_invalid --tlsCAFile "$tls_dir/ca.crt" --tlsCertificateKeyFile "$tls_pem"} \
+#                   ${tls_pem:+--tls --tlsAllowInvalidHostnames $tls_allow_invalid --tlsCAFile "$tls_dir/ca.crt" --tlsCertificateKeyFile "$tls_pem"} \
 #                   --eval 'db.adminCommand({ logRotate: 1 })'; then
 #                   echo 'ERROR: failed to rotate mongod.log with mongosh' >&2
 #                   exit 1
@@ -1126,7 +1127,7 @@ spec:
 #        }
 #      extraConfig:
 #        name: logrotate-config
-#      schedule: "0 0 * * *"
+#      schedule: "0 * * * *"
 #      # Add a liveness/readiness probe for the logrotate container.
 #      # When not set, the container has no probes.
 #      livenessProbe:
