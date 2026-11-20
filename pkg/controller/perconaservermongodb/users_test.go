@@ -65,8 +65,10 @@ func TestSystemUserUpdateMongo(t *testing.T) {
 
 	tests := map[string]struct {
 		existing  []string
+		roles     map[string][]mongo.Role
 		user      systemUser
 		wantUsers []string
+		wantRoles []mongo.Role
 		wantErr   bool
 	}{
 		"password change": {
@@ -89,6 +91,25 @@ func TestSystemUserUpdateMongo(t *testing.T) {
 			user:      systemUser{currName: []byte("newmonitorusername"), name: []byte("clusterMonitor"), pass: []byte("new-pass")},
 			wantUsers: []string{"clusterMonitor"},
 		},
+		"rename when new user already exists with the same roles in another order": {
+			existing: []string{"newmonitorusername", "clusterMonitor"},
+			roles: map[string][]mongo.Role{
+				"newmonitorusername": {{Role: "clusterMonitor", DB: "admin"}, {Role: "read", DB: "local"}},
+				"clusterMonitor":     {{Role: "read", DB: "local"}, {Role: "clusterMonitor", DB: "admin"}},
+			},
+			user:      systemUser{currName: []byte("newmonitorusername"), name: []byte("clusterMonitor"), pass: []byte("new-pass")},
+			wantUsers: []string{"clusterMonitor"},
+			wantRoles: []mongo.Role{{Role: "clusterMonitor", DB: "admin"}, {Role: "read", DB: "local"}},
+		},
+		"rename when new user already exists with different roles": {
+			existing: []string{"newmonitorusername", "clusterMonitor"},
+			roles: map[string][]mongo.Role{
+				"clusterMonitor": {{Role: "root", DB: "admin"}},
+			},
+			user:      systemUser{currName: []byte("newmonitorusername"), name: []byte("clusterMonitor"), pass: []byte("new-pass")},
+			wantUsers: []string{"newmonitorusername", "clusterMonitor"},
+			wantErr:   true,
+		},
 		"rename when neither user exists": {
 			user:    systemUser{currName: []byte("newmonitorusername"), name: []byte("clusterMonitor"), pass: []byte("new-pass")},
 			wantErr: true,
@@ -100,20 +121,32 @@ func TestSystemUserUpdateMongo(t *testing.T) {
 			t.Parallel()
 
 			c := newUserStoreClient(tt.existing...)
-			err := tt.user.updateMongo(t.Context(), c)
-			if tt.wantErr {
-				require.Error(t, err)
-				return
+			for name, roles := range tt.roles {
+				c.users[name].Roles = roles
 			}
-			require.NoError(t, err)
+			err := tt.user.updateMongo(t.Context(), c)
 
 			got := make([]string, 0, len(c.users))
 			for u := range c.users {
 				got = append(got, u)
 			}
 			assert.ElementsMatch(t, tt.wantUsers, got)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				for _, name := range tt.existing {
+					assert.Equal(t, "old-pass", c.passwords[name])
+				}
+				return
+			}
+			require.NoError(t, err)
+
 			assert.Equal(t, "new-pass", c.passwords[string(tt.user.name)])
-			assert.Equal(t, []mongo.Role{{Role: "clusterMonitor", DB: "admin"}}, c.users[string(tt.user.name)].Roles)
+			wantRoles := tt.wantRoles
+			if wantRoles == nil {
+				wantRoles = []mongo.Role{{Role: "clusterMonitor", DB: "admin"}}
+			}
+			assert.ElementsMatch(t, wantRoles, c.users[string(tt.user.name)].Roles)
 		})
 	}
 }
