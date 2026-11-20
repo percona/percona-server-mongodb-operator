@@ -10,6 +10,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/percona/percona-backup-mongodb/pbm/config"
@@ -333,6 +334,67 @@ func TestRestorePBMConfig(t *testing.T) {
 
 		require.NoError(t, r.restorePBMConfig(t.Context(), pbmc, cluster))
 	})
+
+	t.Run("no PBM config yet", func(t *testing.T) {
+		t.Parallel()
+
+		cluster := newCluster(version.Version(), map[string]psmdbv1.BackupStorageSpec{"local-s3": s3Storage("pitr-prefix-2")})
+		r := fakeReconciler(cluster)
+		pbmc := NewMockPBM(gomock.NewController(t))
+
+		gomock.InOrder(
+			pbmc.EXPECT().GetConfig(gomock.Any()).Return(nil, mongo.ErrNoDocuments),
+			pbmc.EXPECT().GetNSetConfig(gomock.Any(), r.client, cluster).Return(nil),
+			pbmc.EXPECT().ResyncMainStorageAndWait(gomock.Any()).Return(nil),
+		)
+
+		require.NoError(t, r.restorePBMConfig(t.Context(), pbmc, cluster))
+	})
+
+	errorTests := map[string]struct {
+		expect  func(pbmc *MockPBM, r *ReconcilePerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, staleCfg *config.Config)
+		wantErr string
+	}{
+		"get current config fails": {
+			expect: func(pbmc *MockPBM, _ *ReconcilePerconaServerMongoDBRestore, _ *psmdbv1.PerconaServerMongoDB, _ *config.Config) {
+				pbmc.EXPECT().GetConfig(gomock.Any()).Return(nil, assert.AnError)
+			},
+			wantErr: "get current PBM config",
+		},
+		"set config fails": {
+			expect: func(pbmc *MockPBM, r *ReconcilePerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, staleCfg *config.Config) {
+				gomock.InOrder(
+					pbmc.EXPECT().GetConfig(gomock.Any()).Return(staleCfg, nil),
+					pbmc.EXPECT().GetNSetConfig(gomock.Any(), r.client, cluster).Return(assert.AnError),
+				)
+			},
+			wantErr: "set PBM config",
+		},
+		"resync fails": {
+			expect: func(pbmc *MockPBM, r *ReconcilePerconaServerMongoDBRestore, cluster *psmdbv1.PerconaServerMongoDB, staleCfg *config.Config) {
+				gomock.InOrder(
+					pbmc.EXPECT().GetConfig(gomock.Any()).Return(staleCfg, nil),
+					pbmc.EXPECT().GetNSetConfig(gomock.Any(), r.client, cluster).Return(nil),
+					pbmc.EXPECT().ResyncMainStorageAndWait(gomock.Any()).Return(assert.AnError),
+				)
+			},
+			wantErr: "resync main storage",
+		},
+	}
+	for name, tt := range errorTests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := newCluster(version.Version(), map[string]psmdbv1.BackupStorageSpec{"local-s3": s3Storage("pitr-prefix-2")})
+			r := fakeReconciler(cluster)
+			pbmc := NewMockPBM(gomock.NewController(t))
+			tt.expect(pbmc, r, cluster, pbmConfigWith(t, cluster, s3Storage("pitr-prefix-1")))
+
+			err := r.restorePBMConfig(t.Context(), pbmc, cluster)
+			require.ErrorIs(t, err, assert.AnError)
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 
 	t.Run("no main storage", func(t *testing.T) {
 		t.Parallel()
