@@ -423,9 +423,13 @@ wait_pod() {
 
 # cert-manager can generate two private keys for one Certificate ("CSR not signed by referenced
 # private key") and then back off for up to an hour. Delete such Certificates so the operator
-# recreates them. Keep in sync with recreate_failed_certificates in e2e-tests/lib/kubectl.py.
+# recreates them. Tests of certificate issuance set CERT_RACE_WORKAROUND=0 so an operator bug fails
+# them. Keep in sync with recreate_failed_certificates in e2e-tests/lib/kubectl.py.
 recreate_failed_certificates() {
 	local cert
+	if [[ ${CERT_RACE_WORKAROUND:-1} == "0" ]]; then
+		return
+	fi
 	for cert in $(kubectl get certificate -o json 2>/dev/null \
 		| jq -r '.items[]
 			| select(any(.metadata.ownerReferences[]?; .kind == "PerconaServerMongoDB" and (.apiVersion // "" | startswith("psmdb.percona.com/"))))

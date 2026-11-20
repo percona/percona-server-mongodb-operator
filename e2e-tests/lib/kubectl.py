@@ -148,8 +148,11 @@ def recreate_failed_certificates() -> None:
     """Delete Certificates that hit cert-manager's private key race so the operator recreates them.
 
     cert-manager can generate two private keys for one Certificate ("CSR not signed by
-    referenced private key") and then back off for up to an hour.
+    referenced private key") and then back off for up to an hour. Tests of certificate
+    issuance set CERT_RACE_WORKAROUND=0 so an operator bug fails them.
     """
+    if os.environ.get("CERT_RACE_WORKAROUND", "1") == "0":
+        return
     out = kubectl_bin("get", "certificate", "-o", "json", check=False)
     if not out.strip():
         return

@@ -14,6 +14,8 @@ from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
 
+pytestmark = pytest.mark.usefixtures("no_cert_race_workaround")
+
 MONGOS_SIZE = 3
 SSL_HASH_JSONPATH = r"jsonpath={.spec.template.metadata.annotations.percona\.com/ssl-hash}"
 

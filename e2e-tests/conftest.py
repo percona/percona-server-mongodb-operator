@@ -209,6 +209,14 @@ def setup_env_vars() -> None:
     init_env()
 
 
+@pytest.fixture(scope="module")
+def no_cert_race_workaround() -> Generator[None]:
+    """Turn off recreate_failed_certificates in tests where certificate issuance is under test."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("CERT_RACE_WORKAROUND", "0")
+        yield
+
+
 def init_env() -> list[str]:
     """Fill os.environ with e2e defaults and return the managed variable names."""
     git_branch = get_git_branch()
