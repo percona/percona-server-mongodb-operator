@@ -819,7 +819,10 @@ func (client *mongoClient) WaitSecondaryCatchUp(ctx context.Context, maxLag, sta
 			return errors.Wrapf(ErrReplicationStalled, "no electable secondary applied oplog in %s", stallTimeout)
 		}
 		if time.Now().After(deadline) {
-			return errors.Errorf("no electable secondary caught up in %s", timeout)
+			if err != nil {
+				return errors.Wrapf(err, "no electable secondary caught up in %s", timeout)
+			}
+			return errors.Errorf("no electable secondary caught up in %s, lag %s", timeout, lag)
 		}
 
 		if err != nil {
