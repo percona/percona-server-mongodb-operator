@@ -410,6 +410,10 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(ctx context.Context, cr
 			continue
 		}
 
+		if rst.Status.State == api.RestoreStateWaiting && rst.Status.WaitingReason == api.RestoreWaitingReasonBackupLease {
+			continue
+		}
+
 		return true, nil
 	}
 
