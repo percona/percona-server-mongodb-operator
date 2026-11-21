@@ -104,9 +104,17 @@ const (
 )
 
 const (
-	ConditionClusterSyncRunning   = "Running"
-	ConditionClusterSyncFinalized = "Finalized"
+	ConditionClusterSyncRunning           = "Running"
+	ConditionClusterSyncFinalized         = "Finalized"
+	ConditionClusterSyncInitialSyncFailed = "InitialSyncFailed"
 )
+
+// ClusterSyncInitialSync is the initial sync progress PCSM reports.
+type ClusterSyncInitialSync struct {
+	Completed               bool  `json:"completed,omitempty"`
+	ClonedSizeBytes         int64 `json:"clonedSizeBytes,omitempty"`
+	EstimatedCloneSizeBytes int64 `json:"estimatedCloneSizeBytes,omitempty"`
+}
 
 type PerconaServerMongoDBClusterSyncStatus struct {
 	// Mode mirrors spec.mode after the corresponding HTTP call has
@@ -137,6 +145,9 @@ type PerconaServerMongoDBClusterSyncStatus struct {
 	// StartedAt is set once the first time PCSM reports state=running;
 	// not updated on restart.
 	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+
+	// InitialSync is unset when PCSM does not report it.
+	InitialSync *ClusterSyncInitialSync `json:"initialSync,omitempty"`
 
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

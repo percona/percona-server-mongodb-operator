@@ -27,6 +27,15 @@ type Status struct {
 	Error          string `json:"error,omitempty"`
 	Role           string `json:"role,omitempty"`
 	LagTimeSeconds int64  `json:"lagTimeSeconds,omitempty"`
+
+	// InitialSync is nil on PCSM versions that do not report it.
+	InitialSync *InitialSync `json:"initialSync,omitempty"`
+}
+
+type InitialSync struct {
+	EstimatedCloneSizeBytes int64 `json:"estimatedCloneSizeBytes,omitempty"`
+	ClonedSizeBytes         int64 `json:"clonedSizeBytes,omitempty"`
+	Completed               bool  `json:"completed,omitempty"`
 }
 
 type StartOptions struct {
