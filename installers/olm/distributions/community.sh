@@ -8,10 +8,7 @@ set_release_image_ref() {
 
 	image="$(release_version_value "${key}")" || return
 
-	case "${image}" in
-		*.*/*|*:*/*|localhost/*) printf -v "${variable}" '%s' "${image}" ;;
-		*) printf -v "${variable}" 'docker.io/%s' "${image}" ;;
-	esac
+	printf -v "${variable}" '%s' "$(qualified_image "${image}")"
 }
 
 build_distribution_data() {
