@@ -3,15 +3,19 @@ package perconaservermongodb
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
 )
 
 func TestMongoExpression(t *testing.T) {
@@ -352,6 +356,66 @@ func TestGetRoles(t *testing.T) {
 			cr := &api.PerconaServerMongoDB{Spec: api.PerconaServerMongoDBSpec{CRVersion: tt.crVersion}}
 			actual := getRoles(cr, tt.role)
 			assert.Equal(t, tt.expected, actual)
+		})
+	}
+}
+
+func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
+	ctx := context.Background()
+	cr := newTestCR()
+	cr.Spec.ClusterServiceDNSMode = api.DNSModeInternal
+	cr.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 49
+	objects := fakePodsForRS(cr, rs)
+	objects = append(objects, fakeStatefulset(cr, rs, rs.Size, "", naming.ComponentMongod))
+	r := buildFakeClient(objects...)
+	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Len(t, pods.Items, 49)
+
+	initialConfig := mongo.RSConfig{Version: 1}
+	for i := range pods.Items {
+		member, err := r.getConfigMemberForPod(ctx, cr, rs, i, &pods.Items[i])
+		require.NoError(t, err)
+		initialConfig.Members = append(initialConfig.Members, member)
+	}
+	initialConfig.Members.UpdateVotes(ctx, initialConfig.Members, false, "")
+	externalNodes := []*api.ExternalNode{
+		{Host: "external-0.example.com", Port: 27017},
+		{Host: "external-1.example.com", Port: 27017},
+	}
+
+	tests := map[string]struct {
+		externalNodes   int
+		expectedMembers int
+	}{
+		"below limit": {externalNodes: 0, expectedMembers: 49},
+		"at limit":    {externalNodes: 1, expectedMembers: 50},
+		"above limit": {externalNodes: 2, expectedMembers: 50},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			rs.ExternalNodes = externalNodes[:tc.externalNodes]
+			cli := mongoFake.NewClientWithConfig(initialConfig)
+
+			// AddNew adds one member per call; repeat to check the 51st stays excluded.
+			for range 2 {
+				_, _, _, err := r.updateConfigMembers(ctx, cli, cr, rs)
+				require.NoError(t, err)
+				config, err := cli.ReadConfig(ctx)
+				require.NoError(t, err)
+
+				var hosts []string
+				for _, member := range config.Members {
+					hosts = append(hosts, member.Host)
+				}
+				assert.Len(t, config.Members, tc.expectedMembers)
+				if tc.externalNodes > 0 {
+					assert.Contains(t, hosts, "external-0.example.com:27017")
+				}
+				assert.NotContains(t, hosts, "external-1.example.com:27017")
+			}
 		})
 	}
 }
@@ -759,4 +823,79 @@ func TestRemoveUndesiredMembers(t *testing.T) {
 			assert.NotEmptyf(t, cfg.Members, "config must never be left without members")
 		})
 	}
+}
+
+// fakeResolver is a test double for dnsResolver.
+type fakeResolver struct {
+	ips     []net.IPAddr
+	err     error
+	gotHost string
+}
+
+func (f *fakeResolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, error) {
+	f.gotHost = host
+	return f.ips, f.err
+}
+
+func TestHostResolvable(t *testing.T) {
+	t.Parallel()
+
+	const host = "my-cluster-rs0-0.psmdb.svc.clusterset.local"
+
+	tests := map[string]struct {
+		resolver    *fakeResolver
+		expectedOK  bool
+		expectedErr bool
+	}{
+		"resolves to an IP": {
+			resolver:    &fakeResolver{ips: []net.IPAddr{{IP: net.ParseIP("10.0.0.1")}}},
+			expectedOK:  true,
+			expectedErr: false,
+		},
+		"resolves to multiple IPs": {
+			resolver: &fakeResolver{ips: []net.IPAddr{
+				{IP: net.ParseIP("10.0.0.1")},
+				{IP: net.ParseIP("10.0.0.2")},
+			}},
+			expectedOK:  true,
+			expectedErr: false,
+		},
+		"lookup error": {
+			resolver:    &fakeResolver{err: errors.New("no such host")},
+			expectedOK:  false,
+			expectedErr: true,
+		},
+		"no addresses without error": {
+			resolver:    &fakeResolver{ips: nil},
+			expectedOK:  false,
+			expectedErr: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ok, err := hostResolvable(context.Background(), tt.resolver, host)
+
+			if tt.expectedErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectedOK, ok)
+			assert.Equal(t, host+".", tt.resolver.gotHost)
+		})
+	}
+}
+
+func TestReconcilerResolverDefault(t *testing.T) {
+	t.Parallel()
+
+	// no resolver configured -> falls back to the system default resolver
+	r := &ReconcilePerconaServerMongoDB{}
+	assert.Same(t, net.DefaultResolver, r.resolver())
+
+	// configured resolver is returned as-is
+	fake := &fakeResolver{}
+	r.dnsResolver = fake
+	assert.Same(t, fake, r.resolver())
 }

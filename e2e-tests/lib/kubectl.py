@@ -6,6 +6,7 @@ import subprocess
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
@@ -297,3 +298,20 @@ def detect_arch() -> str:
     )
     unique = {a for a in arches.split() if a}
     return "arm64" if unique == {"arm64"} else ""
+
+
+def schedulable_nodes(nodes: list[dict[str, Any]]) -> list[str]:
+    """Names of the nodes (items of `kubectl get nodes -o json`) that take ordinary pods.
+
+    A node is left out when it is cordoned or has a NoSchedule or NoExecute taint, as
+    control-plane nodes have (node-role.kubernetes.io/master or control-plane).
+    """
+    return [
+        node["metadata"]["name"]
+        for node in nodes
+        if not node.get("spec", {}).get("unschedulable")
+        and not any(
+            taint.get("effect") in ("NoSchedule", "NoExecute")
+            for taint in node.get("spec", {}).get("taints") or []
+        )
+    ]

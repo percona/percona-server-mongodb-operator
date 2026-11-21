@@ -37,3 +37,11 @@ jobs:
         run: |
           uv run mypy e2e-tests/
           MYPYPATH=e2e-tests uv run mypy installers/olm/e2e-tests/
+
+      # Resolves every fixture without a cluster, so a renamed or removed fixture in
+      # conftest.py fails here. Same commands as `make py-setup-plan` (see the Makefile
+      # for the flags).
+      - name: Check test fixtures
+        run: |
+          uv run pytest --setup-plan -q -p no:cacheprovider -p no:dependency e2e-tests/
+          PYTHONPATH=e2e-tests:installers/olm/e2e-tests uv run pytest --setup-plan -q -p no:cacheprovider -p no:dependency -p conftest installers/olm/e2e-tests/

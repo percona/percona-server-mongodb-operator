@@ -122,10 +122,21 @@ def _wait_for_nodes_ready() -> None:
         time.sleep(_NODES_READY_INTERVAL)
 
 
+def _setup_plan(config: pytest.Config) -> bool:
+    """True under `pytest --setup-plan`: fixtures are resolved, nothing is executed.
+
+    `make py-setup-plan` runs the suite this way without a cluster to catch a renamed
+    or removed fixture, so no hook may call kubectl in this mode.
+    """
+    return bool(config.getoption("setupplan", False))
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Print newline after pytest's verbose test name output and gate on node readiness."""
     print()
+    if _setup_plan(item.config):
+        return
     _wait_for_nodes_ready()
 
 
@@ -178,6 +189,9 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
     """Collect K8s resources when a test fails and add to HTML report."""
     outcome: Any = yield
     report = outcome.get_result()
+
+    if _setup_plan(item.config):
+        return
 
     # Handle the call phase, and setup failures (where infra fixtures break and
     # there is no call phase). Skip passing setup/teardown to avoid duplicate work.
