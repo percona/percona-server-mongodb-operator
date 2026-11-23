@@ -6,6 +6,9 @@ test_dir="$(realpath "$(dirname "$0")")"
 . "${test_dir}/../functions"
 set_debug
 
+# certificate issuance is under test, so cert-manager failures must fail the test
+export CERT_RACE_WORKAROUND=0
+
 cluster="some-name"
 
 test_user_provided_only() {
