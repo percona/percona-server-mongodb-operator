@@ -5,7 +5,9 @@ import re
 import subprocess
 import time
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
@@ -17,6 +19,9 @@ TRANSIENT_ERRORS = re.compile(
     r"|etcdserver: request timed out|the server is currently unable to handle the request"
     r"|Unable to connect to the server|connection reset by peer"
 )
+
+# keep in sync with recreate_failed_certificates in e2e-tests/functions
+CERT_KEY_MISMATCH = "CSR not signed by referenced private key"
 
 
 def _read_manifest(source: str) -> str | None:
@@ -110,11 +115,19 @@ def kubectl_bin(
     return result.stdout
 
 
-def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, timeout: int) -> None:
+def _wait_for(
+    what: str,
+    resource: list[str],
+    jsonpath: str,
+    expected: str,
+    timeout: int,
+    every_10s: Callable[[], None] | None = None,
+) -> None:
     """Poll `kubectl get` until the jsonpath value equals `expected`, else raise TimeoutError."""
     logger.info(f"Waiting for {what} to be ready...")
     deadline = time.time() + timeout
     status = ""
+    attempt = 0
     while time.time() < deadline:
         status = kubectl_bin(
             "get", *resource, "-o", f"jsonpath={jsonpath}", check=False, return_stderr=True
@@ -122,11 +135,41 @@ def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, time
         if status == expected:
             logger.info(f"{what} is ready")
             return
+        attempt += 1
+        if every_10s and attempt % 10 == 0:
+            every_10s()
         time.sleep(1)
 
     raise TimeoutError(
         f"Timeout waiting for {what} to be ready. Last status: {status or 'unknown'}"
     )
+
+
+def recreate_failed_certificates() -> None:
+    """Delete Certificates that hit cert-manager's private key race so the operator recreates them.
+
+    cert-manager can generate two private keys for one Certificate ("CSR not signed by
+    referenced private key") and then back off for up to an hour. Tests of certificate
+    issuance set CERT_RACE_WORKAROUND=0 so an operator bug fails them.
+    """
+    if os.environ.get("CERT_RACE_WORKAROUND", "1") == "0":
+        return
+    out = kubectl_bin("get", "certificate", "-o", "json", check=False)
+    if not out.strip():
+        return
+    for cert in json.loads(out).get("items", []):
+        if not any(
+            owner.get("kind") == "PerconaServerMongoDB"
+            and owner.get("apiVersion", "").startswith("psmdb.percona.com/")
+            for owner in cert.get("metadata", {}).get("ownerReferences", [])
+        ):
+            continue
+        for cond in cert.get("status", {}).get("conditions", []):
+            message = cond.get("message", "")
+            if cond["type"] == "Issuing" and CERT_KEY_MISMATCH in message:
+                name = cert["metadata"]["name"]
+                logger.warning(f"Certificate {name} failed to issue, recreating it: {message}")
+                kubectl_bin("delete", "certificate", name, "--ignore-not-found")
 
 
 def wait_pod(pod_name: str, timeout: int = 360) -> None:
@@ -137,6 +180,7 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
         "{.status.phase} {.status.conditions[?(@.type=='Ready')].status}",
         "Running True",
         timeout,
+        every_10s=recreate_failed_certificates,
     )
 
 
@@ -297,3 +341,20 @@ def detect_arch() -> str:
     )
     unique = {a for a in arches.split() if a}
     return "arm64" if unique == {"arm64"} else ""
+
+
+def schedulable_nodes(nodes: list[dict[str, Any]]) -> list[str]:
+    """Names of the nodes (items of `kubectl get nodes -o json`) that take ordinary pods.
+
+    A node is left out when it is cordoned or has a NoSchedule or NoExecute taint, as
+    control-plane nodes have (node-role.kubernetes.io/master or control-plane).
+    """
+    return [
+        node["metadata"]["name"]
+        for node in nodes
+        if not node.get("spec", {}).get("unschedulable")
+        and not any(
+            taint.get("effect") in ("NoSchedule", "NoExecute")
+            for taint in node.get("spec", {}).get("taints") or []
+        )
+    ]

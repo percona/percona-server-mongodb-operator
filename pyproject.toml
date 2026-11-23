@@ -23,6 +23,9 @@ addopts = "-v -s --self-contained-html"
 render_collapsed = "all"
 junit_family = "xunit2"
 junit_suite_name = "psmdb-e2e-tests"
+# Registered here as well, so `make py-setup-plan` (which disables the plugin) runs
+# without unknown-mark warnings.
+markers = ["dependency: test depends on earlier tests (pytest-dependency)"]
 
 [[tool.mypy.overrides]]
 module = ["pytest_html.*"]

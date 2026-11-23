@@ -15,6 +15,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 // volumeMount returns the container that mounts claimName and where it mounts
@@ -41,44 +42,44 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 	claimName string,
 	pvcSpec *api.PVCSpec,
 	ls map[string]string,
-) error {
+) (*api.PVCSpec, error) {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("statefulset", sts.Name)
 
 	autoscalingSpec := cr.Spec.StorageAutoscaling()
 	if autoscalingSpec == nil || !autoscalingSpec.Enabled {
-		return nil
+		return pvcSpec, nil
 	}
 
 	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
 		log.V(1).Info("skipping storage autoscaling: external autoscaling is enabled")
-		return nil
+		return pvcSpec, nil
 	}
 
 	if !cr.Spec.IsVolumeExpansionEnabled() {
 		log.V(1).Info("skipping storage autoscaling: volume expansion is disabled")
-		return nil
+		return pvcSpec, nil
 	}
 
 	if pvcSpec == nil || pvcSpec.PersistentVolumeClaimSpec == nil {
 		log.V(1).Info("skipping storage autoscaling: not using PVC")
-		return nil
+		return pvcSpec, nil
 	}
 
 	if _, ok := sts.Annotations[api.AnnotationPVCResizeInProgress]; ok {
 		log.V(1).Info("PVC resize already in progress")
-		return nil
+		return pvcSpec, nil
 	}
 
 	if _, ok := cr.GetPVCShrinkState(sts.Name); ok {
 		log.V(1).Info("PVC shrink in progress, skipping autoscaling")
-		return nil
+		return pvcSpec, nil
 	}
 
 	container, mountPath, ok := volumeMount(sts, claimName)
 	if !ok {
 		log.V(1).Info("skipping storage autoscaling: no container mounts the volume",
 			"claim", claimName)
-		return nil
+		return pvcSpec, nil
 	}
 
 	pvcList := &corev1.PersistentVolumeClaimList{}
@@ -87,7 +88,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		LabelSelector: labels.SelectorFromSet(ls),
 	})
 	if err != nil {
-		return errors.Wrap(err, "list PVCs for autoscaling")
+		return pvcSpec, errors.Wrap(err, "list PVCs for autoscaling")
 	}
 
 	podList := &corev1.PodList{}
@@ -96,7 +97,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 		LabelSelector: labels.SelectorFromSet(ls),
 	})
 	if err != nil {
-		return errors.Wrap(err, "list pods for autoscaling")
+		return pvcSpec, errors.Wrap(err, "list pods for autoscaling")
 	}
 
 	for _, pvc := range pvcList.Items {
@@ -111,13 +112,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStorageAutoscaling(
 			continue
 		}
 
-		if err := r.checkAndResizePVC(ctx, cr, &pvc, pod, pvcSpec, container, mountPath); err != nil {
+		pvcSpec, err = r.checkAndResizePVC(ctx, cr, &pvc, pod, pvcSpec, container, mountPath)
+		if err != nil {
 			log.Error(err, "failed to check/resize PVC", "pvc", pvc.Name)
 			r.updateAutoscalingStatus(ctx, cr, pvc.Name, nil, err)
 		}
 	}
 
-	return nil
+	return pvcSpec, nil
 }
 
 // checkAndResizePVC checks a single PVC and triggers resize if needed
@@ -129,24 +131,24 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	pvcSpec *api.PVCSpec,
 	container string,
 	mountPath string,
-) error {
+) (*api.PVCSpec, error) {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
 	if !isContainerAndPodRunning(*pod, container) {
 		log.V(1).Info("skipping PVC metrics check: container and pod not running",
 			"phase", pod.Status.Phase, "container", container)
-		return nil
+		return pvcSpec, nil
 	}
 
 	usage, err := r.getPVCUsageFromMetrics(ctx, pod, pvc.Name, container, mountPath)
 	if err != nil {
-		return errors.Wrap(err, "get PVC usage from metrics")
+		return pvcSpec, errors.Wrap(err, "get PVC usage from metrics")
 	}
 
 	r.updateAutoscalingStatus(ctx, cr, pvc.Name, usage, nil)
 
 	if !r.shouldTriggerResize(ctx, cr, pvc, usage) {
-		return nil
+		return pvcSpec, nil
 	}
 
 	newSize := r.calculateNewSize(cr, pvc)
@@ -157,7 +159,7 @@ func (r *ReconcilePerconaServerMongoDB) checkAndResizePVC(
 	if requested, ok := pvcSpec.Resources.Requests[corev1.ResourceStorage]; ok && requested.Cmp(newSize) >= 0 {
 		log.V(1).Info("skipping resize: a larger size is already requested",
 			"requested", requested.String(), "autoscaledTo", newSize.String())
-		return nil
+		return pvcSpec, nil
 	}
 
 	log.Info("triggering storage autoscaling",
@@ -223,17 +225,38 @@ func (r *ReconcilePerconaServerMongoDB) calculateNewSize(
 	return newSize
 }
 
-// triggerResize updates the CR pvcSpec to trigger a resize operation
+// triggerResize updates the CR to trigger a resize and returns the pvcSpec
 func (r *ReconcilePerconaServerMongoDB) triggerResize(
 	ctx context.Context,
 	cr *api.PerconaServerMongoDB,
 	pvc *corev1.PersistentVolumeClaim,
 	newSize resource.Quantity,
 	pvcSpec *api.PVCSpec,
-) error {
+) (*api.PVCSpec, error) {
 	log := logf.FromContext(ctx).WithName("StorageAutoscaling").WithValues("pvc", pvc.Name)
 
 	orig := cr.DeepCopy()
+	origPVCSpec := pvcSpec
+
+	var searchRS *api.ReplsetSpec
+	var previousSearch *api.SearchReplsetOverride
+	if pvc.Labels[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+		searchRS = cr.Spec.Replset(pvc.Labels[naming.LabelKubernetesReplset])
+		if searchRS == nil {
+			return pvcSpec, errors.Errorf("replset %s not found in cr", pvc.Labels[naming.LabelKubernetesReplset])
+		}
+		previousSearch = searchRS.Search
+		if searchRS.Search == nil || searchRS.Search.Storage == nil {
+			// Autoscaling one shard must not change the shared search storage default.
+			storage := searchRS.SearchStorage(cr).DeepCopy()
+			searchRS.Search = previousSearch.DeepCopy()
+			if searchRS.Search == nil {
+				searchRS.Search = &api.SearchReplsetOverride{}
+			}
+			searchRS.Search.Storage = storage
+		}
+		pvcSpec = &searchRS.Search.Storage.PersistentVolumeClaim
+	}
 
 	requests := pvcSpec.Resources.Requests
 	previous, hadPrevious := requests[corev1.ResourceStorage]
@@ -248,14 +271,17 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 		} else {
 			delete(requests, corev1.ResourceStorage)
 		}
-		return errors.Wrap(err, "patch CR with new storage size")
+		if searchRS != nil {
+			searchRS.Search = previousSearch
+		}
+		return origPVCSpec, errors.Wrap(err, "patch CR with new storage size")
 	}
 
 	log.Info("storage autoscaling initiated",
 		"oldSize", pvc.Status.Capacity.Storage().String(),
 		"newSize", newSize.String())
 
-	return nil
+	return pvcSpec, nil
 }
 
 // updateAutoscalingStatus updates the status for a specific PVC

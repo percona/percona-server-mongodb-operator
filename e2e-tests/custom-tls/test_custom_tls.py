@@ -12,6 +12,8 @@ from lib.utils import Paths
 
 logger = logging.getLogger(__name__)
 
+pytestmark = pytest.mark.usefixtures("no_cert_race_workaround")
+
 
 @dataclass(frozen=True)
 class CustomTLSConfig:
