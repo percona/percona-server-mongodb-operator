@@ -27,17 +27,48 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
+	ls := sts.Spec.Selector.MatchLabels
+	if ls[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
+		return nil
+	}
+	rs := cr.Spec.Replset(ls[naming.LabelKubernetesReplset])
+	if rs == nil {
+		return errors.Errorf("replset %s not found in cr", ls[naming.LabelKubernetesReplset])
+	}
+	claimName := config.MongodDataVolClaimName
+	volumeSpec := rs.VolumeSpec
+	switch ls[naming.LabelKubernetesComponent] {
+	case naming.ComponentNonVoting:
+		volumeSpec = rs.NonVoting.VolumeSpec
+	case naming.ComponentHidden:
+		volumeSpec = rs.Hidden.VolumeSpec
+	case naming.ComponentSearch:
+		claimName = vectorsearch.DataVolumeName
+		volumeSpec = rs.SearchStorage(cr)
+	}
+	if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+		return nil
+	}
+
 	if err := r.fixVolumeLabels(ctx, sts, ls, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim); err != nil {
+	pvcSpec, err := r.reconcileStorageAutoscaling(ctx, cr, sts, claimName, &volumeSpec.PersistentVolumeClaim, ls)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", sts.Name)
+	}
+
+	volumeClaimTemplates, err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, claimName, *pvcSpec)
+	if err != nil {
 		return errors.Wrap(err, "resize volumes if needed")
 	}
+	sts.Spec.VolumeClaimTemplates = volumeClaimTemplates
 
 	return nil
 }
@@ -86,6 +117,8 @@ func isPVCExpansionInProgress(pvcs []corev1.PersistentVolumeClaim, claimName str
 	return "", false
 }
 
+// resizeVolumesIfNeeded returns the desired claim templates after resize handling,
+// including any storage size reverted on failure.
 func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	ctx context.Context,
 	cr *psmdbv1.PerconaServerMongoDB,
@@ -93,14 +126,25 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	ls map[string]string,
 	claimName string,
 	pvcSpec psmdbv1.PVCSpec,
-) error {
+) ([]corev1.PersistentVolumeClaim, error) {
+	origSts := sts
+	desiredVolumeClaimTemplates := func() []corev1.PersistentVolumeClaim {
+		if ls[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+			return vectorsearch.VolumeClaimTemplates(cr, cr.Spec.Replset(ls[naming.LabelKubernetesReplset]))
+		}
+		return origSts.Spec.VolumeClaimTemplates
+	}
+
 	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
-		return nil
+		return desiredVolumeClaimTemplates(), nil
 	}
 
 	// Check if a shrink operation is already in progress for this STS.
 	if state, ok := cr.GetPVCShrinkState(sts.Name); ok {
-		return r.shrinkVolumesIfNeeded(ctx, cr, sts, ls, claimName, pvcSpec, state)
+		if err := r.shrinkVolumesIfNeeded(ctx, cr, sts, ls, claimName, pvcSpec, state); err != nil {
+			return nil, err
+		}
+		return desiredVolumeClaimTemplates(), nil
 	}
 
 	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
@@ -111,16 +155,16 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 		LabelSelector: labels.SelectorFromSet(ls),
 	})
 	if err != nil {
-		return errors.Wrap(err, "list PVCs")
+		return nil, errors.Wrap(err, "list PVCs")
 	}
 
 	if len(pvcList.Items) == 0 {
-		return nil
+		return desiredVolumeClaimTemplates(), nil
 	}
 
 	podList := corev1.PodList{}
 	if err := r.client.List(ctx, &podList, client.InNamespace(cr.Namespace), client.MatchingLabels(ls)); err != nil {
-		return errors.Wrap(err, "list pods")
+		return nil, errors.Wrap(err, "list pods")
 	}
 
 	podNames := make([]string, 0, len(podList.Items))
@@ -163,16 +207,15 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	}
 
 	if actual.IsZero() {
-		return nil
+		return desiredVolumeClaimTemplates(), nil
 	}
 
-	origSts := sts
 	sts = sts.DeepCopy()
 	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), sts); err != nil {
 		if k8serrors.IsNotFound(err) {
-			return nil
+			return desiredVolumeClaimTemplates(), nil
 		}
-		return errors.Wrapf(err, "get statefulset %s", client.ObjectKeyFromObject(sts))
+		return nil, errors.Wrapf(err, "get statefulset %s", client.ObjectKeyFromObject(sts))
 	}
 
 	var volumeTemplate corev1.PersistentVolumeClaim
@@ -188,7 +231,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	if sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress] != "" {
 		resizeStartedAt, err := time.Parse(time.RFC3339, sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress])
 		if err != nil {
-			return errors.Wrap(err, "parse annotation")
+			return nil, errors.Wrap(err, "parse annotation")
 		}
 
 		updatedPVCs := 0
@@ -220,7 +263,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 				Namespace:     sts.Namespace,
 				FieldSelector: fields.SelectorFromSet(map[string]string{"regarding.name": pvc.Name}),
 			}); err != nil {
-				return errors.Wrapf(err, "list events for pvc/%s", pvc.Name)
+				return nil, errors.Wrapf(err, "list events for pvc/%s", pvc.Name)
 			}
 
 			for _, event := range events.Items {
@@ -248,10 +291,10 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 					log.Error(nil, "PVC resize failed", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
 
 					if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
-						return err
+						return nil, err
 					}
 
-					return errors.Errorf("volume resize failed: %s", event.Note)
+					return nil, errors.Errorf("volume resize failed: %s", event.Note)
 				}
 			}
 		}
@@ -260,17 +303,23 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			log.Info("Deleting statefulset")
 
 			if err := r.deleteStatefulSetForResize(ctx, cr, sts); err != nil {
-				return err
+				return nil, err
 			}
 
 			log.Info("PVC resize completed")
 
-			return nil
+			return desiredVolumeClaimTemplates(), nil
 		}
 	}
 
 	if requested.Cmp(actual) < 0 {
 		if cr.Spec.IsVolumeShrinkEnabled() {
+			if ls[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+				if err := r.revertVolumeTemplate(ctx, cr, sts, configured); err != nil {
+					return nil, errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
+				}
+				return nil, errors.New("volume shrinking is not supported for search")
+			}
 			err := r.shrinkVolumesIfNeeded(ctx, cr, sts, ls, claimName, pvcSpec, psmdbv1.PVCShrinkState{})
 			// Always align the original STS VolumeClaimTemplate with the actual
 			// PVC size so that createOrUpdate (which runs after reconcilePVCs)
@@ -281,24 +330,27 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 					break
 				}
 			}
-			return err
+			if err != nil {
+				return nil, err
+			}
+			return desiredVolumeClaimTemplates(), nil
 		}
 		if configured.Cmp(requested) == 0 {
-			return nil
+			return desiredVolumeClaimTemplates(), nil
 		}
 		if configured.Cmp(requested) < 0 {
 			log.Info("Deleting statefulset with stale volume claim template")
 
 			if err := r.deleteStatefulSetForResize(ctx, cr, sts); err != nil {
-				return err
+				return nil, err
 			}
-			return nil
+			return desiredVolumeClaimTemplates(), nil
 		}
 		if err := r.revertVolumeTemplate(ctx, cr, sts, configured); err != nil {
-			return errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
+			return nil, errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
 		}
 		if cr.Spec.IsVolumeExpansionEnabled() {
-			return errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
+			return nil, errors.Errorf("requested storage (%s) is less than actual storage (%s)", requested.String(), actual.String())
 		}
 	}
 	if requested.Cmp(actual) == 0 {
@@ -306,21 +358,21 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			log.Info("Deleting statefulset with stale volume claim template")
 
 			if err := r.deleteStatefulSetForResize(ctx, cr, sts); err != nil {
-				return err
+				return nil, err
 			}
 		}
-		return nil
+		return desiredVolumeClaimTemplates(), nil
 	}
 
 	if cr.CompareVersion("1.18.0") >= 0 && !cr.Spec.IsVolumeExpansionEnabled() {
 		// If expansion is disabled we should keep the old value
 		pvcSpec.Resources.Requests[corev1.ResourceStorage] = configured
-		return nil
+		return desiredVolumeClaimTemplates(), nil
 	}
 
 	err = k8s.AnnotateObject(ctx, r.client, sts, map[string]string{psmdbv1.AnnotationPVCResizeInProgress: metav1.Now().Format(time.RFC3339)})
 	if err != nil {
-		return errors.Wrap(err, "annotate psmdb")
+		return nil, errors.Wrap(err, "annotate psmdb")
 	}
 
 	log.Info("Resizing PVCs", "requested", requested, "actual", actual, "pvcList", strings.Join(pvcsToUpdate, ","))
@@ -334,7 +386,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 		// as it may have been modified since the initial list (e.g. by fixVolumeLabels
 		// or by the Kubernetes PVC controller).
 		if err := r.client.Get(ctx, client.ObjectKeyFromObject(&pvc), &pvc); err != nil {
-			return errors.Wrapf(err, "get persistentvolumeclaim/%s", pvc.Name)
+			return nil, errors.Wrapf(err, "get persistentvolumeclaim/%s", pvc.Name)
 		}
 
 		if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
@@ -351,27 +403,27 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 				log.Error(err, "PVC resize failed", "reason", "ExceededQuota", "message", err.Error())
 
 				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
-					return err
+					return nil, err
 				}
 
-				return nil
+				return desiredVolumeClaimTemplates(), nil
 			case strings.Contains(err.Error(), "the storageclass that provisions the pvc must support resize"):
 				log.Error(err, "PVC resize failed", "reason", "StorageClassNotSupportResize", "message", err.Error())
 
 				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
-					return err
+					return nil, err
 				}
 
-				return nil
+				return desiredVolumeClaimTemplates(), nil
 			default:
-				return errors.Wrapf(err, "update persistentvolumeclaim/%s", pvc.Name)
+				return nil, errors.Wrapf(err, "update persistentvolumeclaim/%s", pvc.Name)
 			}
 		}
 
 		log.Info("PVC resize started", "pvc", pvc.Name, "requested", requested)
 	}
 
-	return nil
+	return desiredVolumeClaimTemplates(), nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
@@ -445,6 +497,29 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 
 		log.Info("Reverting volume template for replset", "replset", replset, "component", component, "originalSize", originalSize)
 		volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
+	case naming.ComponentSearch:
+		replset, ok := sts.Labels[naming.LabelKubernetesReplset]
+		if !ok {
+			return errors.New("missing replset label")
+		}
+		rs := cr.Spec.Replset(replset)
+		if rs == nil {
+			return errors.Errorf("replset %s not found in cr", replset)
+		}
+		storage := rs.SearchStorage(cr)
+		if storage == nil || storage.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil || storage.PersistentVolumeClaim.Resources.Requests == nil {
+			return errors.Errorf("missing search storage spec for %s", replset)
+		}
+		// We should copy clusters search storage into a replset storage so reverting this
+		// replset's size does not change storage settings for other replsets
+		if rs.Search == nil || rs.Search.Storage == nil {
+			if rs.Search == nil {
+				rs.Search = &psmdbv1.SearchReplsetOverride{}
+			}
+			rs.Search.Storage = storage.DeepCopy()
+			storage = rs.Search.Storage
+		}
+		storage.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = originalSize
 	case naming.ComponentMongos:
 		pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
 		if pvcSpec == nil || pvcSpec.Resources.Requests == nil {
