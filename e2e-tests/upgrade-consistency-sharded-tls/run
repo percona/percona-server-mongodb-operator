@@ -96,17 +96,30 @@ main() {
 	compare_generation "7" "statefulset" "${CLUSTER}-rs0"
 	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
 
+	# Starting with 1.24.0 renewed leaf certificates are loaded in place,
+	# without restarting the pods.
+	wait_tls_rotated_in_place "${CLUSTER}"
+	local uids
+	uids=$(pod_uids "${CLUSTER}")
+
 	renew_certificate "some-name-ssl"
 	sleep 20
 	wait_cluster
-	compare_generation "8" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "8" "statefulset" "${CLUSTER}-cfg"
+	wait_tls_rotated_in_place "${CLUSTER}"
+	compare_generation "7" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
 
 	renew_certificate "some-name-ssl-internal"
 	sleep 20
 	wait_cluster
-	compare_generation "9" "statefulset" "${CLUSTER}-rs0"
-	compare_generation "9" "statefulset" "${CLUSTER}-cfg"
+	wait_tls_rotated_in_place "${CLUSTER}"
+	compare_generation "7" "statefulset" "${CLUSTER}-rs0"
+	compare_generation "7" "statefulset" "${CLUSTER}-cfg"
+
+	if [[ ${uids} != "$(pod_uids "${CLUSTER}")" ]]; then
+		echo "pods were restarted on certificate renewal"
+		exit 1
+	fi
 
 	desc 'check if service and statefulset created with expected config'
 	compare_kubectl service/${CLUSTER}-rs0 "-1240"

@@ -6,7 +6,10 @@ const (
 	AnnotationSSLHash         = perconaPrefix + "ssl-hash"
 	AnnotationPBMTLSHash      = perconaPrefix + "pbm-tls-hash"
 	AnnotationSSLInternalHash = perconaPrefix + "ssl-internal-hash"
-	AnnotationConfigHash      = perconaPrefix + "configuration-hash"
+	// AnnotationSSLLeafHash is set on mongod/mongos pods and records the TLS
+	// leaf certificates the running process has loaded.
+	AnnotationSSLLeafHash = perconaPrefix + "ssl-leaf-hash"
+	AnnotationConfigHash  = perconaPrefix + "configuration-hash"
 )
 
 const AnnotationKubectlRestartedAt = "kubectl.kubernetes.io/restartedAt"

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import base64
+import hashlib
 import logging
 import subprocess
 import time
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 MONGOS_SIZE = 3
 SSL_HASH_JSONPATH = r"jsonpath={.spec.template.metadata.annotations.percona\.com/ssl-hash}"
+MONGO_PODS_SELECTOR = "app.kubernetes.io/component in (mongod,cfg,mongos)"
 
 
 @dataclass(frozen=True)
@@ -70,16 +72,39 @@ def _pod_uids(cluster: str) -> dict[str, str]:
     return dict(line.split("=", 1) for line in out.split() if "=" in line)
 
 
-def _pod_creation_times(cluster: str, selector: str) -> list[str]:
+def _tls_leaf_hash(cluster: str) -> str:
+    """The percona.com/ssl-leaf-hash value of pods that loaded the current certificates."""
+    hashes = []
+    for secret in (f"{cluster}-ssl", f"{cluster}-ssl-internal"):
+        crt = kubectl_bin(
+            "get", "secret", secret, "--ignore-not-found", "-o", r"jsonpath={.data.tls\.crt}"
+        ).strip()
+        hashes.append(hashlib.sha256(base64.b64decode(crt)).hexdigest() if crt else "")
+    return "/".join(hashes)
+
+
+def _pod_leaf_hashes(cluster: str) -> dict[str, str]:
     out = kubectl_bin(
         "get",
         "pods",
         "-l",
-        f"app.kubernetes.io/instance={cluster},{selector}",
+        f"app.kubernetes.io/instance={cluster},{MONGO_PODS_SELECTOR}",
         "-o",
-        "jsonpath={.items[*].metadata.creationTimestamp}",
+        r'jsonpath={range .items[*]}{.metadata.name}={.metadata.annotations.percona\.com/ssl-leaf-hash}{"\n"}{end}',
     )
-    return out.split()
+    return dict(line.split("=", 1) for line in out.split() if "=" in line)
+
+
+def _wait_tls_rotated_in_place(cluster: str) -> None:
+    want = _tls_leaf_hash(cluster)
+    retry(
+        lambda: _pod_leaf_hashes(cluster),
+        max_attempts=60,
+        delay=5,
+        condition=lambda hashes: bool(hashes) and all(h == want for h in hashes.values()),
+    )
+    stale = {pod: h for pod, h in _pod_leaf_hashes(cluster).items() if h != want}
+    assert not stale, f"pods did not load the certificates {want} in place: {stale}"
 
 
 def _cert_sans(cluster: str) -> set[str]:
@@ -191,15 +216,17 @@ class TestTLSServicePerPod:
         wait_for_running(f"{cluster}-cfg", 3, False)
         wait_for_running(f"{cluster}-mongos", MONGOS_SIZE)
 
-        state["hash_before"] = _ssl_hash(f"{cluster}-mongos")
         state["client"] = _deploy_tls_client(test_paths["conf_dir"])
 
     @pytest.mark.dependency(depends=["TestTLSServicePerPod::test_create_cluster"])
     def test_enable_service_per_pod(
         self, config: TLSServicePerPodConfig, state: dict[str, object]
     ) -> None:
-        """Enabling servicePerPod adds the per-pod hostnames to the certificate SANs"""
+        """Enabling servicePerPod adds the per-pod hostnames to the certificate SANs,
+        which the pods load in place without a restart"""
         cluster, namespace = config.cluster, config.namespace
+        hashes = _ssl_hashes(cluster)
+        uids = _pod_uids(cluster)
 
         kubectl_bin(
             "patch",
@@ -222,22 +249,11 @@ class TestTLSServicePerPod:
         )
         assert expected <= _cert_sans(cluster), "per-pod mongos SANs missing from the certificate"
 
-        retry(
-            lambda: _ssl_hash(f"{cluster}-mongos"),
-            max_attempts=30,
-            delay=10,
-            condition=lambda h: h != state["hash_before"],
-        )
-        assert _ssl_hash(f"{cluster}-mongos") != state["hash_before"], (
-            "certificate was not re-issued for the new SANs"
-        )
-        wait_cluster_consistency(cluster, timeout=600)
+        _wait_tls_rotated_in_place(cluster)
+        wait_cluster_consistency(cluster)
 
-        mongos_created = _pod_creation_times(cluster, "app.kubernetes.io/component=mongos")
-        cfg_created = _pod_creation_times(cluster, "app.kubernetes.io/replset=cfg")
-        assert max(mongos_created) <= min(cfg_created), (
-            f"cfg was updated before mongos: mongos={mongos_created} cfg={cfg_created}"
-        )
+        assert _ssl_hashes(cluster) == hashes, "pods were restarted for the new SANs"
+        assert uids.items() <= _pod_uids(cluster).items(), "pods were restarted for the new SANs"
 
     @pytest.mark.dependency(depends=["TestTLSServicePerPod::test_enable_service_per_pod"])
     def test_tls_connection_to_per_pod_services(
