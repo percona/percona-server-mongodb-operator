@@ -1980,6 +1980,7 @@ type PVCShrinkState struct {
 	Phase         string   `json:"phase"`
 	ProcessedPods []string `json:"processedPods"`
 	PrimaryPod    string   `json:"primaryPod"`
+	WaitingFor    string   `json:"waitingFor,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {
