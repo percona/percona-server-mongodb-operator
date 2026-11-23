@@ -180,7 +180,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			stdoutBuf.Reset()
 			stderrBuf.Reset()
 
-			err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreCommand, nil, stdoutBuf, stderrBuf, false)
+			err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreCommand, nil, stdoutBuf, stderrBuf)
 			if err != nil {
 				log.Error(nil, "Restore failed to start", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
 				return errors.Wrapf(err, "start restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
@@ -231,7 +231,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 		log.V(1).Info("Check restore status", "command", command, "pod", pod.Name)
 
-		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf); err != nil {
 			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
@@ -819,7 +819,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) getPBMConfigFromPod(
 	container, pbmBinary := getPBMBinaryAndContainerForExec(&pod)
 
 	command := []string{pbmBinary, "config"}
-	err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf, false)
+	err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf)
 	if err != nil {
 		return conf, errors.Wrap(err, "get pbm config")
 	}
@@ -986,7 +986,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) disablePITR(ctx context.Context, 
 	container, pbmBinary := getPBMBinaryAndContainerForExec(pod)
 
 	command := []string{pbmBinary, "config", "--set", "pitr.enabled=false"}
-	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf, false); err != nil {
+	if err := r.clientcmd.Exec(ctx, pod, container, command, nil, stdoutBuf, stderrBuf); err != nil {
 		return errors.Wrapf(err, "disable PiTR stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 	}
 
@@ -1021,7 +1021,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkIfPBMAgentsReadyForPhysicalR
 		container, pbmBinary := getPBMBinaryAndContainerForExec(&pod)
 
 		command := []string{pbmBinary, "status", "-s", "cluster", "--out", "json"}
-		err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf, false)
+		err := r.clientcmd.Exec(ctx, &pod, container, command, nil, stdoutBuf, stderrBuf)
 		if err != nil {
 			return errors.Wrap(err, "get pbm status")
 		}

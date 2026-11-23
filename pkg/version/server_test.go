@@ -1,7 +1,6 @@
 package version
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -19,29 +18,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sversion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
-
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 )
-
-type fakeCmdClient struct {
-	rest rest.Interface
-	cfg  *rest.Config
-}
-
-var _ clientcmd.Client = (*fakeCmdClient)(nil)
-
-func (f *fakeCmdClient) Exec(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
-	return nil
-}
-
-func (f *fakeCmdClient) REST() rest.Interface { return f.rest }
-
-func (f *fakeCmdClient) Config() *rest.Config { return f.cfg }
 
 func groupSet(groups ...string) map[string]struct{} {
 	s := make(map[string]struct{}, len(groups))
@@ -329,10 +310,7 @@ func TestGetServer(t *testing.T) {
 			srv := httptest.NewServer(tc.handler)
 			t.Cleanup(srv.Close)
 
-			cfg := &rest.Config{Host: srv.URL}
-			cl := &fakeCmdClient{rest: restClientFor(t, &rest.Config{Host: srv.URL}), cfg: cfg}
-
-			sv, err := GetServer(t.Context(), cl)
+			sv, err := GetServer(t.Context(), &rest.Config{Host: srv.URL})
 			if tc.wantErr {
 				require.Error(t, err)
 				return

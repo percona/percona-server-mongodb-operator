@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -36,9 +37,9 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/oss"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -58,7 +59,7 @@ func Add(ctx context.Context, mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	cli, err := clientcmd.NewClient(mgr.GetConfig())
+	cli, err := podexec.NewClient(mgr.GetConfig())
 	if err != nil {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
@@ -69,6 +70,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:      mgr.GetScheme(),
 		newPBMFunc:  backup.NewPBM,
 		clientcmd:   cli,
+		restConfig:  mgr.GetConfig(),
 		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"),
 		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbbackup-controller"), "BACKUP_RECONCILE_INTERVAL"),
 	}, nil
@@ -97,11 +99,12 @@ var _ reconcile.Reconciler = &ReconcilePerconaServerMongoDBBackup{}
 type ReconcilePerconaServerMongoDBBackup struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client    client.Client
-	apiReader client.Reader
-	scheme    *runtime.Scheme
-	clientcmd clientcmd.Client
-	recorder  record.EventRecorder
+	client     client.Client
+	apiReader  client.Reader
+	scheme     *runtime.Scheme
+	clientcmd  podexec.Client
+	restConfig *rest.Config
+	recorder   record.EventRecorder
 
 	newPBMFunc  backup.NewPBMFunc
 	reconcileIn time.Duration
@@ -210,7 +213,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 
 	if cluster != nil {
 		var svr *version.ServerVersion
-		svr, err = version.Server(ctx, r.clientcmd)
+		svr, err = version.Server(ctx, r.restConfig)
 		if err != nil {
 			return rr, errors.Wrapf(err, "fetch server version")
 		}
@@ -259,8 +262,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcileDelete(ctx context.Contex
 		cluster = nil
 	}
 
-	if cluster != nil && r.clientcmd != nil {
-		svr, err := version.Server(ctx, r.clientcmd)
+	if cluster != nil && r.restConfig != nil {
+		svr, err := version.Server(ctx, r.restConfig)
 		if err != nil {
 			log.Error(err, "failed to fetch server version; continuing with finalizers")
 		} else if err := cluster.CheckNSetDefaults(ctx, svr.Platform); err != nil {
@@ -912,7 +915,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteFilesystemBackup(ctx context
 
 	outB := bytes.Buffer{}
 	errB := bytes.Buffer{}
-	err = r.clientcmd.Exec(ctx, &pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB, false)
+	err = r.clientcmd.Exec(ctx, &pod, naming.ContainerBackupAgent, cmd, nil, &outB, &errB)
 	if err != nil {
 		return errors.Wrapf(err, "exec delete-backup: stdout=%s, stderr=%s", outB.String(), errB.String())
 	}

@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -23,7 +22,6 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
-	fakeClientcmd "github.com/percona/percona-server-mongodb-operator/clientcmd/fake"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
@@ -100,19 +98,10 @@ func TestReconcileValidationError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	restClient, err := rest.RESTClientFor(&rest.Config{
-		Host:                 srv.URL,
-		GroupVersion:         &metav1.SchemeGroupVersion,
-		NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
-	})
-	require.NoError(t, err)
-
 	r := fakeReconciler(secret, restore, cluster, bcp)
-	r.clientcmd = &fakeClientcmd.Client{
-		RESTFunc: func() rest.Interface { return restClient },
-	}
+	r.restConfig = &rest.Config{Host: srv.URL}
 
-	_, err = r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(restore)})
+	_, err := r.Reconcile(t.Context(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(restore)})
 	require.EqualError(t, err, "failed to validate restore: backup's last write is later than target time")
 
 	got := new(psmdbv1.PerconaServerMongoDBRestore)

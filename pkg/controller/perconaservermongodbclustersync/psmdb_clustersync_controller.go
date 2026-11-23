@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -28,9 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
@@ -51,7 +52,7 @@ func Add(ctx context.Context, mgr manager.Manager) error {
 }
 
 func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
-	cli, err := clientcmd.NewClient(mgr.GetConfig())
+	cli, err := podexec.NewClient(mgr.GetConfig())
 	if err != nil {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
@@ -59,6 +60,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		clientcmd:            cli,
+		restConfig:           mgr.GetConfig(),
 		recorder:             mgr.GetEventRecorder("psmdbclustersync-controller"),
 		newTargetMongoClient: defaultTargetMongoClient,
 	}
@@ -90,10 +92,11 @@ type pcsmClient interface {
 }
 
 type ReconcilePerconaServerMongoDBClusterSync struct {
-	client    client.Client
-	scheme    *runtime.Scheme
-	clientcmd clientcmd.Client
-	recorder  events.EventRecorder
+	client     client.Client
+	scheme     *runtime.Scheme
+	clientcmd  podexec.Client
+	restConfig *rest.Config
+	recorder   events.EventRecorder
 
 	newPCSMClientFor     func(*psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient
 	newTargetMongoClient targetMongoClientFn
@@ -133,7 +136,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return reconcile.Result{}, errors.Wrapf(err, "get target cluster %s", targetNN)
 	}
 
-	svr, err := version.Server(ctx, r.clientcmd)
+	svr, err := version.Server(ctx, r.restConfig)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "fetch server version")
 	}

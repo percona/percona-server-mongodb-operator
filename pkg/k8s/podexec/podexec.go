@@ -1,4 +1,4 @@
-package clientcmd
+package podexec
 
 import (
 	"context"
@@ -17,13 +17,10 @@ type client struct {
 }
 
 type Client interface {
-	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
-	REST() restclient.Interface
-	Config() *restclient.Config
+	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error
 }
 
 func NewClient(config *restclient.Config) (Client, error) {
-	// Create a Kubernetes core/v1 client.
 	cl, err := corev1client.NewForConfig(config)
 	if err != nil {
 		return nil, err
@@ -35,9 +32,7 @@ func NewClient(config *restclient.Config) (Client, error) {
 	}, nil
 }
 
-func (c *client) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
-	// Prepare the API URL used to execute another process within the Pod.
-	// In this case, we'll run a remote shell.
+func (c *client) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	req := c.client.RESTClient().
 		Post().
 		Namespace(pod.Namespace).
@@ -50,7 +45,6 @@ func (c *client) Exec(ctx context.Context, pod *corev1.Pod, containerName string
 			Stdin:     stdin != nil,
 			Stdout:    stdout != nil,
 			Stderr:    stderr != nil,
-			TTY:       tty,
 		}, scheme.ParameterCodec)
 
 	exec, err := remotecommand.NewSPDYExecutor(c.restconfig, "POST", req.URL())
@@ -58,19 +52,9 @@ func (c *client) Exec(ctx context.Context, pod *corev1.Pod, containerName string
 		return err
 	}
 
-	// Connect this process' std{in,out,err} to the remote shell process.
 	return exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  stdin,
 		Stdout: stdout,
 		Stderr: stderr,
-		Tty:    tty,
 	})
-}
-
-func (c *client) REST() restclient.Interface {
-	return c.client.RESTClient()
-}
-
-func (c *client) Config() *restclient.Config {
-	return c.restconfig
 }

@@ -16,12 +16,12 @@ import (
 
 // mockClientCmd is a mock implementation of the ClientCmd interface for testing
 type mockClientCmd struct {
-	execFunc func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
+	execFunc func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error
 }
 
-func (m *mockClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+func (m *mockClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	if m.execFunc != nil {
-		return m.execFunc(ctx, pod, containerName, command, stdin, stdout, stderr, tty)
+		return m.execFunc(ctx, pod, containerName, command, stdin, stdout, stderr)
 	}
 	return nil
 }
@@ -127,7 +127,7 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 			ctx := t.Context()
 
 			mockCmd := &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					if tt.dfError != nil {
 						if stderr != nil {
 							_, _ = stderr.Write([]byte("error executing df command"))
@@ -218,7 +218,7 @@ func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
 			r := &ReconcilePerconaServerMongoDB{
 				pvcUsageBackoff: testPVCUsageBackoff,
 				clientcmd: &mockClientCmd{
-					execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+					execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 						gotContainer = containerName
 						gotCommand = command
 						_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on

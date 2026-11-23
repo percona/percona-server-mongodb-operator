@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	stderrors "errors"
 	"fmt"
-	"io"
 	"maps"
 	"os"
 	"slices"
@@ -40,9 +39,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	k8sutils "github.com/percona/percona-server-mongodb-operator/pkg/k8s"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
@@ -96,12 +95,12 @@ func Add(ctx context.Context, mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(ctx context.Context, mgr manager.Manager) (reconcile.Reconciler, error) {
-	cli, err := clientcmd.NewClient(mgr.GetConfig())
+	cli, err := podexec.NewClient(mgr.GetConfig())
 	if err != nil {
 		return nil, errors.Wrap(err, "create clientcmd")
 	}
 
-	sv, err := version.Server(ctx, cli)
+	sv, err := version.Server(ctx, mgr.GetConfig())
 	if err != nil {
 		return nil, errors.Wrap(err, "get server version")
 	}
@@ -203,11 +202,6 @@ func NewCronRegistry() CronRegistry {
 	return c
 }
 
-// ClientCmd is an interface for executing commands in pods
-type ClientCmd interface {
-	Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
-}
-
 // ReconcilePerconaServerMongoDB reconciles a PerconaServerMongoDB object
 type ReconcilePerconaServerMongoDB struct {
 	// This client, initialized using mgr.Client() above, is a split client
@@ -219,7 +213,7 @@ type ReconcilePerconaServerMongoDB struct {
 	recorder   events.EventRecorder
 
 	crons                 CronRegistry
-	clientcmd             ClientCmd
+	clientcmd             podexec.Client
 	serverVersion         *version.ServerVersion
 	reconcileIn           time.Duration
 	mongoClientProvider   MongoClientProvider

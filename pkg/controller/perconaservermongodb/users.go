@@ -175,7 +175,7 @@ func (r *ReconcilePerconaServerMongoDB) killContainer(ctx context.Context, pods 
 				err := retry.OnError(retry.DefaultBackoff, func(_ error) bool { return true }, func() error {
 					stderrBuf := &bytes.Buffer{}
 
-					err := r.clientcmd.Exec(ctx, &pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
+					err := r.clientcmd.Exec(ctx, &pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf)
 					if err != nil {
 						return errors.Wrap(err, "exec command in pod")
 					}

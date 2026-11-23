@@ -83,7 +83,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) cancelBackup(ctx context.Context, 
 	if len(cluster.Spec.Replsets) == 0 {
 		return errors.New("cluster has no replica sets")
 	}
-	svr, err := version.Server(ctx, r.clientcmd)
+	svr, err := version.Server(ctx, r.restConfig)
 	if err != nil {
 		return errors.Wrap(err, "fetch server version for backup cancellation")
 	}

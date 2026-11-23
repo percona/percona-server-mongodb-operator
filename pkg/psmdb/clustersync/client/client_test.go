@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 )
@@ -29,7 +30,7 @@ type stubExec struct {
 	cmd []string
 }
 
-func (s *stubExec) Exec(_ context.Context, _ *corev1.Pod, _ string, cmd []string, _ io.Reader, stdout, stderr io.Writer, _ bool) error {
+func (s *stubExec) Exec(_ context.Context, _ *corev1.Pod, _ string, cmd []string, _ io.Reader, stdout, stderr io.Writer) error {
 	s.cmd = append([]string(nil), cmd...)
 	if s.stdout != nil {
 		_, _ = stdout.Write(s.stdout)
@@ -54,7 +55,7 @@ type scriptedExec struct {
 	pods []string
 }
 
-func (s *scriptedExec) Exec(_ context.Context, p *corev1.Pod, _ string, _ []string, _ io.Reader, stdout, stderr io.Writer, _ bool) error {
+func (s *scriptedExec) Exec(_ context.Context, p *corev1.Pod, _ string, _ []string, _ io.Reader, stdout, stderr io.Writer) error {
 	s.pods = append(s.pods, p.Name)
 	res := s.byPod[p.Name]
 	if res.stdout != nil {
@@ -95,7 +96,7 @@ func readyPod() *corev1.Pod {
 	return pod("pcsm-0", "cr", true)
 }
 
-func newClient(exec podExecer, pods ...*corev1.Pod) *Client {
+func newClient(exec podexec.Client, pods ...*corev1.Pod) *Client {
 	objs := make([]k8sclient.Object, 0, len(pods))
 	for _, p := range pods {
 		objs = append(objs, p)

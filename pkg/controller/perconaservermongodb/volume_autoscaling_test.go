@@ -895,7 +895,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			var execContainer string
 			var execCommand []string
 			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execContainer = containerName
 					execCommand = command
 					_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
@@ -980,7 +980,7 @@ func TestResizeMongosPVCsWithoutLogPVC(t *testing.T) {
 
 			execCalls := 0
 			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execCalls++
 					return nil
 				},
@@ -1054,7 +1054,7 @@ func TestReconcileStorageAutoscalingNoPVCs(t *testing.T) {
 
 			execCalls := 0
 			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execCalls++
 					return nil
 				},
@@ -1140,7 +1140,7 @@ func fullPVCAndPod(
 
 func fullDiskExec() *mockClientCmd {
 	return &mockClientCmd{
-		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
 /dev/sdb       10737418240 9663676416  1073741824  90% /data/db`))
 			return nil
@@ -1314,7 +1314,7 @@ func TestSearchAutoscalingResizesOnlyTargetShard(t *testing.T) {
 			}
 			r := buildFakeClient(append(objects, cr)...)
 			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					used := "1073741824"
 					if pod.Labels[naming.LabelKubernetesReplset] == target.Name && !tt.belowThreshold {
 						used = "9663676416"
@@ -1482,7 +1482,7 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 	var execContainer string
 	var execCommand []string
 	r.clientcmd = &mockClientCmd{
-		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			execContainer = containerName
 			execCommand = command
 			_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
@@ -1552,7 +1552,7 @@ func TestReconcileStorageAutoscalingVolumeNotMounted(t *testing.T) {
 
 			execCalls := 0
 			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execCalls++
 					return nil
 				},
@@ -1625,7 +1625,7 @@ func TestReconcileStorageAutoscalingPicksOwningContainer(t *testing.T) {
 	var execContainer string
 	var execCommand []string
 	r.clientcmd = &mockClientCmd{
-		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			execContainer = containerName
 			execCommand = command
 			_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on

@@ -765,7 +765,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileBackupVersion(ctx context.Conte
 	stderr := &bytes.Buffer{}
 	cmd := []string{"pbm-agent", "version", "--short"}
 
-	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, stdout, stderr, false)
+	err = r.clientcmd.Exec(ctx, pod, naming.ContainerBackupAgent, cmd, nil, stdout, stderr)
 	if err != nil {
 		return errors.Wrap(err, "get pbm-agent version")
 	}

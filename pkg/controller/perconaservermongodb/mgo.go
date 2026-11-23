@@ -818,7 +818,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 
 		var errb, outb bytes.Buffer
 
-		err = r.clientcmd.Exec(ctx, &pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb, false)
+		err = r.clientcmd.Exec(ctx, &pod, "mongod", []string{"mongod", "--version"}, nil, &outb, &errb)
 		if err != nil {
 			return nil, nil, fmt.Errorf("exec --version: %v / %s / %s", err, outb.String(), errb.String())
 		}
@@ -844,7 +844,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 		}
 		errb.Reset()
 		outb.Reset()
-		err = r.clientcmd.Exec(ctx, &pod, "mongod", mongoArgs, strings.NewReader(replsetInitExpression+"\n"), &outb, &errb, false)
+		err = r.clientcmd.Exec(ctx, &pod, "mongod", mongoArgs, strings.NewReader(replsetInitExpression+"\n"), &outb, &errb)
 		if err != nil {
 			return nil, nil, fmt.Errorf("exec rs.initiate: %v / %s / %s", err, outb.String(), errb.String())
 		}
@@ -862,7 +862,7 @@ func (r *ReconcilePerconaServerMongoDB) handleReplsetInit(ctx context.Context, c
 				"sh", "-c",
 				mongoCmd + " --quiet --eval 'db.hello().isWritablePrimary'",
 			}
-			err := r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr, false)
+			err := r.clientcmd.Exec(ctx, &pod, "mongod", hello, nil, &stdout, &stderr)
 			if err != nil {
 				return errors.Wrapf(err, "run hello stdout: %s, stderr: %s", stdout.String(), stderr.String())
 			}
@@ -925,7 +925,7 @@ func (r *ReconcilePerconaServerMongoDB) createUserAdminIfNeeded(ctx context.Cont
 		fmt.Sprintf(`%s --eval %s`, mongoCmd, quotedCreateUserExpression),
 	}
 
-	err = r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false)
+	err = r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb)
 	if err != nil {
 		canAuth, authErr := r.userAdminCanAuthenticate(ctx, pod, mongoCmd, userAdmin.Username, userAdmin.Password)
 		if authErr != nil {
@@ -956,7 +956,7 @@ func (r *ReconcilePerconaServerMongoDB) userAdminCanAuthenticate(ctx context.Con
 		),
 	}
 
-	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb, false); err != nil {
+	if err := r.clientcmd.Exec(ctx, pod, "mongod", cmd, nil, &outb, &errb); err != nil {
 		if isMongoAuthFailure(err, outb.String(), errb.String()) {
 			log.V(1).Info("userAdmin authentication failed", "pod", pod.Name, "error", err, "stdout", outb.String(), "stderr", errb.String())
 			return false, nil

@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sversion "k8s.io/apimachinery/pkg/version"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 )
 
 var log = logf.Log.WithName("version")
@@ -72,14 +72,14 @@ var (
 
 // Server returns server version and platform (k8s|oc)
 // it performs API requests for the first invocation and then returns "cached" value
-func Server(ctx context.Context, cl clientcmd.Client) (*ServerVersion, error) {
+func Server(ctx context.Context, cfg *rest.Config) (*ServerVersion, error) {
 	mx.Lock()
 	defer mx.Unlock()
 	if cVersion != nil {
 		return cVersion, nil
 	}
 
-	v, err := GetServer(ctx, cl)
+	v, err := GetServer(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +90,12 @@ func Server(ctx context.Context, cl clientcmd.Client) (*ServerVersion, error) {
 }
 
 // GetServer make request to platform server and returns server version and platform (k8s|oc)
-func GetServer(ctx context.Context, cl clientcmd.Client) (*ServerVersion, error) {
-	client := cl.REST()
+func GetServer(ctx context.Context, cfg *rest.Config) (*ServerVersion, error) {
+	cl, err := corev1client.NewForConfig(cfg)
+	if err != nil {
+		return nil, errors.Wrap(err, "create REST client")
+	}
+	client := cl.RESTClient()
 
 	version, err := probePlatform(ctx, client)
 	if err != nil {
@@ -102,7 +106,7 @@ func GetServer(ctx context.Context, cl clientcmd.Client) (*ServerVersion, error)
 	detectCtx, cancel := context.WithTimeout(ctx, cloudDetectionTimeout)
 	defer cancel()
 
-	version.CloudProvider = DetectCloudProvider(detectCtx, client, cl.Config())
+	version.CloudProvider = DetectCloudProvider(detectCtx, client, cfg)
 
 	return version, nil
 }
