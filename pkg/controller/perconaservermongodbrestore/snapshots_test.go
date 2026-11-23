@@ -179,6 +179,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 								Name:           "mongod",
 								LivenessProbe:  &corev1.Probe{},
 								ReadinessProbe: &corev1.Probe{},
+								StartupProbe:   &corev1.Probe{},
 							},
 						},
 					},
@@ -207,6 +208,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		assert.Equal(t, pbmName, updated.Spec.Template.Spec.Containers[0].Args[1])
 		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].LivenessProbe)
 		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].ReadinessProbe)
+		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].StartupProbe)
 	})
 
 	t.Run("returns done and sets condition when all statefulsets at zero ready replicas", func(t *testing.T) {
@@ -400,6 +402,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 								Name:           "mongod",
 								LivenessProbe:  &corev1.Probe{},
 								ReadinessProbe: &corev1.Probe{},
+								StartupProbe:   &corev1.Probe{},
 							},
 						},
 					},
@@ -427,6 +430,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		assert.NotContains(t, container.Args, "--db-config")
 		assert.Nil(t, container.LivenessProbe)
 		assert.Nil(t, container.ReadinessProbe)
+		assert.Nil(t, container.StartupProbe)
 
 		for _, v := range updated.Spec.Template.Spec.Volumes {
 			assert.NotEqual(t, "pbm-db-config", v.Name, "expected no pbm-db-config volume")

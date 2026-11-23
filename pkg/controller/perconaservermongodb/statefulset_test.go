@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -384,8 +385,11 @@ func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
 }
 
 func TestStartupProbeDefaults(t *testing.T) {
-	ctx := context.Background()
-	defaultStartupCommand := []string{"/opt/percona/mongodb-healthcheck", "k8s", "startup", "--component", "mongod"}
+	startupCommand := []string{"/opt/percona/mongodb-healthcheck", "k8s", "startup", "--component", "mongod"}
+	tlsStartupCommand := append(slices.Clone(startupCommand),
+		"--ssl", "--sslInsecure",
+		"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+		"--sslPEMKeyFile", "/tmp/tls.pem")
 
 	tests := map[string]struct {
 		modify          func(cr *api.PerconaServerMongoDB)
@@ -395,6 +399,7 @@ func TestStartupProbeDefaults(t *testing.T) {
 		wantHidden      int32
 		wantRSPeriod    int32
 		wantCfgFailures int32
+		wantCommand     []string
 		wantExec        []string
 	}{
 		"not set before 1.24.0": {
@@ -429,6 +434,18 @@ func TestStartupProbeDefaults(t *testing.T) {
 			wantRSPeriod:    10,
 			wantCfgFailures: 8640,
 		},
+		"no TLS flags when TLS is disabled": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+				cr.Spec.Unsafe.TLS = true
+			},
+			wantRS:          8640,
+			wantNonVoting:   8640,
+			wantHidden:      8640,
+			wantRSPeriod:    10,
+			wantCfgFailures: 8640,
+			wantCommand:     startupCommand,
+		},
 		"user handler is kept": {
 			modify: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.Replsets[0].StartupProbe = &corev1.Probe{
@@ -451,7 +468,7 @@ func TestStartupProbeDefaults(t *testing.T) {
 			cr.Spec.Replsets[0].NonVoting.Enabled = true
 			cr.Spec.Replsets[0].Hidden.Enabled = true
 			tt.modify(cr)
-			require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
 
 			rs := cr.Spec.Replsets[0]
 			cfg := cr.Spec.Sharding.ConfigsvrReplSet
@@ -468,14 +485,18 @@ func TestStartupProbeDefaults(t *testing.T) {
 			require.Equal(t, tt.wantNonVoting, rs.NonVoting.StartupProbe.FailureThreshold)
 			require.Equal(t, tt.wantHidden, rs.Hidden.StartupProbe.FailureThreshold)
 			require.Equal(t, tt.wantCfgFailures, cfg.StartupProbe.FailureThreshold)
+			wantCommand := tlsStartupCommand
+			if tt.wantCommand != nil {
+				wantCommand = tt.wantCommand
+			}
 			for _, p := range []*corev1.Probe{rs.StartupProbe, rs.NonVoting.StartupProbe, rs.Hidden.StartupProbe} {
 				if tt.wantExec != nil {
 					require.Equal(t, tt.wantExec, p.Exec.Command)
 					continue
 				}
-				require.Equal(t, defaultStartupCommand, p.Exec.Command[:5])
+				require.Equal(t, wantCommand, p.Exec.Command)
 			}
-			require.Equal(t, defaultStartupCommand, cfg.StartupProbe.Exec.Command[:5])
+			require.Equal(t, wantCommand, cfg.StartupProbe.Exec.Command)
 		})
 	}
 }

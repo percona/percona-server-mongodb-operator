@@ -36,12 +36,12 @@ func TestCheckStateForLiveness(t *testing.T) {
 	tests := []struct {
 		name    string
 		rs      mongo.Status
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name:    "no self member",
 			rs:      mongo.Status{MyState: mongo.MemberStatePrimary},
-			wantErr: true,
+			wantErr: "self member is not found",
 		},
 		{
 			name: "primary",
@@ -82,33 +82,33 @@ func TestCheckStateForLiveness(t *testing.T) {
 		{
 			name:    "unknown state",
 			rs:      statusWithSelf(mongo.MemberStateUnknown, 1, nil),
-			wantErr: true,
+			wantErr: "unhealthy state UNKNOWN",
 		},
 		{
 			name:    "down state",
 			rs:      statusWithSelf(mongo.MemberStateDown, 1, nil),
-			wantErr: true,
+			wantErr: "unhealthy state DOWN",
 		},
 		{
 			name:    "removed state",
 			rs:      statusWithSelf(mongo.MemberStateRemoved, 1, nil),
-			wantErr: true,
+			wantErr: "unhealthy state REMOVED",
 		},
 		{
 			name:    "out-of-range state",
 			rs:      statusWithSelf(mongo.MemberState(99), 1, nil),
-			wantErr: true,
+			wantErr: "state is unknown 99",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := CheckStateForLiveness(t.Context(), tt.rs)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				return
 			}
+			require.NoError(t, err)
 		})
 	}
 }
