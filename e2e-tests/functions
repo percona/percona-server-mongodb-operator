@@ -1124,6 +1124,54 @@ compare_generation() {
 	fi
 }
 
+# Prints the value of the percona.com/ssl-leaf-hash annotation the operator sets
+# on mongod/mongos pods once they have loaded the current TLS leaf certificates.
+tls_leaf_hash() {
+	local cluster="$1"
+	local hashes=()
+	local secret crt
+
+	for secret in "${cluster}-ssl" "${cluster}-ssl-internal"; do
+		crt=$(kubectl_bin get secret "${secret}" --ignore-not-found -o jsonpath='{.data.tls\.crt}')
+		if [[ -n ${crt} ]]; then
+			hashes+=("$(echo "${crt}" | base64 -d | sha256sum | cut -d' ' -f1)")
+		else
+			hashes+=("")
+		fi
+	done
+	echo "${hashes[0]}/${hashes[1]}"
+}
+
+pod_uids() {
+	local cluster="$1"
+
+	kubectl_bin get pods -l "app.kubernetes.io/instance=${cluster},app.kubernetes.io/component in (mongod,cfg,mongos)" \
+		-o jsonpath='{range .items[*]}{.metadata.name}={.metadata.uid}{"\n"}{end}' | sort
+}
+
+# Waits until every mongod/mongos pod of the cluster has loaded the current TLS
+# leaf certificates in place (crVersion >= 1.24.0).
+wait_tls_rotated_in_place() {
+	local cluster="$1"
+	local want
+	local retry=0
+
+	want=$(tls_leaf_hash "${cluster}")
+	desc "waiting for pods of ${cluster} to load TLS certificates ${want} in place"
+	until [[ -z $(kubectl_bin get pods -l "app.kubernetes.io/instance=${cluster},app.kubernetes.io/component in (mongod,cfg,mongos)" \
+		-o jsonpath='{range .items[*]}{.metadata.name}={.metadata.annotations.percona\.com/ssl-leaf-hash}{"\n"}{end}' \
+		| grep -v "=${want}$") ]]; do
+		let retry+=1
+		if [[ ${retry} -ge 60 ]]; then
+			kubectl_bin get pods -l "app.kubernetes.io/instance=${cluster}" \
+				-o jsonpath='{range .items[*]}{.metadata.name}={.metadata.annotations.percona\.com/ssl-leaf-hash}{"\n"}{end}'
+			echo "TLS certificates were not rotated in place, want ${want}"
+			exit 1
+		fi
+		sleep 5
+	done
+}
+
 compare_kubectl() {
 	local resource="$1"
 	local postfix="$2"
