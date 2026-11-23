@@ -17,9 +17,10 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -219,8 +220,6 @@ func TestApplyObservedStatus(t *testing.T) {
 	}
 }
 
-// fakePCSM records every call so InvokeAction tests can assert exactly
-// one verb fires per action with the expected arguments.
 type fakePCSM struct {
 	started    *client.StartOptions
 	paused     int
@@ -257,12 +256,15 @@ func (f *fakePCSM) Finalize(_ context.Context) error {
 func TestInvokeAction(t *testing.T) {
 	t.Parallel()
 
+	boom := errors.New("pcsm refused")
+
 	tests := map[string]struct {
-		action  modeAction
-		cr      *psmdbv1.PerconaServerMongoDBClusterSync
-		state   psmdbv1.ClusterSyncState
-		assert  func(t *testing.T, f *fakePCSM)
-		wantErr error
+		action    modeAction
+		cr        *psmdbv1.PerconaServerMongoDBClusterSync
+		state     psmdbv1.ClusterSyncState
+		actionErr error
+		assert    func(t *testing.T, f *fakePCSM)
+		wantErr   error
 	}{
 		"start passes excludeNamespaces from spec": {
 			action: actionStart,
@@ -314,18 +316,16 @@ func TestInvokeAction(t *testing.T) {
 			},
 		},
 		"propagates client error": {
-			action:  actionPause,
-			cr:      &psmdbv1.PerconaServerMongoDBClusterSync{},
-			wantErr: errors.New("some error"),
+			action:    actionPause,
+			cr:        &psmdbv1.PerconaServerMongoDBClusterSync{},
+			actionErr: boom,
+			wantErr:   boom,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			f := &fakePCSM{}
-			if tc.wantErr != nil {
-				f.actionErr = tc.wantErr
-			}
+			f := &fakePCSM{actionErr: tc.actionErr}
 			err := invokeAction(t.Context(), f, tc.action, tc.cr, tc.state)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
@@ -339,60 +339,211 @@ func TestInvokeAction(t *testing.T) {
 	}
 }
 
-func TestReconcileModeInheritedFinalized(t *testing.T) {
-	t.Parallel()
+func TestReconcileMode(t *testing.T) {
+	backupHolder := "backup-uid"
+	backupLease := &coordv1.Lease{
+		Name: naming.BackupLeaseName("tgt"), Namespace: "ns",
+		Spec: coordv1.LeaseSpec{
+			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
+			HolderIdentity: &backupHolder,
+		},
+	}
+	running := func(size int32) psmdbv1.PerconaServerMongoDBClusterSyncSpec {
+		return psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: "tgt", Mode: psmdbv1.ClusterSyncModeRunning, Size: size}
+	}
+	paused := psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: "tgt", Mode: psmdbv1.ClusterSyncModePaused, Size: 3}
+	startedStatus := func(state psmdbv1.ClusterSyncState, prevError string) psmdbv1.PerconaServerMongoDBClusterSyncStatus {
+		return psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+			Mode:      psmdbv1.ClusterSyncModeRunning,
+			State:     state,
+			StartedAt: &metav1.Time{Time: time.Unix(0, 0)},
+			Error:     prevError,
+		}
+	}
 
 	tests := map[string]struct {
 		spec        psmdbv1.PerconaServerMongoDBClusterSyncSpec
 		status      psmdbv1.PerconaServerMongoDBClusterSyncStatus
-		observed    client.Status
+		pcsm        fakePCSM
+		ready       int32
+		objects     []k8sclient.Object
+		passes      int
+		wantError   string
+		wantActive  string
+		wantMode    psmdbv1.ClusterSyncMode
+		wantEvents  []string
 		wantStarted bool
+		wantPaused  int
 	}{
 		"new CR against target with inherited finalized state issues /start": {
-			spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
-				ClusterName: "tgt",
-				Mode:        psmdbv1.ClusterSyncModeRunning,
-			},
-			observed:    client.Status{State: "finalized", LagTimeSeconds: 297},
+			spec:        running(0),
+			pcsm:        fakePCSM{statusResp: client.Status{State: "finalized", LagTimeSeconds: 297}},
+			ready:       1,
 			wantStarted: true,
 		},
 		"intentional finalize from running: normal flow, no /start": {
-			spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
-				ClusterName: "tgt",
-				Mode:        psmdbv1.ClusterSyncModeFinalized,
-			},
+			spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: "tgt", Mode: psmdbv1.ClusterSyncModeFinalized},
 			status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
 				Mode:      psmdbv1.ClusterSyncModeRunning,
 				StartedAt: &metav1.Time{Time: time.Now().Add(-time.Hour)},
 			},
-			observed: client.Status{State: "finalized"},
+			pcsm:  fakePCSM{statusResp: client.Status{State: "finalized"}},
+			ready: 1,
+		},
+		"first observation records the active instance without an event": {
+			spec:       running(3),
+			status:     psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning},
+			pcsm:       fakePCSM{statusResp: client.Status{State: "running"}, active: "sync-pcsm-0"},
+			ready:      3,
+			wantActive: "sync-pcsm-0",
+		},
+		"unchanged active instance emits no event": {
+			spec:       running(3),
+			status:     psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, ActiveInstance: "sync-pcsm-0"},
+			pcsm:       fakePCSM{statusResp: client.Status{State: "running"}, active: "sync-pcsm-0"},
+			ready:      3,
+			wantActive: "sync-pcsm-0",
+		},
+		"handover to another instance is reported as a failover": {
+			spec:       running(3),
+			status:     psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, ActiveInstance: "sync-pcsm-0"},
+			pcsm:       fakePCSM{statusResp: client.Status{State: "running"}, active: "sync-pcsm-2"},
+			ready:      3,
+			wantActive: "sync-pcsm-2",
+			wantEvents: []string{"PCSMFailover"},
+		},
+		"degraded group keeps the last known active instance": {
+			spec:       running(3),
+			status:     psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, ActiveInstance: "sync-pcsm-1"},
+			pcsm:       fakePCSM{statusResp: client.Status{State: "running"}},
+			ready:      1,
+			wantActive: "sync-pcsm-1",
+		},
+		"busy cluster is reported once across reconciles": {
+			spec:       running(0),
+			pcsm:       fakePCSM{statusResp: client.Status{State: "idle"}},
+			ready:      1,
+			objects:    []k8sclient.Object{backupLease},
+			passes:     3,
+			wantError:  `backup is in progress on cluster "tgt" (lease ` + naming.BackupLeaseName("tgt") + `)`,
+			wantEvents: []string{"ClusterBusy"},
+		},
+		"mid-election group reports no active instance": {
+			spec:       running(3),
+			status:     startedStatus("", ""),
+			pcsm:       fakePCSM{statusErr: client.ErrNoActivePCSM, active: "sync-pcsm-0"},
+			ready:      3,
+			wantError:  client.ErrNoActivePCSM.Error(),
+			wantActive: "sync-pcsm-0",
+			wantMode:   psmdbv1.ClusterSyncModeRunning,
+		},
+		"no ready pod yet": {
+			spec:       running(3),
+			status:     startedStatus("", ""),
+			pcsm:       fakePCSM{statusErr: client.ErrPCSMNotReady, active: "sync-pcsm-0"},
+			ready:      3,
+			wantError:  client.ErrPCSMNotReady.Error(),
+			wantActive: "sync-pcsm-0",
+			wantMode:   psmdbv1.ClusterSyncModeRunning,
+		},
+		"an unexpected status failure is recorded, not returned": {
+			spec:       running(3),
+			status:     startedStatus("", ""),
+			pcsm:       fakePCSM{statusErr: errors.New("exec failed"), active: "sync-pcsm-0"},
+			ready:      3,
+			wantError:  "exec failed",
+			wantActive: "sync-pcsm-0",
+			wantMode:   psmdbv1.ClusterSyncModeRunning,
+		},
+		"a repeated status failure stays in status": {
+			spec:       running(3),
+			status:     startedStatus("", "exec failed"),
+			pcsm:       fakePCSM{statusErr: errors.New("exec failed"), active: "sync-pcsm-0"},
+			ready:      3,
+			wantError:  "exec failed",
+			wantActive: "sync-pcsm-0",
+			wantMode:   psmdbv1.ClusterSyncModeRunning,
+		},
+		"a failed transition is recorded, not returned": {
+			spec:   paused,
+			status: startedStatus(psmdbv1.ClusterSyncStateRunning, ""),
+			pcsm: fakePCSM{
+				statusResp: client.Status{State: string(psmdbv1.ClusterSyncStateRunning)},
+				actionErr:  errors.New("pcsm pause refused"),
+				active:     "sync-pcsm-0",
+			},
+			ready:      3,
+			wantError:  "pcsm pause refused",
+			wantActive: "sync-pcsm-0",
+			wantPaused: 1,
+		},
+		"a repeated failed transition stays in status": {
+			spec:   paused,
+			status: startedStatus(psmdbv1.ClusterSyncStateRunning, "pcsm pause refused"),
+			pcsm: fakePCSM{
+				statusResp: client.Status{State: string(psmdbv1.ClusterSyncStateRunning)},
+				actionErr:  errors.New("pcsm pause refused"),
+				active:     "sync-pcsm-0",
+			},
+			ready:      3,
+			wantError:  "pcsm pause refused",
+			wantActive: "sync-pcsm-0",
+			wantPaused: 1,
+		},
+		"a transition against an unreachable instance is not an error": {
+			spec:   paused,
+			status: startedStatus(psmdbv1.ClusterSyncStateRunning, ""),
+			pcsm: fakePCSM{
+				statusResp: client.Status{State: string(psmdbv1.ClusterSyncStateRunning)},
+				actionErr:  client.ErrNoActivePCSM,
+				active:     "sync-pcsm-0",
+			},
+			ready:      3,
+			wantError:  client.ErrNoActivePCSM.Error(),
+			wantActive: "sync-pcsm-0",
+			wantPaused: 1,
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-				Name: "sync3", Namespace: "ns", UID: "u",
+				Name: "sync", Namespace: "ns", UID: "u",
 				Spec:   tc.spec,
 				Status: tc.status,
 			}
 			cl := fake.NewClientBuilder().
 				WithScheme(clusterSyncScheme(t)).
 				WithStatusSubresource(cr).
-				WithObjects(cr).
+				WithObjects(append([]k8sclient.Object{cr}, tc.objects...)...).
 				Build()
-			rec := record.NewFakeRecorder(4)
+			rec := events.NewFakeRecorder(16)
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+			pcsm := tc.pcsm
+			nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 
-			f := &fakePCSM{statusResp: tc.observed}
+			for range max(tc.passes, 1) {
+				current := &psmdbv1.PerconaServerMongoDBClusterSync{}
+				require.NoError(t, cl.Get(t.Context(), nn, current))
+				require.NoError(t, r.reconcileMode(t.Context(), current, &pcsm, tc.ready),
+					"a PCSM-side failure must not fail the reconcile")
+			}
 
-			err := r.reconcileMode(t.Context(), cr, f, 1)
-			require.NoError(t, err)
+			stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(t.Context(), nn, stored))
+			assert.Equal(t, tc.wantError, stored.Status.Error)
+			assert.Equal(t, tc.wantActive, stored.Status.ActiveInstance)
+			assert.Equal(t, tc.ready, stored.Status.ReadyReplicas)
+			assert.Equal(t, clustersync.Size(cr), stored.Status.Size)
+			assert.Equal(t, tc.wantStarted, pcsm.started != nil)
+			assert.Equal(t, tc.wantPaused, pcsm.paused)
+			if tc.wantMode != "" {
+				assert.Equal(t, tc.wantMode, stored.Status.Mode, "mode must not mirror spec while PCSM state is unknown")
+			}
 
-			if tc.wantStarted {
-				assert.NotNil(t, f.started, "expected /start to be issued")
-			} else {
-				assert.Nil(t, f.started, "did not expect /start")
+			require.Len(t, rec.Events, len(tc.wantEvents), "events are reported once per change, not once per reconcile")
+			for _, want := range tc.wantEvents {
+				assert.Contains(t, <-rec.Events, want)
 			}
 		})
 	}
@@ -596,12 +747,20 @@ func hasEvent(rec *record.FakeRecorder, reason string) bool {
 func TestReadyReplicas(t *testing.T) {
 	cr := &psmdbv1.PerconaServerMongoDBClusterSync{Name: "sync", Namespace: "ns"}
 
+	boom := errors.New("apiserver down")
+
 	tests := map[string]struct {
 		deployment *appsv1.Deployment
+		getErr     error
 		want       int32
+		wantErr    error
 	}{
 		"missing deployment is not ready": {
 			want: 0,
+		},
+		"a non-NotFound read failure is returned": {
+			getErr:  boom,
+			wantErr: boom,
 		},
 		"stale observedGeneration is treated as not ready": {
 			deployment: deploymentWith(cr, 2, 1, 3),
@@ -631,34 +790,24 @@ func TestReadyReplicas(t *testing.T) {
 			if tc.deployment != nil {
 				b = b.WithObjects(tc.deployment)
 			}
+			if tc.getErr != nil {
+				b = b.WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(context.Context, k8sclient.WithWatch, k8sclient.ObjectKey, k8sclient.Object, ...k8sclient.GetOption) error {
+						return tc.getErr
+					},
+				})
+			}
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: b.Build()}
 
 			got, err := r.readyReplicas(t.Context(), cr)
-
-			require.NoError(t, err)
 			assert.Equal(t, tc.want, got)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
-
-	// A missing deployment is a normal bootstrap state and reads as zero;
-	// any other read failure must not be flattened into the same answer,
-	// or an unreachable API server looks like a group that is still
-	// starting and reconcile silently skips every PCSM command.
-	t.Run("a non-NotFound read failure is returned", func(t *testing.T) {
-		boom := errors.New("apiserver down")
-		cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).
-			WithInterceptorFuncs(interceptor.Funcs{
-				Get: func(context.Context, k8sclient.WithWatch, k8sclient.ObjectKey, k8sclient.Object, ...k8sclient.GetOption) error {
-					return boom
-				},
-			}).Build()
-		r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
-
-		got, err := r.readyReplicas(t.Context(), cr)
-
-		require.ErrorIs(t, err, boom)
-		assert.Zero(t, got)
-	})
 }
 
 func deploymentWith(cr *psmdbv1.PerconaServerMongoDBClusterSync, generation, observed, ready int64) *appsv1.Deployment {
@@ -673,23 +822,17 @@ func deploymentWith(cr *psmdbv1.PerconaServerMongoDBClusterSync, generation, obs
 	}
 }
 
-// TestReconcilePDB covers the full lifecycle of the disruption budget,
-// including the part that is easy to get wrong: removal.
-//
-// A PDB is only meaningful above one instance. If the group is scaled back
-// to a single instance and the budget is left behind, it keeps asserting
-// "at most one pod may be unavailable" over a one-pod deployment, which
-// blocks every node drain on that node indefinitely. So scaling down must
-// delete it, and deleting something that is already gone must not fail the
-// reconcile — a reconcile runs many times and only the first one finds
-// anything to delete.
 func TestReconcilePDB(t *testing.T) {
+	boom := errors.New("etcd unavailable")
+
 	tests := map[string]struct {
 		size        int32
 		existing    bool
 		foreign     bool
+		createErr   error
 		wantPDB     bool
 		wantDeletes int
+		wantErr     error
 	}{
 		"HA group creates the budget":                    {size: 3, wantPDB: true},
 		"HA group is idempotent over an existing budget": {size: 3, existing: true, wantPDB: true},
@@ -697,6 +840,7 @@ func TestReconcilePDB(t *testing.T) {
 		"scale down to one deletes the existing budget":  {size: 1, existing: true, wantDeletes: 1},
 		"a budget this CR does not own is left alone":    {size: 3, existing: true, foreign: true, wantPDB: true},
 		"scale down does not delete a foreign budget":    {size: 1, existing: true, foreign: true, wantPDB: true},
+		"apply failure is returned":                      {size: 3, createErr: boom, wantErr: boom},
 	}
 
 	for name, tc := range tests {
@@ -709,6 +853,12 @@ func TestReconcilePDB(t *testing.T) {
 			deletes := 0
 			b := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).
 				WithInterceptorFuncs(interceptor.Funcs{
+					Create: func(ctx context.Context, c k8sclient.WithWatch, obj k8sclient.Object, opts ...k8sclient.CreateOption) error {
+						if tc.createErr != nil {
+							return tc.createErr
+						}
+						return c.Create(ctx, obj, opts...)
+					},
 					Delete: func(ctx context.Context, c k8sclient.WithWatch, obj k8sclient.Object, opts ...k8sclient.DeleteOption) error {
 						deletes++
 						return c.Delete(ctx, obj, opts...)
@@ -729,13 +879,19 @@ func TestReconcilePDB(t *testing.T) {
 			cl := b.Build()
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
 
-			require.NoError(t, r.reconcilePDB(t.Context(), cr))
+			err := r.reconcilePDB(t.Context(), cr)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				assert.ErrorContains(t, err, "apply clustersync pdb")
+				return
+			}
+			require.NoError(t, err)
 			require.NoError(t, r.reconcilePDB(t.Context(), cr), "reconcile must be idempotent")
 			assert.Equal(t, tc.wantDeletes, deletes,
 				"reconcile runs every few seconds; it must not issue a write call when there is nothing to remove")
 
 			pdb := &policyv1.PodDisruptionBudget{}
-			err := cl.Get(t.Context(), types.NamespacedName{
+			err = cl.Get(t.Context(), types.NamespacedName{
 				Name:      clustersync.DeploymentName(cr),
 				Namespace: cr.Namespace,
 			}, pdb)
@@ -758,206 +914,67 @@ func TestReconcilePDB(t *testing.T) {
 	}
 }
 
-// TestReconcileModeReportsHAGroup covers what the CR tells a user about
-// the PCSM group: how many instances are ready, and which one currently
-// holds the lease.
-//
-// status.activeInstance is not just cosmetic — the next reconcile seeds
-// the PCSM client with it so commands go straight to the writer instead
-// of probing every standby. A handover between reconciles is the only
-// externally visible sign that a failover happened, so it also emits an
-// event; emitting one per reconcile instead of per handover would bury
-// that signal in noise.
-func TestReconcileModeReportsHAGroup(t *testing.T) {
+func TestWriteStatus(t *testing.T) {
+	steady := psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+		State:         psmdbv1.ClusterSyncStateRunning,
+		ReadyReplicas: 3,
+	}
+
 	tests := map[string]struct {
-		prevActive string
-		active     string
-		ready      int32
-		wantActive string
-		wantEvent  string
+		stored    psmdbv1.PerconaServerMongoDBClusterSyncStatus
+		deleted   bool
+		write     psmdbv1.PerconaServerMongoDBClusterSyncStatus
+		wantWrite bool
 	}{
-		"first observation records the active instance without an event": {
-			active:     "sync-pcsm-0",
-			ready:      3,
-			wantActive: "sync-pcsm-0",
+		"a changed status is persisted": {
+			stored:    psmdbv1.PerconaServerMongoDBClusterSyncStatus{State: psmdbv1.ClusterSyncStateRunning},
+			write:     steady,
+			wantWrite: true,
 		},
-		"unchanged active instance emits no event": {
-			prevActive: "sync-pcsm-0",
-			active:     "sync-pcsm-0",
-			ready:      3,
-			wantActive: "sync-pcsm-0",
+		"an identical status is not written again": {
+			stored: steady,
+			write:  steady,
 		},
-		"handover to another instance is reported as a failover": {
-			prevActive: "sync-pcsm-0",
-			active:     "sync-pcsm-2",
-			ready:      3,
-			wantActive: "sync-pcsm-2",
-			wantEvent:  "PCSMFailover",
-		},
-		"degraded group keeps the last known active instance": {
-			prevActive: "sync-pcsm-1",
-			active:     "",
-			ready:      1,
-			wantActive: "sync-pcsm-1",
+		"a CR deleted mid-reconcile is not an error": {
+			deleted: true,
+			write:   psmdbv1.PerconaServerMongoDBClusterSyncStatus{State: psmdbv1.ClusterSyncStateFinalized},
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-				Name: "sync", Namespace: "ns", UID: "u",
-				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
-					ClusterName: "tgt",
-					Mode:        psmdbv1.ClusterSyncModeRunning,
-					Size:        3,
-				},
-				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
-					Mode:           psmdbv1.ClusterSyncModeRunning,
-					ActiveInstance: tc.prevActive,
-				},
+			cr := &psmdbv1.PerconaServerMongoDBClusterSync{Name: "sync", Namespace: "ns", Status: tc.stored}
+			b := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).WithStatusSubresource(cr)
+			if !tc.deleted {
+				b = b.WithObjects(cr)
 			}
-			cl := fake.NewClientBuilder().
-				WithScheme(clusterSyncScheme(t)).
-				WithStatusSubresource(cr).
-				WithObjects(cr).
-				Build()
-			rec := record.NewFakeRecorder(4)
-			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+			cl := b.Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+			nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
 
-			err := r.reconcileMode(t.Context(), cr, &fakePCSM{
-				statusResp: client.Status{State: "running"},
-				active:     tc.active,
-			}, tc.ready)
-			require.NoError(t, err)
+			before := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			if !tc.deleted {
+				require.NoError(t, cl.Get(t.Context(), nn, before))
+			}
 
-			stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
-			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, stored))
-			assert.Equal(t, tc.wantActive, stored.Status.ActiveInstance)
-			assert.Equal(t, tc.ready, stored.Status.ReadyReplicas)
-			assert.Equal(t, int32(3), stored.Status.Size)
-
-			if tc.wantEvent == "" {
-				assert.Empty(t, rec.Events, "no event expected")
+			require.NoError(t, r.writeStatus(t.Context(), cr, tc.write))
+			if tc.deleted {
 				return
 			}
-			require.Len(t, rec.Events, 1)
-			assert.Contains(t, <-rec.Events, tc.wantEvent)
+
+			after := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(t.Context(), nn, after))
+			assert.Equal(t, tc.write, after.Status)
+			if tc.wantWrite {
+				assert.NotEqual(t, before.ResourceVersion, after.ResourceVersion)
+				return
+			}
+			assert.Equal(t, before.ResourceVersion, after.ResourceVersion,
+				"a steady-state reconcile must not write status, or it wakes itself up every requeue")
 		})
 	}
 }
 
-// TestReconcileModeReportsClusterBusyOnce guards against event and log
-// spam on a path that can stay true for hours.
-//
-// A backup holds the target cluster for as long as it runs, and reconcile
-// re-runs every few seconds, so an ungated Eventf here would attach
-// hundreds of ClusterBusy events to the CR and bury everything else in the
-// operator log. The hold is reported once per distinct reason; the
-// standing condition lives in status.error, which is where a user looks
-// anyway and which is deduplicated by definition.
-func TestReconcileModeReportsClusterBusyOnce(t *testing.T) {
-	const ns, clusterName = "ns", "tgt"
-
-	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-		Name: "sync", Namespace: ns, UID: "u",
-		Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
-			ClusterName: clusterName,
-			Mode:        psmdbv1.ClusterSyncModeRunning,
-		},
-	}
-	holder := "backup-uid"
-	lease := &coordv1.Lease{
-		Name: naming.BackupLeaseName(clusterName), Namespace: ns,
-		Spec: coordv1.LeaseSpec{
-			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
-			HolderIdentity: &holder,
-		},
-	}
-	cl := fake.NewClientBuilder().
-		WithScheme(clusterSyncScheme(t)).
-		WithStatusSubresource(cr).
-		WithObjects(cr, lease).
-		Build()
-	rec := record.NewFakeRecorder(16)
-	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
-
-	// Three passes of the same hold, re-reading the CR in between exactly
-	// as the real reconcile loop does.
-	for range 3 {
-		stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
-		require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: ns}, stored))
-		require.NoError(t, r.reconcileMode(t.Context(), stored, &fakePCSM{
-			statusResp: client.Status{State: "idle"},
-		}, 1))
-	}
-
-	stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
-	require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: ns}, stored))
-	assert.Contains(t, stored.Status.Error, "backup is in progress")
-	assert.Nil(t, stored.Status.StartedAt, "PCSM must not be started while the cluster is busy")
-
-	require.Len(t, rec.Events, 1, "ClusterBusy must be reported once per distinct reason, not once per reconcile")
-	assert.Contains(t, <-rec.Events, "ClusterBusy")
-}
-
-// TestWriteStatus covers the write path every reconcile ends in.
-//
-// Reconcile requeues every few seconds for the lifetime of the CR, so an
-// unconditional status Update is one API write per CR per requeue forever,
-// plus a watch event that wakes this controller up again. Identical status
-// must therefore be a no-op. The missing-CR case matters because the user
-// can delete the CR while a reconcile is mid-flight, and losing a race
-// with deletion is not a reconcile failure.
-func TestWriteStatus(t *testing.T) {
-	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-		Name: "sync", Namespace: "ns",
-		Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{State: psmdbv1.ClusterSyncStateRunning},
-	}
-	cl := fake.NewClientBuilder().
-		WithScheme(clusterSyncScheme(t)).
-		WithStatusSubresource(cr).
-		WithObjects(cr).
-		Build()
-	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
-	nn := types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}
-
-	read := func(t *testing.T) *psmdbv1.PerconaServerMongoDBClusterSync {
-		t.Helper()
-		got := &psmdbv1.PerconaServerMongoDBClusterSync{}
-		require.NoError(t, cl.Get(t.Context(), nn, got))
-		return got
-	}
-
-	t.Run("a changed status is persisted", func(t *testing.T) {
-		require.NoError(t, r.writeStatus(t.Context(), cr, psmdbv1.PerconaServerMongoDBClusterSyncStatus{
-			State:         psmdbv1.ClusterSyncStateRunning,
-			ReadyReplicas: 3,
-		}))
-		assert.Equal(t, int32(3), read(t).Status.ReadyReplicas)
-	})
-
-	t.Run("an identical status is not written again", func(t *testing.T) {
-		before := read(t).ResourceVersion
-		require.NoError(t, r.writeStatus(t.Context(), cr, psmdbv1.PerconaServerMongoDBClusterSyncStatus{
-			State:         psmdbv1.ClusterSyncStateRunning,
-			ReadyReplicas: 3,
-		}))
-		assert.Equal(t, before, read(t).ResourceVersion,
-			"a steady-state reconcile must not write status, or it wakes itself up every requeue")
-	})
-
-	t.Run("a CR deleted mid-reconcile is not an error", func(t *testing.T) {
-		require.NoError(t, cl.Delete(t.Context(), cr.DeepCopy()))
-		assert.NoError(t, r.writeStatus(t.Context(), cr, psmdbv1.PerconaServerMongoDBClusterSyncStatus{
-			State: psmdbv1.ClusterSyncStateFinalized,
-		}))
-	})
-}
-
-// TestIsPCSMUnreachable documents which failures are transient. Both
-// sentinels mean "nobody to talk to right now" — no ready pod, or a group
-// mid-election with no lease holder — and must requeue quietly rather than
-// being logged as reconcile errors every 5 seconds.
 func TestIsPCSMUnreachable(t *testing.T) {
 	tests := map[string]struct {
 		err  error
@@ -977,219 +994,13 @@ func TestIsPCSMUnreachable(t *testing.T) {
 	}
 }
 
-type recordingMongoClient struct {
-	mongo.Client
-
-	getUserInfoResp *mongo.User
-	getUserInfoErr  error
-
-	createUserErr     error
-	updateUserPassErr error
-	updateRolesErr    error
-
-	createUserCalls     int
-	updateUserPassCalls int
-	updateRolesCalls    int
-
-	lastCreatePass  string
-	lastUpdatePass  string
-	lastUpdateRoles []mongo.Role
-}
-
-func (m *recordingMongoClient) GetUserInfo(_ context.Context, _, _ string) (*mongo.User, error) {
-	return m.getUserInfoResp, m.getUserInfoErr
-}
-
-func (m *recordingMongoClient) CreateUser(_ context.Context, _, _, pwd string, _ ...mongo.Role) error {
-	m.createUserCalls++
-	m.lastCreatePass = pwd
-	return m.createUserErr
-}
-
-func (m *recordingMongoClient) UpdateUserPass(_ context.Context, _, _, pwd string) error {
-	m.updateUserPassCalls++
-	m.lastUpdatePass = pwd
-	return m.updateUserPassErr
-}
-
-func (m *recordingMongoClient) UpdateUserRoles(_ context.Context, _, _ string, roles []mongo.Role) error {
-	m.updateRolesCalls++
-	m.lastUpdateRoles = roles
-	return m.updateRolesErr
-}
-
-func TestEnsureTargetMongoUser(t *testing.T) {
-	t.Parallel()
-
-	const (
-		username = "clustersync-cr"
-		password = "new-password"
-	)
-	passwordMAC := passwordAnnotationMAC([]byte(password))
-
-	secretWith := func(annotations map[string]string) *corev1.Secret {
-		return &corev1.Secret{
-			Annotations: annotations,
-			Data: map[string][]byte{
-				targetUserSecretUsernameKey: []byte(username),
-				targetUserSecretPasswordKey: []byte(password),
-			},
-		}
-	}
-	existingWithDesiredRoles := &mongo.User{DB: "admin", Roles: append([]mongo.Role(nil), syncTargetUserRoles...)}
-
-	tests := map[string]struct {
-		mc          *recordingMongoClient
-		sec         *corev1.Secret
-		wantErr     string
-		wantMutated bool
-		assert      func(t *testing.T, m *recordingMongoClient, s *corev1.Secret)
-	}{
-		"missing user is created and password hash annotation is set": {
-			mc:          &recordingMongoClient{getUserInfoResp: nil},
-			sec:         secretWith(nil),
-			wantMutated: true,
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Equal(t, 1, m.createUserCalls)
-				assert.Equal(t, password, m.lastCreatePass)
-				assert.Zero(t, m.updateUserPassCalls)
-				assert.Zero(t, m.updateRolesCalls)
-				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
-			},
-		},
-		"steady state converged does no writes": {
-			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
-			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
-			wantMutated: false,
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Zero(t, m.createUserCalls)
-				assert.Zero(t, m.updateUserPassCalls)
-				assert.Zero(t, m.updateRolesCalls)
-			},
-		},
-		"password hash mismatch triggers UpdateUserPass and annotation refresh": {
-			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
-			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: "stale"}),
-			wantMutated: true,
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Equal(t, 1, m.updateUserPassCalls)
-				assert.Equal(t, password, m.lastUpdatePass)
-				assert.Zero(t, m.updateRolesCalls)
-				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
-			},
-		},
-		"recreated secret with existing mongo user triggers UpdateUserPass and creates annotation map": {
-			mc:          &recordingMongoClient{getUserInfoResp: existingWithDesiredRoles},
-			sec:         secretWith(nil),
-			wantMutated: true,
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Equal(t, 1, m.updateUserPassCalls)
-				assert.Equal(t, password, m.lastUpdatePass)
-				assert.Zero(t, m.updateRolesCalls)
-				require.NotNil(t, s.Annotations)
-				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
-			},
-		},
-		"new cr reconcile against stale mongo user with drifted roles applies both password and roles": {
-			mc: &recordingMongoClient{
-				getUserInfoResp: &mongo.User{DB: "admin", Roles: []mongo.Role{{Role: "clusterMonitor", DB: "admin"}}},
-			},
-			sec:         secretWith(nil),
-			wantMutated: true,
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Equal(t, 1, m.updateUserPassCalls)
-				assert.Equal(t, password, m.lastUpdatePass)
-				assert.Equal(t, 1, m.updateRolesCalls)
-				assert.Equal(t, syncTargetUserRoles, m.lastUpdateRoles)
-				assert.Equal(t, passwordMAC, s.Annotations[targetUserPasswordMACAnnotation])
-			},
-		},
-		"role drift triggers UpdateUserRoles without touching password": {
-			mc: &recordingMongoClient{
-				getUserInfoResp: &mongo.User{DB: "admin", Roles: []mongo.Role{{Role: "clusterMonitor", DB: "admin"}}},
-			},
-			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
-			wantMutated: false,
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Zero(t, m.updateUserPassCalls)
-				assert.Equal(t, 1, m.updateRolesCalls)
-				assert.Equal(t, syncTargetUserRoles, m.lastUpdateRoles)
-			},
-		},
-		"roles in a different order are treated as equal": {
-			mc: &recordingMongoClient{
-				getUserInfoResp: &mongo.User{DB: "admin", Roles: []mongo.Role{
-					{Role: "readWriteAnyDatabase", DB: "admin"},
-					{Role: "clusterManager", DB: "admin"},
-					{Role: "clusterMonitor", DB: "admin"},
-					{Role: "restore", DB: "admin"},
-				}},
-			},
-			sec:         secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
-			wantMutated: false,
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Zero(t, m.updateRolesCalls)
-			},
-		},
-		"GetUserInfo error short-circuits with no writes": {
-			mc:      &recordingMongoClient{getUserInfoErr: errors.New("error")},
-			sec:     secretWith(nil),
-			wantErr: "look up target user",
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Zero(t, m.createUserCalls)
-				assert.Zero(t, m.updateUserPassCalls)
-				assert.Zero(t, m.updateRolesCalls)
-			},
-		},
-		"CreateUser error is wrapped": {
-			mc:      &recordingMongoClient{getUserInfoResp: nil, createUserErr: errors.New("error")},
-			sec:     secretWith(nil),
-			wantErr: "create target user",
-		},
-		"UpdateUserPass error stops before UpdateUserRoles": {
-			mc: &recordingMongoClient{
-				getUserInfoResp:   &mongo.User{DB: "admin"},
-				updateUserPassErr: errors.New("error"),
-			},
-			sec:     secretWith(nil),
-			wantErr: "sync target user password",
-			assert: func(t *testing.T, m *recordingMongoClient, s *corev1.Secret) {
-				assert.Zero(t, m.updateRolesCalls)
-			},
-		},
-		"UpdateUserRoles error is wrapped": {
-			mc: &recordingMongoClient{
-				getUserInfoResp: &mongo.User{DB: "admin"},
-				updateRolesErr:  errors.New("error"),
-			},
-			sec:     secretWith(map[string]string{targetUserPasswordMACAnnotation: passwordMAC}),
-			wantErr: "sync target user roles",
-		},
-	}
-
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			mutated, err := ensureTargetMongoUser(t.Context(), tc.mc, tc.sec)
-			if tc.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErr)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tc.wantMutated, mutated)
-			}
-			if tc.assert != nil {
-				tc.assert(t, tc.mc, tc.sec)
-			}
-		})
-	}
-}
-
-func TestTargetTLS(t *testing.T) {
-	targetWithTLS := func() *psmdbv1.PerconaServerMongoDB {
+func TestLoadTargetTLS(t *testing.T) {
+	target := func(crVersion string, tls *psmdbv1.TLSSpec) *psmdbv1.PerconaServerMongoDB {
 		return &psmdbv1.PerconaServerMongoDB{
 			Name: "tgt", Namespace: "ns",
 			Spec: psmdbv1.PerconaServerMongoDBSpec{
-				CRVersion: version.Version(),
+				CRVersion: crVersion,
+				TLS:       tls,
 				Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
 			},
 		}
@@ -1197,51 +1008,63 @@ func TestTargetTLS(t *testing.T) {
 	sslSecret := func(data map[string][]byte) *corev1.Secret {
 		return &corev1.Secret{Name: "tgt-ssl", Namespace: "ns", Data: data}
 	}
-	complete := map[string][]byte{
-		"ca.crt":  []byte("CA"),
-		"tls.crt": []byte("CERT"),
-		"tls.key": []byte("KEY"),
+	complete := func() map[string][]byte {
+		return map[string][]byte{
+			"ca.crt":  []byte("CA"),
+			"tls.crt": []byte("CERT"),
+			"tls.key": []byte("KEY"),
+		}
 	}
 
 	tests := map[string]struct {
 		target      *psmdbv1.PerconaServerMongoDB
 		secret      *corev1.Secret
+		mutate      func(t *testing.T, cl k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret)
 		wantEnabled bool
-		wantErr     string
+		wantErrMsg  string
 	}{
 		"tls disabled target needs no certificates": {
-			target: &psmdbv1.PerconaServerMongoDB{
-				Name: "tgt", Namespace: "ns",
-				Spec: psmdbv1.PerconaServerMongoDBSpec{
-					CRVersion: version.Version(),
-					TLS:       &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
-					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
-				},
-			},
+			target: target(version.Version(), &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled}),
 		},
 		"complete ssl secret resolves": {
-			target:      targetWithTLS(),
-			secret:      sslSecret(complete),
+			target:      target(version.Version(), nil),
+			secret:      sslSecret(complete()),
 			wantEnabled: true,
 		},
+		"missing ca is reported": {
+			target:     target(version.Version(), nil),
+			secret:     sslSecret(map[string][]byte{"tls.crt": []byte("CERT"), "tls.key": []byte("KEY")}),
+			wantErrMsg: "target ssl secret ns/tgt-ssl is missing ca.crt",
+		},
 		"missing key is reported": {
-			target:  targetWithTLS(),
-			secret:  sslSecret(map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT")}),
-			wantErr: "missing tls.key",
+			target:     target(version.Version(), nil),
+			secret:     sslSecret(map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT")}),
+			wantErrMsg: "target ssl secret ns/tgt-ssl is missing tls.key",
 		},
 		"missing secret is reported": {
-			target:  targetWithTLS(),
-			wantErr: "get target ssl secret",
+			target:     target(version.Version(), nil),
+			wantErrMsg: `get target ssl secret ns/tgt-ssl: secrets "tgt-ssl" not found`,
 		},
 		"target pinned to an older crVersion keeps the 1.23 pod template": {
-			target: &psmdbv1.PerconaServerMongoDB{
-				Name: "tgt", Namespace: "ns",
-				Spec: psmdbv1.PerconaServerMongoDBSpec{
-					CRVersion: "1.23.0",
-					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
-				},
+			target: target("1.23.0", nil),
+			secret: sslSecret(complete()),
+		},
+		"rotated certificate changes the hash": {
+			target: target(version.Version(), nil),
+			secret: sslSecret(complete()),
+			mutate: func(t *testing.T, cl k8sclient.Client, _ *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret) {
+				secret.Data["tls.crt"] = []byte("ROTATED")
+				require.NoError(t, cl.Update(t.Context(), secret))
 			},
-			secret: sslSecret(complete),
+			wantEnabled: true,
+		},
+		"certificate verification toggle changes the hash": {
+			target: target(version.Version(), &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire, AllowInvalidCertificates: new(true)}),
+			secret: sslSecret(complete()),
+			mutate: func(_ *testing.T, _ k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, _ *corev1.Secret) {
+				target.Spec.TLS.AllowInvalidCertificates = new(false)
+			},
+			wantEnabled: true,
 		},
 	}
 
@@ -1253,12 +1076,13 @@ func TestTargetTLS(t *testing.T) {
 			if tc.secret != nil {
 				b = b.WithObjects(tc.secret)
 			}
-			r := &ReconcilePerconaServerMongoDBClusterSync{client: b.Build(), scheme: s}
+			cl := b.Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
 
-			got, err := r.targetTLS(t.Context(), tc.target)
-			if tc.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErr)
+			got, err := r.loadTargetTLS(t.Context(), tc.target)
+			if tc.wantErrMsg != "" {
+				require.EqualError(t, err, tc.wantErrMsg)
+				assert.Zero(t, got)
 				return
 			}
 			require.NoError(t, err)
@@ -1267,6 +1091,14 @@ func TestTargetTLS(t *testing.T) {
 				assert.Equal(t, "tgt-ssl", got.SecretName)
 				assert.NotEmpty(t, got.Hash)
 			}
+			if tc.mutate == nil {
+				return
+			}
+
+			tc.mutate(t, cl, tc.target, tc.secret)
+			after, err := r.loadTargetTLS(t.Context(), tc.target)
+			require.NoError(t, err)
+			assert.NotEqual(t, got.Hash, after.Hash, "the pod template must roll when the TLS inputs change")
 		})
 	}
 }
@@ -1278,15 +1110,6 @@ func targetCluster(crVersion string) *psmdbv1.PerconaServerMongoDB {
 	}
 }
 
-// TestReconcileDeploymentConvergesOnSize is the unit-level counterpart of
-// the HA scale steps in e2e-tests/clustersync/run.
-//
-// The assertion that matters is the pod template: spec.size must change
-// replicas and nothing else. When the template varies with size, the
-// Deployment controller rolls the group through a new ReplicaSet instead
-// of adding replicas, which terminates the ACTIVE instance and forces a
-// failover on every scale change. Asserting replicas alone misses that
-// entirely, which is how it reached a live cluster.
 func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
 		Name: "sync", Namespace: "ns", UID: "u",
@@ -1347,17 +1170,18 @@ func TestReconcileDeploymentConvergesOnSize(t *testing.T) {
 	})
 }
 
-// TestReconcileDeploymentVersionGate checks the target cluster's
-// crVersion actually reaches the pod-template builders: a cluster that has
-// not been bumped to 1.24.0 must keep the 1.23 pod template, so upgrading
-// the operator alone never rolls the PCSM pod.
-func TestReconcileDeploymentVersionGate(t *testing.T) {
+func TestReconcileDeployment(t *testing.T) {
+	boom := errors.New("etcd unavailable")
+
 	tests := map[string]struct {
 		crVersion   string
+		createErr   error
 		wantDefault bool
+		wantErr     error
 	}{
 		"older crVersion keeps the 1.23 pod template": {crVersion: "1.23.0"},
 		"current crVersion gets the defaults":         {crVersion: "1.24.0", wantDefault: true},
+		"apply failure is returned":                   {crVersion: "1.24.0", createErr: boom, wantErr: boom},
 	}
 
 	for name, tc := range tests {
@@ -1367,10 +1191,24 @@ func TestReconcileDeploymentVersionGate(t *testing.T) {
 				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{Size: 3, Image: "pcsm:1.0.0"},
 			}
 			scheme := clusterSyncScheme(t)
-			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).Build()
+			b := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr)
+			if tc.createErr != nil {
+				b = b.WithInterceptorFuncs(interceptor.Funcs{
+					Create: func(context.Context, k8sclient.WithWatch, k8sclient.Object, ...k8sclient.CreateOption) error {
+						return tc.createErr
+					},
+				})
+			}
+			cl := b.Build()
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
 
-			require.NoError(t, r.reconcileDeployment(t.Context(), cr, targetCluster(tc.crVersion), clustersync.TLS{}))
+			err := r.reconcileDeployment(t.Context(), cr, targetCluster(tc.crVersion), clustersync.TLS{})
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+				assert.ErrorContains(t, err, "apply clustersync deployment")
+				return
+			}
+			require.NoError(t, err)
 
 			dep := &appsv1.Deployment{}
 			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{
@@ -1399,207 +1237,312 @@ func TestReconcileDeploymentVersionGate(t *testing.T) {
 	}
 }
 
-func TestTargetTLSHashChanges(t *testing.T) {
+func clusterSyncScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	s := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(s))
+	require.NoError(t, coordv1.AddToScheme(s))
+	require.NoError(t, policyv1.AddToScheme(s))
+	require.NoError(t, psmdbv1.SchemeBuilder.AddToScheme(s))
+	return s
+}
+
+func newClusterSyncCR(name, ns, cluster string, finalizers ...string) *psmdbv1.PerconaServerMongoDBClusterSync {
+	return &psmdbv1.PerconaServerMongoDBClusterSync{
+		Name:       name,
+		Namespace:  ns,
+		UID:        types.UID(name + "-uid"),
+		Finalizers: finalizers,
+		Spec:       psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: cluster},
+	}
+}
+
+func leaseFor(cr *psmdbv1.PerconaServerMongoDBClusterSync, holder string) *coordv1.Lease {
+	return &coordv1.Lease{
+		Name:      naming.ClusterSyncLeaseName(cr.Spec.ClusterName),
+		Namespace: cr.Namespace,
+		Spec: coordv1.LeaseSpec{
+			AcquireTime:    &metav1.MicroTime{Time: time.Now()},
+			HolderIdentity: &holder,
+		},
+	}
+}
+
+func TestReleaseClusterSyncLease(t *testing.T) {
+	t.Parallel()
+
+	ours := naming.ClusterSyncHolderId(newClusterSyncCR("sync", "ns", "tgt"))
+
 	tests := map[string]struct {
-		tls    *psmdbv1.TLSSpec
-		mutate func(t *testing.T, cl k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret)
-		reason string
+		holder    string
+		wantLease bool
 	}{
-		"rotated certificate": {
-			mutate: func(t *testing.T, cl k8sclient.Client, _ *psmdbv1.PerconaServerMongoDB, secret *corev1.Secret) {
-				secret.Data["tls.crt"] = []byte("ROTATED")
-				require.NoError(t, cl.Update(t.Context(), secret))
-			},
-			reason: "rotated certificate must change the pod template hash",
-		},
-		"certificate verification toggle": {
-			tls: &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeRequire, AllowInvalidCertificates: new(true)},
-			mutate: func(_ *testing.T, _ k8sclient.Client, target *psmdbv1.PerconaServerMongoDB, _ *corev1.Secret) {
-				target.Spec.TLS.AllowInvalidCertificates = new(false)
-			},
-			reason: "certificate verification change must change the pod template hash",
-		},
+		"lease held by us: deleted":                             {holder: ours},
+		"lease not found: no error, nothing to delete":          {},
+		"lease held by another CR: swallowed (we don't own it)": {holder: "different-holder", wantLease: true},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			target := &psmdbv1.PerconaServerMongoDB{
-				Name: "tgt", Namespace: "ns",
-				Spec: psmdbv1.PerconaServerMongoDBSpec{
-					CRVersion: version.Version(),
-					TLS:       tc.tls,
-					Secrets:   &psmdbv1.SecretsSpec{SSL: "tgt-ssl"},
-				},
+			cr := newClusterSyncCR("sync", "ns", "tgt")
+			b := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t))
+			if tc.holder != "" {
+				b = b.WithRuntimeObjects(leaseFor(cr, tc.holder))
 			}
-			secret := &corev1.Secret{
-				Name: "tgt-ssl", Namespace: "ns",
-				Data: map[string][]byte{"ca.crt": []byte("CA"), "tls.crt": []byte("CERT"), "tls.key": []byte("KEY")},
+			cl := b.Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+
+			require.NoError(t, r.releaseClusterSyncLease(t.Context(), cr))
+
+			err := cl.Get(t.Context(), types.NamespacedName{
+				Name:      naming.ClusterSyncLeaseName(cr.Spec.ClusterName),
+				Namespace: cr.Namespace,
+			}, &coordv1.Lease{})
+			if tc.wantLease {
+				require.NoError(t, err, "foreign lease must not be touched")
+				return
 			}
-
-			s := clusterSyncScheme(t)
-			require.NoError(t, corev1.AddToScheme(s))
-			cl := fake.NewClientBuilder().WithScheme(s).WithObjects(secret).Build()
-			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: s}
-
-			before, err := r.targetTLS(t.Context(), target)
-			require.NoError(t, err)
-
-			tc.mutate(t, cl, target, secret)
-
-			after, err := r.targetTLS(t.Context(), target)
-			require.NoError(t, err)
-			assert.NotEqual(t, before.Hash, after.Hash, tc.reason)
+			require.True(t, k8serrors.IsNotFound(err), "lease must be gone, got %v", err)
 		})
 	}
 }
 
-// TestReconcileDeploymentApplyFailure checks the write error is wrapped
-// rather than swallowed: a silent failure here leaves the group at the
-// old size while status happily reports the new one.
-func TestReconcileDeploymentApplyFailure(t *testing.T) {
-	boom := errors.New("etcd unavailable")
-	cr := &psmdbv1.PerconaServerMongoDBClusterSync{Name: "sync", Namespace: "ns", UID: "u"}
-	scheme := clusterSyncScheme(t)
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Create: func(context.Context, k8sclient.WithWatch, k8sclient.Object, ...k8sclient.CreateOption) error {
-				return boom
-			},
-		}).Build()
-	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
+func TestAcquireClusterSyncLease(t *testing.T) {
+	t.Parallel()
 
-	err := r.reconcileDeployment(t.Context(), cr, targetCluster("1.24.0"), clustersync.TLS{})
+	ours := naming.ClusterSyncHolderId(newClusterSyncCR("sync", "ns", "tgt"))
 
-	require.ErrorIs(t, err, boom)
-	assert.Contains(t, err.Error(), "apply clustersync deployment")
-}
-
-// TestReconcilePDBApplyFailure keeps the write error on the reconcile
-// return path. Swallowing it would leave an HA group with no disruption
-// budget while nothing anywhere says so.
-func TestReconcilePDBApplyFailure(t *testing.T) {
-	boom := errors.New("etcd unavailable")
-	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-		Name: "sync", Namespace: "ns", UID: "u",
-		Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{Size: 3},
-	}
-	scheme := clusterSyncScheme(t)
-	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cr).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Create: func(context.Context, k8sclient.WithWatch, k8sclient.Object, ...k8sclient.CreateOption) error {
-				return boom
-			},
-		}).Build()
-	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, scheme: scheme}
-
-	err := r.reconcilePDB(t.Context(), cr)
-
-	require.ErrorIs(t, err, boom)
-	assert.Contains(t, err.Error(), "apply clustersync pdb")
-}
-
-// TestReconcileModeSurvivesPCSMFailures covers the failure paths around
-// the PCSM call itself.
-//
-// None of these may return an error to the controller. An HA group has no
-// ACTIVE instance for a few seconds on every election, and a failed sync
-// is retried on every requeue; returning an error in either case turns a
-// normal transient into exponential backoff and a reconcile-failure
-// metric. The condition belongs in status.error, which the requeue
-// interval already refreshes.
-func TestReconcileModeSurvivesPCSMFailures(t *testing.T) {
 	tests := map[string]struct {
-		prevError  string
-		statusErr  error
-		actionErr  error
-		mode       psmdbv1.ClusterSyncMode
-		state      psmdbv1.ClusterSyncState
-		wantError  string
-		wantPaused int
+		holder      string
+		wantForeign string
+		wantHolder  string
 	}{
-		"mid-election group reports no active instance": {
-			statusErr: client.ErrNoActivePCSM,
-			mode:      psmdbv1.ClusterSyncModeRunning,
-			wantError: client.ErrNoActivePCSM.Error(),
+		"no lease: acquires, no foreign holder": {
+			wantHolder: ours,
 		},
-		"no ready pod yet": {
-			statusErr: client.ErrPCSMNotReady,
-			mode:      psmdbv1.ClusterSyncModeRunning,
-			wantError: client.ErrPCSMNotReady.Error(),
+		"lease held by us: no foreign holder": {
+			holder:     ours,
+			wantHolder: ours,
 		},
-		"an unexpected status failure is recorded, not returned": {
-			statusErr: errors.New("exec failed"),
-			mode:      psmdbv1.ClusterSyncModeRunning,
-			wantError: "exec failed",
-		},
-		"a repeated status failure stays in status": {
-			prevError: "exec failed",
-			statusErr: errors.New("exec failed"),
-			mode:      psmdbv1.ClusterSyncModeRunning,
-			wantError: "exec failed",
-		},
-		"a failed transition is recorded, not returned": {
-			actionErr:  errors.New("pcsm pause refused"),
-			mode:       psmdbv1.ClusterSyncModePaused,
-			state:      psmdbv1.ClusterSyncStateRunning,
-			wantError:  "pcsm pause refused",
-			wantPaused: 1,
-		},
-		"a repeated failed transition stays in status": {
-			prevError:  "pcsm pause refused",
-			actionErr:  errors.New("pcsm pause refused"),
-			mode:       psmdbv1.ClusterSyncModePaused,
-			state:      psmdbv1.ClusterSyncStateRunning,
-			wantError:  "pcsm pause refused",
-			wantPaused: 1,
-		},
-		"a transition against an unreachable instance is not an error": {
-			actionErr:  client.ErrNoActivePCSM,
-			mode:       psmdbv1.ClusterSyncModePaused,
-			state:      psmdbv1.ClusterSyncStateRunning,
-			wantError:  client.ErrNoActivePCSM.Error(),
-			wantPaused: 1,
+		"lease held by another CR: returns foreign holder, does not overwrite": {
+			holder:      "other-sync-uid",
+			wantForeign: "other-sync-uid",
+			wantHolder:  "other-sync-uid",
 		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
-				Name: "sync", Namespace: "ns", UID: "u",
-				Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{
-					ClusterName: "tgt", Mode: tc.mode, Size: 3,
-				},
-				Status: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
-					Mode:      psmdbv1.ClusterSyncModeRunning,
-					State:     tc.state,
-					StartedAt: &metav1.Time{Time: time.Unix(0, 0)},
-					Error:     tc.prevError,
-				},
+			cr := newClusterSyncCR("sync", "ns", "tgt")
+			b := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t))
+			if tc.holder != "" {
+				b = b.WithRuntimeObjects(leaseFor(cr, tc.holder))
 			}
-			cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).
-				WithStatusSubresource(cr).WithObjects(cr).Build()
-			rec := record.NewFakeRecorder(4)
-			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
-			pcsm := &fakePCSM{
-				statusResp: client.Status{State: string(tc.state)},
-				statusErr:  tc.statusErr,
-				actionErr:  tc.actionErr,
-				active:     "sync-pcsm-0",
+			cl := b.Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+
+			foreign, err := r.acquireClusterSyncLease(t.Context(), cr)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantForeign, foreign)
+
+			got := &coordv1.Lease{}
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{
+				Name:      naming.ClusterSyncLeaseName(cr.Spec.ClusterName),
+				Namespace: cr.Namespace,
+			}, got))
+			require.NotNil(t, got.Spec.HolderIdentity)
+			assert.Equal(t, tc.wantHolder, *got.Spec.HolderIdentity)
+		})
+	}
+}
+
+func TestEnsureReleaseLockFinalizer(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		existing []string
+		want     []string
+	}{
+		"no finalizers: adds release-lock": {
+			want: []string{naming.FinalizerReleaseLock},
+		},
+		"unrelated finalizer present: appends": {
+			existing: []string{"other.example/x"},
+			want:     []string{"other.example/x", naming.FinalizerReleaseLock},
+		},
+		"already present: no patch needed, no error": {
+			existing: []string{naming.FinalizerReleaseLock},
+			want:     []string{naming.FinalizerReleaseLock},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newClusterSyncCR("sync", "ns", "tgt", tc.existing...)
+			cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).WithObjects(cr).Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+
+			require.NoError(t, r.ensureReleaseLockFinalizer(t.Context(), cr))
+
+			got := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, got))
+			assert.Equal(t, tc.want, got.Finalizers)
+		})
+	}
+}
+
+func TestClusterBusyByBackupOrRestore(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns          = "ns"
+		clusterName = "tgt"
+		otherClus   = "otherCluster"
+	)
+	backupLease := func() *coordv1.Lease {
+		h := "backup-uid"
+		return &coordv1.Lease{
+			Name: naming.BackupLeaseName(clusterName), Namespace: ns,
+			Spec: coordv1.LeaseSpec{
+				AcquireTime:    &metav1.MicroTime{Time: time.Now()},
+				HolderIdentity: &h,
+			},
+		}
+	}
+	restoreOn := func(name, cluster string, state psmdbv1.RestoreState) *psmdbv1.PerconaServerMongoDBRestore {
+		return &psmdbv1.PerconaServerMongoDBRestore{
+			Name: name, Namespace: ns,
+			Spec:   psmdbv1.PerconaServerMongoDBRestoreSpec{ClusterName: cluster},
+			Status: psmdbv1.PerconaServerMongoDBRestoreStatus{State: state},
+		}
+	}
+
+	tests := map[string]struct {
+		objs           []runtime.Object
+		wantBusy       bool
+		wantReasonHint string
+	}{
+		"no lease, no restores: free": {
+			objs:     nil,
+			wantBusy: false,
+		},
+		"backup lease active: busy": {
+			objs:           []runtime.Object{backupLease()},
+			wantBusy:       true,
+			wantReasonHint: "backup is in progress",
+		},
+		"restore Running for our cluster: busy": {
+			objs:           []runtime.Object{restoreOn("rst1", clusterName, psmdbv1.RestoreStateRunning)},
+			wantBusy:       true,
+			wantReasonHint: "restore",
+		},
+		"restore Requested for our cluster: busy": {
+			objs:           []runtime.Object{restoreOn("rst1", clusterName, psmdbv1.RestoreStateRequested)},
+			wantBusy:       true,
+			wantReasonHint: "restore",
+		},
+		"restore Waiting for our cluster: busy": {
+			objs:           []runtime.Object{restoreOn("rst1", clusterName, psmdbv1.RestoreStateWaiting)},
+			wantBusy:       true,
+			wantReasonHint: "restore",
+		},
+		"restore Ready: terminal, not busy": {
+			objs:     []runtime.Object{restoreOn("rst1", clusterName, psmdbv1.RestoreStateReady)},
+			wantBusy: false,
+		},
+		"restore Error: terminal, not busy": {
+			objs:     []runtime.Object{restoreOn("rst1", clusterName, psmdbv1.RestoreStateError)},
+			wantBusy: false,
+		},
+		"restore Rejected: terminal, not busy": {
+			objs:     []runtime.Object{restoreOn("rst1", clusterName, psmdbv1.RestoreStateRejected)},
+			wantBusy: false,
+		},
+		"restore Running but targets a different cluster: not busy": {
+			objs:     []runtime.Object{restoreOn("rst1", otherClus, psmdbv1.RestoreStateRunning)},
+			wantBusy: false,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newClusterSyncCR("sync", ns, clusterName)
+			cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).WithRuntimeObjects(tc.objs...).Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+
+			busy, reason, err := r.clusterBusyByBackupOrRestore(t.Context(), cr)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantBusy, busy)
+			if tc.wantReasonHint != "" {
+				assert.Contains(t, reason, tc.wantReasonHint)
+			} else {
+				assert.Empty(t, reason)
+			}
+		})
+	}
+}
+
+func TestWriteAction(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		action modeAction
+		want   bool
+	}{
+		"start writes":          {action: actionStart, want: true},
+		"resume writes":         {action: actionResume, want: true},
+		"pause is read-only":    {action: actionPause},
+		"finalize is read-only": {action: actionFinalize},
+		"none is read-only":     {action: actionNone},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, writeAction(tc.action))
+		})
+	}
+}
+
+func TestHandleDeletion(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		finalizers     []string
+		wantLease      bool
+		wantFinalizers []string
+	}{
+		"release-lock finalizer absent: noop, no lease touched": {
+			finalizers:     []string{"other.example/keep"},
+			wantLease:      true,
+			wantFinalizers: []string{"other.example/keep"},
+		},
+		"finalizer present: releases lease and drops finalizer": {
+			finalizers:     []string{naming.FinalizerReleaseLock, "other.example/keep"},
+			wantFinalizers: []string{"other.example/keep"},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newClusterSyncCR("sync", "ns", "tgt", tc.finalizers...)
+			cr.DeletionTimestamp = &metav1.Time{Time: time.Now()}
+			lease := leaseFor(cr, naming.ClusterSyncHolderId(cr))
+			cl := fake.NewClientBuilder().WithScheme(clusterSyncScheme(t)).WithObjects(cr).WithRuntimeObjects(lease).Build()
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl}
+
+			_, err := r.handleDeletion(t.Context(), cr)
+			require.NoError(t, err)
+
+			err = cl.Get(t.Context(), types.NamespacedName{Name: lease.Name, Namespace: lease.Namespace}, &coordv1.Lease{})
+			if tc.wantLease {
+				require.NoError(t, err, "lease must survive when our finalizer was absent")
+			} else {
+				require.True(t, k8serrors.IsNotFound(err), "lease must be released, got %v", err)
 			}
 
-			require.NoError(t, r.reconcileMode(t.Context(), cr, pcsm, 3),
-				"a PCSM-side failure must not fail the reconcile")
-
-			stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
-			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, stored))
-			assert.Equal(t, tc.wantError, stored.Status.Error)
-			assert.Equal(t, int32(3), stored.Status.ReadyReplicas)
-			assert.Equal(t, tc.wantPaused, pcsm.paused)
-
-			if tc.statusErr != nil {
-				assert.Equal(t, psmdbv1.ClusterSyncModeRunning, stored.Status.Mode,
-					"mode must not mirror spec while PCSM state is unknown")
-			}
+			gotCR := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(t.Context(), types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, gotCR))
+			assert.Equal(t, tc.wantFinalizers, gotCR.Finalizers)
 		})
 	}
 }
