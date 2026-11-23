@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -179,6 +180,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 								Name:           "mongod",
 								LivenessProbe:  &corev1.Probe{},
 								ReadinessProbe: &corev1.Probe{},
+								StartupProbe:   &corev1.Probe{},
 							},
 						},
 					},
@@ -207,6 +209,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		assert.Equal(t, pbmName, updated.Spec.Template.Spec.Containers[0].Args[1])
 		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].LivenessProbe)
 		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].ReadinessProbe)
+		assert.Nil(t, updated.Spec.Template.Spec.Containers[0].StartupProbe)
 	})
 
 	t.Run("returns done and sets condition when all statefulsets at zero ready replicas", func(t *testing.T) {
@@ -400,6 +403,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 								Name:           "mongod",
 								LivenessProbe:  &corev1.Probe{},
 								ReadinessProbe: &corev1.Probe{},
+								StartupProbe:   &corev1.Probe{},
 							},
 						},
 					},
@@ -427,6 +431,7 @@ func TestScaleDownStatefulSetsForSnapshotRestore(t *testing.T) {
 		assert.NotContains(t, container.Args, "--db-config")
 		assert.Nil(t, container.LivenessProbe)
 		assert.Nil(t, container.ReadinessProbe)
+		assert.Nil(t, container.StartupProbe)
 
 		for _, v := range updated.Spec.Template.Spec.Volumes {
 			assert.NotEqual(t, "pbm-db-config", v.Name, "expected no pbm-db-config volume")
@@ -980,6 +985,15 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 		hiddenSFS := makeSFS(naming.HiddenStatefulSetName(cluster, rs))
 
 		r := fakeReconciler(cluster, mongodSFS, arbiterSFS, nvSFS, hiddenSFS)
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				do := &client.DeleteOptions{}
+				do.ApplyOptions(opts)
+				require.NotNil(t, do.PropagationPolicy, "statefulset %s", obj.GetName())
+				assert.Equal(t, metav1.DeletePropagationForeground, *do.PropagationPolicy, "statefulset %s", obj.GetName())
+				return c.Delete(ctx, obj, opts...)
+			},
+		})
 
 		err := r.deleteStatefulSetsForSnapshotRestore(ctx, cluster)
 		assert.NoError(t, err)

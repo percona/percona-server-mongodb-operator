@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -961,6 +962,102 @@ func TestReconcileSSL_Manual(t *testing.T) {
 		assert.Equal(t, ssl.Data, getTestSecret(t, r, cr, api.SSLSecretName(cr)).Data)
 		assert.Equal(t, internal.Data, getTestSecret(t, r, cr, api.SSLInternalSecretName(cr)).Data)
 	})
+
+	// Secrets created before 1.23 have their own CA each and no CA secret. The CA secret
+	// created later (e.g. for the PBM certificate) must be trusted before anything is signed with it.
+	legacySecrets := func(t *testing.T) (ssl, internal *corev1.Secret) {
+		_, sslCA, sslCAKey := manualCASecret(t, cr)
+		_, internalCA, internalCAKey := manualCASecret(t, cr)
+		return manualTLSSecret(t, cr, api.SSLSecretName(cr), tls.GetCertificateSans(cr), sslCA, sslCAKey, true),
+			manualTLSSecret(t, cr, api.SSLInternalSecretName(cr), tls.GetCertificateSans(cr), internalCA, internalCAKey, true)
+	}
+
+	t.Run("adds CA to legacy secrets before re-signing", func(t *testing.T) {
+		caSecret, caCrt, _ := manualCASecret(t, cr)
+		ssl, internal := legacySecrets(t)
+		r := buildFakeClient(cr, caSecret, ssl, internal)
+
+		require.NoError(t, r.reconcileSSL(t.Context(), withHorizons(cr)))
+
+		for _, old := range []*corev1.Secret{ssl, internal} {
+			secret := getTestSecret(t, r, cr, old.Name)
+			assert.Equal(t, old.Data["tls.crt"], secret.Data["tls.crt"], old.Name)
+			assert.Equal(t, old.Data["tls.key"], secret.Data["tls.key"], old.Name)
+			assert.True(t, verifiesWith(t, old.Data["tls.crt"], secret.Data["ca.crt"]), old.Name)
+			assert.True(t, bundleContains(secret.Data["ca.crt"], caCrt), old.Name)
+		}
+	})
+
+	t.Run("re-signs legacy secrets once the CA is rolled out", func(t *testing.T) {
+		caSecret, caCrt, _ := manualCASecret(t, cr)
+		ssl, internal := legacySecrets(t)
+		r := buildFakeClient(cr, caSecret, ssl, internal)
+
+		updated := withHorizons(cr)
+		require.NoError(t, r.reconcileSSL(t.Context(), updated))
+		require.NoError(t, r.reconcileSSL(t.Context(), updated))
+
+		for _, old := range []*corev1.Secret{ssl, internal} {
+			secret := getTestSecret(t, r, cr, old.Name)
+			assert.Equal(t, expectedSANs(updated), certSANs(t, secret), old.Name)
+			assert.True(t, verifiesWith(t, secret.Data["tls.crt"], caCrt), old.Name)
+			assert.True(t, verifiesWith(t, secret.Data["tls.crt"], secret.Data["ca.crt"]), old.Name)
+			assert.True(t, bundleContains(secret.Data["ca.crt"], old.Data["ca.crt"]), old.Name)
+		}
+	})
+
+	t.Run("doesn't add CA to legacy secrets before 1.24.0", func(t *testing.T) {
+		caSecret, _, _ := manualCASecret(t, cr)
+		ssl, internal := legacySecrets(t)
+		old := cr.DeepCopy()
+		old.Spec.CRVersion = "1.23.0"
+		r := buildFakeClient(old, caSecret, ssl, internal)
+
+		require.NoError(t, r.reconcileSSL(t.Context(), old))
+
+		for _, legacy := range []*corev1.Secret{ssl, internal} {
+			assert.Equal(t, legacy.Data, getTestSecret(t, r, cr, legacy.Name).Data, legacy.Name)
+		}
+	})
+
+	t.Run("doesn't re-sign legacy secrets while the CA is rolling out", func(t *testing.T) {
+		caSecret, _, _ := manualCASecret(t, cr)
+		ssl, internal := legacySecrets(t)
+		sts := &appsv1.StatefulSet{
+			Name:      cr.Name + "-rs0",
+			Namespace: cr.Namespace,
+			Labels:    map[string]string{naming.LabelKubernetesInstance: cr.Name},
+		}
+		r := buildFakeClient(cr, caSecret, ssl, internal, sts)
+
+		updated := withHorizons(cr)
+		require.NoError(t, r.reconcileSSL(t.Context(), updated))
+		require.NoError(t, r.reconcileSSL(t.Context(), updated))
+
+		for _, old := range []*corev1.Secret{ssl, internal} {
+			assert.Equal(t, old.Data["tls.crt"], getTestSecret(t, r, cr, old.Name).Data["tls.crt"], old.Name)
+		}
+	})
+}
+
+func verifiesWith(t *testing.T, certPEM, caBundle []byte) bool {
+	t.Helper()
+
+	block, _ := pem.Decode(certPEM)
+	require.NotNil(t, block)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+
+	pool := x509.NewCertPool()
+	require.True(t, pool.AppendCertsFromPEM(caBundle))
+
+	_, err = cert.Verify(x509.VerifyOptions{Roots: pool, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}})
+	return err == nil
+}
+
+func bundleContains(bundle, ca []byte) bool {
+	merged, err := tls.MergePEM(bundle, ca)
+	return err == nil && tls.EqualPEM(merged, bundle)
 }
 
 func TestUpdateCertManagerCerts_OldSecretAlreadyExists(t *testing.T) {
