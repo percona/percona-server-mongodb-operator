@@ -721,6 +721,11 @@ func (in *HiddenSpec) DeepCopyInto(out *HiddenSpec) {
 		*out = new(LivenessProbeExtended)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.StartupProbe != nil {
+		in, out := &in.StartupProbe, &out.StartupProbe
+		*out = new(corev1.Probe)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.PodSecurityContext != nil {
 		in, out := &in.PodSecurityContext, &out.PodSecurityContext
 		*out = new(corev1.PodSecurityContext)
@@ -1347,6 +1352,11 @@ func (in *NonVotingSpec) DeepCopyInto(out *NonVotingSpec) {
 	if in.LivenessProbe != nil {
 		in, out := &in.LivenessProbe, &out.LivenessProbe
 		*out = new(LivenessProbeExtended)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.StartupProbe != nil {
+		in, out := &in.StartupProbe, &out.StartupProbe
+		*out = new(corev1.Probe)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.PodSecurityContext != nil {
@@ -2481,6 +2491,11 @@ func (in *ReplsetSpec) DeepCopyInto(out *ReplsetSpec) {
 	if in.LivenessProbe != nil {
 		in, out := &in.LivenessProbe, &out.LivenessProbe
 		*out = new(LivenessProbeExtended)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.StartupProbe != nil {
+		in, out := &in.StartupProbe, &out.StartupProbe
+		*out = new(corev1.Probe)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.PodSecurityContext != nil {

@@ -1470,7 +1470,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 }
 
 func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if !cr.Spec.Sharding.Enabled {
+	if !cr.Spec.Sharding.Enabled || cr.CompareVersion("1.24.0") < 0 {
 		return nil
 	}
 
