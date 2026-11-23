@@ -210,10 +210,10 @@ type systemUsers struct {
 // add appends user to su.users by given keys if user should be changed
 func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 	if len(su.newData[nameKey]) == 0 {
-		return false, errors.New("undefined or not exist user name " + nameKey)
+		return false, errors.Errorf("can't find %s in users secret", nameKey)
 	}
 	if len(su.newData[passKey]) == 0 {
-		return false, errors.New("undefined or not exist user pass " + nameKey)
+		return false, errors.Errorf("can't find %s in users secret", passKey)
 	}
 
 	// no changes, nothing to do with that user
@@ -361,8 +361,42 @@ func (u *systemUser) updateMongo(ctx context.Context, c mongo.Client) error {
 		return errors.Wrapf(err, "change password for user %s", u.name)
 	}
 
-	err := c.UpdateUser(ctx, string(u.currName), string(u.name), string(u.pass))
+	err := renameUser(ctx, c, string(u.currName), string(u.name), string(u.pass))
 	return errors.Wrapf(err, "update user %s -> %s", u.currName, u.name)
+}
+
+// renameUser recreates currName as newName with the same roles. It is safe to retry after a
+// partial failure: newName may already exist and currName may already be dropped.
+func renameUser(ctx context.Context, c mongo.Client, currName, newName, pass string) error {
+	newUser, err := c.GetUserInfo(ctx, newName, "admin")
+	if err != nil {
+		return errors.Wrap(err, "get new user")
+	}
+	currUser, err := c.GetUserInfo(ctx, currName, "admin")
+	if err != nil {
+		return errors.Wrap(err, "get current user")
+	}
+
+	switch {
+	case newUser != nil:
+		if currUser != nil && !compareRoles(currUser.Roles, newUser.Roles) {
+			return errors.Errorf("cannot rename %s to existing user %s with different roles", currName, newName)
+		}
+		if err := c.UpdateUserPass(ctx, "admin", newName, pass); err != nil {
+			return errors.Wrap(err, "change password")
+		}
+	case currUser != nil:
+		if err := c.CreateUser(ctx, "admin", newName, pass, currUser.Roles...); err != nil {
+			return errors.Wrap(err, "create user")
+		}
+	default:
+		return errors.Errorf("neither %s nor %s exists", currName, newName)
+	}
+
+	if currUser == nil {
+		return nil
+	}
+	return errors.Wrap(c.DropUser(ctx, "admin", currName), "drop user")
 }
 
 func sysUsersSecretDataChanged(cr *api.PerconaServerMongoDB, usersSecret, internalSecret *corev1.Secret) (bool, error) {
