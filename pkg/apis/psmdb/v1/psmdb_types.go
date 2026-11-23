@@ -960,6 +960,16 @@ type ReplsetSpec struct {
 	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 }
 
+func (r *ReplsetSpec) SearchStorage(cr *PerconaServerMongoDB) *VolumeSpec {
+	if r != nil && r.Search != nil && r.Search.Storage != nil {
+		return r.Search.Storage
+	}
+	if cr.Spec.Search != nil {
+		return cr.Spec.Search.Storage
+	}
+	return nil
+}
+
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
 	fixDomain := func(domain string) string {
 		idx := strings.IndexRune(domain, ':')
@@ -1995,6 +2005,7 @@ type PVCShrinkState struct {
 	Phase         string   `json:"phase"`
 	ProcessedPods []string `json:"processedPods"`
 	PrimaryPod    string   `json:"primaryPod"`
+	WaitingFor    string   `json:"waitingFor,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {

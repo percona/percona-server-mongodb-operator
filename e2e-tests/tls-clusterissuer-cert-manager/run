@@ -6,6 +6,9 @@ test_dir=$(realpath $(dirname $0))
 . "${test_dir}/../functions"
 set_debug
 
+# certificate issuance is under test, so cert-manager failures must fail the test
+export CERT_RACE_WORKAROUND=0
+
 check_tls_secret() {
 	local secret_name=$1
 	check_secret_data_key "$secret_name" 'ca.crt'

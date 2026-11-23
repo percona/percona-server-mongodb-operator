@@ -20,6 +20,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -695,7 +696,7 @@ func TestTriggerResize(t *testing.T) {
 
 			originalSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 
-			err := r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, &volumeSpec.PersistentVolumeClaim)
+			_, err := r.triggerResize(t.Context(), tt.cr, tt.pvc, tt.newSize, &volumeSpec.PersistentVolumeClaim)
 			require.NoError(t, err)
 
 			updatedSize := volumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
@@ -762,6 +763,7 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 		return &api.PerconaServerMongoDB{
 			Name: crName, Namespace: namespace,
 			Spec: api.PerconaServerMongoDBSpec{
+				Search: &api.SearchSpec{Enabled: true, Storage: volumeSpec()},
 				StorageScaling: &api.StorageScalingSpec{
 					EnableVolumeScaling: true,
 					Autoscaling: &api.AutoscalingSpec{
@@ -890,6 +892,16 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 				return []*api.PVCSpec{rs.LogPVC(cr, naming.ComponentMongod), rs.LogPVC(cr, naming.ComponentNonVoting)}
 			},
 		},
+		"mongot": {
+			labels:        naming.SearchLabels,
+			stsName:       crName + "-" + rsName + "-" + naming.ComponentSearch,
+			containerName: naming.ContainerMongot,
+			claimName:     vectorsearch.DataVolumeName,
+			mountPath:     "/data/mongot",
+			pvcSpec: func(cr *api.PerconaServerMongoDB) *api.PVCSpec {
+				return &cr.Spec.Replsets[0].SearchStorage(cr).PersistentVolumeClaim
+			},
+		},
 		"mongos": {
 			labels: func(cr *api.PerconaServerMongoDB, _ *api.ReplsetSpec) map[string]string {
 				return naming.MongosLabels(cr)
@@ -964,8 +976,9 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 			}
 
 			pvcSpec := tt.pvcSpec(cr)
-			err := r.reconcileStorageAutoscaling(ctx, cr, sts, tt.claimName, pvcSpec, ls)
+			pvcSpec, err := r.reconcileStorageAutoscaling(ctx, cr, sts, tt.claimName, pvcSpec, ls)
 			assert.NoError(t, err)
+			assert.Same(t, tt.pvcSpec(cr), pvcSpec, "autoscaling must return the current component PVC spec")
 
 			assert.Equal(t, tt.containerName, execContainer, "df must run in the container mounting the volume")
 			assert.Equal(t, []string{"df", "-B1", tt.mountPath}, execCommand, "df must probe the volume's mount path")
@@ -1149,7 +1162,9 @@ func TestReconcileStorageAutoscalingNoPVCs(t *testing.T) {
 			}
 
 			crCopy := cr.DeepCopy()
-			assert.NoError(t, r.reconcileStorageAutoscaling(ctx, crCopy, sts, psmdbconfig.MongosLogVolClaimName, tt.pvcSpec, ls))
+			pvcSpec, err := r.reconcileStorageAutoscaling(ctx, crCopy, sts, psmdbconfig.MongosLogVolClaimName, tt.pvcSpec, ls)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.pvcSpec, pvcSpec)
 
 			assert.Zero(t, execCalls)
 			assert.Empty(t, crCopy.Status.StorageAutoscaling)
@@ -1270,8 +1285,9 @@ func TestAutoscalingKeepsLargerPendingRequest(t *testing.T) {
 	r := buildFakeClient(cr, sts, pvc, pod)
 	r.clientcmd = fullDiskExec()
 
-	assert.NoError(t, r.reconcileStorageAutoscaling(ctx, cr, sts,
-		psmdbconfig.MongodDataVolClaimName, &rs.VolumeSpec.PersistentVolumeClaim, ls))
+	_, err := r.reconcileStorageAutoscaling(ctx, cr, sts,
+		psmdbconfig.MongodDataVolClaimName, &rs.VolumeSpec.PersistentVolumeClaim, ls)
+	assert.NoError(t, err)
 
 	requested := rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
 	assert.Equal(t, "100Gi", requested.String(), "a pending larger request must not be downgraded")
@@ -1331,12 +1347,140 @@ func TestTriggerResizeRestoresSizeOnPatchFailure(t *testing.T) {
 		},
 	}
 
-	err := r.triggerResize(ctx, cr, pvc, resource.MustParse("12Gi"), pvcSpec)
+	returnedSpec, err := r.triggerResize(ctx, cr, pvc, resource.MustParse("12Gi"), pvcSpec)
 	require.ErrorIs(t, err, errPatchRejected, "the API server error has to reach the caller")
 	assert.EqualError(t, err, "patch CR with new storage size: patch rejected")
+	assert.Same(t, pvcSpec, returnedSpec, "a rejected resize must return the original spec")
 
 	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
 	assert.Equal(t, "10Gi", requested.String(), "a rejected size must not stay in the spec")
+}
+
+func TestSearchAutoscalingResizesOnlyTargetShard(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		search          *api.SearchReplsetOverride
+		storageOverride bool
+		belowThreshold  bool
+		patchRejected   bool
+	}{
+		{name: "inherited storage"},
+		{name: "other search overrides", search: &api.SearchReplsetOverride{NodeSelector: map[string]string{"zone": "a"}}},
+		{name: "storage override", search: &api.SearchReplsetOverride{}, storageOverride: true},
+		{name: "below threshold", belowThreshold: true},
+		{name: "patch rejected", patchRejected: true},
+		{name: "patch rejected with other overrides", search: &api.SearchReplsetOverride{NodeSelector: map[string]string{"zone": "a"}}, patchRejected: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			cr := autoscalingCR("test-cluster", "default", "10Gi")
+			cr.Spec.CRVersion = version.Version()
+			cr.Spec.Secrets = &api.SecretsSpec{}
+			cr.Spec.Search = &api.SearchSpec{Enabled: true, Size: 1, Storage: cr.Spec.Replsets[0].VolumeSpec.DeepCopy()}
+			cr.Spec.Search.Storage.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+			globalStorage := cr.Spec.Search.Storage.DeepCopy()
+			target := &api.ReplsetSpec{Name: "rs1", Search: tt.search.DeepCopy()}
+			if tt.storageOverride {
+				target.Search.Storage = globalStorage.DeepCopy()
+				target.Search.Storage.PersistentVolumeClaim.Labels = map[string]string{"custom": "label"}
+			}
+			cr.Spec.Replsets = append(cr.Spec.Replsets, target)
+			originalSearch := target.Search.DeepCopy()
+			expectedStorage := target.SearchStorage(cr).DeepCopy()
+			expectedSize := "12Gi"
+			if tt.belowThreshold || tt.patchRejected {
+				expectedSize = "10Gi"
+			}
+			expectedStorage.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = resource.MustParse(expectedSize)
+
+			var objects []client.Object
+			for _, rs := range cr.Spec.Replsets {
+				sts := vectorsearch.StatefulSet(cr, rs, "init", "", nil)
+				pod := searchPod(sts.Name+"-0", cr, rs, func(pod *corev1.Pod) {
+					pod.Spec.Containers = []corev1.Container{{Name: naming.ContainerMongot}}
+					mountPVC(pod, vectorsearch.DataVolumeName, vectorsearch.DataVolumeName+"-"+pod.Name, "/data/mongot")
+					pod.Status.ContainerStatuses = []corev1.ContainerStatus{{
+						Name:  naming.ContainerMongot,
+						State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}},
+					}}
+				})
+				pvc := &corev1.PersistentVolumeClaim{
+					Name: vectorsearch.DataVolumeName + "-" + pod.Name, Namespace: cr.Namespace,
+					Labels: naming.SearchLabels(cr, rs),
+					Spec:   *rs.SearchStorage(cr).PersistentVolumeClaim.PersistentVolumeClaimSpec.DeepCopy(),
+					Status: corev1.PersistentVolumeClaimStatus{
+						Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")},
+					},
+				}
+				objects = append(objects, sts, pod, pvc)
+			}
+			r := buildFakeClient(append(objects, cr)...)
+			r.clientcmd = &mockClientCmd{
+				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+					used := "1073741824"
+					if pod.Labels[naming.LabelKubernetesReplset] == target.Name && !tt.belowThreshold {
+						used = "9663676416"
+					}
+					_, err := io.WriteString(stdout, "Filesystem 1B-blocks Used Available Use% Mounted on\n/dev/sdb 10737418240 "+used+" 1073741824 90% /data/mongot\n")
+					return err
+				},
+			}
+			if tt.patchRejected {
+				r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						if _, ok := obj.(*api.PerconaServerMongoDB); ok {
+							return errPatchRejected
+						}
+						return c.Patch(ctx, obj, patch, opts...)
+					},
+				})
+			}
+
+			// Reconcile the full shard first, then the shard inheriting the same global storage.
+			for _, rs := range []*api.ReplsetSpec{target, cr.Spec.Replsets[0]} {
+				sts := vectorsearch.StatefulSet(cr, rs, "init", "", nil)
+				require.NoError(t, r.reconcilePVCs(ctx, cr, sts))
+				size := "10Gi"
+				if rs.Name == target.Name {
+					size = expectedSize
+				}
+				require.Len(t, sts.Spec.VolumeClaimTemplates, 1)
+				assert.Equal(t, resource.MustParse(size), sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage],
+					"the desired StatefulSet must use the storage size after autoscaling")
+			}
+
+			stored := new(api.PerconaServerMongoDB)
+			require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(cr), stored))
+			for _, cluster := range []*api.PerconaServerMongoDB{cr, stored} {
+				assert.Equal(t, globalStorage, cluster.Spec.Search.Storage, "the global default must stay unchanged")
+				assert.Nil(t, cluster.Spec.Replsets[0].Search, "other shards must keep inheriting the global default")
+				assert.Equal(t, expectedStorage, cluster.Spec.Replsets[1].SearchStorage(cluster))
+				if tt.belowThreshold || tt.patchRejected {
+					assert.Equal(t, originalSearch, cluster.Spec.Replsets[1].Search, "a skipped or rejected resize must not create an override")
+				} else {
+					require.NotNil(t, cluster.Spec.Replsets[1].Search)
+					if originalSearch != nil {
+						assert.Equal(t, originalSearch.NodeSelector, cluster.Spec.Replsets[1].Search.NodeSelector)
+					}
+				}
+			}
+			for _, rs := range cr.Spec.Replsets {
+				sts := vectorsearch.StatefulSet(cr, rs, "init", "", nil)
+				pvc := new(corev1.PersistentVolumeClaim)
+				require.NoError(t, r.client.Get(ctx, client.ObjectKey{
+					Name: vectorsearch.DataVolumeName + "-" + sts.Name + "-0", Namespace: cr.Namespace,
+				}, pvc))
+				size := "10Gi"
+				if rs.Name == target.Name {
+					size = expectedSize
+				}
+				assert.Equal(t, resource.MustParse(size), pvc.Spec.Resources.Requests[corev1.ResourceStorage], "the PVC must use the current shard size in the same reconcile")
+			}
+		})
+	}
 }
 
 // TestResizeMongosPVCsAutoscalesLogVolume is the happy path of resizeMongosPVCs:
@@ -1523,8 +1667,9 @@ func TestReconcileStorageAutoscalingVolumeNotMounted(t *testing.T) {
 			crCopy := cr.DeepCopy()
 			pvcSpec := &crCopy.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim
 
-			assert.NoError(t, r.reconcileStorageAutoscaling(ctx, crCopy, sts,
-				psmdbconfig.MongodDataVolClaimName, pvcSpec, ls))
+			_, err := r.reconcileStorageAutoscaling(ctx, crCopy, sts,
+				psmdbconfig.MongodDataVolClaimName, pvcSpec, ls)
+			assert.NoError(t, err)
 
 			assert.Zero(t, execCalls, "no df without a known mount path")
 			assert.Empty(t, crCopy.Status.StorageAutoscaling)
@@ -1595,8 +1740,9 @@ func TestReconcileStorageAutoscalingPicksOwningContainer(t *testing.T) {
 		},
 	}
 
-	assert.NoError(t, r.reconcileStorageAutoscaling(ctx, cr, sts,
-		psmdbconfig.MongodDataVolClaimName, &rs.VolumeSpec.PersistentVolumeClaim, ls))
+	_, err := r.reconcileStorageAutoscaling(ctx, cr, sts,
+		psmdbconfig.MongodDataVolClaimName, &rs.VolumeSpec.PersistentVolumeClaim, ls)
+	assert.NoError(t, err)
 
 	assert.Equal(t, naming.ContainerMongod, execContainer, "df must run in the container that owns the volume")
 	assert.Equal(t, []string{"df", "-B1", psmdbconfig.MongodContainerDataDir}, execCommand)
@@ -1626,8 +1772,9 @@ func TestCheckAndResizePVCSkipsTerminatingPod(t *testing.T) {
 	pvc := &corev1.PersistentVolumeClaim{Name: "mongod-data-test-cluster-rs0-0", Namespace: "default"}
 	cr := &api.PerconaServerMongoDB{Name: "test-cluster", Namespace: "default"}
 
-	require.NoError(t, r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
-		naming.ContainerMongod, psmdbconfig.MongodContainerDataDir))
+	_, err := r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
+		naming.ContainerMongod, psmdbconfig.MongodContainerDataDir)
+	require.NoError(t, err)
 	assert.Empty(t, cr.Status.StorageAutoscaling)
 }
 
@@ -1657,8 +1804,9 @@ func TestCheckAndResizePVCSkipsUnmountedPVC(t *testing.T) {
 	pvc := &corev1.PersistentVolumeClaim{Name: "mongod-logs-test-cluster-rs0-0", Namespace: "default"}
 	cr := &api.PerconaServerMongoDB{Name: "test-cluster", Namespace: "default"}
 
-	require.NoError(t, r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
-		naming.ContainerMongod, psmdbconfig.MongodContainerDataLogsDir))
+	_, err := r.checkAndResizePVC(t.Context(), cr, pvc, pod, &api.PVCSpec{},
+		naming.ContainerMongod, psmdbconfig.MongodContainerDataLogsDir)
+	require.NoError(t, err)
 	assert.Empty(t, cr.Status.StorageAutoscaling)
 }
 

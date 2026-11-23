@@ -2,6 +2,7 @@ package perconaservermongodb
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -1219,11 +1220,7 @@ func compareRoles(x []mongo.Role, y []mongo.Role) bool {
 	}
 
 	sortFunc := func(a mongo.Role, b mongo.Role) int {
-		if a.DB < b.DB || a.Role < b.Role {
-			return -1
-		}
-
-		return 0
+		return cmp.Or(cmp.Compare(a.DB, b.DB), cmp.Compare(a.Role, b.Role))
 	}
 
 	slices.SortFunc(x, sortFunc)

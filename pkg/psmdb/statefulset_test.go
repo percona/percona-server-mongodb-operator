@@ -853,9 +853,10 @@ func TestAddPMMTmpVolume(t *testing.T) {
 
 func TestBuildMongoDBURI(t *testing.T) {
 	const baseURI = "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
-	const tlsOpts = "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+	const tlsOpts = "/?tls=true&tlsCertificateKeyFile=/tmp/pbm-tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
 
 	tests := map[string]struct {
+		crVersion    string
 		tlsEnabled   bool
 		allowInvalid bool
 		expectedURI  string
@@ -874,15 +875,24 @@ func TestBuildMongoDBURI(t *testing.T) {
 			allowInvalid: true,
 			expectedURI:  baseURI + tlsOpts + "&tlsInsecure=true",
 		},
+		"crVersion before dedicated pbm certificate": {
+			crVersion:   "1.23.0",
+			tlsEnabled:  true,
+			expectedURI: baseURI + "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt",
+		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			crVersion := tt.crVersion
+			if crVersion == "" {
+				crVersion = version.Version()
+			}
 			cr := &api.PerconaServerMongoDB{
 				Name:      "cluster",
 				Namespace: "ns",
 				Spec: api.PerconaServerMongoDBSpec{
-					CRVersion: version.Version(),
+					CRVersion: crVersion,
 					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
 					TLS:       &api.TLSSpec{AllowInvalidCertificates: &tt.allowInvalid},
 				},
