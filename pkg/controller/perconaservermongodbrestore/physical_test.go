@@ -211,7 +211,11 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				}))
 
 			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
-			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+			pemFile := "/tmp/pbm-tls.pem"
+			if tt.crVersion == "1.22.0" {
+				pemFile = "/tmp/tls.pem"
+			}
+			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=" + pemFile + "&tlsCAFile=/etc/mongodb-ssl/ca.crt"
 			if tt.wantTLSInsecure {
 				expectedURI += "&tlsInsecure=true"
 			}
@@ -420,6 +424,10 @@ func TestIsContainerUnavailableError(t *testing.T) {
 		},
 		"container stopped": {
 			err:  errors.New(`describe restore stderr:  stdout: : Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "5611bd31": OCI runtime exec failed: exec failed: cannot exec in a stopped container`),
+			want: true,
+		},
+		"container killed during exec": {
+			err:  errors.New("describe restore stderr:  stdout: : command terminated with exit code 137"),
 			want: true,
 		},
 		"pbm error": {
