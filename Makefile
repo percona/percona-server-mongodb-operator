@@ -104,10 +104,16 @@ py-fmt: uv ## Format and organize imports in e2e-tests
 	$(UV) run ruff format $(PY_DIRS)
 
 # MYPYPATH: the OLM tests import the shared harness (lib.*) from e2e-tests/.
-py-check: uv ## Run ruff and mypy checks on e2e-tests
+py-check: uv py-setup-plan ## Run ruff, mypy and the fixture check on e2e-tests
 	$(UV) run ruff check $(PY_DIRS)
 	$(UV) run mypy e2e-tests/
 	MYPYPATH=e2e-tests $(UV) run mypy installers/olm/e2e-tests/
+
+# -p no:dependency: pytest-dependency would skip dependent tests before their fixtures resolve.
+SETUP_PLAN = $(UV) run pytest --setup-plan -q -p no:cacheprovider -p no:dependency
+py-setup-plan: uv ## Check that every test's fixtures exist (no cluster needed)
+	$(SETUP_PLAN) e2e-tests/
+	PYTHONPATH=e2e-tests:installers/olm/e2e-tests $(SETUP_PLAN) -p conftest installers/olm/e2e-tests/
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
