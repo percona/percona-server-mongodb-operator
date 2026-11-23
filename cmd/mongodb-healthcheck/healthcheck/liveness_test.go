@@ -74,7 +74,7 @@ func TestHealthCheckMongodLiveness(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stubDial(t, tt.dialErr)
 
-			state, err := HealthCheckMongodLiveness(t.Context(), &db.Config{})
+			state, err := HealthCheckMongodLiveness(t.Context(), &db.Config{SSL: &db.SSLConfig{}})
 			if !tt.alive {
 				assert.ErrorIs(t, err, tt.dialErr)
 				assert.Nil(t, state)
@@ -91,12 +91,32 @@ func TestHealthCheckMongosLiveness(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			stubDial(t, tt.dialErr)
 
-			err := HealthCheckMongosLiveness(t.Context(), &db.Config{})
+			err := HealthCheckMongosLiveness(t.Context(), &db.Config{SSL: &db.SSLConfig{}})
 			if !tt.alive {
 				assert.ErrorIs(t, err, tt.dialErr)
 				return
 			}
 			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestIsNotYetInitialized(t *testing.T) {
+	notInitialized := mgo.CommandError{Code: 94, Name: "NotYetInitialized", Message: "no replset config has been received"}
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "command error", err: notInitialized, want: true},
+		{name: "wrapped command error", err: errors.Wrap(notInitialized, "replSetGetStatus"), want: true},
+		{name: "wrapped message", err: errors.Wrap(errors.New(ErrNoReplsetConfigStr), "replSetGetStatus"), want: true},
+		{name: "other command error", err: errors.Wrap(mgo.CommandError{Code: 13, Name: "Unauthorized"}, "replSetGetStatus"), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isNotYetInitialized(tt.err))
 		})
 	}
 }

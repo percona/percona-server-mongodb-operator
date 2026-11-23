@@ -162,6 +162,6 @@ func (c *fakeMongoClient) UpdateUserPass(ctx context.Context, db, name, pass str
 	return nil
 }
 
-func (c *fakeMongoClient) UpdateUser(ctx context.Context, currName, newName, pass string) error {
+func (c *fakeMongoClient) DropUser(ctx context.Context, db, name string) error {
 	return nil
 }
