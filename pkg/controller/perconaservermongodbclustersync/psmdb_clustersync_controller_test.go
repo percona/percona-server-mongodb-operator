@@ -30,7 +30,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -653,7 +652,7 @@ func TestReconcileModeFailedState(t *testing.T) {
 				WithStatusSubresource(cr).
 				WithObjects(cr).
 				Build()
-			rec := record.NewFakeRecorder(4)
+			rec := events.NewFakeRecorder(4)
 			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
 			f := &fakePCSM{statusResp: tc.observed}
 
@@ -689,7 +688,7 @@ func TestReconcileModeStartThenFailed(t *testing.T) {
 		WithStatusSubresource(cr).
 		WithObjects(cr).
 		Build()
-	rec := record.NewFakeRecorder(4)
+	rec := events.NewFakeRecorder(4)
 	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
 
 	pass := func(f *fakePCSM) *psmdbv1.PerconaServerMongoDBClusterSync {
@@ -718,7 +717,7 @@ func TestReconcileModeStartThenFailed(t *testing.T) {
 	assert.True(t, hasEvent(rec, "InitialSyncFailed"))
 }
 
-func hasEvent(rec *record.FakeRecorder, reason string) bool {
+func hasEvent(rec *events.FakeRecorder, reason string) bool {
 	for {
 		select {
 		case e := <-rec.Events:

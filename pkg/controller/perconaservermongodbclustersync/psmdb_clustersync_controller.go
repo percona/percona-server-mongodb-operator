@@ -515,7 +515,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 	if syncFailed && !initialSyncFailed(&cr.Status) {
 		log.Info("PCSM initial sync failed and cannot be resumed, recreate the ClusterSync to start over",
 			"error", newStatus.Error)
-		r.recorder.Eventf(cr, corev1.EventTypeWarning, "InitialSyncFailed",
+		r.recorder.Eventf(cr, nil, corev1.EventTypeWarning, "InitialSyncFailed", "InitialSync",
 			"PCSM initial sync failed and cannot be resumed, recreate the ClusterSync to start over: %s", newStatus.Error)
 	}
 
