@@ -113,6 +113,9 @@ type initMongoClientProvider struct {
 	cr               *api.PerconaServerMongoDB
 	pods             []client.Object
 	clusterAdminConf *mongo.DialConfig
+	// rsClient, if set, backs every RoleClusterAdmin connection so a test
+	// can inspect the replset config the reconcile wrote.
+	rsClient mongo.Client
 }
 
 func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
@@ -128,6 +131,9 @@ func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 	}
 	if p.clusterAdminErr != nil {
 		return nil, p.clusterAdminErr
+	}
+	if p.rsClient != nil {
+		return p.rsClient, nil
 	}
 	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
@@ -615,4 +621,32 @@ func TestReconcileClusterKeepsMembersBeforeAddedAsShard(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, api.AppStateInit, state)
 	assert.Equal(t, members, got)
+}
+
+// PVC shrink keeps the replset status Init until it finishes. A shard that is
+// already added must still reconcile its members meanwhile, or a member that
+// dropped out of the config is never added back and the shrink waits forever.
+func TestReconcileClusterReconcilesShardMembersDuringPVCShrink(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+	ctx := context.Background()
+
+	provider := &initMongoClientProvider{rsClient: mongoFake.NewClientWithConfig(mongo.RSConfig{Version: 1})}
+	r, cr, rs := setupReplsetInitTest(t, provider, &replsetInitExecRecorder{})
+	cr.Spec.Sharding.Enabled = true
+	cr.Spec.Sharding.Mongos = &api.MongosSpec{Size: 1}
+	rs.ClusterRole = api.ClusterRoleShardSvr
+	cr.Status.Replsets[rs.Name] = api.ReplsetStatus{
+		Initialized:  true,
+		Status:       api.AppStateInit,
+		AddedAsShard: new(true),
+	}
+	cr.SetPVCShrinkState(naming.MongodStatefulSetName(cr, rs), api.PVCShrinkState{Phase: "secondaries"})
+
+	_, _, err := r.reconcileCluster(ctx, cr, rs, nil)
+	require.NoError(t, err)
+
+	config, err := provider.rsClient.ReadConfig(ctx)
+	require.NoError(t, err)
+	require.Len(t, config.Members, 1)
+	assert.Equal(t, cr.Name+"-"+rs.Name+"-0", config.Members[0].Tags["podName"])
 }
