@@ -487,13 +487,22 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		if err != nil {
 			return nil, errors.Wrap(err, "get azure credentials secret")
 		}
+		account := string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey])
+		key := string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey])
+
+		if connStr := string(azureSecret.Data[backup.AzureStorageConnectionStringSecretKey]); connStr != "" {
+			account, key, err = backup.ParseAzureConnectionString(connStr)
+			if err != nil {
+				return nil, errors.Wrap(err, "parse azure connection string")
+			}
+		}
 		azureConf := &azure.Config{
-			Account:     string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
+			Account:     account,
 			Container:   cr.Status.Azure.Container,
 			EndpointURL: cr.Status.Azure.EndpointURL,
 			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString([]byte(key)),
 			},
 		}
 		return azure.New(azureConf, "", nil)
