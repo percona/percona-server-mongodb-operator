@@ -458,6 +458,28 @@
       {
         "resource": {
           "db": "admin",
+          "collection": "system.authForInternalNamespace"
+        },
+        "actions": [
+          "bypassDocumentValidation",
+          "collMod",
+          "convertToCapped",
+          "createCollection",
+          "createIndex",
+          "createSearchIndexes",
+          "dropCollection",
+          "find",
+          "insert",
+          "updateSearchIndex",
+          "performRawDataOperations",
+          "startBackup",
+          "containerInsert",
+          "containerDelete"
+        ]
+      },
+      {
+        "resource": {
+          "db": "admin",
           "collection": "system.backup_users"
         },
         "actions": [
