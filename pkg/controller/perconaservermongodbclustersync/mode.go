@@ -40,13 +40,13 @@ func nextAction(statusMode, specMode api.ClusterSyncMode, state api.ClusterSyncS
 		return actionNone, false
 	}
 	// PCSM rejects pause and finalize while failed, so neither is sent.
-	if state == api.ClusterSyncStateFailed && hasStarted {
+	if state == api.ClusterSyncStateFailed {
 		switch {
 		case specMode == api.ClusterSyncModePaused:
 			return actionNone, statusMode != specMode
 		case specMode == api.ClusterSyncModeFinalized, syncFailed:
 			return actionNone, false
-		case specMode == api.ClusterSyncModeRunning:
+		case hasStarted:
 			return actionResume, false
 		}
 	}

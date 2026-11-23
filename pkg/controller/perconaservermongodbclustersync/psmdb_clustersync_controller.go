@@ -515,6 +515,8 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 	if syncFailed && !initialSyncFailed(&cr.Status) {
 		log.Info("PCSM initial sync failed and cannot be resumed, recreate the ClusterSync to start over",
 			"error", newStatus.Error)
+		r.recorder.Eventf(cr, corev1.EventTypeWarning, "InitialSyncFailed",
+			"PCSM initial sync failed and cannot be resumed, recreate the ClusterSync to start over: %s", newStatus.Error)
 	}
 
 	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil, syncFailed)
@@ -564,6 +566,11 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 				return r.writeStatus(ctx, cr, *newStatus)
 			}
 			r.recordActiveInstance(cr, newStatus, pcsm.ActiveInstance())
+			// A clone can fail before any poll sees running.
+			if action == actionStart {
+				now := metav1.Now()
+				newStatus.StartedAt = &now
+			}
 			log.Info("PCSM transition applied", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
 		}
 	}
@@ -625,25 +632,17 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 		s.StartedAt = &now
 	}
 
-	if initialSyncFailed(s) {
-		meta.SetStatusCondition(&s.Conditions, metav1.Condition{
-			Type:               psmdbv1.ConditionClusterSyncInitialSyncFailed,
-			Status:             metav1.ConditionTrue,
-			Reason:             "InitialSyncNotResumable",
-			Message:            "PCSM initial sync failed and cannot be resumed; delete and recreate the ClusterSync to start a new sync",
-			ObservedGeneration: generation,
-		})
-	} else {
-		meta.RemoveStatusCondition(&s.Conditions, psmdbv1.ConditionClusterSyncInitialSyncFailed)
-	}
-
 	runningStatus := metav1.ConditionFalse
 	runningReason := "PCSMNotRunning"
 	runningMsg := fmt.Sprintf("PCSM state: %s", s.State)
-	if s.State == psmdbv1.ClusterSyncStateRunning {
+	switch {
+	case s.State == psmdbv1.ClusterSyncStateRunning:
 		runningStatus = metav1.ConditionTrue
 		runningReason = "PCSMRunning"
 		runningMsg = "PCSM is replicating from source to target"
+	case initialSyncFailed(s):
+		runningReason = "InitialSyncFailed"
+		runningMsg = "PCSM initial sync failed and cannot be resumed; delete and recreate the ClusterSync to start a new sync"
 	}
 	meta.SetStatusCondition(&s.Conditions, metav1.Condition{
 		Type:               psmdbv1.ConditionClusterSyncRunning,

@@ -124,6 +124,22 @@ func TestNextAction(t *testing.T) {
 			wantAction: actionNone,
 			wantMirror: false,
 		},
+		"failed without startedAt and spec=paused mirrors without calling pause": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModePaused,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: false,
+			wantAction: actionNone,
+			wantMirror: true,
+		},
+		"failed without startedAt and spec=finalized neither finalizes nor mirrors": {
+			statusMode: api.ClusterSyncModeRunning,
+			specMode:   api.ClusterSyncModeFinalized,
+			state:      api.ClusterSyncStateFailed,
+			hasStarted: false,
+			wantAction: actionNone,
+			wantMirror: false,
+		},
 		"failed with spec=paused mirrors without calling pause": {
 			statusMode: api.ClusterSyncModeRunning,
 			specMode:   api.ClusterSyncModePaused,

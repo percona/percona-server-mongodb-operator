@@ -104,9 +104,8 @@ const (
 )
 
 const (
-	ConditionClusterSyncRunning           = "Running"
-	ConditionClusterSyncFinalized         = "Finalized"
-	ConditionClusterSyncInitialSyncFailed = "InitialSyncFailed"
+	ConditionClusterSyncRunning   = "Running"
+	ConditionClusterSyncFinalized = "Finalized"
 )
 
 // ClusterSyncInitialSync is the initial sync progress PCSM reports.
@@ -142,8 +141,8 @@ type PerconaServerMongoDBClusterSyncStatus struct {
 	// instance is found without probing every pod.
 	ActiveInstance string `json:"activeInstance,omitempty"`
 
-	// StartedAt is set once the first time PCSM reports state=running;
-	// not updated on restart.
+	// StartedAt is set when /start succeeds or the first time PCSM
+	// reports state=running; not updated on restart.
 	StartedAt *metav1.Time `json:"startedAt,omitempty"`
 
 	// InitialSync is unset when PCSM does not report it.
