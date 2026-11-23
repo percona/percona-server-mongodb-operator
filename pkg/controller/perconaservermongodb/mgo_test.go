@@ -3,8 +3,10 @@ package perconaservermongodb
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -466,6 +468,21 @@ func TestCompareRoles(t *testing.T) {
 			},
 			expected: false,
 		},
+		"order is different across databases": {
+			x: []mongo.Role{
+				{DB: "admin", Role: "readWrite"},
+				{DB: "local", Role: "backup"},
+				{DB: "admin", Role: "clusterMonitor"},
+				{DB: "config", Role: "read"},
+			},
+			y: []mongo.Role{
+				{DB: "config", Role: "read"},
+				{DB: "admin", Role: "clusterMonitor"},
+				{DB: "local", Role: "backup"},
+				{DB: "admin", Role: "readWrite"},
+			},
+			expected: true,
+		},
 	}
 
 	for name, tt := range tests {
@@ -821,4 +838,79 @@ func TestRemoveUndesiredMembers(t *testing.T) {
 			assert.NotEmptyf(t, cfg.Members, "config must never be left without members")
 		})
 	}
+}
+
+// fakeResolver is a test double for dnsResolver.
+type fakeResolver struct {
+	ips     []net.IPAddr
+	err     error
+	gotHost string
+}
+
+func (f *fakeResolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, error) {
+	f.gotHost = host
+	return f.ips, f.err
+}
+
+func TestHostResolvable(t *testing.T) {
+	t.Parallel()
+
+	const host = "my-cluster-rs0-0.psmdb.svc.clusterset.local"
+
+	tests := map[string]struct {
+		resolver    *fakeResolver
+		expectedOK  bool
+		expectedErr bool
+	}{
+		"resolves to an IP": {
+			resolver:    &fakeResolver{ips: []net.IPAddr{{IP: net.ParseIP("10.0.0.1")}}},
+			expectedOK:  true,
+			expectedErr: false,
+		},
+		"resolves to multiple IPs": {
+			resolver: &fakeResolver{ips: []net.IPAddr{
+				{IP: net.ParseIP("10.0.0.1")},
+				{IP: net.ParseIP("10.0.0.2")},
+			}},
+			expectedOK:  true,
+			expectedErr: false,
+		},
+		"lookup error": {
+			resolver:    &fakeResolver{err: errors.New("no such host")},
+			expectedOK:  false,
+			expectedErr: true,
+		},
+		"no addresses without error": {
+			resolver:    &fakeResolver{ips: nil},
+			expectedOK:  false,
+			expectedErr: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ok, err := hostResolvable(context.Background(), tt.resolver, host)
+
+			if tt.expectedErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectedOK, ok)
+			assert.Equal(t, host+".", tt.resolver.gotHost)
+		})
+	}
+}
+
+func TestReconcilerResolverDefault(t *testing.T) {
+	t.Parallel()
+
+	// no resolver configured -> falls back to the system default resolver
+	r := &ReconcilePerconaServerMongoDB{}
+	assert.Same(t, net.DefaultResolver, r.resolver())
+
+	// configured resolver is returned as-is
+	fake := &fakeResolver{}
+	r.dnsResolver = fake
+	assert.Same(t, fake, r.resolver())
 }

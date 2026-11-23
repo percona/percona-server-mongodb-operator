@@ -28,3 +28,4 @@
 - [ ] Did we ensure compatibility with the previous version or cluster upgrade process?
 - [ ] Does the change support oldest and newest supported MongoDB version?
 - [ ] Does the change support oldest and newest supported Kubernetes version?
+- [ ] Are `AGENTS.md`, `docs/guidelines/` and `.agents/skills/` updated if conventions or workflows changed?

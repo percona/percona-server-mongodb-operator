@@ -16,6 +16,8 @@ from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
 
+pytestmark = pytest.mark.usefixtures("no_cert_race_workaround")
+
 CLUSTER = "some-name"
 
 
