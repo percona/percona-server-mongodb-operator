@@ -66,8 +66,8 @@ func TestConfigMap_Metadata(t *testing.T) {
 	cm, err := ConfigMap(cr, rs)
 	require.NoError(t, err)
 
-	assert.Equal(t, "v1", cm.TypeMeta.APIVersion)
-	assert.Equal(t, "ConfigMap", cm.TypeMeta.Kind)
+	assert.Equal(t, "v1", cm.APIVersion)
+	assert.Equal(t, "ConfigMap", cm.Kind)
 	assert.Equal(t, naming.SearchConfigMapName(cr, rs), cm.Name)
 	assert.Equal(t, "psmdb-rs0-search-config", cm.Name)
 	assert.Equal(t, cr.Namespace, cm.Namespace)

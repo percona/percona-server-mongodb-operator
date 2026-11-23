@@ -3,10 +3,11 @@ package perconaservermongodbrestore
 import (
 	"context"
 
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/types"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -47,7 +48,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) validate(ctx context.Context, cr 
 	if err != nil {
 		return errWaitingPBM
 	}
-	defer pbmc.Close(ctx)
+	defer func() {
+		if err := pbmc.Close(ctx); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	cfg, err := backup.GetPBMConfig(ctx, r.client, cluster, storage)
 	if err != nil {

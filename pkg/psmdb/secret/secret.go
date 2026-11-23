@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"math/big"
 	mrand "math/rand"
-	"time"
 )
 
 const (
@@ -31,7 +30,6 @@ func GenerateKey1024(ln int) ([]byte, error) {
 
 // GeneratePassword generate password
 func GeneratePassword() ([]byte, error) {
-	mrand.Seed(time.Now().UnixNano())
 	ln := mrand.Intn(passwordMaxLen-passwordMinLen) + passwordMinLen
 	b := make([]byte, ln)
 	for i := range ln {

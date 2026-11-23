@@ -8,7 +8,6 @@ import (
 	"slices"
 	"time"
 
-	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +32,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
+	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -59,7 +59,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		clientcmd:            cli,
-		recorder:             mgr.GetEventRecorderFor("psmdbclustersync-controller"),
+		recorder:             mgr.GetEventRecorderFor("psmdbclustersync-controller"), //nolint:staticcheck // e2e tests assert on core/v1 events
 		newTargetMongoClient: defaultTargetMongoClient,
 	}
 	r.newPCSMClientFor = func(cr *psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient {

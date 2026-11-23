@@ -74,7 +74,11 @@ func HasActiveJobs(ctx context.Context, newPBMFunc NewPBMFunc, cl client.Client,
 		}
 		return false, errors.Wrap(err, "getting PBM object")
 	}
-	defer pbm.Close(ctx)
+	defer func() {
+		if err := pbm.Close(ctx); err != nil {
+			l.Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	allowLock = append(allowLock, NotJobLock(current))
 	hasLocks, err := pbm.HasLocks(ctx, allowLock...)

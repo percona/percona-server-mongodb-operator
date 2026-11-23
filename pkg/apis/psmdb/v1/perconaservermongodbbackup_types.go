@@ -53,22 +53,22 @@ const (
 
 // PerconaServerMongoDBBackupStatus defines the observed state of PerconaServerMongoDBBackup
 type PerconaServerMongoDBBackupStatus struct {
-	Type         defs.BackupType              `json:"type,omitempty"`
-	State        BackupState                  `json:"state,omitempty"`
+	Type  defs.BackupType `json:"type,omitempty"`
+	State BackupState     `json:"state,omitempty"`
 	// WaitingReason identifies the blocker while State is waiting.
 	WaitingReason BackupWaitingReason          `json:"waitingReason,omitempty"`
-	Destination  string                       `json:"destination,omitempty"`
-	StorageName  string                       `json:"storageName,omitempty"`
-	S3           *BackupStorageS3Spec         `json:"s3,omitempty"`
-	Minio        *BackupStorageMinioSpec      `json:"minio,omitempty"`
-	GCS          *BackupStorageGCSSpec        `json:"gcs,omitempty"`
-	Azure        *BackupStorageAzureSpec      `json:"azure,omitempty"`
-	OSS          *BackupStorageOSSSpec        `json:"oss,omitempty"`
-	Filesystem   *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
-	OCI          *BackupStorageOCISpec        `json:"oci,omitempty"`
-	ReplsetNames []string                     `json:"replsetNames,omitempty"`
-	PBMname      string                       `json:"pbmName,omitempty"`
-	Size         string                       `json:"size,omitempty"`
+	Destination   string                       `json:"destination,omitempty"`
+	StorageName   string                       `json:"storageName,omitempty"`
+	S3            *BackupStorageS3Spec         `json:"s3,omitempty"`
+	Minio         *BackupStorageMinioSpec      `json:"minio,omitempty"`
+	GCS           *BackupStorageGCSSpec        `json:"gcs,omitempty"`
+	Azure         *BackupStorageAzureSpec      `json:"azure,omitempty"`
+	OSS           *BackupStorageOSSSpec        `json:"oss,omitempty"`
+	Filesystem    *BackupStorageFilesystemSpec `json:"filesystem,omitempty"`
+	OCI           *BackupStorageOCISpec        `json:"oci,omitempty"`
+	ReplsetNames  []string                     `json:"replsetNames,omitempty"`
+	PBMname       string                       `json:"pbmName,omitempty"`
+	Size          string                       `json:"size,omitempty"`
 
 	Snapshots SnapshotInfos `json:"snapshots,omitempty"`
 

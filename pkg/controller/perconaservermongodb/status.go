@@ -308,7 +308,7 @@ func (r *ReconcilePerconaServerMongoDB) updateStatus(ctx context.Context, cr *ap
 		return errors.Wrap(err, "update image upgrade condition")
 	}
 
-	cr.Status.ObservedGeneration = cr.ObjectMeta.Generation
+	cr.Status.ObservedGeneration = cr.Generation
 
 	return r.writeStatus(ctx, cr)
 }

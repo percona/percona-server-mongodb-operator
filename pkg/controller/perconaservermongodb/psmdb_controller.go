@@ -279,7 +279,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 
 	// As operator can handle a few clusters
 	// lock should be created per cluster to not lock cron jobs of other clusters
-	l := r.lockers.LoadOrCreate(request.NamespacedName.String())
+	l := r.lockers.LoadOrCreate(request.String())
 
 	// PerconaServerMongoDB object is also accessed and changed by a version service's cron job (that runs concurrently)
 	l.statusMutex.Lock()
@@ -352,7 +352,7 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		log.Error(err, "failed update secret providers")
 	}
 
-	if cr.ObjectMeta.DeletionTimestamp != nil {
+	if cr.DeletionTimestamp != nil {
 		rec, err := r.checkFinalizers(ctx, cr)
 		if rec || err != nil {
 			return rr, err

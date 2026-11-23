@@ -17,8 +17,9 @@ package healthcheck
 import (
 	"testing"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	"github.com/stretchr/testify/require"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 )
 
 func statusWithSelf(state mongo.MemberState, uptime int64, initialSync any) mongo.Status {

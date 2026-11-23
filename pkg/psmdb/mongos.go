@@ -106,7 +106,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		initContainers[i].Resources = c.Resources
 	}
 
-	containers, ok := cr.Spec.Sharding.Mongos.MultiAZ.WithSidecars(c)
+	containers, ok := cr.Spec.Sharding.Mongos.WithSidecars(c)
 	if !ok {
 		log.Info("Wrong sidecar container name, it is skipped", "containerName", c.Name)
 	}
@@ -119,7 +119,7 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		containers = append(containers, logCollectorCs...)
 	}
 
-	annotations := cr.Spec.Sharding.Mongos.MultiAZ.Annotations
+	annotations := cr.Spec.Sharding.Mongos.Annotations
 	if annotations == nil {
 		annotations = make(map[string]string)
 	}
@@ -137,20 +137,20 @@ func MongosTemplateSpec(cr *api.PerconaServerMongoDB, initImage string, log logr
 		Spec: corev1.PodSpec{
 			HostAliases:                   cr.Spec.Sharding.Mongos.HostAliases,
 			SecurityContext:               cr.Spec.Sharding.Mongos.PodSecurityContext,
-			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.MultiAZ.Affinity, ls),
-			TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, cr.Spec.Sharding.Mongos.MultiAZ.TopologySpreadConstraints, ls),
-			NodeSelector:                  cr.Spec.Sharding.Mongos.MultiAZ.NodeSelector,
-			Tolerations:                   cr.Spec.Sharding.Mongos.MultiAZ.Tolerations,
-			TerminationGracePeriodSeconds: cr.Spec.Sharding.Mongos.MultiAZ.TerminationGracePeriodSeconds,
-			PriorityClassName:             cr.Spec.Sharding.Mongos.MultiAZ.PriorityClassName,
-			ServiceAccountName:            cr.Spec.Sharding.Mongos.MultiAZ.ServiceAccountName,
+			Affinity:                      PodAffinity(cr, cr.Spec.Sharding.Mongos.Affinity, ls),
+			TopologySpreadConstraints:     PodTopologySpreadConstraints(cr, cr.Spec.Sharding.Mongos.TopologySpreadConstraints, ls),
+			NodeSelector:                  cr.Spec.Sharding.Mongos.NodeSelector,
+			Tolerations:                   cr.Spec.Sharding.Mongos.Tolerations,
+			TerminationGracePeriodSeconds: cr.Spec.Sharding.Mongos.TerminationGracePeriodSeconds,
+			PriorityClassName:             cr.Spec.Sharding.Mongos.PriorityClassName,
+			ServiceAccountName:            cr.Spec.Sharding.Mongos.ServiceAccountName,
 			RestartPolicy:                 corev1.RestartPolicyAlways,
 			ImagePullSecrets:              cr.Spec.ImagePullSecrets,
 			Containers:                    containers,
 			InitContainers:                initContainers,
 			Volumes:                       volumes(cr, configs, mountKeyFile),
 			SchedulerName:                 cr.Spec.SchedulerName,
-			RuntimeClassName:              cr.Spec.Sharding.Mongos.MultiAZ.RuntimeClassName,
+			RuntimeClassName:              cr.Spec.Sharding.Mongos.RuntimeClassName,
 		},
 	}, nil
 }

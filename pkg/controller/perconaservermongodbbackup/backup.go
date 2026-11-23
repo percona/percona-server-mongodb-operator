@@ -323,7 +323,7 @@ func (b *managedBackups) statusFromMeta(ctx context.Context, cluster *api.Percon
 	if err != nil {
 		return status, nil
 	}
-	status.PBMPod = node
+	status.PBMPod = node //nolint:staticcheck // kept for clients that read the deprecated field
 
 	meta, err = b.pbm.GetBackupMeta(ctx, cr.Status.PBMname)
 	if err != nil || meta == nil || meta.Replsets == nil {

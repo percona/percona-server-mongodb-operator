@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
 const (

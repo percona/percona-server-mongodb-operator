@@ -235,8 +235,8 @@ func TestApplyCustomPBMConfig(t *testing.T) {
 	if expectedBackupOptions.Priority["localhost:28019"] != config.Backup.Priority["localhost:28019"] {
 		t.Errorf("expected %f, got %f", expectedBackupOptions.Priority["localhost:28019"], config.Backup.Priority["localhost:28019"])
 	}
-	if expectedBackupOptions.Timeouts.Starting != config.Backup.Timeouts.Starting {
-		t.Errorf("expected %d, got %d", expectedBackupOptions.Timeouts.Starting, config.Backup.Timeouts.Starting)
+	if *expectedBackupOptions.Timeouts.Starting != *config.Backup.Timeouts.Starting {
+		t.Errorf("expected %d, got %d", *expectedBackupOptions.Timeouts.Starting, *config.Backup.Timeouts.Starting)
 	}
 
 	if expectedBackupOptions.NumParallelCollections != config.Backup.NumParallelCollections {

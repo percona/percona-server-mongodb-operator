@@ -6,12 +6,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 )
 
 const WatchNamespaceEnvVar = "WATCH_NAMESPACE"

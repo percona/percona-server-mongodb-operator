@@ -87,7 +87,11 @@ func (r *ReconcilePerconaServerMongoDB) deleteAllPITRChunks(ctx context.Context,
 	if err != nil {
 		return errors.Wrap(err, "new pbm")
 	}
-	defer pbmc.Close(ctx)
+	defer func() {
+		if err := pbmc.Close(ctx); err != nil {
+			logf.FromContext(ctx).Error(err, "failed to close PBM connection")
+		}
+	}()
 
 	if err := pbmc.DeletePITRChunks(ctx, bson.Timestamp{
 		T: uint32(time.Now().Unix()),
