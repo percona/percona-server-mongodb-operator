@@ -1095,11 +1095,13 @@ func isTransientNetworkError(err error) bool {
 
 // isContainerUnavailableError reports exec failures caused by the target
 // container not running, e.g. while pods restart at the end of a restore.
+// Exit code 137 means the exec was killed because the container stopped while it ran.
 func isContainerUnavailableError(err error) bool {
 	for _, s := range []string{
 		"container is not created or running",
 		"container not found",
 		"cannot exec in a stopped container",
+		"command terminated with exit code 137",
 	} {
 		if strings.Contains(err.Error(), s) {
 			return true

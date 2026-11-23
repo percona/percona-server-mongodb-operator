@@ -18,7 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,7 +59,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		clientcmd:            cli,
-		recorder:             mgr.GetEventRecorderFor("psmdbclustersync-controller"), //nolint:staticcheck // e2e tests assert on core/v1 events
+		recorder:             mgr.GetEventRecorder("psmdbclustersync-controller"),
 		newTargetMongoClient: defaultTargetMongoClient,
 	}
 	r.newPCSMClientFor = func(cr *psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient {
@@ -93,7 +93,7 @@ type ReconcilePerconaServerMongoDBClusterSync struct {
 	client    client.Client
 	scheme    *runtime.Scheme
 	clientcmd clientcmd.Client
-	recorder  record.EventRecorder
+	recorder  events.EventRecorder
 
 	newPCSMClientFor     func(*psmdbv1.PerconaServerMongoDBClusterSync) pcsmClient
 	newTargetMongoClient targetMongoClientFn
@@ -133,6 +133,20 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return reconcile.Result{}, errors.Wrapf(err, "get target cluster %s", targetNN)
 	}
 
+	svr, err := version.Server(ctx, r.clientcmd)
+	if err != nil {
+		return reconcile.Result{}, errors.Wrap(err, "fetch server version")
+	}
+	if err := target.CheckNSetDefaults(ctx, svr.Platform); err != nil {
+		return reconcile.Result{}, errors.Wrapf(err, "apply defaults to target cluster %s", targetNN)
+	}
+
+	tlsConf, err := r.loadTargetTLS(ctx, target)
+	if err != nil {
+		log.Info("target TLS certificates not usable, surfacing in status", "err", err.Error())
+		return r.requeueWithStatusError(ctx, cr, errors.Wrap(err, "target tls"))
+	}
+
 	// Announce ownership of the target cluster before the PCSM
 	// deployment exists. Backups/restores in the same namespace will
 	// see this lease and stay in Waiting. The finalizer guarantees the
@@ -150,14 +164,6 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 		return r.requeueWithStatusError(ctx, cr, errors.Errorf(
 			"clustersync lease %s held by %q, not by this CR",
 			naming.ClusterSyncLeaseName(cr.Spec.ClusterName), foreignHolder))
-	}
-
-	svr, err := version.Server(ctx, r.clientcmd)
-	if err != nil {
-		return reconcile.Result{}, errors.Wrap(err, "fetch server version")
-	}
-	if err := target.CheckNSetDefaults(ctx, svr.Platform); err != nil {
-		return reconcile.Result{}, errors.Wrapf(err, "apply defaults to target cluster %s", targetNN)
 	}
 
 	sourceURI, err := buildSourceURI(ctx, r.client, cr)
@@ -183,12 +189,6 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) Reconcile(ctx context.Context
 
 	if err := r.reconcileURISecret(ctx, cr, sourceURI, targetURI); err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile uri secret")
-	}
-
-	tlsConf, err := r.targetTLS(ctx, target)
-	if err != nil {
-		log.Info("target TLS certificates not usable, surfacing in status", "err", err.Error())
-		return r.requeueWithStatusError(ctx, cr, errors.Wrap(err, "target tls"))
 	}
 
 	if err := r.reconcileDeployment(ctx, cr, target, tlsConf); err != nil {
@@ -367,7 +367,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) releaseClusterSyncLease(ctx c
 	return err
 }
 
-func (r *ReconcilePerconaServerMongoDBClusterSync) targetTLS(ctx context.Context, target *psmdbv1.PerconaServerMongoDB) (clustersync.TLS, error) {
+func (r *ReconcilePerconaServerMongoDBClusterSync) loadTargetTLS(ctx context.Context, target *psmdbv1.PerconaServerMongoDB) (clustersync.TLS, error) {
 	if !pcsmTLSEnabled(target) {
 		return clustersync.TLS{}, nil
 	}
@@ -535,7 +535,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 					} else {
 						log.Info("Holding PCSM transition: cluster busy with backup or restore",
 							"action", action, "reason", reason)
-						r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterBusy",
+						r.recorder.Eventf(cr, nil, corev1.EventTypeNormal, "ClusterBusy", "HoldTransition",
 							"Holding PCSM %q: %s", action, reason)
 					}
 					newStatus.Error = reason
@@ -587,7 +587,7 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) recordActiveInstance(
 	// Compare against newStatus, not cr.Status: this runs more than once
 	// per reconcile and must not report the same handover twice.
 	if prev := newStatus.ActiveInstance; prev != "" && prev != active {
-		r.recorder.Eventf(cr, corev1.EventTypeNormal, "PCSMFailover",
+		r.recorder.Eventf(cr, nil, corev1.EventTypeNormal, "PCSMFailover", "Failover",
 			"Active PCSM instance changed from %q to %q", prev, active)
 	}
 	newStatus.ActiveInstance = active
