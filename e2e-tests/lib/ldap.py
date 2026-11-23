@@ -95,7 +95,7 @@ def _check_ldap_auth(
 def _delete_cluster(cluster: str) -> None:
     kubectl_bin("delete", "psmdb", cluster)
     wait_for_delete(f"psmdb/{cluster}")
-    kubectl_bin("delete", "pvc", "--all")
+    kubectl_bin("delete", "pvc", "-l", f"app.kubernetes.io/instance={cluster}")
 
 
 def check_replset_ldap(
