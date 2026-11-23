@@ -264,11 +264,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 				// a cert change may break replication until the primary is restarted too
 				if sslChanged && errors.Is(err, mongo.ErrReplicationStalled) {
 					log.Info("replication stalled after SSL change, doing forced step down", "reason", err.Error())
-					r.recorder.Eventf(cr, corev1.EventTypeWarning, "ForcedStepDown",
+					r.recorder.Eventf(cr, &primaryPod, corev1.EventTypeWarning, "ForcedStepDown", "StepDown",
 						"Replset %s: replication stalled after SSL change, forcing step down of %s: %v", replset.Name, primaryPod.Name, err)
 					forceStepDown = true
 				} else if err != nil {
-					r.recorder.Eventf(cr, corev1.EventTypeWarning, "SecondaryNotCaughtUp",
+					r.recorder.Eventf(cr, &primaryPod, corev1.EventTypeWarning, "SecondaryNotCaughtUp", "StepDown",
 						"Replset %s: smart update postponed, primary %s is not stepped down: %v", replset.Name, primaryPod.Name, err)
 					return errors.Wrap(err, "wait secondary catch up")
 				}
