@@ -783,14 +783,12 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
-	//nolint:staticcheck
-	if err := rs.MultiAZ.reconcileOpts(cr); err != nil {
+	if err := rs.reconcileOpts(cr); err != nil {
 		return errors.Wrapf(err, "reconcile multiAZ options for replset %s", rs.Name)
 	}
 
 	if rs.Arbiter.Enabled {
-		//nolint:staticcheck
-		if err := rs.Arbiter.MultiAZ.reconcileOpts(cr); err != nil {
+		if err := rs.Arbiter.reconcileOpts(cr); err != nil {
 			return errors.Wrapf(err, "reconcile multiAZ options for arbiter in replset %s", rs.Name)
 		}
 	}
