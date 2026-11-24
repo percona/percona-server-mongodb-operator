@@ -25,10 +25,10 @@ const (
 const (
 	ComponentMongod         = "mongod"
 	ComponentMongos         = "mongos"
-	ComponentNonVoting      = "nonVoting"
+	ComponentNonVoting      = psmdbv1.ComponentNonVoting
 	ComponentNonVotingShort = "nv"
-	ComponentHidden         = "hidden"
-	ComponentArbiter        = "arbiter"
+	ComponentHidden         = psmdbv1.ComponentHidden
+	ComponentArbiter        = psmdbv1.ComponentArbiter
 	ComponentSearch         = "search"
 	ComponentConfigSrv      = "cfg"
 )
@@ -128,6 +128,10 @@ func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
 	hash := fmt.Sprintf("%x", md5.Sum([]byte(bcp.Spec.ClusterName+bcp.Name+rsName)))
 	return fmt.Sprintf("%s-%s-%s", bcp.Name, strings.ToLower(rsName), hash[:5])
+}
+
+func JournalVolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
+	return VolumeSnapshotName(bcp, rsName) + "-journal"
 }
 
 func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) types.NamespacedName {
