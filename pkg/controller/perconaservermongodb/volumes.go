@@ -889,8 +889,27 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// PVC deletion waits for its pod to go away, make sure the pod is being deleted.
 		if pvc.DeletionTimestamp != nil {
 			log.Info("Waiting for PVC to be deleted", "pvc", pvc.Name, "pod", pod.Name)
-			if pod.DeletionTimestamp == nil && isPodReady(pod) && !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
-				return nil
+			if pod.DeletionTimestamp == nil && isPodReady(pod) {
+				if !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
+					return nil
+				}
+				// The pod may have been elected after its PVC was deleted. Its data is going away
+				// anyway, so step it down in place instead of tracking it as the primary.
+				if sc.needsStepdown && sc.replset != nil {
+					isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+					if err != nil {
+						log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
+						return nil
+					}
+					if isPrimary {
+						log.Info("Stepping down primary before deleting its pod", "pod", pod.Name)
+						r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", pod.Name)
+						if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
+							return errors.Wrapf(err, "step down primary %s for PVC shrink", pod.Name)
+						}
+						return nil
+					}
+				}
 			}
 			if err := r.client.Delete(ctx, &pod); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrapf(err, "delete pod %s", pod.Name)

@@ -2066,6 +2066,48 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.False(t, podExists(t, r, stsName+"-2"))
 	})
 
+	t.Run("running pod of a terminating PVC elected primary is stepped down before deletion", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, primaryPod: stsName + "-2"}
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(true)...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.True(t, podExists(t, r, stsName+"-2"), "primary must not be deleted without a stepdown")
+		assert.Equal(t, 1, p.stepDowns)
+		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "secondaries", got.Phase)
+		assert.Equal(t, stsName+"-0", got.PrimaryPod, "pod with a terminating PVC must not become the tracked primary")
+
+		p.primaryPod = stsName + "-0"
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, got, false))
+		assert.False(t, podExists(t, r, stsName+"-2"))
+		assert.Equal(t, 1, p.stepDowns)
+	})
+
+	t.Run("running pod of a terminating PVC is kept when the primary check fails", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, standaloneErr: errors.New("dial failed")}
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(true)...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            &events.FakeRecorder{},
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.True(t, podExists(t, r, stsName+"-2"), "pod must not be deleted while it's unknown whether it is primary")
+		assert.Zero(t, p.stepDowns)
+	})
+
 	t.Run("not ready pod of a terminating PVC is deleted while a member is unhealthy", func(t *testing.T) {
 		r := &ReconcilePerconaServerMongoDB{
 			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(false)...).Build(),
