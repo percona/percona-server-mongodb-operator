@@ -13,7 +13,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -848,7 +847,7 @@ func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabl
 				pemFile = naming.PBMClientTLSPEMFile
 			}
 			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s/ca.crt", pemFile, config.SSLDir)
-			if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
+			if cr.InvalidCertificatesAllowed() {
 				uri += "&tlsInsecure=true"
 			}
 		}
