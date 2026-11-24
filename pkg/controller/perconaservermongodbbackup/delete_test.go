@@ -5,21 +5,220 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	coordv1 "k8s.io/api/coordination/v1"
+	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/percona/percona-backup-mongodb/pbm/defs"
+	pbmErrors "github.com/percona/percona-backup-mongodb/pbm/errors"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+func TestReconcileDeleteCanceledBackup(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		backupType    defs.BackupType
+		pause         bool
+		clusterState  psmdbv1.AppState
+		pbmErr        error
+		deleteErr     error
+		missingMeta   bool
+		withSnapshot  bool
+		waitForLock   bool
+		wantFinalizer bool
+	}{
+		"retains the finalizer when file deletion fails": {
+			backupType:    defs.LogicalBackup,
+			deleteErr:     errors.New("storage unavailable"),
+			wantFinalizer: true,
+		},
+		"waits for lock release and skips PITR cleanup": {
+			backupType:  defs.LogicalBackup,
+			waitForLock: true,
+		},
+		"retains the finalizer when PBM is unavailable": {
+			backupType:    defs.LogicalBackup,
+			clusterState:  psmdbv1.AppStateReady,
+			pbmErr:        errors.New("PBM unavailable"),
+			wantFinalizer: true,
+		},
+		"retains the finalizer while the cluster is stopping and PBM is unavailable": {
+			backupType:    defs.LogicalBackup,
+			pause:         true,
+			clusterState:  psmdbv1.AppStateStopping,
+			pbmErr:        errors.New("PBM unavailable"),
+			wantFinalizer: true,
+		},
+		"retains the finalizer while the cluster is resuming and PBM is unavailable": {
+			backupType:    defs.LogicalBackup,
+			clusterState:  psmdbv1.AppStatePaused,
+			pbmErr:        errors.New("PBM unavailable"),
+			wantFinalizer: true,
+		},
+		"deletes snapshots when the cluster is paused and PBM is unavailable": {
+			backupType:   defs.ExternalBackup,
+			pause:        true,
+			clusterState: psmdbv1.AppStatePaused,
+			pbmErr:       errors.New("PBM unavailable"),
+			withSnapshot: true,
+		},
+		"deletes remaining snapshot backup metadata": {
+			backupType: defs.ExternalBackup,
+		},
+		"checks for snapshot backup locks when metadata is missing": {
+			backupType:  defs.ExternalBackup,
+			missingMeta: true,
+			waitForLock: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := backupWithState("backup", "ns", "", "cluster", psmdbv1.BackupStateCanceled)
+			cr.DeletionTimestamp = new(metav1.Now())
+			cr.Finalizers = []string{naming.FinalizerDeleteBackup}
+			cr.Spec.Type = tt.backupType
+			cr.Status.PBMname = "pbm-backup"
+
+			if tt.backupType == defs.ExternalBackup {
+				cr.Spec.VolumeSnapshotClass = new("snapshot-class")
+				cr.Status.ReplsetNames = []string{"rs0"}
+			} else {
+				cr.Spec.StorageName = "s3"
+				cr.Status.StorageName = "s3"
+				cr.Status.S3 = &psmdbv1.BackupStorageS3Spec{
+					Bucket:            "bucket",
+					CredentialsSecret: "backup-credentials",
+				}
+			}
+
+			var snapshot *volumesnapshotv1.VolumeSnapshot
+			if tt.withSnapshot {
+				snapshot = &volumesnapshotv1.VolumeSnapshot{
+					Name:      naming.VolumeSnapshotName(cr, "rs0"),
+					Namespace: cr.Namespace,
+				}
+				cr.Status.Snapshots = psmdbv1.SnapshotInfos{{ReplsetName: "rs0", SnapshotName: snapshot.Name}}
+			}
+
+			cluster := &psmdbv1.PerconaServerMongoDB{
+				Name:      cr.Spec.ClusterName,
+				Namespace: cr.Namespace,
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					Pause:     tt.pause,
+					CRVersion: version.Version(),
+					Backup: psmdbv1.BackupSpec{
+						Storages: map[string]psmdbv1.BackupStorageSpec{
+							"s3": {Type: psmdbv1.BackupStorageS3, Main: true},
+						},
+					},
+				},
+				Status: psmdbv1.PerconaServerMongoDBStatus{State: tt.clusterState},
+			}
+			scheme := backupScheme(t)
+			require.NoError(t, volumesnapshotv1.AddToScheme(scheme))
+			builder := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(cr.DeepCopy(), cluster).
+				WithStatusSubresource(cr).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, cl client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*corev1.Secret); ok {
+							t.Error("cleanup reached the direct storage fallback")
+						}
+						return cl.Get(ctx, key, obj, opts...)
+					},
+				})
+			if snapshot != nil {
+				builder.WithObjects(snapshot)
+			}
+			cl := builder.Build()
+
+			pbm := NewMockPBM(gomock.NewController(t))
+			r := &ReconcilePerconaServerMongoDBBackup{
+				client:    cl,
+				apiReader: cl,
+				newPBMFunc: func(context.Context, client.Client, *psmdbv1.PerconaServerMongoDB) (backup.PBM, error) {
+					if tt.pbmErr != nil {
+						return nil, tt.pbmErr
+					}
+					return pbm, nil
+				},
+			}
+			backupName := cr.Status.PBMname
+			meta := &backup.BackupMeta{
+				Name:   backupName,
+				OPID:   "backup-op",
+				Status: defs.StatusCancelled,
+			}
+			opID := meta.OPID
+			var metaErr error
+			if tt.missingMeta {
+				meta, opID, metaErr = nil, "", pbmErrors.ErrNotFound
+			}
+			request := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(cr)}
+
+			lockStates := []bool{false}
+			if tt.waitForLock {
+				lockStates = []bool{true, false}
+			}
+			for _, locked := range lockStates {
+				if tt.pbmErr == nil {
+					calls := []*gomock.Call{
+						pbm.EXPECT().GetBackupMeta(gomock.Any(), backupName).Return(meta, metaErr),
+						pbm.EXPECT().HasBackupLock(gomock.Any(), opID).Return(locked, nil),
+					}
+					switch {
+					case !locked && tt.backupType == defs.LogicalBackup:
+						calls = append(calls, pbm.EXPECT().DeleteBackup(gomock.Any(), backupName).Return(tt.deleteErr))
+					case !locked && !tt.missingMeta:
+						calls = append(calls, pbm.EXPECT().DeleteBackupMeta(gomock.Any(), backupName).Return(nil))
+					}
+					gomock.InOrder(append(calls, pbm.EXPECT().Close(gomock.Any()).Return(nil))...)
+				}
+
+				result, err := r.Reconcile(t.Context(), request)
+				require.NoError(t, err)
+				if locked {
+					assert.Positive(t, result.RequeueAfter)
+				}
+
+				got := new(psmdbv1.PerconaServerMongoDBBackup)
+				err = cl.Get(t.Context(), request.NamespacedName, got)
+				if locked || tt.wantFinalizer {
+					require.NoError(t, err)
+					assert.Equal(t, cr.Finalizers, got.Finalizers)
+				} else {
+					assert.True(t, k8serrors.IsNotFound(err), "backup should be removed after cleanup: %v", err)
+				}
+				if snapshot != nil {
+					err := cl.Get(t.Context(), client.ObjectKeyFromObject(snapshot), &volumesnapshotv1.VolumeSnapshot{})
+					if locked || tt.wantFinalizer {
+						assert.NoError(t, err)
+					} else {
+						assert.True(t, k8serrors.IsNotFound(err), "snapshot should be removed after cleanup: %v", err)
+					}
+				}
+			}
+		})
+	}
+}
 
 type erroringGetClient struct {
 	client.Client
