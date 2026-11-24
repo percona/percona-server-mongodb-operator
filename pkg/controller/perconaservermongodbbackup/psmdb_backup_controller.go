@@ -803,7 +803,8 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 				return errors.New("waiting for PBM backup locks to release before cleanup")
 			}
 		}
-	} else if cr.Status.State == psmdbv1.BackupStateCanceled && cluster != nil {
+	} else if cr.Status.State == psmdbv1.BackupStateCanceled && cluster != nil &&
+		(!cluster.Spec.Pause || cluster.Status.State != psmdbv1.AppStatePaused) {
 		return errors.New("PBM connection unavailable to check backup locks before cleanup")
 	}
 
