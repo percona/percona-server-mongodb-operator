@@ -1184,7 +1184,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	} else {
 		isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
 		if err != nil {
-			log.Info("Failed to check if pod is still primary, retrying", "pod", state.PrimaryPod, "error", err)
+			r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 			return nil
 		}
 		if !isPrimary {

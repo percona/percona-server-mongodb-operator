@@ -1208,9 +1208,11 @@ func TestShrinkStepdownRetry(t *testing.T) {
 	t.Run("isPodPrimary failure causes soft retry", func(t *testing.T) {
 		primaryPod := newPod(cr.Namespace, stsName+"-0", labels)
 
+		rec := events.NewFakeRecorder(10)
 		r := &ReconcilePerconaServerMongoDB{
-			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build(),
-			scheme: s,
+			client:   fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build(),
+			scheme:   s,
+			recorder: rec,
 		}
 
 		state := api.PVCShrinkState{
@@ -1225,6 +1227,8 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		got, ok := cr.GetPVCShrinkState(stsName)
 		require.True(t, ok)
 		assert.Equal(t, "stepdown", got.Phase, "phase should remain stepdown so next reconcile retries")
+		assert.Equal(t, "failed to check whether "+primaryPod.Name+" is primary", got.WaitingFor)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
 	})
 
 	t.Run("pod not found advances to primary phase", func(t *testing.T) {
@@ -1683,6 +1687,18 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
 	})
 
+	t.Run("stepdown phase stays when the stepdown fails", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, isPrimary: true, stepDownErr: errors.New("no electable secondary")}
+		r, _ := newReconciler(p)
+		cr.SetPVCShrinkState(stsName, stepdownState)
+
+		require.Error(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
+		assert.Equal(t, 1, p.stepDowns)
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase)
+	})
+
 	t.Run("secondaries phase tracks a member elected before its replacement", func(t *testing.T) {
 		p := &shrinkMongoProvider{status: healthy, primaryPod: stsName + "-1"}
 		r, rec := newReconciler(p)
@@ -1727,9 +1743,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.Contains(t, got.WaitingFor, "is primary")
 
 		// The health check clears the reason before the primary check sets it again.
-		next := sc
-		next.waitingFor = got.WaitingFor
-		require.NoError(t, r.shrinkProcessPods(t.Context(), next, got, false))
+		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
 		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
 	})
 
@@ -1839,6 +1853,18 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "stepdown", got.Phase)
 		assert.ElementsMatch(t, []string{stsName + "-1", stsName + "-2"}, got.ProcessedPods)
+	})
+
+	t.Run("replaced member is not done when the primary check fails", func(t *testing.T) {
+		r, rec := replaced(t, &shrinkMongoProvider{status: statusWith("", 0), standaloneErr: errors.New("dial failed")})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.ProcessedPods)
+		assert.Equal(t, "failed to check whether "+stsName+"-2 is primary", got.WaitingFor)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
 	})
 
 	t.Run("replaced member elected primary becomes the tracked primary", func(t *testing.T) {
@@ -2129,9 +2155,7 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		require.True(t, ok)
 		assert.Contains(t, got.WaitingFor, stsName+"-2")
 
-		next := sc
-		next.waitingFor = got.WaitingFor
-		require.NoError(t, r.shrinkProcessPods(t.Context(), next, got, false))
+		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
 		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
 	})
 
