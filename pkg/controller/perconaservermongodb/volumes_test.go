@@ -1240,6 +1240,7 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		state := api.PVCShrinkState{
 			Phase:      "stepdown",
 			PrimaryPod: stsName + "-0",
+			WaitingFor: "failed to check whether " + stsName + "-0 is primary",
 		}
 		cr.SetPVCShrinkState(stsName, state)
 
@@ -1249,6 +1250,7 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		got, ok := cr.GetPVCShrinkState(stsName)
 		require.True(t, ok)
 		assert.Equal(t, "primary", got.Phase, "missing pod should advance to primary phase")
+		assert.Empty(t, got.WaitingFor, "reason about the missing pod should be cleared")
 	})
 
 	t.Run("needsStepdown false skips to primary phase", func(t *testing.T) {
@@ -1687,6 +1689,25 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
 	})
 
+	t.Run("stepdown clears a failed primary check once the pod is no longer primary", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, standaloneErr: errors.New("dial failed")}
+		r, _ := newReconciler(p)
+		cr.SetPVCShrinkState(stsName, stepdownState)
+
+		require.NoError(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		require.Equal(t, "stepdown", got.Phase)
+		require.NotEmpty(t, got.WaitingFor)
+
+		p.standaloneErr = nil
+		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
+		got, ok = cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "primary", got.Phase)
+		assert.Empty(t, got.WaitingFor, "reason should be cleared once the primary check succeeds")
+	})
+
 	t.Run("stepdown phase stays when the stepdown fails", func(t *testing.T) {
 		p := &shrinkMongoProvider{status: healthy, isPrimary: true, stepDownErr: errors.New("no electable secondary")}
 		r, _ := newReconciler(p)
@@ -1744,6 +1765,9 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 
 		// The health check clears the reason before the primary check sets it again.
 		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
+		got, ok = cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, "is primary")
 		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
 	})
 
@@ -2156,6 +2180,9 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.Contains(t, got.WaitingFor, stsName+"-2")
 
 		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
+		got, ok = cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, "is primary")
 		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
 	})
 

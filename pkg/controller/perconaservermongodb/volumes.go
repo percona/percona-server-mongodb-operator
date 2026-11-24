@@ -1177,6 +1177,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	if err := r.client.Get(ctx, client.ObjectKey{Name: state.PrimaryPod, Namespace: sc.cr.Namespace}, &pod); err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.Info("Primary pod not found, skipping stepdown")
+			r.setShrinkWaiting(sc, &state, "", false)
 			state.Phase = "primary"
 		} else {
 			return errors.Wrapf(err, "get primary pod %s", state.PrimaryPod)
@@ -1187,6 +1188,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 			r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 			return nil
 		}
+		r.setShrinkWaiting(sc, &state, "", false)
 		if !isPrimary {
 			log.Info("Primary already stepped down, advancing to primary phase", "pod", state.PrimaryPod)
 		} else {
