@@ -44,8 +44,8 @@ def _remove_instance_finalizers(resource_kind: str) -> None:
 
 
 @step("Deploy the operator")
-def deploy_operator(test_dir: str, src_dir: str) -> None:
-    """Deploy the operator"""
+def deploy_operator(test_dir: str, src_dir: str, watch_namespace: str = "") -> None:
+    """Deploy the operator. watch_namespace is the test namespace, used with SHARED_CLUSTER=1."""
     logger.info("Start PSMDB operator")
     prefix = "cw-" if os.environ.get("OPERATOR_NS") else ""
 
@@ -70,6 +70,8 @@ def deploy_operator(test_dir: str, src_dir: str) -> None:
                 env_vars["DISABLE_TELEMETRY"]["value"] = "true"
             if "LOG_LEVEL" in env_vars:
                 env_vars["LOG_LEVEL"]["value"] = "DEBUG"
+            if "WATCH_NAMESPACE" in env_vars and prefix and _shared_cluster_operator():
+                env_vars["WATCH_NAMESPACE"]["value"] = watch_namespace
 
     yaml_content = yaml.dump(data, default_flow_style=False)
     kubectl_bin("apply", "-f", "-", input_data=yaml_content)
@@ -121,8 +123,24 @@ def apply_rbac(src_dir: str, rbac: str = "rbac") -> None:
         r"^(\s*)namespace:\s*.*$", rf"\1namespace: {operator_ns}", yaml_content, flags=re.MULTILINE
     )
 
+    if _shared_cluster_operator():
+        docs = [doc for doc in yaml.safe_load_all(modified_yaml) if doc]
+        for doc in docs:
+            if doc["kind"] in ("ClusterRole", "ClusterRoleBinding"):
+                doc["metadata"]["name"] += f"-{operator_ns}"
+            if doc["kind"] == "ClusterRoleBinding":
+                doc["roleRef"]["name"] += f"-{operator_ns}"
+        modified_yaml = yaml.safe_dump_all(docs)
+
     ns_flag = ["-n", operator_ns] if os.getenv("OPERATOR_NS") else []
     kubectl_bin("apply", *ns_flag, "-f", "-", input_data=modified_yaml)
+
+
+def _shared_cluster_operator() -> bool:
+    """SHARED_CLUSTER=1: other tests run on the same cluster at the same time. A cluster-wide
+    operator then gets a ClusterRole and ClusterRoleBinding named after OPERATOR_NS and watches
+    only the test namespace, so each test has its own operator."""
+    return os.getenv("SHARED_CLUSTER") == "1" and bool(os.getenv("OPERATOR_NS"))
 
 
 def delete_crd_rbac(src_dir: Path) -> None:

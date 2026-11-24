@@ -483,7 +483,7 @@ def create_infra(
         # Namespaced: operator lives in the test namespace, which must exist first.
         if operator_ns:
             create_namespace(operator_ns)
-            deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
+            deploy_operator(test_paths["test_dir"], test_paths["src_dir"], namespace)
             create_namespace(namespace)
         else:
             create_namespace(namespace)
