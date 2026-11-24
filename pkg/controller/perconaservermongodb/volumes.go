@@ -552,7 +552,11 @@ type shrinkContext struct {
 	replset       *psmdbv1.ReplsetSpec
 	isRSComponent bool
 	needsStepdown bool
+	// waitingFor is the reason recorded before this reconcile; a Warning is emitted only when it changes.
+	waitingFor string
 }
+
+const shrinkStepDownSeconds = 60
 
 func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 	ctx context.Context,
@@ -584,6 +588,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 		replset:       replset,
 		isRSComponent: component != naming.ComponentMongos,
 		needsStepdown: component == naming.ComponentMongod || component == naming.ComponentConfigSrv,
+		waitingFor:    state.WaitingFor,
 	}
 
 	// Route to the correct phase
@@ -898,16 +903,12 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 				if sc.needsStepdown && sc.replset != nil {
 					isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
 					if err != nil {
-						log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
+						r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 						return nil
 					}
 					if isPrimary {
 						log.Info("Stepping down primary before deleting its pod", "pod", pod.Name)
-						r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", pod.Name)
-						if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
-							return errors.Wrapf(err, "step down primary %s for PVC shrink", pod.Name)
-						}
-						return nil
+						return r.shrinkStepDownPod(ctx, sc, pod)
 					}
 				}
 			}
@@ -928,7 +929,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 			if sc.needsStepdown && sc.replset != nil {
 				isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
 				if err != nil {
-					log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
+					r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 					return nil
 				}
 				if isPrimary {
@@ -967,7 +968,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		if sc.isRSComponent && sc.replset != nil {
 			isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
 			if err != nil {
-				log.Info("Failed to check RS membership, waiting", "pod", pod.Name, "error", err)
+				r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 				return nil
 			}
 			if isPrimary {
@@ -1073,9 +1074,23 @@ func (r *ReconcilePerconaServerMongoDB) setShrinkWaiting(sc shrinkContext, state
 	}
 	state.WaitingFor = reason
 	sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
-	if warn {
+	if warn && reason != sc.waitingFor {
 		r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkWaiting", "Wait", "Shrink of %s is waiting: %s", sc.sts.Name, reason)
 	}
+}
+
+func (r *ReconcilePerconaServerMongoDB) shrinkPrimaryCheckFailed(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, pod corev1.Pod, err error) {
+	log := logf.FromContext(ctx).WithName("PVCShrink").WithValues("sts", sc.sts.Name, "phase", state.Phase)
+	log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
+	r.setShrinkWaiting(sc, state, "failed to check whether "+pod.Name+" is primary", true)
+}
+
+func (r *ReconcilePerconaServerMongoDB) shrinkStepDownPod(ctx context.Context, sc shrinkContext, pod corev1.Pod) error {
+	r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", pod.Name)
+	if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, shrinkStepDownSeconds); err != nil {
+		return errors.Wrapf(err, "step down primary %s for PVC shrink", pod.Name)
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkReplacingHost(ctx context.Context, sc shrinkContext, replacing *corev1.Pod) string {
@@ -1179,9 +1194,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 				return nil
 			}
 			log.Info("Stepping down primary", "pod", state.PrimaryPod)
-			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", state.PrimaryPod)
-			if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
-				return errors.Wrap(err, "step down primary for PVC shrink")
+			if err := r.shrinkStepDownPod(ctx, sc, pod); err != nil {
+				return err
 			}
 		}
 		state.Phase = "primary"
