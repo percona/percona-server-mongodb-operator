@@ -34,15 +34,14 @@ func statusWithSelf(state mongo.MemberState, uptime int64, initialSync any) mong
 
 func TestCheckStateForLiveness(t *testing.T) {
 	tests := []struct {
-		name      string
-		rs        mongo.Status
-		oplogSize int64
-		wantErr   bool
+		name    string
+		rs      mongo.Status
+		wantErr string
 	}{
 		{
 			name:    "no self member",
 			rs:      mongo.Status{MyState: mongo.MemberStatePrimary},
-			wantErr: true,
+			wantErr: "self member is not found",
 		},
 		{
 			name: "primary",
@@ -57,24 +56,12 @@ func TestCheckStateForLiveness(t *testing.T) {
 			rs:   statusWithSelf(mongo.MemberStateArbiter, 1000, nil),
 		},
 		{
-			name: "startup, no initial sync, uptime within budget",
-			rs:   statusWithSelf(mongo.MemberStateStartup, 30, nil),
+			name: "startup without initial sync ignores uptime",
+			rs:   statusWithSelf(mongo.MemberStateStartup, 99999, nil),
 		},
 		{
-			name:    "startup, no initial sync, uptime exceeds budget",
-			rs:      statusWithSelf(mongo.MemberStateStartup, 31, nil),
-			wantErr: true,
-		},
-		{
-			name:      "startup2, no initial sync, uptime within oplog-scaled budget",
-			rs:        statusWithSelf(mongo.MemberStateStartup2, 150, nil),
-			oplogSize: 2, // budget = 30 + 2*60 = 150
-		},
-		{
-			name:      "startup2, no initial sync, uptime exceeds oplog-scaled budget",
-			rs:        statusWithSelf(mongo.MemberStateStartup2, 151, nil),
-			oplogSize: 2,
-			wantErr:   true,
+			name: "startup2 without initial sync ignores uptime",
+			rs:   statusWithSelf(mongo.MemberStateStartup2, 99999, nil),
 		},
 		{
 			name: "startup with initial sync ignores uptime",
@@ -95,33 +82,33 @@ func TestCheckStateForLiveness(t *testing.T) {
 		{
 			name:    "unknown state",
 			rs:      statusWithSelf(mongo.MemberStateUnknown, 1, nil),
-			wantErr: true,
+			wantErr: "unhealthy state UNKNOWN",
 		},
 		{
 			name:    "down state",
 			rs:      statusWithSelf(mongo.MemberStateDown, 1, nil),
-			wantErr: true,
+			wantErr: "unhealthy state DOWN",
 		},
 		{
 			name:    "removed state",
 			rs:      statusWithSelf(mongo.MemberStateRemoved, 1, nil),
-			wantErr: true,
+			wantErr: "unhealthy state REMOVED",
 		},
 		{
 			name:    "out-of-range state",
 			rs:      statusWithSelf(mongo.MemberState(99), 1, nil),
-			wantErr: true,
+			wantErr: "state is unknown 99",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := CheckStateForLiveness(t.Context(), tt.rs, tt.oplogSize)
-			if tt.wantErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
+			err := CheckStateForLiveness(t.Context(), tt.rs)
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				return
 			}
+			require.NoError(t, err)
 		})
 	}
 }

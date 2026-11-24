@@ -356,10 +356,10 @@ type systemUsers struct {
 // add appends user to su.users by given keys if user should be changed
 func (su *systemUsers) add(nameKey, passKey string) (changed bool, err error) {
 	if len(su.newData[nameKey]) == 0 {
-		return false, errors.New("undefined or not exist user name " + nameKey)
+		return false, errors.Errorf("can't find %s in users secret", nameKey)
 	}
 	if len(su.newData[passKey]) == 0 {
-		return false, errors.New("undefined or not exist user pass " + nameKey)
+		return false, errors.Errorf("can't find %s in users secret", passKey)
 	}
 
 	// no changes, nothing to do with that user
