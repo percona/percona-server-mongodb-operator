@@ -4,13 +4,16 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,6 +23,7 @@ import (
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/logcollector/logrotate"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
@@ -44,6 +48,11 @@ func TestReconcileStatefulSet(t *testing.T) {
 	defaultCR.Spec.Replsets[0].NonVoting.Enabled = true
 	defaultCR.Spec.Replsets[0].Hidden.Enabled = true
 	defaultCR.Spec.LogCollector.Configuration = "config"
+	for _, rs := range []*api.ReplsetSpec{defaultCR.Spec.Replsets[0], defaultCR.Spec.Sharding.ConfigsvrReplSet} {
+		rs.LogStorage = logStorageSpec("2Gi")
+		rs.NonVoting.LogStorage = logStorageSpec("2Gi")
+		rs.Hidden.LogStorage = logStorageSpec("2Gi")
+	}
 	if err := defaultCR.CheckNSetDefaults(ctx, version.PlatformKubernetes); err != nil {
 		t.Fatal(err)
 	}
@@ -87,70 +96,101 @@ func TestReconcileStatefulSet(t *testing.T) {
 		crUpdate       func(cr *api.PerconaServerMongoDB)
 		additionalObjs []client.Object
 
-		expectedSts *appsv1.StatefulSet
+		compareFile string
 	}{
 		{
 			name:        "rs0-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentMongod,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-mongod.yaml"),
+			compareFile: "reconcile-statefulset/rs0-mongod.yaml",
 		},
 		{
 			name:        "rs0-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentArbiter,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-arbiter.yaml"),
+			compareFile: "reconcile-statefulset/rs0-arbiter.yaml",
 		},
 		{
 			name:        "rs0-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentNonVoting,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-nv.yaml"),
+			compareFile: "reconcile-statefulset/rs0-nv.yaml",
 		},
 		{
 			name:        "rs0-hidden",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentHidden,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-hidden.yaml"),
+			compareFile: "reconcile-statefulset/rs0-hidden.yaml",
 		},
 		{
 			name:        "cfg-mongod",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentMongod,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-mongod.yaml"),
+			compareFile: "reconcile-statefulset/cfg-mongod.yaml",
 		},
 		{
 			name:        "cfg-arbiter",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentArbiter,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-arbiter.yaml"),
+			compareFile: "reconcile-statefulset/cfg-arbiter.yaml",
 		},
 		{
 			name:        "cfg-non-voting",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentNonVoting,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-nv.yaml"),
+			compareFile: "reconcile-statefulset/cfg-nv.yaml",
 		},
 		{
 			name:        "cfg-hidden",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "cfg",
 			component:   naming.ComponentHidden,
-			expectedSts: expectedSts(t, "reconcile-statefulset/cfg-hidden.yaml"),
+			compareFile: "reconcile-statefulset/cfg-hidden.yaml",
+		},
+		{
+			name:        "rs0-no-log-storage",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "rs0",
+			component:   naming.ComponentMongod,
+			compareFile: "reconcile-statefulset/rs0-no-log-storage.yaml",
+			crUpdate: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].LogStorage = nil
+			},
+		},
+		{
+			name:        "rs0-journal",
+			cr:          defaultCR.DeepCopy(),
+			rsName:      "rs0",
+			component:   naming.ComponentMongod,
+			compareFile: "reconcile-statefulset/rs0-journal.yaml",
+			crUpdate: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].JournalStorage = &api.StorageSpec{
+					PersistentVolumeClaim: &api.PVCSpec{
+						PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+							AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+							Resources: corev1.VolumeResourceRequirements{
+								Requests: corev1.ResourceList{
+									corev1.ResourceStorage: resource.MustParse("5Gi"),
+								},
+							},
+						},
+					},
+				}
+			},
 		},
 		{
 			name:        "rs0-logrotate",
 			cr:          defaultCR.DeepCopy(),
 			rsName:      "rs0",
 			component:   naming.ComponentMongod,
-			expectedSts: expectedSts(t, "reconcile-statefulset/rs0-logrotate.yaml"),
+			compareFile: "reconcile-statefulset/rs0-logrotate.yaml",
 			crUpdate: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.LogCollector.LogRotate = &api.LogRotateSpec{
 					Configuration: "test-config",
@@ -248,8 +288,30 @@ func TestReconcileStatefulSet(t *testing.T) {
 			sts.Kind = gvk.Kind
 			sts.APIVersion = gvk.GroupVersion().String()
 
-			compareSts(t, sts, tt.expectedSts)
+			if os.Getenv("UPDATE_COMPARE_FILES") == "1" {
+				updateSts(t, tt.compareFile, sts)
+			}
+
+			compareSts(t, sts, expectedSts(t, tt.compareFile))
 		})
+	}
+}
+
+func updateSts(t *testing.T, filename string, sts *appsv1.StatefulSet) {
+	t.Helper()
+
+	sts = sts.DeepCopy()
+	delete(sts.Annotations, "percona.com/last-config-hash")
+	delete(sts.Spec.Template.Annotations, naming.AnnotationSSLHash)
+	delete(sts.Spec.Template.Annotations, naming.AnnotationSSLInternalHash)
+
+	data, err := yaml.Marshal(sts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile("testdata/"+filename, data, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -381,4 +443,162 @@ func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
 		_, err := staleCache(100).getStatefulsetFromReplset(ctx, cr, rs, naming.MongodLabels(cr, rs))
 		require.ErrorIs(t, err, errConfigNotInCache)
 	})
+}
+
+func TestReconcileStatefulSetFinishedResize(t *testing.T) {
+	ctx := t.Context()
+
+	const (
+		ns     = "sts-finished-resize"
+		crName = ns + "-cr"
+	)
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+
+	rs := cr.Spec.Replset("rs0")
+	ls := naming.MongodLabels(cr, rs)
+	objs := []client.Object{
+		cr,
+		&corev1.Secret{Name: crName + "-ssl", Namespace: ns},
+		&corev1.Secret{Name: crName + "-ssl-internal", Namespace: ns},
+		&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: ns},
+	}
+
+	sts, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, ls)
+	require.NoError(t, err)
+	sts.Annotations = map[string]string{
+		api.AnnotationPVCResizeInProgress: time.Now().Format(time.RFC3339),
+		api.AnnotationPVCResizeClaim:      config.MongodDataVolClaimName,
+	}
+
+	pod := newPod(ns, sts.Name+"-0", ls)
+	size := rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage]
+	pvc := newPVC(ns, config.MongodDataVolClaimName+"-"+pod.Name, ls, size, size)
+
+	r := buildFakeClient(append(objs, sts, pod, pvc)...)
+
+	_, err = r.reconcileStatefulSet(ctx, cr, rs, ls)
+	require.NoError(t, err)
+
+	err = r.client.Get(ctx, client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
+	require.True(t, k8serrors.IsNotFound(err), "statefulset must be rebuilt on the next reconcile, got %v", err)
+}
+
+func TestStartupProbeDefaults(t *testing.T) {
+	startupCommand := []string{"/opt/percona/mongodb-healthcheck", "k8s", "startup", "--component", "mongod"}
+	tlsStartupCommand := append(slices.Clone(startupCommand),
+		"--ssl", "--sslInsecure",
+		"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+		"--sslPEMKeyFile", "/tmp/tls.pem")
+
+	tests := map[string]struct {
+		modify          func(cr *api.PerconaServerMongoDB)
+		wantNil         bool
+		wantRS          int32
+		wantNonVoting   int32
+		wantHidden      int32
+		wantRSPeriod    int32
+		wantCfgFailures int32
+		wantCommand     []string
+		wantExec        []string
+	}{
+		"not set before 1.24.0": {
+			modify:  func(cr *api.PerconaServerMongoDB) { cr.Spec.CRVersion = "1.23.0" },
+			wantNil: true,
+		},
+		"defaults to 24h": {
+			modify:          func(cr *api.PerconaServerMongoDB) {},
+			wantRS:          8640,
+			wantNonVoting:   8640,
+			wantHidden:      8640,
+			wantRSPeriod:    10,
+			wantCfgFailures: 8640,
+		},
+		"replset override is inherited by nonvoting and hidden": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].StartupProbe = &corev1.Probe{FailureThreshold: 100}
+			},
+			wantRS:          100,
+			wantNonVoting:   100,
+			wantHidden:      100,
+			wantRSPeriod:    10,
+			wantCfgFailures: 8640,
+		},
+		"nonvoting override doesn't change replset": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].NonVoting.StartupProbe = &corev1.Probe{FailureThreshold: 50, PeriodSeconds: 30}
+			},
+			wantRS:          8640,
+			wantNonVoting:   50,
+			wantHidden:      8640,
+			wantRSPeriod:    10,
+			wantCfgFailures: 8640,
+		},
+		"no TLS flags when TLS is disabled": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+				cr.Spec.Unsafe.TLS = true
+			},
+			wantRS:          8640,
+			wantNonVoting:   8640,
+			wantHidden:      8640,
+			wantRSPeriod:    10,
+			wantCfgFailures: 8640,
+			wantCommand:     startupCommand,
+		},
+		"user handler is kept": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].StartupProbe = &corev1.Probe{
+					Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
+				}
+			},
+			wantRS:          8640,
+			wantNonVoting:   8640,
+			wantHidden:      8640,
+			wantRSPeriod:    10,
+			wantCfgFailures: 8640,
+			wantExec:        []string{"/bin/true"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr, err := readDefaultCR("startup-probe", "startup-probe")
+			require.NoError(t, err)
+			cr.Spec.Replsets[0].NonVoting.Enabled = true
+			cr.Spec.Replsets[0].Hidden.Enabled = true
+			tt.modify(cr)
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+
+			rs := cr.Spec.Replsets[0]
+			cfg := cr.Spec.Sharding.ConfigsvrReplSet
+			if tt.wantNil {
+				require.Nil(t, rs.StartupProbe)
+				require.Nil(t, rs.NonVoting.StartupProbe)
+				require.Nil(t, rs.Hidden.StartupProbe)
+				require.Nil(t, cfg.StartupProbe)
+				return
+			}
+
+			require.Equal(t, tt.wantRS, rs.StartupProbe.FailureThreshold)
+			require.Equal(t, tt.wantRSPeriod, rs.StartupProbe.PeriodSeconds)
+			require.Equal(t, tt.wantNonVoting, rs.NonVoting.StartupProbe.FailureThreshold)
+			require.Equal(t, tt.wantHidden, rs.Hidden.StartupProbe.FailureThreshold)
+			require.Equal(t, tt.wantCfgFailures, cfg.StartupProbe.FailureThreshold)
+			wantCommand := tlsStartupCommand
+			if tt.wantCommand != nil {
+				wantCommand = tt.wantCommand
+			}
+			for _, p := range []*corev1.Probe{rs.StartupProbe, rs.NonVoting.StartupProbe, rs.Hidden.StartupProbe} {
+				if tt.wantExec != nil {
+					require.Equal(t, tt.wantExec, p.Exec.Command)
+					continue
+				}
+				require.Equal(t, wantCommand, p.Exec.Command)
+			}
+			require.Equal(t, wantCommand, cfg.StartupProbe.Exec.Command)
+		})
+	}
 }

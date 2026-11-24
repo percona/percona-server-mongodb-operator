@@ -50,11 +50,11 @@ func TestBuildTargetURI(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		target   *psmdbv1.PerconaServerMongoDB
-		username string
-		password string
-		want     string
-		wantErr  string
+		target     *psmdbv1.PerconaServerMongoDB
+		username   string
+		password   string
+		want       string
+		wantErrMsg string
 	}{
 		"replicaset target with tls disabled": {
 			target: &psmdbv1.PerconaServerMongoDB{
@@ -193,16 +193,16 @@ func TestBuildTargetURI(t *testing.T) {
 			want:     "mongodb://sync:p%40ss%2Fword@cluster1-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0",
 		},
 		"empty credentials": {
-			target:  &psmdbv1.PerconaServerMongoDB{},
-			wantErr: "syncTargetUser credentials are empty",
+			target:     &psmdbv1.PerconaServerMongoDB{},
+			wantErrMsg: "syncTargetUser credentials are empty",
 		},
 		"no replsets": {
 			target: &psmdbv1.PerconaServerMongoDB{
 				Name: "cluster1", Namespace: "ns",
 			},
-			username: "sync",
-			password: "syncpass",
-			wantErr:  "has no replsets",
+			username:   "sync",
+			password:   "syncpass",
+			wantErrMsg: "target cluster cluster1 has no replsets",
 		},
 	}
 
@@ -212,9 +212,9 @@ func TestBuildTargetURI(t *testing.T) {
 				tc.target.Spec.CRVersion = version.Version()
 			}
 			got, err := buildTargetURI(tc.target, tc.username, tc.password)
-			if tc.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErr)
+			if tc.wantErrMsg != "" {
+				require.EqualError(t, err, tc.wantErrMsg)
+				assert.Empty(t, got)
 				return
 			}
 			require.NoError(t, err)
@@ -228,10 +228,10 @@ func TestBuildSourceURI(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		uri     string
-		secret  *corev1.Secret
-		want    string
-		wantErr string
+		uri        string
+		secret     *corev1.Secret
+		want       string
+		wantErrMsg string
 	}{
 		"credentials are injected": {
 			uri:    "mongodb://source-rs0.ns.svc.cluster.local:27017/?replicaSet=rs0",
@@ -249,13 +249,23 @@ func TestBuildSourceURI(t *testing.T) {
 			want:   "mongodb://src:p%40ss%2Fword@source-rs0.ns.svc.cluster.local:27017/",
 		},
 		"missing password": {
-			uri:     "mongodb://source-rs0.ns.svc.cluster.local:27017/",
-			secret:  sourceSecret("src", ""),
-			wantErr: "missing username/password keys",
+			uri:        "mongodb://source-rs0.ns.svc.cluster.local:27017/",
+			secret:     sourceSecret("src", ""),
+			wantErrMsg: "source credentials secret ns/source-creds missing username/password keys",
+		},
+		"missing username": {
+			uri:        "mongodb://source-rs0.ns.svc.cluster.local:27017/",
+			secret:     sourceSecret("", "srcpass"),
+			wantErrMsg: "source credentials secret ns/source-creds missing username/password keys",
 		},
 		"missing secret": {
-			uri:     "mongodb://source-rs0.ns.svc.cluster.local:27017/",
-			wantErr: "get source credentials secret",
+			uri:        "mongodb://source-rs0.ns.svc.cluster.local:27017/",
+			wantErrMsg: `get source credentials secret ns/source-creds: secrets "source-creds" not found`,
+		},
+		"malformed uri": {
+			uri:        "mongodb://source-rs0:bad-port/",
+			secret:     sourceSecret("src", "srcpass"),
+			wantErrMsg: `parse source uri "mongodb://source-rs0:bad-port/": parse "mongodb://source-rs0:bad-port/": invalid port ":bad-port" after host`,
 		},
 	}
 
@@ -278,9 +288,9 @@ func TestBuildSourceURI(t *testing.T) {
 			}
 
 			got, err := buildSourceURI(t.Context(), b.Build(), cr)
-			if tc.wantErr != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tc.wantErr)
+			if tc.wantErrMsg != "" {
+				require.EqualError(t, err, tc.wantErrMsg)
+				assert.Empty(t, got)
 				return
 			}
 			require.NoError(t, err)

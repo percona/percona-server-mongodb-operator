@@ -12,6 +12,8 @@ from .utils import retry
 
 logger = logging.getLogger(__name__)
 
+_AGENT_READY_MARKER = "listening for the commands"
+
 # PLATFORM -> manifest under e2e-tests/conf (mirrors deploy_volume_snapshot_class in functions)
 _SNAPSHOT_CLASS_FILES = {
     "aks": "volume-snapshot-class-aks.yaml",
@@ -86,6 +88,20 @@ def get_backup_snapshots(backup_name: str) -> list[dict[str, str]]:
         return []
     snapshots: list[dict[str, str]] = json.loads(raw)
     return snapshots
+
+
+def wait_backup_agent(pod: str, timeout: int = 1800) -> None:
+    """Wait until the pbm-agent sidecar of a pod is listening for commands."""
+    logger.info(f"Waiting for pbm-agent in {pod}")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        logs = kubectl_bin("logs", pod, "-c", "backup-agent", check=False)
+        if _AGENT_READY_MARKER in logs:
+            logger.info(f"pbm-agent is ready in {pod}")
+            return
+        time.sleep(5)
+
+    raise TimeoutError(f"pbm-agent in {pod} was not ready within {timeout}s")
 
 
 @step("Run {backup_type} backup to {storage}")

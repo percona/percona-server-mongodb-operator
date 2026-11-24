@@ -242,6 +242,10 @@ spec:
 #      periodSeconds: 3
 #      successThreshold: 1
 #      timeoutSeconds: 2
+#    startupProbe:
+#      failureThreshold: 8640
+#      periodSeconds: 10
+#      timeoutSeconds: 10
 #    containerSecurityContext:
 #      privileged: false
 #    podSecurityContext:
@@ -341,6 +345,20 @@ spec:
         resources:
           requests:
             storage: 3Gi
+#    journalStorage:
+#      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+#        resources:
+#          requests:
+#            storage: 2Gi
+#    logStorage:
+#      persistentVolumeClaim:
+#        storageClassName: standard
+#        accessModes: [ "ReadWriteOnce" ]
+#        resources:
+#          requests:
+#            storage: 2Gi
 
     hidden:
       enabled: false
@@ -408,6 +426,20 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      journalStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
+#      logStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
 
     nonvoting:
       enabled: false
@@ -475,6 +507,20 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      journalStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
+#      logStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
     arbiter:
       enabled: false
       size: 1
@@ -603,6 +649,10 @@ spec:
 #        periodSeconds: 3
 #        successThreshold: 1
 #        timeoutSeconds: 2
+#      startupProbe:
+#        failureThreshold: 8640
+#        periodSeconds: 10
+#        timeoutSeconds: 10
 #      containerSecurityContext:
 #        privileged: false
 #      podSecurityContext:
@@ -667,6 +717,20 @@ spec:
           resources:
             requests:
               storage: 3Gi
+#      journalStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
+#      logStorage:
+#        persistentVolumeClaim:
+#          storageClassName: standard
+#          accessModes: [ "ReadWriteOnce" ]
+#          resources:
+#            requests:
+#              storage: 2Gi
 #      hostAliases:
 #      - ip: "10.10.0.2"
 #        hostnames:

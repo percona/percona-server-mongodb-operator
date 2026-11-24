@@ -118,6 +118,24 @@ spec:
         ports:
         - containerPort: 27017
           name: mongodb
+        startupProbe:
+          exec:
+            command:
+            - /opt/percona/mongodb-healthcheck
+            - k8s
+            - startup
+            - --component
+            - mongod
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
+          failureThreshold: 8640
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 10
         readinessProbe:
           exec:
             command:
@@ -147,7 +165,6 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
-        topologySpreadConstraints: null
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
@@ -217,3 +234,6 @@ spec:
         name: mongod-data
   updateStrategy:
     type: OnDelete
+status:
+  availableReplicas: 0
+  replicas: 0
