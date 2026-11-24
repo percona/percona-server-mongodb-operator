@@ -86,6 +86,13 @@ PLACEMENT_RULES = [
         "an admission webhook acts on objects in every namespace",
     ),
     _rule(
+        "vpa",
+        r"install_vpa_crd|vpa-v1-crd|goldilocks",
+        OWN_CLUSTER,
+        "installs the cluster-wide VerticalPodAutoscaler CRD (and for Goldilocks the VPA "
+        "recommender), which the operator watches in every namespace",
+    ),
+    _rule(
         "cert-manager",
         r"deploy_cert_manager|cert_manager|^kind: ClusterIssuer",
         OWN_CLUSTER,

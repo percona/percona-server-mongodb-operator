@@ -713,16 +713,19 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   vpa-inplace-sharded:
     suites: [pr, release]
     operatorModes: [cluster-wide]
     groups: [core, sharding]
+    ownCluster: true
 
   vpa-goldilocks:
     suites: [release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   vpa-sharded:
     # Release only: ~18m per run, and the component matrix it covers is also
@@ -731,4 +734,5 @@ tests:
     suites: [release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core, sharding]
+    ownCluster: true
 
