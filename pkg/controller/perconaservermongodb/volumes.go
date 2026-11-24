@@ -905,23 +905,19 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
 			}
+			// Never replace a primary. Hidden and non-voting members can't become one.
 			if sc.needsStepdown && sc.replset != nil {
-				isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+				isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
 				if err != nil {
 					log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
 					return nil
 				}
 				if isPrimary {
-					// The primary changed since the shrink started. Track the new one, so it's
-					// replaced last, after a stepdown.
 					if isPrimaryPhase {
 						log.Info("Pod is primary again, stepping it down before replacing it", "pod", pod.Name)
 						state.Phase = "stepdown"
-					} else {
-						log.Info("Pod became primary during shrink, updating tracked primary", "pod", pod.Name, "previousPrimary", state.PrimaryPod)
-						state.PrimaryPod = pod.Name
+						sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 					}
-					sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 					return nil
 				}
 			}
@@ -950,23 +946,15 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 		// PVC has new size and pod is Ready
 		if sc.isRSComponent && sc.replset != nil {
-			isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+			isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
 			if err != nil {
 				log.Info("Failed to check RS membership, waiting", "pod", pod.Name, "error", err)
 				return nil
 			}
 			if isPrimary {
-				if !isPrimaryPhase {
-					// Primary election happened during shrink. Update the
-					// tracked primary so this pod is skipped and processed
-					// in the primary phase instead. Return so the next
-					// reconcile revisits the former primary as a secondary.
-					log.Info("Pod became primary during shrink, updating tracked primary", "pod", pod.Name, "previousPrimary", state.PrimaryPod)
-					state.PrimaryPod = pod.Name
-					sc.cr.SetPVCShrinkState(sc.sts.Name, state)
-					return nil
+				if isPrimaryPhase {
+					log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				}
-				log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				return nil
 			}
 		}
@@ -989,6 +977,20 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 
 	return nil
+}
+
+// shrinkCheckPrimary reports whether pod is the replset primary. In the secondaries phase a newly elected
+// primary becomes the tracked one, so it's skipped now and replaced last, after a stepdown.
+func (r *ReconcilePerconaServerMongoDB) shrinkCheckPrimary(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, pod corev1.Pod, isPrimaryPhase bool) (bool, error) {
+	isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+	if err != nil || !isPrimary || isPrimaryPhase {
+		return isPrimary, err
+	}
+	logf.FromContext(ctx).WithName("PVCShrink").Info("Pod became primary during shrink, updating tracked primary",
+		"sts", sc.sts.Name, "pod", pod.Name, "previousPrimary", state.PrimaryPod)
+	state.PrimaryPod = pod.Name
+	sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
+	return true, nil
 }
 
 // shrinkRSHealthy checks every replset member, including hidden, non-voting and arbiter members from other statefulsets.

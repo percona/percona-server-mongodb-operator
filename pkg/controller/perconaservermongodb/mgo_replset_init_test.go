@@ -626,27 +626,65 @@ func TestReconcileClusterKeepsMembersBeforeAddedAsShard(t *testing.T) {
 // PVC shrink keeps the replset status Init until it finishes. A shard that is
 // already added must still reconcile its members meanwhile, or a member that
 // dropped out of the config is never added back and the shrink waits forever.
-func TestReconcileClusterReconcilesShardMembersDuringPVCShrink(t *testing.T) {
+func TestReconcileClusterShardMembersDuringPVCShrink(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
-	ctx := context.Background()
 
-	provider := &initMongoClientProvider{rsClient: mongoFake.NewClientWithConfig(mongo.RSConfig{Version: 1})}
-	r, cr, rs := setupReplsetInitTest(t, provider, &replsetInitExecRecorder{})
-	cr.Spec.Sharding.Enabled = true
-	cr.Spec.Sharding.Mongos = &api.MongosSpec{Size: 1}
-	rs.ClusterRole = api.ClusterRoleShardSvr
-	cr.Status.Replsets[rs.Name] = api.ReplsetStatus{
-		Initialized:  true,
-		Status:       api.AppStateInit,
-		AddedAsShard: new(true),
+	tests := map[string]struct {
+		addedAsShard  bool
+		shrinkSts     func(cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) string
+		wantReconcile bool
+	}{
+		"added shard, mongod shrinking": {
+			addedAsShard:  true,
+			shrinkSts:     naming.MongodStatefulSetName,
+			wantReconcile: true,
+		},
+		"added shard, hidden shrinking": {
+			addedAsShard:  true,
+			shrinkSts:     naming.HiddenStatefulSetName,
+			wantReconcile: true,
+		},
+		"added shard, non-voting shrinking": {
+			addedAsShard:  true,
+			shrinkSts:     naming.NonVotingStatefulSetName,
+			wantReconcile: true,
+		},
+		"added shard, no shrink": {
+			addedAsShard: true,
+		},
+		"shard not added yet, mongod shrinking": {
+			shrinkSts: naming.MongodStatefulSetName,
+		},
 	}
-	cr.SetPVCShrinkState(naming.MongodStatefulSetName(cr, rs), api.PVCShrinkState{Phase: "secondaries"})
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+			provider := &initMongoClientProvider{rsClient: mongoFake.NewClientWithConfig(mongo.RSConfig{Version: 1})}
+			r, cr, rs := setupReplsetInitTest(t, provider, &replsetInitExecRecorder{})
+			cr.Spec.Sharding.Enabled = true
+			cr.Spec.Sharding.Mongos = &api.MongosSpec{Size: 1}
+			rs.ClusterRole = api.ClusterRoleShardSvr
+			cr.Status.Replsets[rs.Name] = api.ReplsetStatus{
+				Initialized:  true,
+				Status:       api.AppStateInit,
+				AddedAsShard: new(tt.addedAsShard),
+			}
+			if tt.shrinkSts != nil {
+				cr.SetPVCShrinkState(tt.shrinkSts(cr, rs), api.PVCShrinkState{Phase: "secondaries"})
+			}
 
-	_, _, err := r.reconcileCluster(ctx, cr, rs, nil)
-	require.NoError(t, err)
+			state, _, err := r.reconcileCluster(ctx, cr, rs, nil)
+			require.NoError(t, err)
 
-	config, err := provider.rsClient.ReadConfig(ctx)
-	require.NoError(t, err)
-	require.Len(t, config.Members, 1)
-	assert.Equal(t, cr.Name+"-"+rs.Name+"-0", config.Members[0].Tags["podName"])
+			config, err := provider.rsClient.ReadConfig(ctx)
+			require.NoError(t, err)
+			if !tt.wantReconcile {
+				assert.Equal(t, api.AppStateInit, state)
+				assert.Empty(t, config.Members, "recorded members must be kept")
+				return
+			}
+			require.Len(t, config.Members, 1)
+			assert.Equal(t, cr.Name+"-"+rs.Name+"-0", config.Members[0].Tags["podName"])
+		})
+	}
 }

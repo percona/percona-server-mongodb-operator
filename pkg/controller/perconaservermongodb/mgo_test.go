@@ -424,7 +424,7 @@ func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
 // cache drops it mid-reconcile, the replset pods can no longer be listed;
 // members must not be removed or lose their votes because of it.
 func TestUpdateConfigMembersStatefulSetOrphanDeleted(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	cr := newTestCR()
 	cr.Spec.ClusterServiceDNSMode = api.DNSModeInternal
 	cr.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
@@ -446,6 +446,9 @@ func TestUpdateConfigMembersStatefulSetOrphanDeleted(t *testing.T) {
 	initialConfig.Members.UpdateVotes(ctx, initialConfig.Members, false, "")
 
 	r := buildFakeClient(pods...)
+	noSts, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Empty(t, noSts.Items, "pods must not be listable without the statefulset")
 	cli := mongoFake.NewClientWithConfig(initialConfig)
 
 	_, _, _, err = r.updateConfigMembers(ctx, cli, cr, rs, podList.Items)
