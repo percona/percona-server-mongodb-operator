@@ -49,12 +49,17 @@ check against that.
   upgrades, failover, networking, and integration with Kubernetes and external
   systems. When an e2e test adds a golden-file check for a new field, add or
   point to the unit test that covers the rendering.
+- **No unit tests for the Python e2e code.** `lib/`, `conftest.py` and the
+  OLM test helpers are test code; the e2e runs exercise them. `make py-check`
+  (ruff, mypy, the fixture check) is the only check they get without a
+  cluster.
 - **Every wait has a ceiling** and fails with what it expected and the last
   value it saw. No unbounded `until` loops.
 - **Fail fast on terminal states.** When the watched object reports `Failed`
   or `Error`, stop with its message instead of waiting out the timeout.
 - **Treat an empty read as unknown.** A `kubectl_bin(..., check=False)` that
-  returns `""` is not a state; retry it or skip that sample.
+  returns `""` is not a state; retry it or skip that sample. When every sample
+  is empty, fail: the object is gone or the API is down.
 - **No sleeps for readiness.** Poll the condition. Sleeps that encode real
   time (a soak, a PITR window, a known upstream bug workaround) stay, with a
   comment saying why.
@@ -97,16 +102,25 @@ check against that.
 
 ## OLM and OpenShift tests
 
+- `installers/olm/e2e-tests/` (the OLM tests) imports `lib/` and
+  `conftest.py` from here, loaded with `-p conftest`. When you rename or
+  remove a fixture or helper, update those tests too. `make py-check`
+  resolves every test's fixtures without a cluster (`make py-setup-plan`) and
+  type-checks both trees, so CI fails on a stale name; a behaviour change is
+  only caught by running the OLM tests on OpenShift (`make -C installers/olm
+  tests`).
 - Use fully qualified OLM resource names (`subscriptions.operators.coreos.com`,
   `installplans.operators.coreos.com`, ...). On OpenShift, `subscription` can
   resolve to Knative's Subscription.
 - Select a PackageManifest by its catalog label (`-l catalog=<source>`): the
   same package name is served by several catalogs.
-- With `installPlanApproval: Manual`, OLM prepares the next upgrade as soon as
-  a version is installed. After a channel switch the Subscription can still
-  point at that stale pending plan, or at a plan or CSV that was already
-  deleted. Delete pending plans you do not want, and read referenced plans and
-  CSVs as "may be gone".
+- Upgrade the way users do: install the old version with `startingCSV` on
+  the channel it ships in and upgrade in that channel, without switching it.
+- With `installPlanApproval: Manual`, OLM creates the InstallPlan for the
+  upgrade as soon as the old version is installed. Leave it unapproved until
+  the cluster and data are in place. A Subscription can still name a plan or
+  CSV that OLM already replaced; read referenced plans and CSVs as "may be
+  gone".
 - Approve only the plan you intend to test. The bundles skip every older
   version (`olm.skipRange` in community bundles, `spec.skips` in certified
   ones), so an upgrade to the newest version is one hop.
@@ -115,5 +129,6 @@ check against that.
 - Applying the operator CRD makes an InstallPlan emit `AppliedWithWarnings` for the
   deprecated `psmdb.percona.com/v1-x-0` versions. Allow that event only when
   every warning in it is a deprecation notice.
-- Build the starting CR from the old bundle's `alm-examples`, so its
-  `crVersion` and images match the version being upgraded from.
+- Build the starting CR, and the backup and restore objects, from the
+  bundle's `alm-examples`, so `crVersion` and images match the version under
+  test.

@@ -12,11 +12,21 @@ update it with any change here.
 - `build-bundle.sh` builds and pushes bundle images.
 - `build-catalog.sh` downloads previous bundles from the OperatorHub GitHub
   repositories, builds catalog images and applies the CatalogSource.
+- `run-tests.sh` runs the OLM tests against the deployed dev catalog
+  (`make tests`, `make tests/<type>`, `OLM_TESTS` selects them):
+  `olm-default-install` and `olm-backup-restore` once against the target,
+  `olm-upgrade` once per starting version.
+- `e2e-tests/` holds the OLM pytest tests (`olm-default-install/`,
+  `olm-backup-restore/`, `olm-upgrade/`) and their helpers (`olm.py`:
+  install through OLM, objects from a bundle's `alm-examples`, data and
+  operator checks). They reuse the shared harness from the root `e2e-tests/`
+  and follow
+  [`e2e-tests/AGENTS.md`](../../e2e-tests/AGENTS.md).
 - `Makefile` wraps these; `make help` lists the targets.
 
 Vocabulary: a **bundle** is one operator version as an image, its main
 manifest is the **CSV**, a **catalog** indexes bundles, a **channel** is an
-upgrade stream inside it (`stable-vX.Y`), and a cluster installs from a
+upgrade stream inside it (`stable`), and a cluster installs from a
 catalog through a **Subscription** and **InstallPlans**.
 
 ## Rules
@@ -27,8 +37,10 @@ catalog through a **Subscription** and **InstallPlans**.
   namespace for experiments, `make deploy/community DEV_REPOSITORY=<you>`, and
   never point dev targets at `percona`. Keep `CONFIRM_PUSH=1` for interactive
   runs.
-- Do not change what existing catalogs contain by default: add a variable and
-  leave the old behavior when it is unset.
+- Dev catalogs have the layout of the published Red Hat catalogs: one
+  `stable` channel with every bundle. Add other catalog content behind a
+  variable (such as `CATALOG_PREVIOUS_MINORS`) and leave the old content when
+  it is unset.
 - Scripts run under `set -euo pipefail` on Linux and on macOS (bash 3.2, BSD
   `awk`/`sed`, GNU make 3.81). An empty array is "unbound" under `set -u` in
   bash 3.2: check its length before expanding it. Test version-selection logic
@@ -36,3 +48,6 @@ catalog through a **Subscription** and **InstallPlans**.
 - On macOS, `opm` needs `~/.config/containers/policy.json` to pull bundles;
   Linux ships it in `/etc/containers/policy.json`.
 - Run `make validate` after changing bundle generation.
+- `olm-default-install` applies the first `alm-examples` entry, built from
+  `deploy/cr.yaml`, unchanged. Do not change it in the test: a failure there
+  means the example users create from the console does not deploy cleanly.

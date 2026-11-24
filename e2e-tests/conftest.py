@@ -122,10 +122,21 @@ def _wait_for_nodes_ready() -> None:
         time.sleep(_NODES_READY_INTERVAL)
 
 
+def _setup_plan(config: pytest.Config) -> bool:
+    """True under `pytest --setup-plan`: fixtures are resolved, nothing is executed.
+
+    `make py-setup-plan` runs the suite this way without a cluster to catch a renamed
+    or removed fixture, so no hook may call kubectl in this mode.
+    """
+    return bool(config.getoption("setupplan", False))
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Print newline after pytest's verbose test name output and gate on node readiness."""
     print()
+    if _setup_plan(item.config):
+        return
     _wait_for_nodes_ready()
 
 
@@ -179,6 +190,9 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
     outcome: Any = yield
     report = outcome.get_result()
 
+    if _setup_plan(item.config):
+        return
+
     # Handle the call phase, and setup failures (where infra fixtures break and
     # there is no call phase). Skip passing setup/teardown to avoid duplicate work.
     if not (report.when == "call" or (report.when == "setup" and report.failed)):
@@ -209,6 +223,14 @@ def setup_env_vars() -> None:
     init_env()
 
 
+@pytest.fixture(scope="module")
+def no_cert_race_workaround() -> Generator[None]:
+    """Turn off recreate_failed_certificates in tests where certificate issuance is under test."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("CERT_RACE_WORKAROUND", "0")
+        yield
+
+
 def init_env() -> list[str]:
     """Fill os.environ with e2e defaults and return the managed variable names."""
     git_branch = get_git_branch()
@@ -231,7 +253,7 @@ def init_env() -> list[str]:
         "GIT_BRANCH": git_branch,
         "OPERATOR_VERSION": get_cr_version(),
         "IMAGE": f"perconalab/percona-server-mongodb-operator:{git_branch}",
-        "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.0",
+        "IMAGE_MONGOD": "perconalab/percona-server-mongodb-operator:main-mongod8.3",
         "IMAGE_MONGOD_CHAIN": (
             "perconalab/percona-server-mongodb-operator:main-mongod7.0\n"
             "perconalab/percona-server-mongodb-operator:main-mongod8.0\n"
@@ -749,7 +771,8 @@ def deploy_s3_storage() -> Generator[None]:
         )
 
     logger.info(f"Creating S3 bucket: {bucket}")
-    aws_cli_s3(f"s3 mb s3://{bucket}", endpoint)
+    # The S3 gateway starts after the pod is Ready; retry until it accepts connections.
+    retry(lambda: aws_cli_s3(f"s3 mb s3://{bucket}", endpoint), max_attempts=12, delay=10)
 
     yield
 

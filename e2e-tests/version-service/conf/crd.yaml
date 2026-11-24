@@ -381,6 +381,8 @@ spec:
                 type: string
               type:
                 type: string
+              waitingReason:
+                type: string
             type: object
         type: object
     served: true
@@ -1844,6 +1846,8 @@ spec:
                     type: string
                   type:
                     type: string
+                  waitingReason:
+                    type: string
                 type: object
               clusterName:
                 type: string
@@ -1938,6 +1942,8 @@ spec:
               pitrTarget:
                 type: string
               state:
+                type: string
+              waitingReason:
                 type: string
             type: object
         type: object
@@ -9831,6 +9837,91 @@ spec:
                         size:
                           format: int32
                           type: integer
+                        startupProbe:
+                          properties:
+                            exec:
+                              properties:
+                                command:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              type: object
+                            failureThreshold:
+                              format: int32
+                              type: integer
+                            grpc:
+                              properties:
+                                mode:
+                                  type: string
+                                port:
+                                  format: int32
+                                  type: integer
+                                service:
+                                  default: ""
+                                  type: string
+                              required:
+                              - port
+                              type: object
+                            httpGet:
+                              properties:
+                                host:
+                                  type: string
+                                httpHeaders:
+                                  items:
+                                    properties:
+                                      name:
+                                        type: string
+                                      value:
+                                        type: string
+                                    required:
+                                    - name
+                                    - value
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                path:
+                                  type: string
+                                port:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  x-kubernetes-int-or-string: true
+                                protocol:
+                                  type: string
+                                scheme:
+                                  type: string
+                              required:
+                              - port
+                              type: object
+                            initialDelaySeconds:
+                              format: int32
+                              type: integer
+                            periodSeconds:
+                              format: int32
+                              type: integer
+                            successThreshold:
+                              format: int32
+                              type: integer
+                            tcpSocket:
+                              properties:
+                                host:
+                                  type: string
+                                port:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  x-kubernetes-int-or-string: true
+                              required:
+                              - port
+                              type: object
+                            terminationGracePeriodSeconds:
+                              format: int64
+                              type: integer
+                            timeoutSeconds:
+                              format: int32
+                              type: integer
+                          type: object
                         terminationGracePeriodSeconds:
                           format: int64
                           type: integer
@@ -12803,6 +12894,91 @@ spec:
                         size:
                           format: int32
                           type: integer
+                        startupProbe:
+                          properties:
+                            exec:
+                              properties:
+                                command:
+                                  items:
+                                    type: string
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                              type: object
+                            failureThreshold:
+                              format: int32
+                              type: integer
+                            grpc:
+                              properties:
+                                mode:
+                                  type: string
+                                port:
+                                  format: int32
+                                  type: integer
+                                service:
+                                  default: ""
+                                  type: string
+                              required:
+                              - port
+                              type: object
+                            httpGet:
+                              properties:
+                                host:
+                                  type: string
+                                httpHeaders:
+                                  items:
+                                    properties:
+                                      name:
+                                        type: string
+                                      value:
+                                        type: string
+                                    required:
+                                    - name
+                                    - value
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-type: atomic
+                                path:
+                                  type: string
+                                port:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  x-kubernetes-int-or-string: true
+                                protocol:
+                                  type: string
+                                scheme:
+                                  type: string
+                              required:
+                              - port
+                              type: object
+                            initialDelaySeconds:
+                              format: int32
+                              type: integer
+                            periodSeconds:
+                              format: int32
+                              type: integer
+                            successThreshold:
+                              format: int32
+                              type: integer
+                            tcpSocket:
+                              properties:
+                                host:
+                                  type: string
+                                port:
+                                  anyOf:
+                                  - type: integer
+                                  - type: string
+                                  x-kubernetes-int-or-string: true
+                              required:
+                              - port
+                              type: object
+                            terminationGracePeriodSeconds:
+                              format: int64
+                              type: integer
+                            timeoutSeconds:
+                              format: int32
+                              type: integer
+                          type: object
                         terminationGracePeriodSeconds:
                           format: int64
                           type: integer
@@ -15837,6 +16013,91 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
+                      type: object
+                    startupProbe:
+                      properties:
+                        exec:
+                          properties:
+                            command:
+                              items:
+                                type: string
+                              type: array
+                              x-kubernetes-list-type: atomic
+                          type: object
+                        failureThreshold:
+                          format: int32
+                          type: integer
+                        grpc:
+                          properties:
+                            mode:
+                              type: string
+                            port:
+                              format: int32
+                              type: integer
+                            service:
+                              default: ""
+                              type: string
+                          required:
+                          - port
+                          type: object
+                        httpGet:
+                          properties:
+                            host:
+                              type: string
+                            httpHeaders:
+                              items:
+                                properties:
+                                  name:
+                                    type: string
+                                  value:
+                                    type: string
+                                required:
+                                - name
+                                - value
+                                type: object
+                              type: array
+                              x-kubernetes-list-type: atomic
+                            path:
+                              type: string
+                            port:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              x-kubernetes-int-or-string: true
+                            protocol:
+                              type: string
+                            scheme:
+                              type: string
+                          required:
+                          - port
+                          type: object
+                        initialDelaySeconds:
+                          format: int32
+                          type: integer
+                        periodSeconds:
+                          format: int32
+                          type: integer
+                        successThreshold:
+                          format: int32
+                          type: integer
+                        tcpSocket:
+                          properties:
+                            host:
+                              type: string
+                            port:
+                              anyOf:
+                              - type: integer
+                              - type: string
+                              x-kubernetes-int-or-string: true
+                          required:
+                          - port
+                          type: object
+                        terminationGracePeriodSeconds:
+                          format: int64
+                          type: integer
+                        timeoutSeconds:
+                          format: int32
+                          type: integer
                       type: object
                     storage:
                       properties:
@@ -22885,6 +23146,91 @@ spec:
                           size:
                             format: int32
                             type: integer
+                          startupProbe:
+                            properties:
+                              exec:
+                                properties:
+                                  command:
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                type: object
+                              failureThreshold:
+                                format: int32
+                                type: integer
+                              grpc:
+                                properties:
+                                  mode:
+                                    type: string
+                                  port:
+                                    format: int32
+                                    type: integer
+                                  service:
+                                    default: ""
+                                    type: string
+                                required:
+                                - port
+                                type: object
+                              httpGet:
+                                properties:
+                                  host:
+                                    type: string
+                                  httpHeaders:
+                                    items:
+                                      properties:
+                                        name:
+                                          type: string
+                                        value:
+                                          type: string
+                                      required:
+                                      - name
+                                      - value
+                                      type: object
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                  path:
+                                    type: string
+                                  port:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
+                                  scheme:
+                                    type: string
+                                required:
+                                - port
+                                type: object
+                              initialDelaySeconds:
+                                format: int32
+                                type: integer
+                              periodSeconds:
+                                format: int32
+                                type: integer
+                              successThreshold:
+                                format: int32
+                                type: integer
+                              tcpSocket:
+                                properties:
+                                  host:
+                                    type: string
+                                  port:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                required:
+                                - port
+                                type: object
+                              terminationGracePeriodSeconds:
+                                format: int64
+                                type: integer
+                              timeoutSeconds:
+                                format: int32
+                                type: integer
+                            type: object
                           terminationGracePeriodSeconds:
                             format: int64
                             type: integer
@@ -25857,6 +26203,91 @@ spec:
                           size:
                             format: int32
                             type: integer
+                          startupProbe:
+                            properties:
+                              exec:
+                                properties:
+                                  command:
+                                    items:
+                                      type: string
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                type: object
+                              failureThreshold:
+                                format: int32
+                                type: integer
+                              grpc:
+                                properties:
+                                  mode:
+                                    type: string
+                                  port:
+                                    format: int32
+                                    type: integer
+                                  service:
+                                    default: ""
+                                    type: string
+                                required:
+                                - port
+                                type: object
+                              httpGet:
+                                properties:
+                                  host:
+                                    type: string
+                                  httpHeaders:
+                                    items:
+                                      properties:
+                                        name:
+                                          type: string
+                                        value:
+                                          type: string
+                                      required:
+                                      - name
+                                      - value
+                                      type: object
+                                    type: array
+                                    x-kubernetes-list-type: atomic
+                                  path:
+                                    type: string
+                                  port:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                  protocol:
+                                    type: string
+                                  scheme:
+                                    type: string
+                                required:
+                                - port
+                                type: object
+                              initialDelaySeconds:
+                                format: int32
+                                type: integer
+                              periodSeconds:
+                                format: int32
+                                type: integer
+                              successThreshold:
+                                format: int32
+                                type: integer
+                              tcpSocket:
+                                properties:
+                                  host:
+                                    type: string
+                                  port:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    x-kubernetes-int-or-string: true
+                                required:
+                                - port
+                                type: object
+                              terminationGracePeriodSeconds:
+                                format: int64
+                                type: integer
+                              timeoutSeconds:
+                                format: int32
+                                type: integer
+                            type: object
                           terminationGracePeriodSeconds:
                             format: int64
                             type: integer
@@ -28891,6 +29322,91 @@ spec:
                           additionalProperties:
                             type: string
                           type: object
+                        type: object
+                      startupProbe:
+                        properties:
+                          exec:
+                            properties:
+                              command:
+                                items:
+                                  type: string
+                                type: array
+                                x-kubernetes-list-type: atomic
+                            type: object
+                          failureThreshold:
+                            format: int32
+                            type: integer
+                          grpc:
+                            properties:
+                              mode:
+                                type: string
+                              port:
+                                format: int32
+                                type: integer
+                              service:
+                                default: ""
+                                type: string
+                            required:
+                            - port
+                            type: object
+                          httpGet:
+                            properties:
+                              host:
+                                type: string
+                              httpHeaders:
+                                items:
+                                  properties:
+                                    name:
+                                      type: string
+                                    value:
+                                      type: string
+                                  required:
+                                  - name
+                                  - value
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
+                              path:
+                                type: string
+                              port:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                              protocol:
+                                type: string
+                              scheme:
+                                type: string
+                            required:
+                            - port
+                            type: object
+                          initialDelaySeconds:
+                            format: int32
+                            type: integer
+                          periodSeconds:
+                            format: int32
+                            type: integer
+                          successThreshold:
+                            format: int32
+                            type: integer
+                          tcpSocket:
+                            properties:
+                              host:
+                                type: string
+                              port:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                x-kubernetes-int-or-string: true
+                            required:
+                            - port
+                            type: object
+                          terminationGracePeriodSeconds:
+                            format: int64
+                            type: integer
+                          timeoutSeconds:
+                            format: int32
+                            type: integer
                         type: object
                       storage:
                         properties:
@@ -32463,6 +32979,8 @@ spec:
                     startedAt:
                       type: string
                     targetSize:
+                      type: string
+                    waitingFor:
                       type: string
                   required:
                   - phase

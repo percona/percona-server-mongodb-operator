@@ -189,7 +189,7 @@ type Client interface {
 	GetUserInfo(ctx context.Context, username, db string) (*User, error)
 	UpdateUserRoles(ctx context.Context, db, username string, roles []Role) error
 	UpdateUserPass(ctx context.Context, db, name, pass string) error
-	UpdateUser(ctx context.Context, currName, newName, pass string) error
+	DropUser(ctx context.Context, db, name string) error
 }
 
 type ClientDatabase interface {
@@ -848,35 +848,8 @@ func (client *mongoClient) UpdateUserPass(ctx context.Context, db, name, pass st
 	return client.Database(db).RunCommand(ctx, bson.D{{Key: "updateUser", Value: name}, {Key: "pwd", Value: pass}}).Err()
 }
 
-// UpdateUser recreates user with new name and password
-// should be used only when username was changed
-func (client *mongoClient) UpdateUser(ctx context.Context, currName, newName, pass string) error {
-	mu := struct {
-		Users []struct {
-			Roles any `bson:"roles"`
-		} `bson:"users"`
-	}{}
-
-	res := client.Database("admin").RunCommand(ctx, bson.D{{Key: "usersInfo", Value: currName}})
-	if res.Err() != nil {
-		return errors.Wrap(res.Err(), "get user")
-	}
-	err := res.Decode(&mu)
-	if err != nil {
-		return errors.Wrap(err, "decode user")
-	}
-
-	if len(mu.Users) == 0 {
-		return errors.New("empty user data")
-	}
-
-	err = client.Database("admin").RunCommand(ctx, bson.D{{Key: "createUser", Value: newName}, {Key: "pwd", Value: pass}, {Key: "roles", Value: mu.Users[0].Roles}}).Err()
-	if err != nil {
-		return errors.Wrap(err, "create user")
-	}
-
-	err = client.Database("admin").RunCommand(ctx, bson.D{{Key: "dropUser", Value: currName}}).Err()
-	return errors.Wrap(err, "drop user")
+func (client *mongoClient) DropUser(ctx context.Context, db, name string) error {
+	return client.Database(db).RunCommand(ctx, bson.D{{Key: "dropUser", Value: name}}).Err()
 }
 
 // RemoveOld removes from the list those members which are not present in the given list.

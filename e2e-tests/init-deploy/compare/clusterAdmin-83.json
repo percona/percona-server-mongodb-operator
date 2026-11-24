@@ -204,6 +204,7 @@
           "connPoolStats",
           "connPoolSync",
           "dropConnections",
+          "enableSharding",
           "flushRouterConfig",
           "fsync",
           "getClusterParameter",

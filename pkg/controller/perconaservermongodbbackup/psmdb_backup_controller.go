@@ -168,7 +168,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) Reconcile(ctx context.Context, req
 			status.Error = err.Error()
 			log.Error(err, "failed to make backup", "backup", cr.Name)
 		}
-		if cr.Status.State != status.State || cr.Status.Error != status.Error ||
+		if cr.Status.State != status.State || cr.Status.Error != status.Error || cr.Status.WaitingReason != status.WaitingReason ||
 			!slices.Equal(cr.Status.Snapshots, status.Snapshots) {
 			log.Info("Backup state changed", "previous", cr.Status.State, "current", status.State)
 			cr.Status = status
@@ -332,6 +332,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	if cjobs {
 		log.Info("Waiting to finish another backup/restore.")
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonConcurrentJob
 		return status, nil
 	}
 
@@ -339,8 +340,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 		return status, err
 	} else if blocked {
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonClusterSync
 		return status, nil
 	}
+	status.WaitingReason = ""
 
 	acquired, err := r.tryAcquireLease(ctx, cr, cluster)
 	if err != nil {
@@ -348,6 +351,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) reconcile(
 	}
 	if !acquired {
 		status.State = psmdbv1.BackupStateWaiting
+		status.WaitingReason = psmdbv1.BackupWaitingReasonBackupLease
 		return status, nil
 	}
 
@@ -387,9 +391,11 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkClusterSyncLease(ctx context.
 		return false, nil
 	}
 	logf.FromContext(ctx).Info("Waiting for ClusterSync to release the cluster.", "lease", csLeaseName)
-	r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
-		"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
-		cluster.Name, csLeaseName)
+	if cr.Status.WaitingReason != psmdbv1.BackupWaitingReasonClusterSync {
+		r.recorder.Eventf(cr, corev1.EventTypeNormal, "ClusterSyncActive",
+			"Backup is waiting: ClusterSync is replicating to cluster %q (lease %s). Finalize or delete the ClusterSync CR to allow backups.",
+			cluster.Name, csLeaseName)
+	}
 	return true, nil
 }
 
@@ -481,13 +487,22 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		if err != nil {
 			return nil, errors.Wrap(err, "get azure credentials secret")
 		}
+		account := string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey])
+		key := string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey])
+
+		if connStr := string(azureSecret.Data[backup.AzureStorageConnectionStringSecretKey]); connStr != "" {
+			account, key, err = backup.ParseAzureConnectionString(connStr)
+			if err != nil {
+				return nil, errors.Wrap(err, "parse azure connection string")
+			}
+		}
 		azureConf := &azure.Config{
-			Account:     string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
+			Account:     account,
 			Container:   cr.Status.Azure.Container,
 			EndpointURL: cr.Status.Azure.EndpointURL,
 			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString([]byte(key)),
 			},
 		}
 		return azure.New(azureConf, "", nil)
@@ -712,7 +727,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 			log.Info("delete-backup finalizer is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
 			fallthrough
 		case naming.FinalizerDeleteBackup:
-			if cr.Status.State == psmdbv1.BackupStateReady {
+			if cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateCanceled {
 				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
@@ -775,9 +790,26 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 			}
 			meta = nil
 		}
+		if cr.Status.State == psmdbv1.BackupStateCanceled {
+			var opID string
+			if meta != nil {
+				opID = meta.OPID
+			}
+			active, err := b.PBM().HasBackupLock(ctx, opID)
+			if err != nil {
+				return errors.Wrap(err, "check PBM backup locks before cleanup")
+			}
+			if active {
+				return errors.New("waiting for PBM backup locks to release before cleanup")
+			}
+		}
+	} else if cr.Status.State == psmdbv1.BackupStateCanceled && cluster != nil {
+		return errors.New("PBM connection unavailable to check backup locks before cleanup")
 	}
+
+	snapshotBackup := len(cr.Status.Snapshots) > 0 || (cr.Status.State == psmdbv1.BackupStateCanceled && cr.Spec.Type == defs.ExternalBackup)
 	if b.PBM() == nil || meta == nil {
-		if len(cr.Status.Snapshots) > 0 {
+		if snapshotBackup {
 			return r.deleteVolumeSnapshots(ctx, cr)
 		}
 
@@ -815,12 +847,19 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 			return errors.Wrap(err, "delete filesystem backup")
 		}
 		return nil
-	case len(cr.Status.Snapshots) > 0:
+	case snapshotBackup:
 		if err := r.deleteVolumeSnapshots(ctx, cr); err != nil {
 			return errors.Wrap(err, "delete volume snapshots")
 		}
 		if err := b.PBM().DeleteBackupMeta(ctx, cr.Status.PBMname); err != nil {
 			return errors.Wrap(err, "delete backup meta")
+		}
+		return nil
+	}
+
+	if cr.Status.State == psmdbv1.BackupStateCanceled {
+		if err := b.PBM().DeleteBackup(ctx, cr.Status.PBMname); err != nil {
+			return errors.Wrap(err, "failed to delete canceled backup")
 		}
 		return nil
 	}

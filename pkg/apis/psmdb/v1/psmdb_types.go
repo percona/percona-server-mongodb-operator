@@ -659,6 +659,7 @@ type NonVotingSpec struct {
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	StartupProbe             *corev1.Probe              `json:"startupProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
@@ -680,6 +681,7 @@ type HiddenSpec struct {
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	StartupProbe             *corev1.Probe              `json:"startupProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
@@ -919,6 +921,7 @@ type ReplsetSpec struct {
 	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
+	StartupProbe             *corev1.Probe                `json:"startupProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage           `json:"storage,omitempty"`
@@ -934,6 +937,16 @@ type ReplsetSpec struct {
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
 	VPA                      *ComponentVPASpec            `json:"vpa,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
+}
+
+func (r *ReplsetSpec) SearchStorage(cr *PerconaServerMongoDB) *VolumeSpec {
+	if r != nil && r.Search != nil && r.Search.Storage != nil {
+		return r.Search.Storage
+	}
+	if cr.Spec.Search != nil {
+		return cr.Spec.Search.Storage
+	}
+	return nil
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -1970,6 +1983,7 @@ type PVCShrinkState struct {
 	Phase         string   `json:"phase"`
 	ProcessedPods []string `json:"processedPods"`
 	PrimaryPod    string   `json:"primaryPod"`
+	WaitingFor    string   `json:"waitingFor,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {

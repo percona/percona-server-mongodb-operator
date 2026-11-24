@@ -2,26 +2,38 @@ package perconaservermongodb
 
 import (
 	"context"
+	"fmt"
+	"maps"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
+	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -43,12 +55,13 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		expectCRStorage   string
 	}{
 		{
-			name:             "finishes resize when pvc exceeds requested size",
-			requested:        "1200Mi",
-			configured:       "1200Mi",
-			actual:           "6G",
-			resizeInProgress: true,
-			expectSTSDeleted: true,
+			name:              "finishes resize when pvc exceeds requested size",
+			requested:         "1200Mi",
+			configured:        "1200Mi",
+			actual:            "6G",
+			resizeInProgress:  true,
+			expectSTSDeleted:  true,
+			expectRestartedAt: true,
 		},
 		{
 			name:             "finishes resize when orphan pvc exceeds requested size",
@@ -114,88 +127,161 @@ func TestReconcilePersistentVolumes(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			requested := resource.MustParse(tt.requested)
-			configured := resource.MustParse(tt.configured)
-			actual := resource.MustParse(tt.actual)
+	components := []string{
+		naming.ComponentMongod,
+		naming.ComponentNonVoting,
+		naming.ComponentHidden,
+		naming.ComponentConfigSrv,
+		naming.ComponentSearch,
+	}
+	for _, component := range components {
+		for _, tt := range tests {
+			if component == naming.ComponentSearch && tt.volumeShrink {
+				tt.name = "rejects search shrink for multi-member replica set"
+				tt.expectErrContains = "volume shrinking is not supported for search"
+			}
+			t.Run(component+"/"+tt.name, func(t *testing.T) {
+				const restartedAt = "2026-01-01T00:00:00Z"
+				var (
+					cr             *api.PerconaServerMongoDB
+					sts            *appsv1.StatefulSet
+					pod            *corev1.Pod
+					r              *ReconcilePerconaServerMongoDB
+					deletionPolicy *metav1.DeletionPropagation
+				)
 
-			cr, err := readDefaultCR("some-cluster", "ns")
-			require.NoError(t, err)
-			require.NotEmpty(t, cr.Spec.Replsets)
+				t.Run("prepare cluster and storage resources", func(t *testing.T) {
+					requested := resource.MustParse(tt.requested)
+					configured := resource.MustParse(tt.configured)
+					actual := resource.MustParse(tt.actual)
 
-			rs := cr.Spec.Replsets[0]
-			rs.Size = 1
-			rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
-				corev1.ResourceStorage: requested,
-			}
-			cr.Spec.StorageScaling = &api.StorageScalingSpec{
-				EnableVolumeScaling: tt.volumeScaling,
-				EnableVolumeShrink:  tt.volumeShrink,
-			}
-			if tt.volumeShrink {
-				cr.Status.State = api.AppStateReady
-			}
+					var err error
+					cr, err = readDefaultCR("some-cluster", "ns")
+					require.NoError(t, err)
+					require.NotEmpty(t, cr.Spec.Replsets)
+					cr.Spec.StorageScaling = &api.StorageScalingSpec{
+						EnableVolumeScaling: tt.volumeScaling,
+						EnableVolumeShrink:  tt.volumeShrink,
+					}
+					if tt.volumeShrink {
+						cr.Status.State = api.AppStateReady
+					}
 
-			labels := naming.MongodLabels(cr, rs)
-			sts := newStatefulSet(cr.Namespace, naming.MongodStatefulSetName(cr, rs), labels, configured)
-			const restartedAt = "2026-01-01T00:00:00Z"
-			if tt.expectRestartedAt {
-				sts.Spec.Template.Annotations = map[string]string{
-					naming.AnnotationKubectlRestartedAt: restartedAt,
-				}
-			}
-			if tt.resizeInProgress {
-				sts.Annotations = map[string]string{
-					api.AnnotationPVCResizeInProgress: time.Now().Add(-time.Minute).Format(time.RFC3339),
-				}
-			}
+					rs := cr.Spec.Replsets[0]
+					rs.Size = 1
+					rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests = corev1.ResourceList{
+						corev1.ResourceStorage: requested,
+					}
 
-			pod := newPod(cr.Namespace, sts.Name+"-0", labels)
-			pvc := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, actual, actual)
-			objects := []runtime.Object{cr, sts, pod, pvc}
-			if tt.orphanPVC {
-				orphanPVC := newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+sts.Name+"-1", labels, actual, actual)
-				objects = append(objects, orphanPVC)
-			}
+					labels := naming.MongodLabels(cr, rs)
+					stsName := naming.MongodStatefulSetName(cr, rs)
+					claimName := config.MongodDataVolClaimName
+					switch component {
+					case naming.ComponentNonVoting:
+						rs.NonVoting.VolumeSpec = rs.VolumeSpec.DeepCopy()
+						labels = naming.NonVotingLabels(cr, rs)
+					case naming.ComponentHidden:
+						rs.Hidden.VolumeSpec = rs.VolumeSpec.DeepCopy()
+						labels = naming.HiddenLabels(cr, rs)
+					case naming.ComponentConfigSrv:
+						cr.Spec.Sharding.ConfigsvrReplSet.Name = api.ConfigReplSetName
+						cr.Spec.Sharding.ConfigsvrReplSet.Size = 1
+						cr.Spec.Sharding.ConfigsvrReplSet.VolumeSpec = rs.VolumeSpec.DeepCopy()
+						labels = naming.MongodLabels(cr, cr.Spec.Sharding.ConfigsvrReplSet)
+						labels[naming.LabelKubernetesComponent] = naming.ComponentConfigSrv
+					case naming.ComponentSearch:
+						rs.Size = 3
+						cr.Spec.Search = &api.SearchSpec{Enabled: true, Storage: rs.VolumeSpec.DeepCopy()}
+						labels = naming.SearchLabels(cr, rs)
+						stsName = naming.SearchStatefulSetName(cr, rs)
+						claimName = vectorsearch.DataVolumeName
+					}
+					sts = newStatefulSet(cr.Namespace, stsName, labels, configured)
+					sts.Spec.VolumeClaimTemplates[0].Name = claimName
+					sts.Labels = maps.Clone(labels)
+					sts.Labels["custom-label"] = "metadata-only"
+					sts.Spec.VolumeClaimTemplates = append([]corev1.PersistentVolumeClaim{{Name: "sidecar-data"}}, sts.Spec.VolumeClaimTemplates...)
+					if tt.expectRestartedAt {
+						sts.Spec.Template.Annotations = map[string]string{
+							naming.AnnotationKubectlRestartedAt: restartedAt,
+						}
+					}
+					if tt.resizeInProgress {
+						sts.Annotations = map[string]string{
+							api.AnnotationPVCResizeInProgress: time.Now().Add(-time.Minute).Format(time.RFC3339),
+						}
+					}
 
-			s := runtime.NewScheme()
-			require.NoError(t, clientgoscheme.AddToScheme(s))
-			require.NoError(t, apis.AddToScheme(s))
+					pod = newPod(cr.Namespace, sts.Name+"-0", labels)
+					pvc := newPVC(cr.Namespace, claimName+"-"+pod.Name, labels, actual, actual)
+					objects := []client.Object{cr, sts, pod, pvc}
+					if tt.orphanPVC {
+						orphanPVC := newPVC(cr.Namespace, claimName+"-"+sts.Name+"-1", labels, actual, actual)
+						objects = append(objects, orphanPVC)
+					}
 
-			r := &ReconcilePerconaServerMongoDB{
-				client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects...).Build(),
-				scheme: s,
-			}
+					r = buildFakeClient(objects...)
+					r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+						Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+							if _, ok := obj.(*appsv1.StatefulSet); ok {
+								options := &client.DeleteOptions{}
+								options.ApplyOptions(opts)
+								deletionPolicy = options.PropagationPolicy
+							}
+							return c.Delete(ctx, obj, opts...)
+						},
+					})
+				})
 
-			err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
-			if tt.expectErrContains != "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectErrContains)
-			} else {
-				require.NoError(t, err)
-			}
+				t.Run("reconcile PVCs", func(t *testing.T) {
+					err := r.reconcilePVCs(t.Context(), cr, sts)
+					if tt.expectErrContains != "" {
+						require.Error(t, err)
+						assert.Contains(t, err.Error(), tt.expectErrContains)
+					} else {
+						require.NoError(t, err)
+					}
+				})
 
-			fetchedSTS := &appsv1.StatefulSet{}
-			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), fetchedSTS)
-			if tt.expectSTSDeleted {
-				assert.Error(t, err)
-				assert.True(t, client.IgnoreNotFound(err) == nil)
-			} else {
-				assert.NoError(t, err)
-			}
+				t.Run("verify StatefulSet and pod preservation", func(t *testing.T) {
+					fetchedSTS := &appsv1.StatefulSet{}
+					err := r.client.Get(t.Context(), client.ObjectKeyFromObject(sts), fetchedSTS)
+					if tt.expectSTSDeleted {
+						assert.Error(t, err)
+						assert.True(t, client.IgnoreNotFound(err) == nil)
+						require.NotNil(t, deletionPolicy)
+						assert.Equal(t, metav1.DeletePropagationOrphan, *deletionPolicy)
+						require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(pod), new(corev1.Pod)))
+					} else {
+						assert.NoError(t, err)
+					}
+				})
 
-			fetchedCR := &api.PerconaServerMongoDB{}
-			err = r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), fetchedCR)
-			require.NoError(t, err)
-			if tt.expectCRStorage != "" {
-				expected := resource.MustParse(tt.expectCRStorage)
-				assert.Equal(t, expected, fetchedCR.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage])
-			}
-			if tt.expectRestartedAt {
-				assert.Equal(t, restartedAt, fetchedCR.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)])
-			}
-		})
+				t.Run("verify cluster storage and preserved restart annotation", func(t *testing.T) {
+					fetchedCR := &api.PerconaServerMongoDB{}
+					err := r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), fetchedCR)
+					require.NoError(t, err)
+					if tt.expectCRStorage != "" {
+						expected := resource.MustParse(tt.expectCRStorage)
+						storage := fetchedCR.Spec.Replsets[0].VolumeSpec
+						switch component {
+						case naming.ComponentNonVoting:
+							storage = fetchedCR.Spec.Replsets[0].NonVoting.VolumeSpec
+						case naming.ComponentHidden:
+							storage = fetchedCR.Spec.Replsets[0].Hidden.VolumeSpec
+						case naming.ComponentConfigSrv:
+							storage = fetchedCR.Spec.Sharding.ConfigsvrReplSet.VolumeSpec
+						case naming.ComponentSearch:
+							storage = fetchedCR.Spec.Replsets[0].SearchStorage(fetchedCR)
+						}
+						assert.Equal(t, expected, storage.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage])
+					}
+					if tt.expectRestartedAt {
+						assert.Equal(t, restartedAt, fetchedCR.Annotations[api.AnnotationPreservedRestartedAt(sts.Name)])
+					}
+				})
+			})
+		}
 	}
 }
 
@@ -286,7 +372,7 @@ func TestReconcilePersistentVolumesExternalAutoscaling(t *testing.T) {
 				scheme: scheme,
 			}
 
-			err := r.reconcilePVCs(ctx, cr, sts, labels, cr.Spec.Replsets[0].VolumeSpec)
+			err := r.reconcilePVCs(ctx, cr, sts)
 			require.NoError(t, err)
 
 			gotSTS := new(appsv1.StatefulSet)
@@ -311,6 +397,7 @@ func newStatefulSet(namespace, name string, labels map[string]string, storage re
 		Namespace: namespace,
 		Labels:    labels,
 		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: labels},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					Name: config.MongodDataVolClaimName,
@@ -500,7 +587,7 @@ func TestResizeVolumesIfNeeded_NoSpuriousResizeOnDecimalUnits(t *testing.T) {
 
 			ls := map[string]string{"app": "test"}
 
-			resizeErr := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim)
+			_, resizeErr := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, volumeSpec.PersistentVolumeClaim)
 
 			stsKey := types.NamespacedName{Name: stsName, Namespace: ns}
 
@@ -723,7 +810,7 @@ func TestShrinkStatusBlocksReconciliation(t *testing.T) {
 		scheme: s,
 	}
 
-	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	err = r.reconcilePVCs(t.Context(), cr, sts)
 	if err != nil {
 		assert.NotContains(t, err.Error(), "requested storage")
 	}
@@ -756,14 +843,17 @@ func TestShrinkRejectsSingleMember(t *testing.T) {
 	require.NoError(t, clientgoscheme.AddToScheme(s))
 	require.NoError(t, apis.AddToScheme(s))
 
+	rec := events.NewFakeRecorder(10)
 	r := &ReconcilePerconaServerMongoDB{
-		client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
-		scheme: s,
+		client:   fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, sts, pod, pvc).Build(),
+		scheme:   s,
+		recorder: rec,
 	}
 
-	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	err = r.reconcilePVCs(t.Context(), cr, sts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "single-member replica set has no sync source")
+	assert.Equal(t, []string{"Warning PVCShrinkRejected"}, eventReasons(rec))
 }
 
 func TestShrinkPreflightRevertsVCTWhenBlocked(t *testing.T) {
@@ -799,11 +889,62 @@ func TestShrinkPreflightRevertsVCTWhenBlocked(t *testing.T) {
 		scheme: s,
 	}
 
-	err = r.reconcilePVCs(t.Context(), cr, sts, labels, rs.VolumeSpec)
+	err = r.reconcilePVCs(t.Context(), cr, sts)
 	require.NoError(t, err, "blocked shrink should return nil, not error")
 
 	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
 	assert.Equal(t, actual.String(), vctSize.String(), "VCT should be reverted to actual PVC size when shrink is blocked")
+}
+
+func TestShrinkingReplsetStatefulSet(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+	rs := cr.Spec.Replsets[0]
+
+	mongod := naming.MongodStatefulSetName(cr, rs)
+	hidden := naming.HiddenStatefulSetName(cr, rs)
+	nonVoting := naming.NonVotingStatefulSetName(cr, rs)
+	state := api.PVCShrinkState{Phase: "secondaries", TargetSize: "3Gi"}
+
+	scFor := func(stsName string) shrinkContext {
+		return shrinkContext{
+			cr:            cr,
+			sts:           newStatefulSet(cr.Namespace, stsName, nil, resource.MustParse("3Gi")),
+			replset:       rs,
+			isRSComponent: true,
+		}
+	}
+
+	t.Run("no shrink in progress", func(t *testing.T) {
+		cr.Status.PVCShrink = nil
+		assert.Empty(t, shrinkingReplsetStatefulSet(scFor(hidden)))
+	})
+
+	t.Run("own shrink is ignored", func(t *testing.T) {
+		cr.Status.PVCShrink = nil
+		cr.SetPVCShrinkState(hidden, state)
+		assert.Empty(t, shrinkingReplsetStatefulSet(scFor(hidden)))
+	})
+
+	t.Run("mongod shrink blocks hidden and non-voting", func(t *testing.T) {
+		cr.Status.PVCShrink = nil
+		cr.SetPVCShrinkState(mongod, state)
+		assert.Equal(t, mongod, shrinkingReplsetStatefulSet(scFor(hidden)))
+		assert.Equal(t, mongod, shrinkingReplsetStatefulSet(scFor(nonVoting)))
+	})
+
+	t.Run("hidden shrink blocks mongod", func(t *testing.T) {
+		cr.Status.PVCShrink = nil
+		cr.SetPVCShrinkState(hidden, state)
+		assert.Equal(t, hidden, shrinkingReplsetStatefulSet(scFor(mongod)))
+	})
+
+	t.Run("other replset does not block", func(t *testing.T) {
+		cr.Status.PVCShrink = nil
+		cr.SetPVCShrinkState(naming.MongodStatefulSetName(cr, &api.ReplsetSpec{Name: "rs1"}), state)
+		assert.Empty(t, shrinkingReplsetStatefulSet(scFor(mongod)))
+	})
 }
 
 func TestShrinkMongosShrinkEntryPath(t *testing.T) {
@@ -864,8 +1005,9 @@ func TestShrinkMongosShrinkEntryPath(t *testing.T) {
 		},
 	}
 
-	err = r.resizeVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongosLogVolClaimName, pvcSpec)
+	templates, err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongosLogVolClaimName, pvcSpec)
 	require.NoError(t, err, "blocked mongos shrink should return nil")
+	assert.Equal(t, sts.Spec.VolumeClaimTemplates, templates, "returned templates must preserve the shrink correction")
 
 	vctSize := sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
 	assert.Equal(t, actual.String(), vctSize.String(),
@@ -1000,7 +1142,7 @@ func TestResizeVolumesIfNeeded_VolumeResizeFailedEvent(t *testing.T) {
 				scheme: testScheme(),
 			}
 
-			err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim)
+			_, err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, cr.Spec.Replsets[0].VolumeSpec.PersistentVolumeClaim)
 			if tt.wantErr {
 				assert.ErrorContains(t, err, "volume resize failed")
 			} else {
@@ -1129,4 +1271,742 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "primary", got.Phase, "non-stepdown component should skip to primary phase")
 	})
+}
+
+// TestResizeVolumesIfNeeded_IgnoresPVCsWithoutPods covers a replset that was
+// scaled down with autoscaling on. The PVC of the member that went away is kept
+// unless the delete-psmdb-pvc finalizer is set, and nothing ever resizes it
+// because it has no pod. Counting it when working out the size the volumes
+// actually have would leave the operator believing a resize is still owed: it
+// re-annotates the statefulset, finds every PVC it can resize already at the
+// requested size, deletes the statefulset to pick up the template, and starts
+// over, which shows up as the cluster flapping between ready and error.
+func TestResizeVolumesIfNeeded_IgnoresPVCsWithoutPods(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns      = "test-ns"
+		stsName = "my-cluster-rs0"
+	)
+
+	// rs0 went from 3 members to 2 and the surviving volumes have grown to 3Gi
+	requested := resource.MustParse("3Gi")
+	grown := resource.MustParse("3Gi")
+	leftBehind := resource.MustParse("1Gi")
+
+	ls := map[string]string{"app": "test"}
+
+	sts := &appsv1.StatefulSet{
+		Name:      stsName,
+		Namespace: ns,
+		Spec: appsv1.StatefulSetSpec{
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+				{
+					Name: config.MongodDataVolClaimName,
+					Spec: corev1.PersistentVolumeClaimSpec{
+						Resources: corev1.VolumeResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	newPVC := func(index int, capacity resource.Quantity) *corev1.PersistentVolumeClaim {
+		return &corev1.PersistentVolumeClaim{
+			Name:      fmt.Sprintf("%s-%s-%d", config.MongodDataVolClaimName, stsName, index),
+			Namespace: ns,
+			Labels:    ls,
+			Spec: corev1.PersistentVolumeClaimSpec{
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: capacity.DeepCopy()},
+				},
+			},
+			Status: corev1.PersistentVolumeClaimStatus{
+				Capacity: corev1.ResourceList{corev1.ResourceStorage: capacity.DeepCopy()},
+			},
+		}
+	}
+
+	newPod := func(index int) *corev1.Pod {
+		return &corev1.Pod{
+			Name:      fmt.Sprintf("%s-%d", stsName, index),
+			Namespace: ns,
+			Labels:    ls,
+		}
+	}
+
+	pvcs := []*corev1.PersistentVolumeClaim{
+		newPVC(0, grown),
+		newPVC(1, grown),
+		newPVC(2, leftBehind), // the member that was scaled away
+	}
+
+	cr := &api.PerconaServerMongoDB{
+		Name:      "my-cluster",
+		Namespace: ns,
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			StorageScaling: &api.StorageScalingSpec{
+				EnableVolumeScaling: true,
+			},
+		},
+	}
+
+	objs := []client.Object{cr, sts, newPod(0), newPod(1)}
+	for _, pvc := range pvcs {
+		objs = append(objs, pvc)
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(testScheme()).
+		WithObjects(objs...).
+		WithStatusSubresource(pvcs[0], pvcs[1], pvcs[2]).
+		Build()
+
+	for _, pvc := range pvcs {
+		require.NoError(t, fakeClient.Status().Update(t.Context(), pvc))
+	}
+
+	r := &ReconcilePerconaServerMongoDB{client: fakeClient, scheme: testScheme()}
+
+	pvcSpec := api.PVCSpec{
+		PersistentVolumeClaimSpec: &corev1.PersistentVolumeClaimSpec{
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{corev1.ResourceStorage: requested.DeepCopy()},
+			},
+		},
+	}
+
+	_, err := r.resizeVolumesIfNeeded(t.Context(), cr, sts, ls, config.MongodDataVolClaimName, pvcSpec)
+	require.NoError(t, err)
+
+	updatedSTS := &appsv1.StatefulSet{}
+	require.NoError(t, fakeClient.Get(t.Context(), types.NamespacedName{Name: stsName, Namespace: ns}, updatedSTS))
+	assert.Empty(t, updatedSTS.Annotations[api.AnnotationPVCResizeInProgress],
+		"the volumes in use are already at the requested size, so no resize should start")
+
+	kept := &corev1.PersistentVolumeClaim{}
+	require.NoError(t, fakeClient.Get(t.Context(),
+		types.NamespacedName{Name: pvcs[2].Name, Namespace: ns}, kept))
+	size := kept.Spec.Resources.Requests[corev1.ResourceStorage]
+	assert.Equal(t, "1Gi", size.String(), "a PVC with no pod must be left alone")
+}
+
+func TestUnhealthyRSMember(t *testing.T) {
+	member := func(name string, state mongo.MemberState) *mongo.Member {
+		return &mongo.Member{Name: name, State: state}
+	}
+
+	tests := []struct {
+		name      string
+		members   []*mongo.Member
+		replacing string
+		want      string
+	}{
+		{
+			name: "all healthy",
+			members: []*mongo.Member{
+				member("rs0-0", mongo.MemberStatePrimary),
+				member("rs0-1", mongo.MemberStateSecondary),
+				member("rs0-arbiter-0", mongo.MemberStateArbiter),
+			},
+		},
+		{
+			name: "hidden member recovering",
+			members: []*mongo.Member{
+				member("rs0-0", mongo.MemberStatePrimary),
+				member("rs0-1", mongo.MemberStateSecondary),
+				member("rs0-hidden-0", mongo.MemberStateRecovering),
+			},
+			want: "rs0-hidden-0",
+		},
+		{
+			name: "member in initial sync",
+			members: []*mongo.Member{
+				member("rs0-0", mongo.MemberStatePrimary),
+				member("rs0-2", mongo.MemberStateStartup2),
+			},
+			want: "rs0-2",
+		},
+		{
+			name: "member down",
+			members: []*mongo.Member{
+				member("rs0-0", mongo.MemberStatePrimary),
+				member("rs0-1", mongo.MemberStateDown),
+			},
+			want: "rs0-1",
+		},
+		{
+			name: "other unhealthy member is reported before the replacing one",
+			members: []*mongo.Member{
+				member("rs0-0", mongo.MemberStatePrimary),
+				member("rs0-1", mongo.MemberStateStartup2),
+				member("rs0-hidden-0", mongo.MemberStateRecovering),
+			},
+			replacing: "rs0-1",
+			want:      "rs0-hidden-0",
+		},
+		{
+			name: "replacing member is reported when it's the only unhealthy one",
+			members: []*mongo.Member{
+				member("rs0-0", mongo.MemberStatePrimary),
+				member("rs0-1", mongo.MemberStateStartup2),
+				member("rs0-hidden-0", mongo.MemberStateSecondary),
+			},
+			replacing: "rs0-1",
+			want:      "rs0-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := unhealthyRSMember(mongo.Status{Members: tt.members}, tt.replacing)
+			if tt.want == "" {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want, got.Name)
+		})
+	}
+}
+
+type shrinkMongoProvider struct {
+	status       mongo.Status
+	isPrimary    bool
+	stepDowns    int
+	rsDials      int
+	rsRetryDials int
+	dialErr      error
+	statusErr    error
+}
+
+func (p *shrinkMongoProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
+	p.rsDials++
+	conf := mongo.DialConfig{Backoff: mongo.DefaultBackoff()}
+	for _, opt := range opts {
+		opt(&conf)
+	}
+	if conf.Backoff != nil {
+		p.rsRetryDials++
+	}
+	if p.dialErr != nil {
+		return nil, p.dialErr
+	}
+	return &shrinkMongoClient{Client: mongoFake.NewClient(), p: p}, nil
+}
+
+func (p *shrinkMongoProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
+	return &shrinkMongoClient{Client: mongoFake.NewClient(), p: p}, nil
+}
+
+func (p *shrinkMongoProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
+	return &shrinkMongoClient{Client: mongoFake.NewClient(), p: p}, nil
+}
+
+type shrinkMongoClient struct {
+	mongo.Client
+	p *shrinkMongoProvider
+}
+
+func (c *shrinkMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
+	if c.p.statusErr != nil {
+		return mongo.Status{}, c.p.statusErr
+	}
+	return c.p.status, nil
+}
+
+func (c *shrinkMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, error) {
+	return &mongo.IsMasterResp{IsMaster: c.p.isPrimary}, nil
+}
+
+func (c *shrinkMongoClient) StepDown(ctx context.Context, seconds int, force bool) error {
+	c.p.stepDowns++
+	return nil
+}
+
+func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	require.NotEmpty(t, cr.Spec.Replsets)
+
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+
+	labels := naming.MongodLabels(cr, rs)
+	labels[naming.LabelKubernetesReplset] = rs.Name
+	stsName := naming.MongodStatefulSetName(cr, rs)
+	sts := newStatefulSet(cr.Namespace, stsName, labels, resource.MustParse("3Gi"))
+
+	s := runtime.NewScheme()
+	require.NoError(t, clientgoscheme.AddToScheme(s))
+	require.NoError(t, apis.AddToScheme(s))
+
+	sc := shrinkContext{
+		cr:            cr,
+		sts:           sts,
+		ls:            labels,
+		claimName:     config.MongodDataVolClaimName,
+		component:     naming.ComponentMongod,
+		replset:       rs,
+		isRSComponent: true,
+		needsStepdown: true,
+	}
+
+	healthy := mongo.Status{Members: []*mongo.Member{
+		{Name: "rs0-0", State: mongo.MemberStatePrimary},
+		{Name: "rs0-1", State: mongo.MemberStateSecondary},
+		{Name: "rs0-2", State: mongo.MemberStateSecondary},
+		{Name: "rs0-hidden-0", State: mongo.MemberStateSecondary},
+	}}
+	hiddenRecovering := mongo.Status{Members: []*mongo.Member{
+		{Name: "rs0-0", State: mongo.MemberStatePrimary},
+		{Name: "rs0-1", State: mongo.MemberStateSecondary},
+		{Name: "rs0-2", State: mongo.MemberStateSecondary},
+		{Name: "rs0-hidden-0", State: mongo.MemberStateRecovering},
+	}}
+
+	stsPod := func(i int) *corev1.Pod {
+		podLabels := maps.Clone(labels)
+		podLabels[appsv1.PodIndexLabel] = strconv.Itoa(i)
+		return newPod(cr.Namespace, fmt.Sprintf("%s-%d", stsName, i), podLabels)
+	}
+
+	objects := func() []runtime.Object {
+		objs := []runtime.Object{cr, sts}
+		for i := range 3 {
+			podName := fmt.Sprintf("%s-%d", stsName, i)
+			objs = append(objs,
+				stsPod(i),
+				newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+podName, labels, resource.MustParse("5Gi"), resource.MustParse("5Gi")),
+			)
+		}
+		return objs
+	}
+
+	pvcCount := func(t *testing.T, r *ReconcilePerconaServerMongoDB) int {
+		pvcs := corev1.PersistentVolumeClaimList{}
+		require.NoError(t, r.client.List(t.Context(), &pvcs, client.InNamespace(cr.Namespace)))
+		return len(pvcs.Items)
+	}
+
+	secondariesState := api.PVCShrinkState{
+		Phase:         "secondaries",
+		TargetSize:    "3Gi",
+		PrimaryPod:    stsName + "-0",
+		ProcessedPods: []string{},
+	}
+
+	newReconciler := func(p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *events.FakeRecorder) {
+		rec := events.NewFakeRecorder(10)
+		return &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objects()...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            rec,
+		}, rec
+	}
+
+	t.Run("secondaries phase keeps PVC while a member is unhealthy", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: hiddenRecovering})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 3, pvcCount(t, r))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, "rs0-hidden-0")
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, got, false))
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
+	})
+
+	t.Run("secondaries phase deletes PVC when all members are healthy", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy}
+		r, rec := newReconciler(p)
+		state := secondariesState
+		state.WaitingFor = "member rs0-hidden-0 is RECOVERING"
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
+		assert.Equal(t, 2, pvcCount(t, r))
+		assert.Equal(t, []string{"Normal PVCShrinkReplacingMember"}, eventReasons(rec))
+		assert.Positive(t, p.rsDials)
+		assert.Zero(t, p.rsRetryDials, "health check must not block the reconcile on retries")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.WaitingFor)
+	})
+
+	stepdownState := api.PVCShrinkState{
+		Phase:      "stepdown",
+		TargetSize: "3Gi",
+		PrimaryPod: stsName + "-0",
+	}
+
+	t.Run("stepdown waits while a member is unhealthy", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: hiddenRecovering, isPrimary: true}
+		r, rec := newReconciler(p)
+		cr.SetPVCShrinkState(stsName, stepdownState)
+
+		require.NoError(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
+		assert.Zero(t, p.stepDowns)
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
+	})
+
+	t.Run("stepdown proceeds when all members are healthy", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, isPrimary: true}
+		r, rec := newReconciler(p)
+		cr.SetPVCShrinkState(stsName, stepdownState)
+
+		require.NoError(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
+		assert.Equal(t, 1, p.stepDowns)
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "primary", got.Phase)
+		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
+	})
+
+	t.Run("primary phase completes shrink", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: healthy})
+		state := api.PVCShrinkState{
+			Phase:         "primary",
+			TargetSize:    "3Gi",
+			PrimaryPod:    stsName + "-0",
+			ProcessedPods: []string{stsName + "-0", stsName + "-1", stsName + "-2"},
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, true))
+		_, ok := cr.GetPVCShrinkState(stsName)
+		assert.False(t, ok)
+		assert.Equal(t, []string{"Normal PVCShrinkCompleted"}, eventReasons(rec))
+	})
+
+	// Pods already recreated with the new size and Ready: the readiness probe reports a freshly
+	// wiped member Ready until it receives the replset config, so shrink must check the member state.
+	host := func(podName string) string {
+		h, err := psmdb.MongoHost(t.Context(), nil, cr, cr.Spec.ClusterServiceDNSMode, rs, rs.Expose.Enabled, *newPod(cr.Namespace, podName, labels))
+		require.NoError(t, err)
+		return h
+	}
+	replaced := func(t *testing.T, p *shrinkMongoProvider) (*ReconcilePerconaServerMongoDB, *events.FakeRecorder) {
+		objs := []runtime.Object{cr, sts}
+		for i := range 3 {
+			pod := stsPod(i)
+			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
+			objs = append(objs, pod, newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, resource.MustParse("3Gi"), resource.MustParse("3Gi")))
+		}
+		rec := events.NewFakeRecorder(10)
+		return &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            rec,
+		}, rec
+	}
+	statusWith := func(syncing string, state mongo.MemberState) mongo.Status {
+		status := mongo.Status{}
+		for i := range 3 {
+			name := host(fmt.Sprintf("%s-%d", stsName, i))
+			st := mongo.MemberStateSecondary
+			if i == 0 {
+				st = mongo.MemberStatePrimary
+			}
+			if name == syncing {
+				st = state
+			}
+			status.Members = append(status.Members, &mongo.Member{Name: name, State: st})
+		}
+		return status
+	}
+
+	t.Run("replaced member is not done while in initial sync", func(t *testing.T) {
+		syncing := host(stsName + "-2")
+		r, rec := replaced(t, &shrinkMongoProvider{status: statusWith(syncing, mongo.MemberStateStartup2)})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.ProcessedPods)
+		assert.Contains(t, got.WaitingFor, "STARTUP2")
+		assert.Empty(t, eventReasons(rec), "syncing member being replaced is expected, no warning")
+	})
+
+	t.Run("replaced member is done once it is secondary", func(t *testing.T) {
+		r, _ := replaced(t, &shrinkMongoProvider{status: statusWith("", 0)})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase)
+		assert.ElementsMatch(t, []string{stsName + "-1", stsName + "-2"}, got.ProcessedPods)
+	})
+
+	t.Run("primary phase does not complete while last member is in initial sync", func(t *testing.T) {
+		syncing := host(stsName + "-0")
+		status := statusWith(syncing, mongo.MemberStateStartup2)
+		status.Members[1].State = mongo.MemberStatePrimary
+		r, rec := replaced(t, &shrinkMongoProvider{status: status})
+		state := api.PVCShrinkState{
+			Phase:         "primary",
+			TargetSize:    "3Gi",
+			PrimaryPod:    stsName + "-0",
+			ProcessedPods: []string{stsName + "-1", stsName + "-2"},
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, true))
+		_, ok := cr.GetPVCShrinkState(stsName)
+		assert.True(t, ok, "shrink must not complete")
+		assert.Empty(t, eventReasons(rec))
+	})
+
+	t.Run("other unhealthy member while waiting for replaced member emits warning", func(t *testing.T) {
+		r, rec := replaced(t, &shrinkMongoProvider{status: hiddenRecovering})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.ProcessedPods)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
+	})
+
+	t.Run("other unhealthy member is reported while replaced member syncs", func(t *testing.T) {
+		status := statusWith(host(stsName+"-2"), mongo.MemberStateStartup2)
+		status.Members = append(status.Members, &mongo.Member{Name: "rs0-hidden-0", State: mongo.MemberStateRecovering})
+		r, rec := replaced(t, &shrinkMongoProvider{status: status})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, "rs0-hidden-0")
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
+	})
+
+	t.Run("member health is checked while replaced pod is not ready", func(t *testing.T) {
+		objs := []runtime.Object{cr, sts}
+		for i := range 3 {
+			pod := stsPod(i)
+			if i != 2 {
+				pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
+			}
+			objs = append(objs, pod, newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, resource.MustParse("3Gi"), resource.MustParse("3Gi")))
+		}
+		status := statusWith(host(stsName+"-2"), mongo.MemberStateStartup2)
+		status.Members = append(status.Members, &mongo.Member{Name: "rs0-hidden-0", State: mongo.MemberStateRecovering})
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: status},
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.ProcessedPods)
+		assert.Contains(t, got.WaitingFor, "rs0-hidden-0")
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
+	})
+
+	t.Run("replaced member stays processed when next member is replaced in the same reconcile", func(t *testing.T) {
+		objs := []runtime.Object{cr, sts}
+		for i := range 3 {
+			pod := stsPod(i)
+			pod.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
+			size := resource.MustParse("5Gi")
+			if i == 2 {
+				size = resource.MustParse("3Gi")
+			}
+			objs = append(objs, pod, newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+pod.Name, labels, size, size))
+		}
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: statusWith("", 0)},
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 2, pvcCount(t, r), "rs0-1 PVC should be deleted")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, []string{stsName + "-2"}, got.ProcessedPods)
+	})
+
+	t.Run("waits without connecting while statefulset is being recreated", func(t *testing.T) {
+		var objs []runtime.Object
+		for _, o := range objects() {
+			if _, ok := o.(*appsv1.StatefulSet); !ok {
+				objs = append(objs, o)
+			}
+		}
+		p := &shrinkMongoProvider{status: healthy}
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            rec,
+		}
+		state := secondariesState
+		state.WaitingFor = "member rs0-hidden-0 is RECOVERING"
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
+		assert.Equal(t, 3, pvcCount(t, r))
+		assert.Zero(t, p.rsDials, "replset client has no hosts without the statefulset")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "statefulset is being recreated", got.WaitingFor)
+		assert.Empty(t, eventReasons(rec), "every shrink waits for the statefulset, no warning")
+	})
+
+	for name, p := range map[string]*shrinkMongoProvider{
+		"connection failure": {status: healthy, dialErr: errors.New("auth failed")},
+		"RS status failure":  {status: healthy, statusErr: errors.New("no primary")},
+	} {
+		t.Run(name+" is recorded as waiting reason", func(t *testing.T) {
+			r, rec := newReconciler(p)
+			state := secondariesState
+			state.WaitingFor = "member rs0-hidden-0 is RECOVERING"
+			cr.SetPVCShrinkState(stsName, state)
+
+			require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
+			assert.Equal(t, 3, pvcCount(t, r))
+
+			got, ok := cr.GetPVCShrinkState(stsName)
+			require.True(t, ok)
+			assert.NotEqual(t, state.WaitingFor, got.WaitingFor, "stale member reason must be replaced")
+			assert.NotEmpty(t, got.WaitingFor)
+			assert.NotContains(t, got.WaitingFor, "auth failed", "raw errors would change the reason on every reconcile")
+			assert.NotContains(t, got.WaitingFor, "no primary", "raw errors would change the reason on every reconcile")
+
+			require.NoError(t, r.shrinkProcessPods(t.Context(), sc, got, false))
+			assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
+		})
+	}
+
+	t.Run("PVC already being deleted is not deleted again", func(t *testing.T) {
+		objs := objects()
+		for _, o := range objs {
+			if pvc, ok := o.(*corev1.PersistentVolumeClaim); ok && pvc.Name == config.MongodDataVolClaimName+"-"+stsName+"-2" {
+				now := metav1.Now()
+				pvc.DeletionTimestamp = &now
+				pvc.Finalizers = []string{"kubernetes.io/pvc-protection"}
+			}
+		}
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: healthy},
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 3, pvcCount(t, r))
+		assert.Empty(t, eventReasons(rec))
+	})
+
+	terminatingPVC := func(podReady bool) []runtime.Object {
+		objs := objects()
+		for _, o := range objs {
+			switch obj := o.(type) {
+			case *corev1.PersistentVolumeClaim:
+				if obj.Name == config.MongodDataVolClaimName+"-"+stsName+"-2" {
+					now := metav1.Now()
+					obj.DeletionTimestamp = &now
+					obj.Finalizers = []string{"kubernetes.io/pvc-protection"}
+				}
+			case *corev1.Pod:
+				if podReady && obj.Name == stsName+"-2" {
+					obj.Status.Conditions = []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}}
+				}
+			}
+		}
+		return objs
+	}
+	podExists := func(t *testing.T, r *ReconcilePerconaServerMongoDB, name string) bool {
+		err := r.client.Get(t.Context(), types.NamespacedName{Namespace: cr.Namespace, Name: name}, &corev1.Pod{})
+		if k8serrors.IsNotFound(err) {
+			return false
+		}
+		require.NoError(t, err)
+		return true
+	}
+
+	t.Run("running pod of a terminating PVC is kept while a member is unhealthy", func(t *testing.T) {
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(true)...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: hiddenRecovering},
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.True(t, podExists(t, r, stsName+"-2"))
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
+	})
+
+	t.Run("running pod of a terminating PVC is deleted when all members are healthy", func(t *testing.T) {
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(true)...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: healthy},
+			recorder:            &events.FakeRecorder{},
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.False(t, podExists(t, r, stsName+"-2"))
+	})
+
+	t.Run("not ready pod of a terminating PVC is deleted while a member is unhealthy", func(t *testing.T) {
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(false)...).Build(),
+			scheme:              s,
+			mongoClientProvider: &shrinkMongoProvider{status: hiddenRecovering},
+			recorder:            &events.FakeRecorder{},
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.False(t, podExists(t, r, stsName+"-2"))
+	})
+}
+
+// eventReasons returns "<type> <reason>" of every event recorded so far.
+func eventReasons(rec *events.FakeRecorder) []string {
+	var reasons []string
+	for {
+		select {
+		case e := <-rec.Events:
+			fields := strings.Fields(e)
+			reasons = append(reasons, strings.Join(fields[:2], " "))
+		default:
+			return reasons
+		}
+	}
 }

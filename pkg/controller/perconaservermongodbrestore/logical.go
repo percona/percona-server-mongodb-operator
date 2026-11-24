@@ -34,6 +34,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 	if err != nil {
 		log.Info("Waiting for pbm-agent.")
 		status.State = psmdbv1.RestoreStateWaiting
+		status.WaitingReason = psmdbv1.RestoreWaitingReasonPBMAgent
 		return status, nil
 	}
 	defer func() {
@@ -56,6 +57,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 		if isBlockedByPITR {
 			log.Info("Waiting for PITR to be disabled.")
 			status.State = psmdbv1.RestoreStateWaiting
+			status.WaitingReason = psmdbv1.RestoreWaitingReasonPITR
 			return status, nil
 		}
 
@@ -79,7 +81,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 	case defs.StatusError:
 		status.State = psmdbv1.RestoreStateError
 		status.Error = meta.Error
-		if err = reEnablePITR(ctx, pbmc, cluster.Spec.Backup); err != nil {
+		if err = r.restorePBMConfig(ctx, pbmc, cluster); err != nil {
 			return status, err
 		}
 	case defs.StatusDone:
@@ -87,7 +89,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 		status.CompletedAt = &metav1.Time{
 			Time: time.Unix(meta.LastTransitionTS, 0),
 		}
-		if err = reEnablePITR(ctx, pbmc, cluster.Spec.Backup); err != nil {
+		if err = r.restorePBMConfig(ctx, pbmc, cluster); err != nil {
 			return status, err
 		}
 	case defs.StatusStarting, defs.StatusRunning:
@@ -95,6 +97,41 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 	}
 
 	return status, nil
+}
+
+// restorePBMConfig re-enables PITR after a restore. A restore from backupSource with PITR sets the
+// backup source as the PBM main storage. The cluster's own config must be back before PITR starts,
+// otherwise the oplog slicer uploads chunks to the backup source.
+func (r *ReconcilePerconaServerMongoDBRestore) restorePBMConfig(ctx context.Context, pbmc backup.PBM, cluster *psmdbv1.PerconaServerMongoDB) error {
+	if cluster.CompareVersion("1.24.0") < 0 {
+		return reEnablePITR(ctx, pbmc, cluster.Spec.Backup)
+	}
+
+	_, mainStg, err := cluster.Spec.Backup.MainStorage()
+	if errors.Is(err, psmdbv1.ErrNoMainStorage) {
+		return reEnablePITR(ctx, pbmc, cluster.Spec.Backup)
+	}
+	if err != nil {
+		return errors.Wrap(err, "get main storage")
+	}
+
+	want, err := backup.GetPBMConfig(ctx, r.client, cluster, mainStg)
+	if err != nil {
+		return errors.Wrap(err, "get PBM config")
+	}
+	curr, err := pbmc.GetConfig(ctx)
+	if err != nil && !backup.IsErrNoDocuments(err) {
+		return errors.Wrap(err, "get current PBM config")
+	}
+	if curr != nil && curr.Storage.IsSameStorage(&want.Storage) {
+		return reEnablePITR(ctx, pbmc, cluster.Spec.Backup)
+	}
+
+	logf.FromContext(ctx).Info("Setting back the cluster's PBM main storage changed by the restore")
+	if err := pbmc.GetNSetConfig(ctx, r.client, cluster); err != nil {
+		return errors.Wrap(err, "set PBM config")
+	}
+	return errors.Wrap(pbmc.ResyncMainStorageAndWait(ctx), "resync main storage")
 }
 
 func reEnablePITR(ctx context.Context, pbm backup.PBM, backup psmdbv1.BackupSpec) (err error) {
