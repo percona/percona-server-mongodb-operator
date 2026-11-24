@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sversion "k8s.io/apimachinery/pkg/version"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -221,6 +222,13 @@ type TLSSpec struct {
 	// +kubebuilder:default=auto
 	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
 	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
+}
+
+func (cr *PerconaServerMongoDB) InvalidCertificatesAllowed() bool {
+	if cr.CompareVersion("1.24.0") < 0 {
+		return true
+	}
+	return ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, DefaultAllowInvalidCertificates)
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {

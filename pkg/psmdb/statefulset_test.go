@@ -876,7 +876,7 @@ func TestBuildMongoDBURI(t *testing.T) {
 		"crVersion before dedicated pbm certificate": {
 			crVersion:   "1.23.0",
 			tlsEnabled:  true,
-			expectedURI: baseURI + "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt",
+			expectedURI: baseURI + "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true",
 		},
 	}
 
