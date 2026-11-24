@@ -940,6 +940,7 @@ func TestResizeMongosPVCsWithoutLogPVC(t *testing.T) {
 		return &api.PerconaServerMongoDB{
 			Name: crName, Namespace: namespace,
 			Spec: api.PerconaServerMongoDBSpec{
+				CRVersion: version.Version(),
 				// the log collector gives mongos an emptyDir log volume, never a PVC
 				LogCollector: &api.LogCollectorSpec{Enabled: true},
 				StorageScaling: &api.StorageScalingSpec{
