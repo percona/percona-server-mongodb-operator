@@ -19,6 +19,11 @@ Read the root [`AGENTS.md`](../AGENTS.md) first. These rules cover
   `uv run e2e-tests/select_tests.py list --suite pr`. A test directory that is
   not in `tests.yaml` never runs in CI. Leaving it out is right only for a test
   that needs special infrastructure; say so in the PR.
+- CI can run several tests on one cluster. A test that changes anything outside
+  its own namespaces (CRDs, cert-manager, Vault, ClusterRoles, nodes,
+  StorageClasses) needs `ownCluster: true` or `locks: [...]` in `tests.yaml`;
+  the notes above `tests:` explain both. `uv run e2e-tests/select_tests.py
+  check-placement` prints the tag a test needs, and a PR check runs it.
 
 ## Running locally
 
