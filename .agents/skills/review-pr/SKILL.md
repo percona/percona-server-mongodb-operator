@@ -20,16 +20,18 @@ gh pr diff <pr>
 gh pr view <pr> --json files,commits
 ```
 
-Identify which disciplines apply:
-- Go code (`pkg/`, `cmd/`, `*.go`): apply `docs/guidelines/architecture.md`
-  and `docs/guidelines/go-style.md`. Also apply `docs/guidelines/qa.md` ("What a
-  test must prove", "Go tests") to check that new branches, fields, and error
-  paths have unit or envtest coverage.
-- Test code (`e2e-tests/`, `*_test.go`, golden files, `tests.yaml`, test
-  runners): apply `docs/guidelines/qa.md` and the nearest `AGENTS.md`.
-- Manifests and OLM (`deploy/`, `installers/olm/`): apply
-  `docs/guidelines/architecture.md` (compatibility, generated files) and
-  `installers/olm/AGENTS.md`.
+Sort each changed file into one group, checking the groups in this order,
+and run only the reviews of the groups that have files:
+
+| Group | Files | Reviews |
+| ----- | ----- | ------- |
+| Test code | any path with an `e2e-tests/` segment, `*_test.go`, `testdata/`, golden files, `tests.yaml`, the scripts and `make` targets that run tests | `review-qa` |
+| Go code | other `*.go` files | `review-architecture`, `review-go-style`, `review-qa` |
+| Manifests and OLM | `deploy/`, `config/`, `installers/olm/` | `review-architecture` |
+
+A diff with test code only gets `review-qa` alone; it applies the "Tests"
+section of `go-style.md` to Go tests itself. Files in no group (docs, agent
+files) get no review; say so in the report.
 
 ## 2. Review execution
 
