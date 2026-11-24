@@ -88,8 +88,9 @@ PLACEMENT_RULES = [
     _rule(
         "cert-manager",
         r"deploy_cert_manager|cert_manager|^kind: ClusterIssuer",
-        "cert-manager",
-        "deploy_cert_manager deletes every ClusterIssuer and Certificate in cert-manager",
+        OWN_CLUSTER,
+        "with cert-manager installed the operator issues every test's certificates through it; "
+        "other tests run without it, as in serial runs",
     ),
     _rule(
         "vault",
