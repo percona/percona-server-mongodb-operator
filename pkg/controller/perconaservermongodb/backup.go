@@ -325,7 +325,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteBackupTask(cr *api.PerconaServerMo
 	r.crons.crons.Remove(job.(BackupScheduleJob).JobID)
 }
 
-// oldScheduledBackups returns list of the most old psmdb-backups that execeed `keep` limit
+// oldScheduledBackups returns backups that exceed the retention count, pruning canceled backups first.
 func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context, cr *api.PerconaServerMongoDB,
 	ancestor string, keep int,
 ) ([]api.PerconaServerMongoDBBackup, error) {
@@ -351,7 +351,7 @@ func (r *ReconcilePerconaServerMongoDB) oldScheduledBackups(ctx context.Context,
 	h := &minHeap{}
 	heap.Init(h)
 	for _, bcp := range bcpList.Items {
-		if bcp.Status.State == api.BackupStateReady {
+		if bcp.Status.State == api.BackupStateReady || bcp.Status.State == api.BackupStateCanceled {
 			heap.Push(h, bcp)
 		}
 	}
@@ -374,6 +374,9 @@ type minHeap []api.PerconaServerMongoDBBackup
 func (h minHeap) Len() int { return len(h) }
 
 func (h minHeap) Less(i, j int) bool {
+	if h[i].Status.State != h[j].Status.State {
+		return h[i].Status.State == api.BackupStateCanceled
+	}
 	return h[i].CreationTimestamp.Before(&h[j].CreationTimestamp)
 }
 
@@ -407,6 +410,10 @@ func (r *ReconcilePerconaServerMongoDB) isRestoreRunning(ctx context.Context, cr
 		}
 
 		if rst.Status.State == api.RestoreStateReady || rst.Status.State == api.RestoreStateError {
+			continue
+		}
+
+		if rst.Status.State == api.RestoreStateWaiting && rst.Status.WaitingReason == api.RestoreWaitingReasonBackupLease {
 			continue
 		}
 

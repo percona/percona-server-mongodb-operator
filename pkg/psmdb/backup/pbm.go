@@ -612,7 +612,7 @@ func GetPBMStorageAzureConfig(
 	key := string(azureSecret.Data[AzureStorageAccountKeySecretKey])
 
 	if connStr := string(azureSecret.Data[AzureStorageConnectionStringSecretKey]); connStr != "" {
-		account, key, err = parseAzureConnectionString(connStr)
+		account, key, err = ParseAzureConnectionString(connStr)
 		if err != nil {
 			return config.StorageConf{}, errors.Wrap(err, "parse azure connection string")
 		}
@@ -634,11 +634,11 @@ func GetPBMStorageAzureConfig(
 	return storageConf, nil
 }
 
-// parseAzureConnectionString extracts AccountName and AccountKey from an Azure
+// ParseAzureConnectionString extracts AccountName and AccountKey from an Azure
 // storage connection string of the form:
 //
 //	DefaultEndpointsProtocol=https;AccountName=<name>;AccountKey=<key>;EndpointSuffix=core.windows.net
-func parseAzureConnectionString(connStr string) (account, key string, err error) {
+func ParseAzureConnectionString(connStr string) (account, key string, err error) {
 	for part := range strings.SplitSeq(strings.TrimRight(connStr, ";"), ";") {
 		// Use approach (strings.SplitN per segment with limit 2) so that
 		// base64-padded AccountKey values containing '=' are handled correctly.

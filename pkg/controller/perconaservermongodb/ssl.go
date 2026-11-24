@@ -138,7 +138,27 @@ func (r *ReconcilePerconaServerMongoDB) reconcileSSL(ctx context.Context, cr *ap
 				return errors.Wrap(err, "create ssl manually")
 			}
 		}
+		if cr.CompareVersion("1.24.0") >= 0 {
+			caAdded, err := r.addManualCAToSecrets(ctx, cr)
+			if err != nil {
+				return errors.Wrap(err, "add CA to TLS secrets")
+			}
+			if caAdded {
+				// Pods must trust the CA before any certificate signed by it is rolled out.
+				return nil
+			}
+		}
 		if r.needsManualSSLUpdate(ctx, cr, secretObj) || r.needsManualSSLUpdate(ctx, cr, secretInternalObj) {
+			if cr.CompareVersion("1.24.0") >= 0 {
+				trusted, err := r.isManualCATrusted(ctx, cr)
+				if err != nil {
+					return errors.Wrap(err, "check if CA is trusted")
+				}
+				if !trusted {
+					logf.FromContext(ctx).Info("waiting for pods to trust the CA before re-signing TLS certificates")
+					return nil
+				}
+			}
 			if err := r.updateSSLManually(ctx, cr); err != nil {
 				return errors.Wrap(err, "update ssl manually")
 			}
@@ -707,6 +727,82 @@ func (r *ReconcilePerconaServerMongoDB) needsManualSSLUpdate(ctx context.Context
 	_, reissue := tls.SansToIssue(currentSANs, expectedSANs)
 
 	return reissue
+}
+
+// addManualCAToSecrets appends the CA to the ca.crt of TLS secrets that don't have it yet.
+// Secrets created before 1.23 have their own CA each, and the CA secret can be created later
+// (e.g. to issue the PBM certificate), so certificates re-signed by it wouldn't be trusted.
+func (r *ReconcilePerconaServerMongoDB) addManualCAToSecrets(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	caSecret, err := r.getSecret(ctx, cr, tls.ManualCASecretName(cr))
+	if err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+
+	added := false
+	for _, name := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+		secret, err := r.getSecret(ctx, cr, name)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return false, errors.Wrapf(err, "get secret %s", name)
+		}
+		if len(secret.Data["ca.crt"]) == 0 {
+			continue
+		}
+
+		merged, err := tls.MergePEM(secret.Data["ca.crt"], caSecret.Data["ca.crt"])
+		if err != nil {
+			return false, errors.Wrap(err, "merge CA")
+		}
+		if tls.EqualPEM(merged, secret.Data["ca.crt"]) {
+			continue
+		}
+
+		secret.Data["ca.crt"] = merged
+		if err := r.client.Update(ctx, secret); err != nil {
+			return false, errors.Wrapf(err, "update secret %s", name)
+		}
+		logf.FromContext(ctx).Info("CA added to TLS secret", "secret", name)
+		added = true
+	}
+
+	return added, nil
+}
+
+// isManualCATrusted reports whether all pods trust the CA. Secrets whose ca.crt is
+// a bundle with an older CA got the CA by addManualCAToSecrets, so pods must be restarted first.
+func (r *ReconcilePerconaServerMongoDB) isManualCATrusted(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
+	caSecret, err := r.getSecret(ctx, cr, tls.ManualCASecretName(cr))
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, errors.Wrap(err, "get CA secret")
+	}
+
+	caDiffers := false
+	for _, name := range []string{api.SSLSecretName(cr), api.SSLInternalSecretName(cr)} {
+		secret, err := r.getSecret(ctx, cr, name)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				continue
+			}
+			return false, errors.Wrapf(err, "get secret %s", name)
+		}
+		if !tls.EqualPEM(secret.Data["ca.crt"], caSecret.Data["ca.crt"]) {
+			caDiffers = true
+		}
+	}
+	if !caDiffers {
+		return true, nil
+	}
+
+	upToDate, err := r.isAllSfsUpToDate(ctx, cr)
+	if err != nil || !upToDate {
+		return false, err
+	}
+	return r.doAllStsHasLatestTLS(ctx, cr)
 }
 
 // updateSSLManually re-signs TLS certificates with the existing CA when SANs change.

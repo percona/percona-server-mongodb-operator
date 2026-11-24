@@ -152,6 +152,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	containerEnvFrom := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
+	startupProbe := replset.StartupProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
@@ -177,6 +178,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		configName = naming.NonVotingConfigMapName(cr, replset)
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
+		startupProbe = replset.NonVoting.StartupProbe
 		volumeSpec = replset.NonVoting.VolumeSpec
 	case naming.ComponentHidden:
 		containerName = naming.ContainerHidden
@@ -189,6 +191,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
+		startupProbe = replset.Hidden.StartupProbe
 		volumeSpec = replset.Hidden.VolumeSpec
 	}
 
@@ -307,6 +310,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
 		livenessProbe:            livenessProbe,
 		readinessProbe:           readinessProbe,
+		startupProbe:             startupProbe,
 		containerSecurityContext: containerSecurityContext,
 		containerEnv:             containerEnv,
 		containerEnvFrom:         containerEnvFrom,
@@ -791,8 +795,12 @@ func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabl
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
-			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
-			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt", config.SSLDir)
+			// the PEM file is created on the fly during the execution of build/pbm-entry.sh
+			pemFile := "/tmp/tls.pem"
+			if cr.CompareVersion("1.24.0") >= 0 {
+				pemFile = naming.PBMClientTLSPEMFile
+			}
+			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s/ca.crt", pemFile, config.SSLDir)
 			if cr.InvalidCertificatesAllowed() {
 				uri += "&tlsInsecure=true"
 			}

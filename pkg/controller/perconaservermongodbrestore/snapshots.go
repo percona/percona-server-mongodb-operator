@@ -408,6 +408,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) scaleDownStatefulSetsForSnapshotR
 
 				sfs.Spec.Template.Spec.Containers[0].LivenessProbe = nil
 				sfs.Spec.Template.Spec.Containers[0].ReadinessProbe = nil
+				sfs.Spec.Template.Spec.Containers[0].StartupProbe = nil
 
 				if err := r.client.Patch(ctx, &sfs, client.MergeFrom(orig)); err != nil {
 					return err
@@ -842,11 +843,14 @@ func (r *ReconcilePerconaServerMongoDBRestore) deleteStatefulSetsForSnapshotRest
 		}
 	}
 
+	// Foreground deletion keeps each statefulset, with its restore-in-progress annotation,
+	// until its pods are gone. Otherwise the cluster controller can recreate some statefulsets
+	// while old pods are still terminating and block on connecting to them.
 	for _, nn := range toDelete {
 		if err := r.client.Delete(ctx, &appsv1.StatefulSet{
 			Name:      nn.Name,
 			Namespace: nn.Namespace,
-		}); client.IgnoreNotFound(err) != nil {
+		}, client.PropagationPolicy(metav1.DeletePropagationForeground)); client.IgnoreNotFound(err) != nil {
 			return errors.Wrapf(err, "delete statefulset %s", nn.Name)
 		}
 	}
