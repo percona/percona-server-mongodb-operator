@@ -24,6 +24,10 @@ Read the root [`AGENTS.md`](../AGENTS.md) first. These rules cover
   StorageClasses) needs `ownCluster: true` or `locks: [...]` in `tests.yaml`;
   the notes above `tests:` explain both. `uv run e2e-tests/select_tests.py
   check-placement` prints the tag a test needs, and a PR check runs it.
+- The check finds cluster-wide actions by pattern, including helper names such
+  as `deploy_cert_manager`. A new helper in `functions` or `lib/` that changes
+  anything outside the test namespace needs a matching rule in
+  `PLACEMENT_RULES` (`select_tests.py`) in the same PR.
 
 ## Running locally
 
