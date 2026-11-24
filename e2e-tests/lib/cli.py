@@ -1,6 +1,8 @@
 import logging
 import subprocess
 
+from .allure_support import mask
+
 logger = logging.getLogger(__name__)
 
 
@@ -11,7 +13,7 @@ def _run_bin(
     capture: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     cmd = [executable, *args]
-    logger.debug(" ".join(cmd))
+    logger.debug(mask(" ".join(cmd)))
     return subprocess.run(cmd, check=check, capture_output=capture, text=True)
 
 

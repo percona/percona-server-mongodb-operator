@@ -1,4 +1,5 @@
 import pytest
+from lib.allure_support import name_bash_test
 from lib.bash_wrapper import run_bash_test
 
 
@@ -7,4 +8,5 @@ def test_bash_wrapper(request: pytest.FixtureRequest, bash_test_cleanup: None) -
     test_name = request.config.getoption("--test-name")
     if not test_name:
         pytest.skip("No --test-name provided")
+    name_bash_test(test_name)
     run_bash_test(test_name)
