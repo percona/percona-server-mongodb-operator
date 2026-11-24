@@ -195,6 +195,23 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		volumeSpec = replset.Hidden.VolumeSpec
 	}
 
+	logPVC := replset.LogPVC(cr, ls[naming.LabelKubernetesComponent])
+	logVol := config.MongodLogVolume()
+	var mongodLogVol *config.LogVolume
+	if logPVC != nil {
+		logVol = config.MongodPVCLogVolume()
+		mongodLogVol = &logVol
+	}
+
+	journalPVC := replset.JournalPVC(cr, ls[naming.LabelKubernetesComponent])
+	var journalMount *corev1.VolumeMount
+	if journalPVC != nil {
+		journalMount = &corev1.VolumeMount{
+			Name:      config.MongodJournalVolClaimName,
+			MountPath: config.MongodContainerJournalDir,
+		}
+	}
+
 	// Resources come from what the operator committed for this component when VPA
 	// is managing it, and from the declared spec otherwise. The operator never
 	// writes resources back into spec.
@@ -314,6 +331,8 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		containerSecurityContext: containerSecurityContext,
 		containerEnv:             containerEnv,
 		containerEnvFrom:         containerEnvFrom,
+		logVolume:                mongodLogVol,
+		journalMount:             journalMount,
 	}
 	c, err := container(ctx, cr, params)
 	if err != nil {
@@ -323,6 +342,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	initContainers := psmdbInit.Containers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
+	}
+
+	if journalPVC != nil {
+		migration := psmdbInit.JournalMigrationContainer(cr, containerSecurityContext)
+		migration.Resources = c.Resources
+		initContainers = append(initContainers, migration)
 	}
 
 	containers, ok := multiAZ.WithSidecars(c)
@@ -422,7 +447,11 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			if name, err := replset.CustomReplsetName(); err == nil {
 				rsName = name
 			}
-			containers = append(containers, backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret))
+			backupC := backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret)
+			if journalMount != nil {
+				backupC.VolumeMounts = append(backupC.VolumeMounts, *journalMount)
+			}
+			containers = append(containers, backupC)
 
 			if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript.Specified() {
 				name := cr.Spec.Backup.HookScript.ConfigMapRef.Name
@@ -442,11 +471,28 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			volumes = AddPMMTmpVolume(cr, pmmC, volumes)
+			if mongodLogVol != nil {
+				pmmC.VolumeMounts = append(pmmC.VolumeMounts, corev1.VolumeMount{
+					Name:      mongodLogVol.Name,
+					MountPath: mongodLogVol.MountPath,
+					ReadOnly:  true,
+				})
+			}
 			containers = append(containers, *pmmC)
 		}
 
+		if journalPVC != nil {
+			volumeClaimTemplates = append(volumeClaimTemplates,
+				extraPVC(cr, config.MongodJournalVolClaimName, journalPVC))
+		}
+
+		if logPVC != nil {
+			volumeClaimTemplates = append(volumeClaimTemplates,
+				extraPVC(cr, config.MongodLogVolClaimName, logPVC))
+		}
+
 		if cr.CompareVersion("1.21.0") >= 0 {
-			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), config.MongodLogVolume())
+			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), logVol)
 			if err != nil {
 				log.Error(err, "error preparing logcollector containers")
 			}
@@ -846,6 +892,19 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
+	return pvc
+}
+
+func extraPVC(cr *api.PerconaServerMongoDB, name string, storage *api.PVCSpec) corev1.PersistentVolumeClaim {
+	pvc := corev1.PersistentVolumeClaim{
+		Name:      name,
+		Namespace: cr.Namespace,
+	}
+
+	if storage.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *storage.PersistentVolumeClaimSpec
+	}
+
 	return pvc
 }
 
