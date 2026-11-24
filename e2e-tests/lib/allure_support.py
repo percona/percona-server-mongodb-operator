@@ -7,7 +7,7 @@ import functools
 import inspect
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import allure
@@ -57,6 +57,9 @@ _PRIVATE_KEY = re.compile(
 _FILE_PATH = re.compile(r"/(?:dev|etc|tmp|var|opt|home|data|usr|run|proc|mnt|srv|root|certs?)/")
 _MAX_VALUE_LEN = 80
 
+# Exact values of the test's secrets, masked wherever they appear.
+_known_values: set[str] = set()
+
 # Failure diagnostics from K8sCollector.capture_summary(), in report order.
 _SUMMARY_TITLES = {
     "logs": "Operator pod logs",
@@ -82,8 +85,19 @@ def _mask_secret_field(match: re.Match[str]) -> str:
     return f"{prefix}{quote}***{quote}"
 
 
+def add_known_values(values: Iterable[str]) -> None:
+    """Mask these exact values in everything mask() handles from now on."""
+    _known_values.update(value for value in values if value)
+
+
 def mask(text: str) -> str:
-    """Hide passwords, keys and tokens in text that goes to the report."""
+    """Hide passwords, keys and tokens in text that goes to the report.
+
+    Known secret values (add_known_values) are masked first, longest first, so a
+    value that contains another is masked whole. Then credential shapes are masked.
+    """
+    for value in sorted(_known_values, key=len, reverse=True):
+        text = text.replace(value, "***")
     text = _PRIVATE_KEY.sub("***", text)
     text = _KNOWN_TOKEN.sub("***", text)
     text = _SECRET_ARG.sub(_mask_secret_field, text)
