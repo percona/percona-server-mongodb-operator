@@ -31,7 +31,16 @@ if [[ $originalArgOne == mongo* ]]; then
 	fi
 fi
 
-MONGODB_VERSION=$(mongod --version | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
+# Read the version separately. With set -e and pipefail, a failing
+# `mongod --version` would otherwise end the script here without output,
+# hiding why mongod cannot start.
+mongod_version_output=$(mongod --version) || {
+	rc=$?
+	echo "mongod --version failed with exit code $rc:" >&2
+	echo "$mongod_version_output" >&2
+	exit "$rc"
+}
+MONGODB_VERSION=$(echo "$mongod_version_output" | head -1 | awk '{print $3}' | awk -F'.' '{print $1"."$2}')
 
 mongo_shell="env HOME=${TMPDIR:-/tmp} mongosh"
 if [ "$MONGODB_VERSION" == 'v4.4' ] || [ "$MONGODB_VERSION" == 'v5.0' ]; then
