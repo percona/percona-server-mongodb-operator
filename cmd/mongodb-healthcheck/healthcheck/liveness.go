@@ -120,11 +120,6 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config) (_ *mongo.Me
 		}
 	}()
 
-	isMasterResp, err := client.IsMaster(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "get isMaster response")
-	}
-
 	rsStatus, err := client.RSStatus(ctx)
 	if err != nil {
 		if isNotYetInitialized(err) {
@@ -135,43 +130,15 @@ func HealthCheckMongodLiveness(ctx context.Context, cnf *db.Config) (_ *mongo.Me
 		return nil, errors.Wrap(err, "get replSetGetStatus response")
 	}
 
-	oplogRs := OplogRs{}
-	if !isMasterResp.IsArbiter {
-		log.V(1).Info("Getting \"oplog.rs\" info")
-		res := client.Database("local").RunCommand(ctx, bson.D{
-			{Key: "collStats", Value: "oplog.rs"},
-			{Key: "scale", Value: 1024 * 1024 * 1024}, // scale size to gigabytes
-		})
-		if res.Err() != nil {
-			return nil, errors.Wrap(res.Err(), "get oplog.rs info")
-		}
-		if err := res.Decode(&oplogRs); err != nil {
-			return nil, errors.Wrap(err, "decode oplog.rs info")
-		}
-		if oplogRs.OK == 0 {
-			return nil, errors.Wrap(errors.New("non-ok response from getting oplog.rs info"), oplogRs.Errmsg)
-		}
-	}
-
-	var storageSize int64
-	if oplogRs.StorageSize > 0 {
-		storageSize = oplogRs.StorageSize
-	}
-
-	log.V(1).Info("Checking state", "state", rsStatus.MyState, "storage size", storageSize)
-	if err := CheckStateForLiveness(ctx, rsStatus, storageSize); err != nil {
+	log.V(1).Info("Checking state", "state", rsStatus.MyState)
+	if err := CheckStateForLiveness(ctx, rsStatus); err != nil {
 		return &rsStatus.MyState, err
 	}
 
 	return &rsStatus.MyState, nil
 }
 
-type OplogRs struct {
-	mongo.OKResponse `bson:",inline"`
-	StorageSize      int64 `bson:"storageSize" json:"storageSize"`
-}
-
-func CheckStateForLiveness(ctx context.Context, rs mongo.Status, oplogSize int64) error {
+func CheckStateForLiveness(ctx context.Context, rs mongo.Status) error {
 	self := rs.GetSelf()
 	if self == nil {
 		return errors.New("self member is not found")
@@ -183,10 +150,7 @@ func CheckStateForLiveness(ctx context.Context, rs mongo.Status, oplogSize int64
 	case mongo.MemberStatePrimary, mongo.MemberStateSecondary, mongo.MemberStateArbiter:
 		return nil
 	case mongo.MemberStateStartup, mongo.MemberStateStartup2:
-		// give 60 seconds to each 1Gb of oplog + 30 seconds
-		if rs.InitialSyncStatus == nil && self.Uptime > 30+oplogSize*60 {
-			return errors.Errorf("state is %s and uptime is %d", mongo.MemberStateStrings[rs.MyState], self.Uptime)
-		}
+		log.Info("Member state is " + mongo.MemberStateStrings[rs.MyState])
 		if rs.InitialSyncStatus != nil {
 			log.Info("Initial sync is in progress")
 		}

@@ -153,6 +153,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	containerEnvFrom := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
+	startupProbe := replset.StartupProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
@@ -178,6 +179,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		configName = naming.NonVotingConfigMapName(cr, replset)
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
+		startupProbe = replset.NonVoting.StartupProbe
 		volumeSpec = replset.NonVoting.VolumeSpec
 	case naming.ComponentHidden:
 		containerName = naming.ContainerHidden
@@ -190,6 +192,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
+		startupProbe = replset.Hidden.StartupProbe
 		volumeSpec = replset.Hidden.VolumeSpec
 	}
 
@@ -325,6 +328,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
 		livenessProbe:            livenessProbe,
 		readinessProbe:           readinessProbe,
+		startupProbe:             startupProbe,
 		containerSecurityContext: containerSecurityContext,
 		containerEnv:             containerEnv,
 		containerEnvFrom:         containerEnvFrom,

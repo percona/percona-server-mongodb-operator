@@ -23,6 +23,7 @@ type containerFnParams struct {
 	useConfigFile            bool
 	livenessProbe            *api.LivenessProbeExtended
 	readinessProbe           *corev1.Probe
+	startupProbe             *corev1.Probe
 	containerSecurityContext *corev1.SecurityContext
 	containerEnv             []corev1.EnvVar
 	containerEnvFrom         []corev1.EnvFromSource
@@ -40,6 +41,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		useConfigFile            = params.useConfigFile
 		livenessProbe            = params.livenessProbe
 		readinessProbe           = params.readinessProbe
+		startupProbe             = params.startupProbe
 		containerSecurityContext = params.containerSecurityContext
 		containerEnv             = params.containerEnv
 		containerEnvFrom         = params.containerEnvFrom
@@ -210,6 +212,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		WorkingDir:      config.MongodContainerDataDir,
 		LivenessProbe:   &livenessProbe.Probe,
 		ReadinessProbe:  readinessProbe,
+		StartupProbe:    startupProbe,
 		Resources:       resources,
 		SecurityContext: containerSecurityContext,
 		VolumeMounts:    volumes,

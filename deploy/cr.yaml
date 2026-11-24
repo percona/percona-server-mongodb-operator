@@ -242,6 +242,10 @@ spec:
 #      periodSeconds: 3
 #      successThreshold: 1
 #      timeoutSeconds: 2
+#    startupProbe:
+#      failureThreshold: 8640
+#      periodSeconds: 10
+#      timeoutSeconds: 10
 #    containerSecurityContext:
 #      privileged: false
 #    podSecurityContext:
@@ -645,6 +649,10 @@ spec:
 #        periodSeconds: 3
 #        successThreshold: 1
 #        timeoutSeconds: 2
+#      startupProbe:
+#        failureThreshold: 8640
+#        periodSeconds: 10
+#        timeoutSeconds: 10
 #      containerSecurityContext:
 #        privileged: false
 #      podSecurityContext:
