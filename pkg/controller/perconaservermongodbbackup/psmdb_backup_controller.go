@@ -69,7 +69,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:      mgr.GetScheme(),
 		newPBMFunc:  backup.NewPBM,
 		clientcmd:   cli,
-		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"),
+		recorder:    mgr.GetEventRecorderFor("psmdbbackup-controller"), //nolint:staticcheck // e2e tests assert on core/v1 events
 		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbbackup-controller"), "BACKUP_RECONCILE_INTERVAL"),
 	}, nil
 }
@@ -715,7 +715,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 	log := logf.FromContext(ctx)
 
 	var err error
-	if cr.ObjectMeta.DeletionTimestamp == nil {
+	if cr.DeletionTimestamp == nil {
 		return nil
 	}
 

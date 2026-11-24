@@ -671,7 +671,7 @@ func TestStatefulSet_PodLabelsMergeSpecLabels(t *testing.T) {
 	rs := newTestRS()
 
 	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
-	podLabels := sts.Spec.Template.ObjectMeta.Labels
+	podLabels := sts.Spec.Template.Labels
 
 	// object labels must be present
 	for k, v := range naming.SearchLabels(cr, rs) {
@@ -696,7 +696,7 @@ func TestStatefulSet_ObjectLabelsWinOverSpecLabels(t *testing.T) {
 	rs := newTestRS()
 
 	sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
-	podLabels := sts.Spec.Template.ObjectMeta.Labels
+	podLabels := sts.Spec.Template.Labels
 
 	assert.Equal(t, naming.ComponentSearch, podLabels[naming.LabelKubernetesComponent],
 		"operator-managed labels must not be overridden by user-provided spec labels")
@@ -710,12 +710,12 @@ func TestStatefulSet_ConfigHashAnnotation(t *testing.T) {
 
 	t.Run("set when configHash provided", func(t *testing.T) {
 		sts := StatefulSet(cr, rs, "percona/init:latest", "abc123", nil)
-		assert.Equal(t, "abc123", sts.Spec.Template.ObjectMeta.Annotations[naming.AnnotationConfigHash])
+		assert.Equal(t, "abc123", sts.Spec.Template.Annotations[naming.AnnotationConfigHash])
 	})
 
 	t.Run("absent when configHash empty", func(t *testing.T) {
 		sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
-		_, ok := sts.Spec.Template.ObjectMeta.Annotations[naming.AnnotationConfigHash]
+		_, ok := sts.Spec.Template.Annotations[naming.AnnotationConfigHash]
 		assert.False(t, ok, "configuration-hash annotation must be absent when configHash is empty")
 	})
 }
@@ -733,7 +733,7 @@ func TestStatefulSet_SSLHashAnnotations(t *testing.T) {
 		}
 
 		sts := StatefulSet(cr, rs, "percona/init:latest", "", sslHashes)
-		annotations := sts.Spec.Template.ObjectMeta.Annotations
+		annotations := sts.Spec.Template.Annotations
 
 		assert.Equal(t, "ssl-hash-value", annotations[naming.AnnotationSSLHash])
 		assert.Equal(t, "ssl-internal-hash-value", annotations[naming.AnnotationSSLInternalHash])
@@ -741,7 +741,7 @@ func TestStatefulSet_SSLHashAnnotations(t *testing.T) {
 
 	t.Run("absent when sslHashes nil", func(t *testing.T) {
 		sts := StatefulSet(cr, rs, "percona/init:latest", "", nil)
-		annotations := sts.Spec.Template.ObjectMeta.Annotations
+		annotations := sts.Spec.Template.Annotations
 
 		_, ok := annotations[naming.AnnotationSSLHash]
 		assert.False(t, ok, "ssl-hash annotation must be absent when sslHashes is nil")
@@ -755,7 +755,7 @@ func TestStatefulSet_SSLHashAnnotations(t *testing.T) {
 		}
 
 		sts := StatefulSet(cr, rs, "percona/init:latest", "", sslHashes)
-		annotations := sts.Spec.Template.ObjectMeta.Annotations
+		annotations := sts.Spec.Template.Annotations
 
 		assert.Equal(t, "ssl-hash-value", annotations[naming.AnnotationSSLHash])
 		_, ok := annotations[naming.AnnotationSSLInternalHash]
@@ -769,7 +769,7 @@ func TestStatefulSet_SSLHashAnnotations(t *testing.T) {
 		}
 
 		sts := StatefulSet(cr, rs, "percona/init:latest", "", sslHashes)
-		annotations := sts.Spec.Template.ObjectMeta.Annotations
+		annotations := sts.Spec.Template.Annotations
 
 		_, ok := annotations[naming.AnnotationSSLHash]
 		assert.False(t, ok, "ssl-hash annotation must be absent when its value is empty")
@@ -862,7 +862,7 @@ func TestStatefulSet_Affinity_TopologyKey(t *testing.T) {
 	terms := aff.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 	require.Len(t, terms, 1)
 	assert.Equal(t, "kubernetes.io/hostname", terms[0].TopologyKey)
-	assert.Equal(t, sts.Spec.Template.ObjectMeta.Labels, terms[0].LabelSelector.MatchLabels)
+	assert.Equal(t, sts.Spec.Template.Labels, terms[0].LabelSelector.MatchLabels)
 }
 
 func TestStatefulSet_Affinity_Off(t *testing.T) {

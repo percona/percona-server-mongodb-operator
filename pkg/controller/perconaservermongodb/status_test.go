@@ -282,7 +282,7 @@ func TestUpdateStatus(t *testing.T) {
 					Backup: api.BackupSpec{
 						Enabled: true,
 						Storages: map[string]api.BackupStorageSpec{
-							"s3": api.BackupStorageSpec{
+							"s3": {
 								S3: api.BackupStorageS3Spec{
 									Bucket: "operator-testing",
 								},
@@ -322,7 +322,7 @@ func TestUpdateStatus(t *testing.T) {
 					Backup: api.BackupSpec{
 						Enabled: true,
 						Storages: map[string]api.BackupStorageSpec{
-							"s3": api.BackupStorageSpec{
+							"s3": {
 								S3: api.BackupStorageS3Spec{
 									Bucket: "operator-testing",
 								},

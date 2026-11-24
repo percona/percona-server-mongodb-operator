@@ -25,7 +25,6 @@ import (
 
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 
-	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -293,7 +292,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			if rs.Arbiter.Enabled {
 				toDelete = append(toDelete, naming.ArbiterStatefulSetName(cluster, rs))
 			}
-			if cluster.IsSearchEnabled() && rs.ClusterRole != api.ClusterRoleConfigSvr {
+			if cluster.IsSearchEnabled() && rs.ClusterRole != psmdbv1.ClusterRoleConfigSvr {
 				toDelete = append(toDelete, naming.SearchStatefulSetName(cluster, rs))
 			}
 
@@ -436,7 +435,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key:      "MONGODB_BACKUP_USER_ESCAPED",
-						Name:     api.UserSecretName(cluster),
+						Name:     psmdbv1.UserSecretName(cluster),
 						Optional: &f,
 					},
 				},
@@ -446,7 +445,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						Key:      "MONGODB_BACKUP_PASSWORD_ESCAPED",
-						Name:     api.UserSecretName(cluster),
+						Name:     psmdbv1.UserSecretName(cluster),
 						Optional: &f,
 					},
 				},
@@ -477,7 +476,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		}
 
 		sslSecret := new(corev1.Secret)
-		err = r.client.Get(ctx, types.NamespacedName{Name: api.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
+		err = r.client.Get(ctx, types.NamespacedName{Name: psmdbv1.SSLSecretName(cluster), Namespace: cluster.Namespace}, sslSecret)
 		if client.IgnoreNotFound(err) != nil {
 			return errors.Wrap(err, "check ssl secrets")
 		}
@@ -934,7 +933,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) checkStatefulSetForPhysicalRestor
 	}
 
 	for _, pod := range podList.Items {
-		if pod.ObjectMeta.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
+		if pod.Labels["controller-revision-hash"] != sts.Status.UpdateRevision {
 			if err := r.client.Delete(ctx, &pod); client.IgnoreNotFound(err) != nil {
 				return false, errors.Wrapf(err, "delete pod %s", pod.Name)
 			}

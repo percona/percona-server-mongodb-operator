@@ -616,7 +616,7 @@ func (r *ReconcilePerconaServerMongoDB) applyNWait(ctx context.Context, cr *api.
 }
 
 func (r *ReconcilePerconaServerMongoDB) recreateNWait(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
-	if pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision {
+	if pod.Labels["controller-revision-hash"] == updateRevision {
 		logf.FromContext(ctx).Info("Pod already updated", "pod", pod.Name)
 	} else {
 		if err := r.client.Delete(ctx, pod); err != nil {
@@ -664,7 +664,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 			}
 		}
 
-		if pod.Status.Phase == corev1.PodRunning && pod.ObjectMeta.Labels["controller-revision-hash"] == updateRevision && ready {
+		if pod.Status.Phase == corev1.PodRunning && pod.Labels["controller-revision-hash"] == updateRevision && ready {
 			logf.FromContext(ctx).Info("Pod started", "pod", pod.Name)
 			return nil
 		}

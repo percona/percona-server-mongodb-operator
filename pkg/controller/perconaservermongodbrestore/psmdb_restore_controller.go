@@ -66,7 +66,7 @@ func newReconciler(mgr manager.Manager) (reconcile.Reconciler, error) {
 		scheme:      mgr.GetScheme(),
 		clientcmd:   cli,
 		newPBMFunc:  backup.NewPBM,
-		recorder:    mgr.GetEventRecorderFor("psmdbrestore-controller"),
+		recorder:    mgr.GetEventRecorderFor("psmdbrestore-controller"), //nolint:staticcheck // e2e tests assert on core/v1 events
 		reconcileIn: util.ReconcileInterval(logf.Log.WithName("psmdbrestore-controller"), "RESTORE_RECONCILE_INTERVAL"),
 	}, nil
 }

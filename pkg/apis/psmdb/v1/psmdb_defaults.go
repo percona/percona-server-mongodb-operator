@@ -474,9 +474,9 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 				Command: []string{"mongodb-healthcheck", "k8s", "liveness"},
 			}
 
-			replset.LivenessProbe.Probe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
+			replset.LivenessProbe.Exec.Command[0] = "/data/db/mongodb-healthcheck"
 			if cr.TLSEnabled() {
-				replset.LivenessProbe.Probe.Exec.Command = append(replset.LivenessProbe.Probe.Exec.Command,
+				replset.LivenessProbe.Exec.Command = append(replset.LivenessProbe.Exec.Command,
 					"--ssl", "--sslInsecure",
 					"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
 					"--sslPEMKeyFile", "/tmp/tls.pem")
@@ -787,12 +787,12 @@ func (rs *ReplsetSpec) SetDefaults(platform version.Platform, cr *PerconaServerM
 		}
 	}
 
-	if err := rs.MultiAZ.reconcileOpts(cr); err != nil {
+	if err := rs.reconcileOpts(cr); err != nil {
 		return errors.Wrapf(err, "reconcile multiAZ options for replset %s", rs.Name)
 	}
 
 	if rs.Arbiter.Enabled {
-		if err := rs.Arbiter.MultiAZ.reconcileOpts(cr); err != nil {
+		if err := rs.Arbiter.reconcileOpts(cr); err != nil {
 			return errors.Wrapf(err, "reconcile multiAZ options for arbiter in replset %s", rs.Name)
 		}
 	}
@@ -895,25 +895,25 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 	if nv.LivenessProbe.StartupDelaySeconds < 1 {
 		nv.LivenessProbe.StartupDelaySeconds = rs.LivenessProbe.StartupDelaySeconds
 	}
-	if nv.LivenessProbe.ProbeHandler.Exec == nil {
-		nv.LivenessProbe.Probe.ProbeHandler.Exec = &corev1.ExecAction{
+	if nv.LivenessProbe.Exec == nil {
+		nv.LivenessProbe.Exec = &corev1.ExecAction{
 			Command: []string{"/data/db/mongodb-healthcheck", "k8s", "liveness"},
 		}
 
 		if cr.TLSEnabled() {
-			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command = append(
-				nv.LivenessProbe.Probe.ProbeHandler.Exec.Command,
+			nv.LivenessProbe.Exec.Command = append(
+				nv.LivenessProbe.Exec.Command,
 				"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem",
 			)
 		}
 
 		if cr.CompareVersion("1.14.0") >= 0 {
-			nv.LivenessProbe.Probe.ProbeHandler.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
+			nv.LivenessProbe.Exec.Command[0] = "/opt/percona/mongodb-healthcheck"
 		}
 	}
 	if !nv.LivenessProbe.CommandHas(startupDelaySecondsFlag) {
-		nv.LivenessProbe.ProbeHandler.Exec.Command = append(
-			nv.LivenessProbe.ProbeHandler.Exec.Command,
+		nv.LivenessProbe.Exec.Command = append(
+			nv.LivenessProbe.Exec.Command,
 			startupDelaySecondsFlag, strconv.Itoa(nv.LivenessProbe.StartupDelaySeconds),
 		)
 	}
@@ -1317,7 +1317,7 @@ func (v *VolumeSpec) reconcileOpts() error {
 			return fmt.Errorf("volume.resources.storage can't be empty")
 		}
 
-		if v.PersistentVolumeClaim.AccessModes == nil || len(v.PersistentVolumeClaim.AccessModes) == 0 {
+		if len(v.PersistentVolumeClaim.AccessModes) == 0 {
 			v.PersistentVolumeClaim.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
 		}
 	}

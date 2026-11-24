@@ -481,7 +481,7 @@ func getLatestBackup(ctx context.Context, cl client.Client, cr *api.PerconaServe
 			continue
 		}
 
-		if latest == nil || latest.CreationTimestamp.Before(&b.ObjectMeta.CreationTimestamp) {
+		if latest == nil || latest.CreationTimestamp.Before(&b.CreationTimestamp) {
 			latest = &b
 		}
 	}

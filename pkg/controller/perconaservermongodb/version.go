@@ -404,7 +404,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
 	log := logf.FromContext(ctx)
 
-	if cr.Status.ObservedGeneration != cr.ObjectMeta.Generation ||
+	if cr.Status.ObservedGeneration != cr.Generation ||
 		cr.Status.State != api.AppStateReady ||
 		cr.Status.MongoImage == cr.Spec.Image {
 		return nil

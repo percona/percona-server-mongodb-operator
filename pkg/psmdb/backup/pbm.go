@@ -1261,9 +1261,9 @@ func (b *pbmC) pitrGetChunkContains(ctx context.Context, rs string, ts bson.Time
 	res := b.Client.PITRChunksCollection().FindOne(
 		ctx,
 		bson.D{
-			{"rs", rs},
-			{"start_ts", bson.M{"$lte": ts}},
-			{"end_ts", bson.M{"$gte": ts}},
+			{Key: "rs", Value: rs},
+			{Key: "start_ts", Value: bson.M{"$lte": ts}},
+			{Key: "end_ts", Value: bson.M{"$gte": ts}},
 		},
 	)
 	if res.Err() != nil {
