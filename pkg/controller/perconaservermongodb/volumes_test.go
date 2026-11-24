@@ -1672,6 +1672,40 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
 	})
 
+	t.Run("secondaries phase tracks a member elected before its replacement", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: healthy, isPrimary: true})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 3, pvcCount(t, r), "primary must not be replaced without a stepdown")
+		assert.Empty(t, eventReasons(rec))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "secondaries", got.Phase)
+		assert.Equal(t, stsName+"-2", got.PrimaryPod)
+	})
+
+	t.Run("primary phase steps down a re-elected primary before replacing it", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: healthy, isPrimary: true})
+		state := api.PVCShrinkState{
+			Phase:         "primary",
+			TargetSize:    "3Gi",
+			PrimaryPod:    stsName + "-0",
+			ProcessedPods: []string{stsName + "-1", stsName + "-2"},
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, true))
+		assert.Equal(t, 3, pvcCount(t, r), "primary must not be replaced without a stepdown")
+		assert.Empty(t, eventReasons(rec))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase)
+		assert.Equal(t, stsName+"-0", got.PrimaryPod)
+	})
+
 	t.Run("primary phase completes shrink", func(t *testing.T) {
 		r, rec := newReconciler(&shrinkMongoProvider{status: healthy})
 		state := api.PVCShrinkState{

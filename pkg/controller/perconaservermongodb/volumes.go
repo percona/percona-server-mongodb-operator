@@ -905,6 +905,26 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
 			}
+			if sc.needsStepdown && sc.replset != nil {
+				isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+				if err != nil {
+					log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
+					return nil
+				}
+				if isPrimary {
+					// The primary changed since the shrink started. Track the new one, so it's
+					// replaced last, after a stepdown.
+					if isPrimaryPhase {
+						log.Info("Pod is primary again, stepping it down before replacing it", "pod", pod.Name)
+						state.Phase = "stepdown"
+					} else {
+						log.Info("Pod became primary during shrink, updating tracked primary", "pod", pod.Name, "previousPrimary", state.PrimaryPod)
+						state.PrimaryPod = pod.Name
+					}
+					sc.cr.SetPVCShrinkState(sc.sts.Name, state)
+					return nil
+				}
+			}
 			log.Info("Deleting PVC for shrink", "pvc", pvc.Name, "pod", pod.Name)
 			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkReplacingMember", "DeletePVC", "Deleting PVC %s and pod %s to recreate them with %s", pvc.Name, pod.Name, state.TargetSize)
 			if err := r.client.Delete(ctx, pvc); err != nil && !k8serrors.IsNotFound(err) {
