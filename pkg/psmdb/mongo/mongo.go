@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"reflect"
 	"slices"
@@ -184,6 +185,7 @@ type Client interface {
 	RemoveShard(ctx context.Context, shard string) (ShardRemoveResp, error)
 	RSBuildInfo(ctx context.Context) (BuildInfo, error)
 	StepDown(ctx context.Context, seconds int, force bool) error
+	WaitSecondaryCatchUp(ctx context.Context, maxLag, stallTimeout, timeout time.Duration) error
 	Freeze(ctx context.Context, seconds int) error
 	IsMaster(ctx context.Context) (*IsMasterResp, error)
 	GetUserInfo(ctx context.Context, username, db string) (*User, error)
@@ -770,6 +772,139 @@ func (client *mongoClient) StepDown(ctx context.Context, seconds int, force bool
 	}
 
 	return nil
+}
+
+// ErrReplicationStalled means no electable secondary applied oplog for the stall timeout.
+var ErrReplicationStalled = errors.New("replication stalled")
+
+var errNoElectableSecondary = errors.New("no electable secondary found")
+
+// WaitSecondaryCatchUp waits until some electable secondary is at most maxLag behind the primary.
+// It returns ErrReplicationStalled if no electable secondary optime moves for stallTimeout.
+func (client *mongoClient) WaitSecondaryCatchUp(ctx context.Context, maxLag, stallTimeout, timeout time.Duration) error {
+	log := logf.FromContext(ctx)
+
+	start := time.Now()
+	deadline := start.Add(timeout)
+	lastProgress := start
+	var prevOptimes map[string]time.Time
+	for {
+		cfg, err := client.ReadConfig(ctx)
+		if err != nil {
+			return errors.Wrap(err, "read replset config")
+		}
+		status, err := client.RSStatus(ctx)
+		if err != nil {
+			return errors.Wrap(err, "get replset status")
+		}
+
+		optimes := electableOptimes(cfg, status)
+		if len(optimes) == 0 {
+			return errNoElectableSecondary
+		}
+		if secondaryProgressed(prevOptimes, optimes) {
+			lastProgress = time.Now()
+		}
+		prevOptimes = optimes
+
+		member, lag, err := electableSecondaryLag(cfg, status)
+		if err != nil && !errors.Is(err, errNoElectableSecondary) {
+			return err
+		}
+		if err == nil && lag <= maxLag {
+			log.Info("secondary caught up", "member", member, "lag", lag.String())
+			return nil
+		}
+		if time.Since(lastProgress) > stallTimeout {
+			return errors.Wrapf(ErrReplicationStalled, "no electable secondary applied oplog in %s", stallTimeout)
+		}
+		if time.Now().After(deadline) {
+			if err != nil {
+				return errors.Wrapf(err, "no electable secondary caught up in %s", timeout)
+			}
+			return errors.Errorf("no electable secondary caught up in %s, lag %s", timeout, lag)
+		}
+
+		if err != nil {
+			log.Info("waiting for secondary to catch up", "reason", err.Error())
+		} else {
+			log.Info("waiting for secondary to catch up", "member", member, "lag", lag.String())
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+func isElectable(m ConfigMember) bool {
+	return !m.ArbiterOnly && !m.Hidden && m.Priority > 0 && m.Votes > 0
+}
+
+// electableOptimes returns the last applied optime of electable members other than the primary, whatever their health.
+func electableOptimes(cfg RSConfig, status Status) map[string]time.Time {
+	electable := make(map[string]bool, len(cfg.Members))
+	for _, m := range cfg.Members {
+		if isElectable(m) {
+			electable[m.Host] = true
+		}
+	}
+
+	optimes := make(map[string]time.Time)
+	for _, m := range status.Members {
+		if m.State != MemberStatePrimary && electable[m.Name] {
+			optimes[m.Name] = m.OptimeDate
+		}
+	}
+	return optimes
+}
+
+// secondaryProgressed reports whether some member optime moved forward since prev.
+func secondaryProgressed(prev, cur map[string]time.Time) bool {
+	for name, optime := range cur {
+		if p, ok := prev[name]; ok && optime.After(p) {
+			return true
+		}
+	}
+	return false
+}
+
+// electableSecondaryLag returns the least lagging electable secondary and its lag behind the primary.
+func electableSecondaryLag(cfg RSConfig, status Status) (string, time.Duration, error) {
+	electable := make(map[string]bool, len(cfg.Members))
+	for _, m := range cfg.Members {
+		if isElectable(m) {
+			electable[m.Host] = true
+		}
+	}
+
+	var primaryOptime time.Time
+	for _, m := range status.Members {
+		if m.State == MemberStatePrimary {
+			primaryOptime = m.OptimeDate
+		}
+	}
+	if primaryOptime.IsZero() {
+		return "", 0, errors.New("primary not found in replset status")
+	}
+
+	best, bestLag := "", time.Duration(math.MaxInt64)
+	for _, m := range status.Members {
+		if m.State != MemberStateSecondary || m.Health != MemberHealthUp || !electable[m.Name] {
+			continue
+		}
+		lag := max(primaryOptime.Sub(m.OptimeDate), 0)
+		if lag < bestLag {
+			best, bestLag = m.Name, lag
+		}
+	}
+	if best == "" {
+		return "", 0, errNoElectableSecondary
+	}
+
+	return best, bestLag, nil
 }
 
 func (client *mongoClient) Freeze(ctx context.Context, seconds int) error {

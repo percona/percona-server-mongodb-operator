@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	mgo "go.mongodb.org/mongo-driver/v2/mongo"
@@ -139,6 +140,10 @@ func (c *fakeMongoClient) RSBuildInfo(ctx context.Context) (mongo.BuildInfo, err
 }
 
 func (c *fakeMongoClient) StepDown(ctx context.Context, seconds int, force bool) error {
+	return nil
+}
+
+func (c *fakeMongoClient) WaitSecondaryCatchUp(ctx context.Context, maxLag, stallTimeout, timeout time.Duration) error {
 	return nil
 }
 
