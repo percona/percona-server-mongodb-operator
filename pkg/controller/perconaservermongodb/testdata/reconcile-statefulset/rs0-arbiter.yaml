@@ -165,7 +165,6 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
-        topologySpreadConstraints: null
         volumeMounts:
         - mountPath: /data/db
           name: mongod-data
@@ -235,3 +234,6 @@ spec:
         name: mongod-data
   updateStrategy:
     type: OnDelete
+status:
+  availableReplicas: 0
+  replicas: 0

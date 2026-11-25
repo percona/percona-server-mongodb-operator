@@ -33,6 +33,31 @@ import (
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
 	if err := r.fixVolumeLabels(ctx, sts, volumeSpec.PersistentVolumeClaim); err != nil {
+func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
+	ls := sts.Spec.Selector.MatchLabels
+	if ls[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
+		return nil
+	}
+	rs := cr.Spec.Replset(ls[naming.LabelKubernetesReplset])
+	if rs == nil {
+		return errors.Errorf("replset %s not found in cr", ls[naming.LabelKubernetesReplset])
+	}
+	claimName := config.MongodDataVolClaimName
+	volumeSpec := rs.VolumeSpec
+	switch ls[naming.LabelKubernetesComponent] {
+	case naming.ComponentNonVoting:
+		volumeSpec = rs.NonVoting.VolumeSpec
+	case naming.ComponentHidden:
+		volumeSpec = rs.Hidden.VolumeSpec
+	case naming.ComponentSearch:
+		claimName = vectorsearch.DataVolumeName
+		volumeSpec = rs.SearchStorage(cr)
+	}
+	if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+		return nil
+	}
+
+	if err := r.fixVolumeLabels(ctx, sts, ls, claimName, volumeSpec.PersistentVolumeClaim); err != nil {
 		return errors.Wrap(err, "fix volume labels")
 	}
 
@@ -47,7 +72,120 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	}
 	sts.Spec.VolumeClaimTemplates = volumeClaimTemplates
 
+	if err := r.reconcileExtraPVCs(ctx, cr, sts, ls, config.MongodLogVolClaimName, logStorage(cr, sts)); err != nil {
+		return errors.Wrap(err, "reconcile log PVCs")
+	}
+
+	if err := r.reconcileExtraPVCs(ctx, cr, sts, ls, config.MongodJournalVolClaimName, journalStorage(cr, sts)); err != nil {
+		return errors.Wrap(err, "reconcile journal PVCs")
+	}
+
 	return nil
+}
+
+var (
+	errExtraPVCShrink     = errors.New("shrinking is not supported")
+	errMissingStorageSpec = errors.New("missing storage spec")
+)
+
+// journalStorage returns the journal PVC spec for the component sts belongs to.
+func journalStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
+	rs := componentReplset(cr, sts)
+	if rs == nil {
+		return nil
+	}
+	return rs.JournalPVC(cr, sts.Labels[naming.LabelKubernetesComponent])
+}
+
+// logStorage returns the log PVC spec for the component sts belongs to.
+func logStorage(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.PVCSpec {
+	rs := componentReplset(cr, sts)
+	if rs == nil {
+		return nil
+	}
+	return rs.LogPVC(cr, sts.Labels[naming.LabelKubernetesComponent])
+}
+
+// componentReplset returns the replset whose mongod members sts runs, or nil for other components.
+func componentReplset(cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) *psmdbv1.ReplsetSpec {
+	switch sts.Labels[naming.LabelKubernetesComponent] {
+	case naming.ComponentConfigSrv:
+		return cr.Spec.Sharding.ConfigsvrReplSet
+	case naming.ComponentMongod, naming.ComponentNonVoting, naming.ComponentHidden:
+		return cr.Spec.Replset(sts.Labels[naming.LabelKubernetesReplset])
+	}
+	return nil
+}
+
+// reconcileExtraPVCs keeps the PVCs of a non-data claim in sync with the CR.
+// Shrinking is not supported.
+func (r *ReconcilePerconaServerMongoDB) reconcileExtraPVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec *psmdbv1.PVCSpec) error {
+	if pvcSpec == nil || pvcSpec.PersistentVolumeClaimSpec == nil {
+		return nil
+	}
+
+	if sts.Labels[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
+		return nil
+	}
+
+	if _, ok := cr.GetPVCShrinkState(sts.Name); ok {
+		return nil
+	}
+
+	if _, ok := sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress]; ok && resizingClaim(sts) != claimName {
+		return nil
+	}
+
+	if err := r.fixVolumeLabels(ctx, sts, ls, claimName, *pvcSpec); err != nil {
+		return errors.Wrapf(err, "fix %s volume labels", claimName)
+	}
+
+	pvcSpec, err := r.reconcileStorageAutoscaling(ctx, cr, sts, claimName, pvcSpec, ls)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", sts.Name, "claim", claimName)
+	}
+
+	if cr.Spec.IsExternalVolumeAutoscalingEnabled() {
+		return nil
+	}
+
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.client.List(ctx, pvcList, &client.ListOptions{
+		Namespace:     sts.Namespace,
+		LabelSelector: labels.SelectorFromSet(ls),
+	}); err != nil {
+		return errors.Wrap(err, "list PVCs")
+	}
+
+	requested := pvcSpec.Resources.Requests[corev1.ResourceStorage]
+	actual := maxPVCCapacity(pvcList.Items, claimName, sts)
+
+	if !actual.IsZero() && requested.Cmp(actual) < 0 {
+		if err := r.revertVolumeTemplate(ctx, cr, sts, claimName, actual); err != nil {
+			return errors.Wrapf(err, "revert %s volume template for sts/%s", claimName, sts.Name)
+		}
+		return errors.Wrapf(errExtraPVCShrink, "%s: requested storage (%s) is less than actual storage (%s)", claimName, requested.String(), actual.String())
+	}
+
+	volumeClaimTemplates, err := r.resizeVolumesIfNeeded(ctx, cr, sts, ls, claimName, *pvcSpec)
+	if err != nil {
+		return err
+	}
+	sts.Spec.VolumeClaimTemplates = volumeClaimTemplates
+
+	return nil
+}
+
+// resizingClaim returns the claim whose resize is tracked on sts. Resizes started
+// before the claim was recorded belong to the data claim.
+func resizingClaim(sts *appsv1.StatefulSet) string {
+	if claim := sts.Annotations[psmdbv1.AnnotationPVCResizeClaim]; claim != "" {
+		return claim
+	}
+	if sts.Labels[naming.LabelKubernetesComponent] == naming.ComponentSearch {
+		return vectorsearch.DataVolumeName
+	}
+	return config.MongodDataVolClaimName
 }
 
 func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
@@ -218,6 +356,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	configured := volumeTemplate.Spec.Resources.Requests[corev1.ResourceStorage]
 
 	if sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress] != "" {
+		// The annotation is per statefulset, so a resize of another claim must not
+		// be adopted here: it would delete the statefulset mid-resize.
+		if resizingClaim(sts) != claimName {
+			return desiredVolumeClaimTemplates(), nil
+		}
+
 		resizeStartedAt, err := time.Parse(time.RFC3339, sts.Annotations[psmdbv1.AnnotationPVCResizeInProgress])
 		if err != nil {
 			return nil, errors.Wrap(err, "parse annotation")
@@ -279,7 +423,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 
 					log.Error(nil, "PVC resize failed", "pvc", pvc.Name, "reason", event.Reason, "message", event.Note)
 
-					if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
+					if err := r.handlePVCResizeFailure(ctx, cr, sts, claimName, configured); err != nil {
 						return nil, err
 					}
 
@@ -304,7 +448,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 	if requested.Cmp(actual) < 0 {
 		if cr.Spec.IsVolumeShrinkEnabled() {
 			if ls[naming.LabelKubernetesComponent] == naming.ComponentSearch {
-				if err := r.revertVolumeTemplate(ctx, cr, sts, configured); err != nil {
+				if err := r.revertVolumeTemplate(ctx, cr, sts, claimName, configured); err != nil {
 					return nil, errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
 				}
 				return nil, errors.New("volume shrinking is not supported for search")
@@ -335,7 +479,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			}
 			return desiredVolumeClaimTemplates(), nil
 		}
-		if err := r.revertVolumeTemplate(ctx, cr, sts, configured); err != nil {
+		if err := r.revertVolumeTemplate(ctx, cr, sts, claimName, configured); err != nil {
 			return nil, errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
 		}
 		if cr.Spec.IsVolumeExpansionEnabled() {
@@ -359,7 +503,10 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 		return desiredVolumeClaimTemplates(), nil
 	}
 
-	err = k8s.AnnotateObject(ctx, r.client, sts, map[string]string{psmdbv1.AnnotationPVCResizeInProgress: metav1.Now().Format(time.RFC3339)})
+	err = k8s.AnnotateObject(ctx, r.client, sts, map[string]string{
+		psmdbv1.AnnotationPVCResizeInProgress: metav1.Now().Format(time.RFC3339),
+		psmdbv1.AnnotationPVCResizeClaim:      claimName,
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "annotate psmdb")
 	}
@@ -379,11 +526,19 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 		}
 
 		if pvc.Status.Capacity.Storage().Cmp(requested) == 0 {
-			log.Info("PVC already resized", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
+			log.V(1).Info("PVC already resized", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
 			continue
 		}
 
-		log.Info("Resizing PVC", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
+		current := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
+		alreadyRequested := current.Cmp(requested) == 0
+
+		if alreadyRequested {
+			log.V(1).Info("PVC resize already requested", "name", pvc.Name, "requested", requested)
+		} else {
+			log.Info("Resizing PVC", "name", pvc.Name, "actual", pvc.Status.Capacity.Storage(), "requested", requested)
+		}
+
 		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = requested
 
 		if err := r.client.Update(ctx, &pvc); err != nil {
@@ -391,7 +546,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			case strings.Contains(err.Error(), "exceeded quota"):
 				log.Error(err, "PVC resize failed", "reason", "ExceededQuota", "message", err.Error())
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
+				if err := r.handlePVCResizeFailure(ctx, cr, sts, claimName, configured); err != nil {
 					return nil, err
 				}
 
@@ -399,7 +554,7 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			case strings.Contains(err.Error(), "the storageclass that provisions the pvc must support resize"):
 				log.Error(err, "PVC resize failed", "reason", "StorageClassNotSupportResize", "message", err.Error())
 
-				if err := r.handlePVCResizeFailure(ctx, cr, sts, configured); err != nil {
+				if err := r.handlePVCResizeFailure(ctx, cr, sts, claimName, configured); err != nil {
 					return nil, err
 				}
 
@@ -409,7 +564,9 @@ func (r *ReconcilePerconaServerMongoDB) resizeVolumesIfNeeded(
 			}
 		}
 
-		log.Info("PVC resize started", "pvc", pvc.Name, "requested", requested)
+		if !alreadyRequested {
+			log.Info("PVC resize started", "pvc", pvc.Name, "requested", requested)
+		}
 	}
 
 	return desiredVolumeClaimTemplates(), nil
@@ -428,18 +585,11 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 		}
 	}
 
-	if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil
-		}
-		return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
-	}
-
-	return nil
+	return client.IgnoreNotFound(k8s.OrphanDeleteStatefulSet(ctx, r.client, sts))
 }
 
-func (r *ReconcilePerconaServerMongoDB) handlePVCResizeFailure(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, originalSize resource.Quantity) error {
-	if err := r.revertVolumeTemplate(ctx, cr, sts, originalSize); err != nil {
+func (r *ReconcilePerconaServerMongoDB) handlePVCResizeFailure(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, claimName string, originalSize resource.Quantity) error {
+	if err := r.revertVolumeTemplate(ctx, cr, sts, claimName, originalSize); err != nil {
 		return errors.Wrapf(err, "revert volume template for sts/%s", sts.Name)
 	}
 
@@ -447,10 +597,14 @@ func (r *ReconcilePerconaServerMongoDB) handlePVCResizeFailure(ctx context.Conte
 		return errors.Wrapf(err, "deannotate psmdb/%s", cr.Name)
 	}
 
+	if err := k8s.DeannotateObject(ctx, r.client, sts, psmdbv1.AnnotationPVCResizeClaim); err != nil {
+		return errors.Wrapf(err, "deannotate psmdb/%s", cr.Name)
+	}
+
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, originalSize resource.Quantity) error {
+func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, claimName string, originalSize resource.Quantity) error {
 	log := logf.FromContext(ctx)
 
 	orig := cr.DeepCopy()
@@ -458,6 +612,26 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 	component, ok := sts.Labels[naming.LabelKubernetesComponent]
 	if !ok {
 		return errors.New("missing component label")
+	}
+
+	switch claimName {
+	case config.MongodLogVolClaimName, config.MongodJournalVolClaimName:
+		pvcSpec := logStorage(cr, sts)
+		if claimName == config.MongodJournalVolClaimName {
+			pvcSpec = journalStorage(cr, sts)
+		}
+		if pvcSpec == nil || pvcSpec.Resources.Requests == nil {
+			return errors.Wrap(errMissingStorageSpec, claimName)
+		}
+
+		log.Info("Reverting volume template", "claim", claimName, "component", component, "originalSize", originalSize)
+		pvcSpec.Resources.Requests[corev1.ResourceStorage] = originalSize
+
+		if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+			return errors.Wrapf(err, "patch psmdb/%s", cr.Name)
+		}
+
+		return nil
 	}
 
 	switch component {
@@ -541,7 +715,11 @@ type shrinkContext struct {
 	replset       *psmdbv1.ReplsetSpec
 	isRSComponent bool
 	needsStepdown bool
+	// waitingFor is the reason recorded before this reconcile; a Warning is emitted only when it changes.
+	waitingFor string
 }
+
+const shrinkStepDownSeconds = 60
 
 func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 	ctx context.Context,
@@ -573,6 +751,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 		replset:       replset,
 		isRSComponent: component != naming.ComponentMongos,
 		needsStepdown: component == naming.ComponentMongod || component == naming.ComponentConfigSrv,
+		waitingFor:    state.WaitingFor,
 	}
 
 	// Route to the correct phase
@@ -669,7 +848,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 
 	// Reject single-member replica set (no sync source for initial sync)
 	if sc.isRSComponent && sc.replset != nil && sc.replset.Size == 1 {
-		if err := r.revertVolumeTemplate(ctx, sc.cr, sc.sts, actual); err != nil {
+		if err := r.revertVolumeTemplate(ctx, sc.cr, sc.sts, sc.claimName, actual); err != nil {
 			return errors.Wrapf(err, "revert volume template for sts/%s", sc.sts.Name)
 		}
 		msg := fmt.Sprintf("PVC shrink rejected for %s: single-member replica set has no sync source", sc.sts.Name)
@@ -703,7 +882,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		if float64(usage.UsedBytes) > maxUsed {
 			log.Info("PVC shrink rejected: disk usage exceeds threshold of target size",
 				"pod", pod.Name, "usedBytes", usage.UsedBytes, "targetSize", requested.String(), "maxAllowed", int64(maxUsed), "thresholdPercent", int(maxUsageRatio*100))
-			if err := r.revertVolumeTemplate(ctx, sc.cr, sc.sts, actual); err != nil {
+			if err := r.revertVolumeTemplate(ctx, sc.cr, sc.sts, sc.claimName, actual); err != nil {
 				return errors.Wrapf(err, "revert volume template for sts/%s", sc.sts.Name)
 			}
 			msg := fmt.Sprintf("PVC shrink rejected: pod %s disk usage exceeds %d%% of target size %s", pod.Name, int(maxUsageRatio*100), requested.String())
@@ -878,8 +1057,23 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// PVC deletion waits for its pod to go away, make sure the pod is being deleted.
 		if pvc.DeletionTimestamp != nil {
 			log.Info("Waiting for PVC to be deleted", "pvc", pvc.Name, "pod", pod.Name)
-			if pod.DeletionTimestamp == nil && isPodReady(pod) && !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
-				return nil
+			if pod.DeletionTimestamp == nil && isPodReady(pod) {
+				if !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
+					return nil
+				}
+				// The pod may have been elected after its PVC was deleted. Its data is going away
+				// anyway, so step it down in place instead of tracking it as the primary.
+				if sc.needsStepdown && sc.replset != nil {
+					isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+					if err != nil {
+						r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
+						return nil
+					}
+					if isPrimary {
+						log.Info("Stepping down primary before deleting its pod", "pod", pod.Name)
+						return r.shrinkStepDownPod(ctx, sc, pod)
+					}
+				}
 			}
 			if err := r.client.Delete(ctx, &pod); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrapf(err, "delete pod %s", pod.Name)
@@ -893,6 +1087,22 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		if pvcRequested.Cmp(targetSize) > 0 {
 			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
+			}
+			// Never replace a primary. Hidden and non-voting members can't become one.
+			if sc.needsStepdown && sc.replset != nil {
+				isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
+				if err != nil {
+					r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
+					return nil
+				}
+				if isPrimary {
+					if isPrimaryPhase {
+						log.Info("Pod is primary again, stepping it down before replacing it", "pod", pod.Name)
+						state.Phase = "stepdown"
+						sc.cr.SetPVCShrinkState(sc.sts.Name, state)
+					}
+					return nil
+				}
 			}
 			log.Info("Deleting PVC for shrink", "pvc", pvc.Name, "pod", pod.Name)
 			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkReplacingMember", "DeletePVC", "Deleting PVC %s and pod %s to recreate them with %s", pvc.Name, pod.Name, state.TargetSize)
@@ -919,23 +1129,15 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 		// PVC has new size and pod is Ready
 		if sc.isRSComponent && sc.replset != nil {
-			isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+			isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
 			if err != nil {
-				log.Info("Failed to check RS membership, waiting", "pod", pod.Name, "error", err)
+				r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 				return nil
 			}
 			if isPrimary {
-				if !isPrimaryPhase {
-					// Primary election happened during shrink. Update the
-					// tracked primary so this pod is skipped and processed
-					// in the primary phase instead. Return so the next
-					// reconcile revisits the former primary as a secondary.
-					log.Info("Pod became primary during shrink, updating tracked primary", "pod", pod.Name, "previousPrimary", state.PrimaryPod)
-					state.PrimaryPod = pod.Name
-					sc.cr.SetPVCShrinkState(sc.sts.Name, state)
-					return nil
+				if isPrimaryPhase {
+					log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				}
-				log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				return nil
 			}
 		}
@@ -958,6 +1160,20 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 
 	return nil
+}
+
+// shrinkCheckPrimary reports whether pod is the replset primary. In the secondaries phase a newly elected
+// primary becomes the tracked one, so it's skipped now and replaced last, after a stepdown.
+func (r *ReconcilePerconaServerMongoDB) shrinkCheckPrimary(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, pod corev1.Pod, isPrimaryPhase bool) (bool, error) {
+	isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+	if err != nil || !isPrimary || isPrimaryPhase {
+		return isPrimary, err
+	}
+	logf.FromContext(ctx).WithName("PVCShrink").Info("Pod became primary during shrink, updating tracked primary",
+		"sts", sc.sts.Name, "pod", pod.Name, "previousPrimary", state.PrimaryPod)
+	state.PrimaryPod = pod.Name
+	sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
+	return true, nil
 }
 
 // shrinkRSHealthy checks every replset member, including hidden, non-voting and arbiter members from other statefulsets.
@@ -1021,9 +1237,23 @@ func (r *ReconcilePerconaServerMongoDB) setShrinkWaiting(sc shrinkContext, state
 	}
 	state.WaitingFor = reason
 	sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
-	if warn {
+	if warn && reason != sc.waitingFor {
 		r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkWaiting", "Wait", "Shrink of %s is waiting: %s", sc.sts.Name, reason)
 	}
+}
+
+func (r *ReconcilePerconaServerMongoDB) shrinkPrimaryCheckFailed(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, pod corev1.Pod, err error) {
+	log := logf.FromContext(ctx).WithName("PVCShrink").WithValues("sts", sc.sts.Name, "phase", state.Phase)
+	log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
+	r.setShrinkWaiting(sc, state, "failed to check whether "+pod.Name+" is primary", true)
+}
+
+func (r *ReconcilePerconaServerMongoDB) shrinkStepDownPod(ctx context.Context, sc shrinkContext, pod corev1.Pod) error {
+	r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", pod.Name)
+	if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, shrinkStepDownSeconds); err != nil {
+		return errors.Wrapf(err, "step down primary %s for PVC shrink", pod.Name)
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkReplacingHost(ctx context.Context, sc shrinkContext, replacing *corev1.Pod) string {
@@ -1060,11 +1290,7 @@ func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 	if !sc.isRSComponent || sc.replset == nil {
 		return ""
 	}
-	for _, name := range []string{
-		naming.MongodStatefulSetName(sc.cr, sc.replset),
-		naming.NonVotingStatefulSetName(sc.cr, sc.replset),
-		naming.HiddenStatefulSetName(sc.cr, sc.replset),
-	} {
+	for _, name := range replsetMemberStatefulSetNames(sc.cr, sc.replset) {
 		if name == sc.sts.Name {
 			continue
 		}
@@ -1073,6 +1299,25 @@ func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 		}
 	}
 	return ""
+}
+
+// replsetPVCShrinkInProgress reports whether any statefulset of the replset
+// that holds data-bearing members is being shrunk.
+func replsetPVCShrinkInProgress(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) bool {
+	for _, name := range replsetMemberStatefulSetNames(cr, rs) {
+		if _, ok := cr.GetPVCShrinkState(name); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func replsetMemberStatefulSetNames(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) []string {
+	return []string{
+		naming.MongodStatefulSetName(cr, rs),
+		naming.NonVotingStatefulSetName(cr, rs),
+		naming.HiddenStatefulSetName(cr, rs),
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
@@ -1095,6 +1340,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	if err := r.client.Get(ctx, client.ObjectKey{Name: state.PrimaryPod, Namespace: sc.cr.Namespace}, &pod); err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.Info("Primary pod not found, skipping stepdown")
+			r.setShrinkWaiting(sc, &state, "", false)
 			state.Phase = "primary"
 		} else {
 			return errors.Wrapf(err, "get primary pod %s", state.PrimaryPod)
@@ -1102,9 +1348,10 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	} else {
 		isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
 		if err != nil {
-			log.Info("Failed to check if pod is still primary, retrying", "pod", state.PrimaryPod, "error", err)
+			r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 			return nil
 		}
+		r.setShrinkWaiting(sc, &state, "", false)
 		if !isPrimary {
 			log.Info("Primary already stepped down, advancing to primary phase", "pod", state.PrimaryPod)
 		} else {
@@ -1112,9 +1359,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 				return nil
 			}
 			log.Info("Stepping down primary", "pod", state.PrimaryPod)
-			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", state.PrimaryPod)
-			if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
-				return errors.Wrap(err, "step down primary for PVC shrink")
+			if err := r.shrinkStepDownPod(ctx, sc, pod); err != nil {
+				return err
 			}
 		}
 		state.Phase = "primary"
@@ -1128,6 +1374,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, pvcSpec psmdbv1.PVCSpec) error {
 	// PVCs inherit labels from volumeClaimTemplates, not from the StatefulSet selector. The template
 	// intentionally omits mutable metadata, so identify claims by name before applying the labels.
+func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec psmdbv1.PVCSpec) error {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
 		Namespace: sts.Namespace,
@@ -1138,6 +1385,7 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 
 	for _, pvc := range pvcList.Items {
 		if !validatePVCName(config.MongodDataVolClaimName, pvc, sts) {
+		if !validatePVCName(claimName, pvc, sts) {
 			continue
 		}
 

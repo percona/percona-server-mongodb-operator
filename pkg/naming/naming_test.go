@@ -1,6 +1,10 @@
 package naming
 
-import "testing"
+import (
+	"testing"
+
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+)
 
 func TestMongodContainerName(t *testing.T) {
 	t.Parallel()
@@ -49,5 +53,18 @@ func TestVPAStatusKey(t *testing.T) {
 				t.Errorf("VPAStatusKey(%q, %q) = %q, want %q", tt.rsName, tt.component, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestJournalVolumeSnapshotName(t *testing.T) {
+	t.Parallel()
+
+	bcp := &psmdbv1.PerconaServerMongoDBBackup{
+		Name: "backup",
+		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{ClusterName: "cluster"},
+	}
+
+	if data, journal := VolumeSnapshotName(bcp, "rs0-journal"), JournalVolumeSnapshotName(bcp, "rs0"); data == journal {
+		t.Errorf("data snapshot of rs0-journal and journal snapshot of rs0 share the name %q", data)
 	}
 }
