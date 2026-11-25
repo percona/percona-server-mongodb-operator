@@ -721,11 +721,15 @@ func (r *ReconcilePerconaServerMongoDB) recreateNWait(ctx context.Context, cr *a
 
 const defaultPodRestartPoll = time.Second
 
-func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
-	poll := r.podRestartPoll
-	if poll <= 0 {
-		poll = defaultPodRestartPoll
+func (r *ReconcilePerconaServerMongoDB) podPollInterval() time.Duration {
+	if r.podRestartPoll <= 0 {
+		return defaultPodRestartPoll
 	}
+	return r.podRestartPoll
+}
+
+func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *api.PerconaServerMongoDB, updateRevision string, pod *corev1.Pod, waitLimit int) error {
+	poll := r.podPollInterval()
 
 	for range waitLimit {
 		select {

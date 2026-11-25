@@ -5,8 +5,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"net/url"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -14,7 +18,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -111,85 +114,228 @@ func (r *ReconcilePerconaServerMongoDB) reconcileUsers(ctx context.Context, cr *
 		return errors.Wrap(err, "check sys users data changes")
 	}
 
-	if !dataChanged || cr.Spec.Unmanaged {
+	if cr.Spec.Unmanaged {
 		return nil
 	}
 
-	logf.FromContext(ctx).Info("Secret data changed. Updating users...")
-
-	containerNames, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
-	if err != nil {
-		return errors.Wrap(err, "manage sys users")
+	pending := pendingRestarts(&internalSysSecretObj)
+	if !dataChanged && len(pending) == 0 {
+		return nil
 	}
 
-	if len(containerNames) > 0 {
-		rsPodList, err := r.getMongodPods(ctx, cr)
+	if dataChanged {
+		logf.FromContext(ctx).Info("Secret data changed. Updating users...")
+
+		containerNames, err := r.updateSysUsers(ctx, cr, &sysUsersSecretObj, &internalSysSecretObj, repls)
 		if err != nil {
-			return errors.Wrap(err, "failed to get mongos pods")
+			return errors.Wrap(err, "manage sys users")
 		}
 
-		pods := rsPodList.Items
-
-		if cr.Spec.Sharding.Enabled {
-			mongosList, err := r.getMongosPods(ctx, cr)
-			if err != nil {
-				return errors.Wrap(err, "failed to get mongos pods")
-			}
-
-			pods = append(pods, mongosList.Items...)
-
-			cfgPodlist, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
-			if err != nil {
-				return errors.Wrap(err, "failed to get mongos pods")
-			}
-
-			pods = append(pods, cfgPodlist.Items...)
+		// MongoDB has the new credentials now. Store them, and the containers that
+		// still have to restart, before restarting any: the operator connects with
+		// the internal secret, and with old credentials in it after a failed restart
+		// it could not log in again. Restarted containers read their credentials
+		// from this secret too.
+		internalSysSecretObj.Data = sysUsersSecretObj.Data
+		if cr.CompareVersion("1.19.0") >= 0 {
+			internalSysSecretObj.Data = getInternalSecretData(cr, &sysUsersSecretObj)
 		}
-
-		for _, name := range containerNames {
-			err = r.killContainer(ctx, pods, name)
-			if err != nil {
-				return errors.Wrapf(err, "failed to kill %s container", name)
-			}
+		pending = mergeRestarts(pending, containerNames)
+		setPendingRestarts(&internalSysSecretObj, pending)
+		if err := r.client.Update(ctx, &internalSysSecretObj); err != nil {
+			return errors.Wrap(err, "update internal sys users secret")
 		}
 	}
 
-	internalSysSecretObj.Data = sysUsersSecretObj.Data
-	if cr.CompareVersion("1.19.0") >= 0 {
-		internalSysSecretObj.Data = getInternalSecretData(cr, &sysUsersSecretObj)
+	if len(pending) == 0 {
+		return nil
 	}
-	err = r.client.Update(ctx, &internalSysSecretObj)
+
+	pods, err := r.podsWithSystemUsers(ctx, cr)
 	if err != nil {
-		return errors.Wrap(err, "update internal sys users secret")
+		return errors.Wrap(err, "get pods")
+	}
+
+	// Only the restarts that failed stay pending, the next reconcile retries them.
+	// They are not returned as an error, so the rest of the reconcile, which may
+	// replace a stuck pod, still runs.
+	var failed []string
+	var errs []error
+	for _, t := range restartTargets(pending, pods) {
+		if err := r.restartContainer(ctx, t.pod, t.container); err != nil {
+			failed = append(failed, t.container+"/"+t.pod.Name)
+			errs = append(errs, errors.Wrapf(err, "restart %s in pod %s", t.container, t.pod.Name))
+		}
+	}
+
+	setPendingRestarts(&internalSysSecretObj, failed)
+	if err := r.client.Update(ctx, &internalSysSecretObj); err != nil {
+		return errors.Wrap(stderrors.Join(append(errs, err)...), "update pending restarts")
+	}
+	if len(errs) > 0 {
+		logf.FromContext(ctx).Error(stderrors.Join(errs...), "Restart containers, will retry", "pending", failed)
+	}
+	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) podsWithSystemUsers(ctx context.Context, cr *api.PerconaServerMongoDB) ([]corev1.Pod, error) {
+	rsPodList, err := r.getMongodPods(ctx, cr)
+	if err != nil {
+		return nil, errors.Wrap(err, "get mongod pods")
+	}
+	pods := rsPodList.Items
+
+	if cr.Spec.Sharding.Enabled {
+		mongosList, err := r.getMongosPods(ctx, cr)
+		if err != nil {
+			return nil, errors.Wrap(err, "get mongos pods")
+		}
+		pods = append(pods, mongosList.Items...)
+
+		cfgPodlist, err := psmdb.GetRSPods(ctx, r.client, cr, api.ConfigReplSetName)
+		if err != nil {
+			return nil, errors.Wrap(err, "get cfg pods")
+		}
+		pods = append(pods, cfgPodlist.Items...)
+	}
+
+	return pods, nil
+}
+
+// A pending restart is "<container>" for every pod that has the container, or
+// "<container>/<pod>" for one pod.
+func pendingRestarts(secret *corev1.Secret) []string {
+	v := secret.Annotations[naming.AnnotationPendingRestarts]
+	if v == "" {
+		return nil
+	}
+	return strings.Split(v, ",")
+}
+
+func setPendingRestarts(secret *corev1.Secret, restarts []string) {
+	if len(restarts) == 0 {
+		delete(secret.Annotations, naming.AnnotationPendingRestarts)
+		return
+	}
+	if secret.Annotations == nil {
+		secret.Annotations = map[string]string{}
+	}
+	secret.Annotations[naming.AnnotationPendingRestarts] = strings.Join(restarts, ",")
+}
+
+func mergeRestarts(pending, add []string) []string {
+	for _, name := range add {
+		if !slices.Contains(pending, name) {
+			pending = append(pending, name)
+		}
+	}
+	return pending
+}
+
+type containerRestart struct {
+	pod       *corev1.Pod
+	container string
+}
+
+// restartTargets lists each pod and container of the pending restarts once.
+// A pod that is gone needs no restart: its replacement reads the new secret.
+func restartTargets(pending []string, pods []corev1.Pod) []containerRestart {
+	seen := map[string]bool{}
+	var targets []containerRestart
+	for _, entry := range pending {
+		container, podName, _ := strings.Cut(entry, "/")
+		for i := range pods {
+			pod := &pods[i]
+			key := container + "/" + pod.Name
+			if (podName != "" && podName != pod.Name) || seen[key] || getPodContainer(pod, container) == nil {
+				continue
+			}
+			seen[key] = true
+			targets = append(targets, containerRestart{pod: pod, container: container})
+		}
+	}
+	return targets
+}
+
+// containerRestartChecks is how many times restartContainer reads a pod to see
+// whether a container restarted although the exec that killed it failed. A
+// restart that is not seen in time stays pending: killing again right away could
+// hit the new container.
+const containerRestartChecks = 5
+
+// restartContainer makes the container read the users secret again. The
+// container reads it when it starts, so one that is not running, or not created
+// yet, is left alone.
+func (r *ReconcilePerconaServerMongoDB) restartContainer(ctx context.Context, pod *corev1.Pod, containerName string) error {
+	log := logf.FromContext(ctx)
+
+	before := containerStatus(pod, containerName)
+	if before == nil || before.State.Running == nil {
+		log.Info("Container is not running, it reads the new credentials when it starts", "pod", pod.Name, "container", containerName)
+		return nil
+	}
+
+	log.Info("Restarting container", "pod", pod.Name, "container", containerName)
+	err := r.execKill(ctx, pod, containerName)
+	// "kill 1" ends the exec session together with the container, so the
+	// exec can fail although the container was restarted.
+	if err != nil && r.containerRestarted(ctx, pod, containerName, before) {
+		log.Info("Container restarted or stopped, ignoring the exec error", "pod", pod.Name, "container", containerName, "error", err.Error())
+		return nil
+	}
+	return err
+}
+
+func (r *ReconcilePerconaServerMongoDB) execKill(ctx context.Context, pod *corev1.Pod, containerName string) error {
+	stderrBuf := &bytes.Buffer{}
+
+	err := r.clientcmd.Exec(ctx, pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
+	if err != nil {
+		return errors.Wrap(err, "exec command in pod")
+	}
+
+	if stderrBuf.Len() != 0 {
+		return errors.Errorf("exec command return error: %s", stderrBuf.String())
 	}
 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) killContainer(ctx context.Context, pods []corev1.Pod, containerName string) error {
-	for _, pod := range pods {
-		for _, c := range pod.Spec.Containers {
-			if c.Name == containerName {
-				logf.FromContext(ctx).Info("Restarting container", "pod", pod.Name, "container", c.Name)
+// containerRestarted reports whether the container was replaced since before
+// was taken, or is not running: either way it reads the users secret again when
+// it starts. The kubelet reports a restart with a delay, so it checks the pod a
+// few times.
+func (r *ReconcilePerconaServerMongoDB) containerRestarted(ctx context.Context, pod *corev1.Pod, containerName string, before *corev1.ContainerStatus) bool {
+	if before == nil {
+		return false
+	}
 
-				err := retry.OnError(retry.DefaultBackoff, func(_ error) bool { return true }, func() error {
-					stderrBuf := &bytes.Buffer{}
+	for range containerRestartChecks {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(r.podPollInterval()):
+		}
 
-					err := r.clientcmd.Exec(ctx, &pod, containerName, []string{"/bin/sh", "-c", "kill 1"}, nil, nil, stderrBuf, false)
-					if err != nil {
-						return errors.Wrap(err, "exec command in pod")
-					}
+		current := new(corev1.Pod)
+		if err := r.client.Get(ctx, types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, current); err != nil {
+			logf.FromContext(ctx).V(1).Info("Get pod to check the container restart", "pod", pod.Name, "error", err.Error())
+			continue
+		}
 
-					if stderrBuf.Len() != 0 {
-						return errors.Errorf("exec command return error: %s", stderrBuf.String())
-					}
+		now := containerStatus(current, containerName)
+		if now != nil && (now.RestartCount != before.RestartCount || now.ContainerID != before.ContainerID || now.State.Running == nil) {
+			return true
+		}
+	}
 
-					return nil
-				})
-				if err != nil {
-					return errors.Wrap(err, "failed to restart container")
-				}
-			}
+	return false
+}
+
+func containerStatus(pod *corev1.Pod, name string) *corev1.ContainerStatus {
+	for i := range pod.Status.ContainerStatuses {
+		if pod.Status.ContainerStatuses[i].Name == name {
+			return &pod.Status.ContainerStatuses[i]
 		}
 	}
 	return nil
