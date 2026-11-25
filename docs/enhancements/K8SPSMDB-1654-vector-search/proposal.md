@@ -282,16 +282,17 @@ Key connections:
    initial-sync time, added to the effective RTO for the *search*
    surface (regular query RTO is not affected). This is the basis
    for §5.6.
-6. **PBM restore requires restarting the search pods.** After PBM
+6. **PBM restore requires resetting the `mongot` data.** After PBM
    rewinds `mongod` to an earlier point in time, the change-stream
-   cursor that `mongot` is tailing no longer matches the restored
-   oplog position. The operator must delete each `<...>-search` pod
-   after the PBM restore completes; the StatefulSet controller
-   recreates it, and the new `mongot` does a full initial sync from
-   the restored `mongod`. This is operator-driven, not automatic —
-   without the restart, `mongot` would keep tailing from a stream
-   position that no longer exists on `mongod` and its indexes would
-   diverge from the restored data. This drives §8.3.
+   resume token that `mongot` stores next to its index data points
+   past the restored oplog. `mongod` accepts that token without an
+   error, so a restarted `mongot` resumes from it instead of
+   resyncing. The operator must delete each `mongot` PVC after the
+   PBM restore completes; the new `mongot` starts with an empty data
+   directory and does a full initial sync from the restored
+   `mongod`. This is operator-driven, not automatic — restarting the
+   search pod alone keeps the PVC, and the indexes silently diverge
+   from the restored data. This drives §8.3.
 7. **PVC autoscaling for the search PVC.** `mongot` becomes
    read-only at 90% disk usage (Constraint 3), so a search PVC that
    fills up silently makes the search surface read-only without any
@@ -672,11 +673,11 @@ manage them prevents drift and gives a single source of truth.
 ### 5.6 Backup / Restore Handling
 
 **Chosen approach:** PBM does **not** back up `mongot` PVCs. After
-a restore, the operator triggers a rolling restart of the
-`<cluster>-<rs>-search` StatefulSet so each `mongot` resyncs from
-the restored `mongod`. Restore completion does **not** wait for
-`mongot` to be ready (search availability is eventual; data
-availability is not).
+a physical restore, the operator deletes the `mongot` PVCs and the
+`<cluster>-<rs>-search` StatefulSet so each `mongot` starts empty
+and resyncs from the restored `mongod` (see §8.3). Restore
+completion does **not** wait for `mongot` to be ready (search
+availability is eventual; data availability is not).
 
 **Why:** `mongot` indexes can be rebuilt fully from `mongod` data;
 the source of truth is already in `mongod`. Backing up `mongot`
@@ -1107,15 +1108,22 @@ unknown-parameter error and no clear condition.
 **Scenario:** PBM restores `mongod` data to an earlier point in time.
 
 **Expected behavior:**
-- The PBM restore runs without touching the `mongot` PVC.
+- PBM neither backs up nor restores the `mongot` PVC.
+- After the restore, `mongot` starts with an empty data directory
+  and rebuilds its indexes from the restored `mongod`.
 
-**Implementation status:** The restore controller has no
-search-aware step today; without it, `mongot` keeps tailing from a
-change-stream position that no longer matches the rewound oplog
-and its indexes diverge from the restored data. Users who restore
-with search enabled must `kubectl delete pod -l
-app.kubernetes.io/component=search` themselves until the
-reconciler hook lands.
+**Implementation status:** After a physical restore, the restore
+controller deletes the `mongot` PVCs before it deletes the search
+StatefulSet, so the recreated `mongot` pod gets a new PVC and runs
+an initial sync. Deleting only the search pod is not enough: the
+resume token on the old PVC points past the rewound oplog,
+`mongod` accepts it, and `mongot` resumes without resyncing. The
+PVCs are found by their labels, so a PVC left behind after search
+was disabled is deleted as well. If the StorageClass uses
+`reclaimPolicy: Retain`, the old volume stays `Released` and has
+to be removed by hand. `mongot` data on a `hostPath` volume is not
+removed. Snapshot-based restores do not reset `mongot` yet
+(K8SPSMDB-1951).
 
 ### 8.4 Anti-affinity in Small Clusters
 
@@ -1228,7 +1236,7 @@ To resolve before implementation begins.
 5. **PBM coordination on `mongot` reindex after restore.** Should operator
    handle reindexing after restore somehow?
      - *Resolution:* `mongot` handles reindexing itself, it only requires
-        restarting after physical restore.
+        an empty data directory after physical restore (see §8.3).
 
 6. **Cert-manager `Certificate` template extension.** Adding the
    per-replset / per-shard search SANs to the cluster cert template

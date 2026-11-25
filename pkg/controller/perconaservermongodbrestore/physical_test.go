@@ -1,6 +1,7 @@
 package perconaservermongodbrestore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -14,11 +15,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -589,4 +592,137 @@ func TestCheckStatefulSetForPhysicalRestore(t *testing.T) {
 			assert.Equal(t, tt.wantReady, ready)
 		})
 	}
+}
+
+func TestDeleteSearchPVCs(t *testing.T) {
+	t.Parallel()
+
+	const ns = "some-ns"
+
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name:      "some-name",
+		Namespace: ns,
+	}
+	otherCluster := &psmdbv1.PerconaServerMongoDB{
+		Name:      "other-name",
+		Namespace: ns,
+	}
+	rs0 := &psmdbv1.ReplsetSpec{Name: "rs0"}
+	rs1 := &psmdbv1.ReplsetSpec{Name: "rs1"}
+
+	newPVC := func(name string, ls map[string]string) *corev1.PersistentVolumeClaim {
+		return &corev1.PersistentVolumeClaim{
+			Name:      name,
+			Namespace: ns,
+			Labels:    ls,
+		}
+	}
+
+	searchPVC := func(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) *corev1.PersistentVolumeClaim {
+		name := fmt.Sprintf("%s-%s-0", vectorsearch.DataVolumeName, naming.SearchStatefulSetName(cr, rs))
+		return newPVC(name, naming.SearchLabels(cr, rs))
+	}
+
+	mongodPVC := func(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) *corev1.PersistentVolumeClaim {
+		name := fmt.Sprintf("%s-%s-0", config.MongodDataVolClaimName, naming.MongodStatefulSetName(cr, rs))
+		return newPVC(name, naming.MongodLabels(cr, rs))
+	}
+
+	exists := func(t *testing.T, r *ReconcilePerconaServerMongoDBRestore, pvc *corev1.PersistentVolumeClaim) bool {
+		t.Helper()
+
+		err := r.client.Get(t.Context(), client.ObjectKeyFromObject(pvc), &corev1.PersistentVolumeClaim{})
+		if client.IgnoreNotFound(err) != nil {
+			require.NoError(t, err)
+		}
+		return err == nil
+	}
+
+	t.Run("deletes the search PVCs of every replset of the cluster", func(t *testing.T) {
+		search0, search1 := searchPVC(cluster, rs0), searchPVC(cluster, rs1)
+		mongod0 := mongodPVC(cluster, rs0)
+		otherSearch := searchPVC(otherCluster, rs0)
+
+		r := fakeReconciler(cluster, search0, search1, mongod0, otherSearch)
+
+		require.NoError(t, r.deleteSearchPVCs(t.Context(), cluster))
+
+		assert.False(t, exists(t, r, search0), "search PVC of rs0 should be deleted")
+		assert.False(t, exists(t, r, search1), "search PVC of rs1 should be deleted")
+		assert.True(t, exists(t, r, mongod0), "mongod PVC should be kept")
+		assert.True(t, exists(t, r, otherSearch), "search PVC of another cluster should be kept")
+	})
+
+	t.Run("does nothing when there are no search PVCs", func(t *testing.T) {
+		mongod0 := mongodPVC(cluster, rs0)
+
+		r := fakeReconciler(cluster, mongod0)
+
+		require.NoError(t, r.deleteSearchPVCs(t.Context(), cluster))
+
+		assert.True(t, exists(t, r, mongod0), "mongod PVC should be kept")
+	})
+
+	t.Run("skips PVCs that are already being deleted", func(t *testing.T) {
+		search0 := searchPVC(cluster, rs0)
+		search0.Finalizers = []string{"kubernetes.io/pvc-protection"}
+		search0.DeletionTimestamp = &metav1.Time{Time: metav1.Now().Time}
+
+		r := fakeReconciler(cluster, search0)
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error {
+				t.Error("delete should not be called for a terminating PVC")
+				return nil
+			},
+		})
+
+		require.NoError(t, r.deleteSearchPVCs(t.Context(), cluster))
+	})
+
+	t.Run("retries a failed delete", func(t *testing.T) {
+		search0 := searchPVC(cluster, rs0)
+
+		r := fakeReconciler(cluster, search0)
+		failed := false
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				if !failed {
+					failed = true
+					return errors.New("boom")
+				}
+				return c.Delete(ctx, obj, opts...)
+			},
+		})
+
+		require.NoError(t, r.deleteSearchPVCs(t.Context(), cluster))
+
+		assert.True(t, failed, "the first delete should fail")
+		assert.False(t, exists(t, r, search0), "search PVC should be deleted on retry")
+	})
+
+	t.Run("returns list errors", func(t *testing.T) {
+		r := fakeReconciler(cluster, searchPVC(cluster, rs0))
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+				return errors.New("boom")
+			},
+		})
+
+		err := r.deleteSearchPVCs(t.Context(), cluster)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "boom")
+	})
+
+	t.Run("returns delete errors", func(t *testing.T) {
+		r := fakeReconciler(cluster, searchPVC(cluster, rs0))
+		r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+			Delete: func(context.Context, client.WithWatch, client.Object, ...client.DeleteOption) error {
+				return errors.New("boom")
+			},
+		})
+
+		err := r.deleteSearchPVCs(t.Context(), cluster)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "boom")
+	})
 }
