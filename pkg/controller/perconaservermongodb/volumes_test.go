@@ -2316,12 +2316,7 @@ func TestShrinkPreflightSavesStateBeforeDeletingStatefulSet(t *testing.T) {
 	t.Run("failed statefulset delete keeps the saved state", func(t *testing.T) {
 		t.Parallel()
 		r, sc := mongosShrinkFixture(t, requested)
-		r.client = interceptorClient(t, r.client, func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
-			if _, ok := obj.(*appsv1.StatefulSet); ok {
-				return errors.New("delete failed")
-			}
-			return c.Delete(ctx, obj, opts...)
-		})
+		r.client = interceptorClient(t, r.client, failStatefulSetDelete)
 
 		require.Error(t, r.shrinkPreflight(t.Context(), sc, requested, actual))
 
@@ -2393,6 +2388,13 @@ func TestShrinkClaimTemplateReady(t *testing.T) {
 			wantReady: true,
 			wantSTS:   true,
 		},
+		"delete fails": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				r.client = interceptorClient(t, r.client, failStatefulSetDelete)
+			},
+			wantErr: "delete statefulset for shrink",
+		},
 		"get fails": {
 			vctSize: target,
 			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
@@ -2406,7 +2408,6 @@ func TestShrinkClaimTemplateReady(t *testing.T) {
 				})
 			},
 			wantErr: "get statefulset",
-			wantSTS: true,
 		},
 	}
 
@@ -2455,6 +2456,74 @@ func rejectClaimTemplateUpdates(c client.Client) client.Client {
 func TestShrinkReplsetRecreatesStatefulSetWithOldClaimTemplate(t *testing.T) {
 	t.Parallel()
 
+	target := resource.MustParse("2Gi")
+
+	for name, specSize := range map[string]resource.Quantity{
+		"old claim template":             target,
+		"size changed during the shrink": resource.MustParse("1Gi"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			f := newReplsetShrinkFixture(t, specSize, target.String())
+
+			_, err := f.r.reconcileStatefulSet(ctx, f.cr, f.rs, f.ls)
+			require.NoError(t, err)
+			err = f.r.client.Get(ctx, client.ObjectKeyFromObject(f.sts), new(appsv1.StatefulSet))
+			require.True(t, k8serrors.IsNotFound(err), "statefulset with the old claim template must be deleted, got %v", err)
+			require.NoError(t, f.r.client.Get(ctx, client.ObjectKeyFromObject(f.pvc), new(corev1.PersistentVolumeClaim)), "PVC must not be deleted yet")
+
+			// the shrink keeps its target until it is done, so the statefulset is recreated once
+			for range 3 {
+				_, err = f.r.reconcileStatefulSet(ctx, f.cr, f.rs, f.ls)
+				require.NoError(t, err)
+				recreated := new(appsv1.StatefulSet)
+				require.NoError(t, f.r.client.Get(ctx, client.ObjectKeyFromObject(f.sts), recreated))
+				size := recreated.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+				assert.Equal(t, target.String(), size.String())
+			}
+			assert.Equal(t, specSize.String(), f.rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests.Storage().String(), "CR spec must not change")
+		})
+	}
+
+	t.Run("delete fails", func(t *testing.T) {
+		t.Parallel()
+		f := newReplsetShrinkFixture(t, target, target.String())
+		f.r.client = interceptorClient(t, f.r.client, failStatefulSetDelete)
+
+		_, err := f.r.reconcileStatefulSet(t.Context(), f.cr, f.rs, f.ls)
+		require.ErrorContains(t, err, "delete statefulset for shrink")
+	})
+
+	t.Run("target size does not parse", func(t *testing.T) {
+		t.Parallel()
+		f := newReplsetShrinkFixture(t, target, "not-a-size")
+
+		_, err := f.r.reconcileStatefulSet(t.Context(), f.cr, f.rs, f.ls)
+		require.ErrorContains(t, err, "parse shrink target size")
+	})
+}
+
+func failStatefulSetDelete(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+	if _, ok := obj.(*appsv1.StatefulSet); ok {
+		return errors.New("delete failed")
+	}
+	return c.Delete(ctx, obj, opts...)
+}
+
+type replsetShrinkFixture struct {
+	r   *ReconcilePerconaServerMongoDB
+	cr  *api.PerconaServerMongoDB
+	rs  *api.ReplsetSpec
+	ls  map[string]string
+	sts *appsv1.StatefulSet
+	pvc *corev1.PersistentVolumeClaim
+}
+
+// newReplsetShrinkFixture builds rs0 with a 3Gi statefulset and PVC, a saved shrink state and the spec at specSize:
+// the shrink state was saved but the operator stopped before deleting the statefulset.
+func newReplsetShrinkFixture(t *testing.T, specSize resource.Quantity, targetSize string) replsetShrinkFixture {
+	t.Helper()
 	ctx := t.Context()
 	const ns = "shrink-crash"
 	crName := ns + "-cr"
@@ -2471,7 +2540,7 @@ func TestShrinkReplsetRecreatesStatefulSetWithOldClaimTemplate(t *testing.T) {
 		&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: ns},
 	}
 
-	old, target := resource.MustParse("3Gi"), resource.MustParse("2Gi")
+	old := resource.MustParse("3Gi")
 	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = old
 	sts, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, ls)
 	require.NoError(t, err)
@@ -2480,23 +2549,12 @@ func TestShrinkReplsetRecreatesStatefulSetWithOldClaimTemplate(t *testing.T) {
 	pod := newPod(ns, sts.Name+"-0", ls)
 	pvc := newPVC(ns, config.MongodDataVolClaimName+"-"+pod.Name, ls, old, old)
 
-	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = target
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = specSize
 	cr.Status.State = api.AppStateInit
-	cr.SetPVCShrinkState(sts.Name, api.PVCShrinkState{TargetSize: target.String(), Phase: "secondaries", ProcessedPods: []string{}})
+	cr.SetPVCShrinkState(sts.Name, api.PVCShrinkState{TargetSize: targetSize, Phase: "secondaries", ProcessedPods: []string{}})
 
 	r := buildFakeClient(append(objs, sts, pod, pvc)...)
 	r.client = rejectClaimTemplateUpdates(r.client)
 
-	_, err = r.reconcileStatefulSet(ctx, cr, rs, ls)
-	require.NoError(t, err)
-	err = r.client.Get(ctx, client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
-	require.True(t, k8serrors.IsNotFound(err), "statefulset with the old claim template must be deleted, got %v", err)
-	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(pvc), new(corev1.PersistentVolumeClaim)), "PVC must not be deleted yet")
-
-	_, err = r.reconcileStatefulSet(ctx, cr, rs, ls)
-	require.NoError(t, err)
-	recreated := new(appsv1.StatefulSet)
-	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(sts), recreated))
-	size := recreated.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
-	assert.Equal(t, target.String(), size.String())
+	return replsetShrinkFixture{r: r, cr: cr, rs: rs, ls: ls, sts: sts, pvc: pvc}
 }

@@ -186,10 +186,7 @@ func resizingClaim(sts *appsv1.StatefulSet) string {
 	if claim := sts.Annotations[psmdbv1.AnnotationPVCResizeClaim]; claim != "" {
 		return claim
 	}
-	if sts.Labels[naming.LabelKubernetesComponent] == naming.ComponentSearch {
-		return vectorsearch.DataVolumeName
-	}
-	return config.MongodDataVolClaimName
+	return dataClaimName(sts.Labels[naming.LabelKubernetesComponent])
 }
 
 func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
@@ -976,7 +973,10 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		return nil
 	}
 
-	targetSize := resource.MustParse(state.TargetSize)
+	targetSize, err := resource.ParseQuantity(state.TargetSize)
+	if err != nil {
+		return errors.Wrap(err, "parse shrink target size")
+	}
 
 	// List pods
 	podList := corev1.PodList{}
