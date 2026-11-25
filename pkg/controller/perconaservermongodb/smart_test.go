@@ -15,6 +15,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
@@ -519,4 +520,33 @@ func TestWaitPodRestartIgnoresStatusConflict(t *testing.T) {
 	require.NoError(t, r.client.Update(ctx, edited))
 
 	assert.NoError(t, r.waitPodRestart(ctx, cr, "rev-2", pod.DeepCopy(), 3))
+}
+
+func TestWaitPodRestartStopsStatusUpdatesAfterConflict(t *testing.T) {
+	t.Parallel()
+
+	pod := &corev1.Pod{Name: "some-name-rs0-0", Namespace: "some-namespace"}
+	existing := &api.PerconaServerMongoDB{Name: "some-name", Namespace: "some-namespace"}
+	existing.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+	r := buildFakeClient(existing, pod)
+	ctx := t.Context()
+
+	cr := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), cr))
+
+	edited := cr.DeepCopy()
+	edited.Annotations = map[string]string{"foo": "bar"}
+	require.NoError(t, r.client.Update(ctx, edited))
+
+	statusWrites := 0
+	r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+		SubResourceUpdate: func(ctx context.Context, c client.Client, subResourceName string, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+			statusWrites++
+			return c.SubResource(subResourceName).Update(ctx, obj, opts...)
+		},
+	})
+
+	err := r.waitPodRestart(ctx, cr, "rev-2", pod.DeepCopy(), 3)
+	require.EqualError(t, err, "reach pod wait limit")
+	assert.Equal(t, 1, statusWrites)
 }

@@ -566,7 +566,13 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
 
 	if restartedAtValue, exists := sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt]; exists {
-		if err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationPreservedRestartedAt(sts.Name): restartedAtValue}); err != nil {
+		orig := cr.DeepCopy()
+		if cr.Annotations == nil {
+			cr.Annotations = make(map[string]string)
+		}
+		cr.Annotations[psmdbv1.AnnotationPreservedRestartedAt(sts.Name)] = restartedAtValue
+		if err := r.patchCR(ctx, cr, orig); err != nil {
+			cr.Annotations = orig.Annotations
 			log.V(1).Info("Failed to preserve restartedAt annotation, continuing", "error", err)
 		}
 	}

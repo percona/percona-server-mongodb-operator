@@ -706,6 +706,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		poll = defaultPodRestartPoll
 	}
 
+	statusConflict := false
 	for range waitLimit {
 		select {
 		case <-ctx.Done():
@@ -719,13 +720,17 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		}
 
 		// We update status in every loop to not wait until the end of smart update.
-		// A conflict only means the CR changed since this reconcile read it: the
-		// restart goes on and the next reconcile writes the status.
-		if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
-			if !k8sErrors.IsConflict(err) {
-				return errors.Wrap(err, "update status")
+		// A conflict means the CR changed since this reconcile read it, so every
+		// later CR write in this reconcile conflicts too. The restart goes on
+		// without status updates and the next reconcile starts from the new CR.
+		if !statusConflict {
+			if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
+				if !k8sErrors.IsConflict(err) {
+					return errors.Wrap(err, "update status")
+				}
+				statusConflict = true
+				logf.FromContext(ctx).V(1).Info("CR changed during pod restart, skipping status updates", "pod", pod.Name)
 			}
-			logf.FromContext(ctx).V(1).Info("CR changed during pod restart, skipping status update", "pod", pod.Name)
 		}
 
 		ready := false

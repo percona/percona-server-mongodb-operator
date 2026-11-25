@@ -383,6 +383,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 
 	err = r.patchCR(ctx, cr, orig)
 	if err != nil {
+		cr.Spec = orig.Spec
 		return errors.Wrap(err, "patch CR")
 	}
 

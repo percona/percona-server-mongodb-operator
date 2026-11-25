@@ -1260,6 +1260,22 @@ func TestCRWritesKeepResourceVersion(t *testing.T) {
 				return r.unsetUpdateMongosFirst(ctx, cr)
 			},
 		},
+		"deleteStatefulSetForResize": {
+			write: func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error {
+				sts := &appsv1.StatefulSet{Name: "sh-rs0", Namespace: "ns"}
+				sts.Spec.Template.Annotations = map[string]string{naming.AnnotationKubectlRestartedAt: "2026-11-25T00:00:00Z"}
+				if err := r.client.Create(ctx, sts); err != nil {
+					return err
+				}
+				if err := r.deleteStatefulSetForResize(ctx, cr, sts); err != nil {
+					return err
+				}
+				if cr.Annotations[api.AnnotationPreservedRestartedAt("sh-rs0")] == "" {
+					return fmt.Errorf("restartedAt not preserved: %v", cr.Annotations)
+				}
+				return nil
+			},
+		},
 	}
 
 	for name, tt := range tests {
@@ -1316,4 +1332,70 @@ func TestWriteStatusDeletedCR(t *testing.T) {
 	cr := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns", ResourceVersion: "1"}
 
 	assert.NoError(t, r.writeStatus(t.Context(), cr))
+}
+
+func TestPatchCRWithoutChangesSkipsPatch(t *testing.T) {
+	t.Parallel()
+
+	existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+	r := buildFakeClient(existing)
+	ctx := t.Context()
+
+	stale := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+
+	current := stale.DeepCopy()
+	current.Annotations = map[string]string{"foo": "bar"}
+	require.NoError(t, r.client.Update(ctx, current))
+
+	before := stale.ResourceVersion
+	require.NoError(t, r.patchCR(ctx, stale, stale.DeepCopy()))
+	assert.Equal(t, before, stale.ResourceVersion)
+}
+
+func TestUpdateMongosFirstStaleKeepsAnnotations(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		annotations map[string]string
+		write       func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error
+	}{
+		"setUpdateMongosFirst": {
+			write: func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error {
+				return r.setUpdateMongosFirst(ctx, cr)
+			},
+		},
+		"unsetUpdateMongosFirst": {
+			annotations: map[string]string{api.AnnotationUpdateMongosFirst: "true"},
+			write: func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error {
+				return r.unsetUpdateMongosFirst(ctx, cr)
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns", Annotations: tt.annotations}
+			existing.Spec.Sharding.Enabled = true
+			r := buildFakeClient(existing)
+			ctx := t.Context()
+
+			stale := &api.PerconaServerMongoDB{}
+			require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+
+			current := stale.DeepCopy()
+			current.Spec.Image = "new-image"
+			require.NoError(t, r.client.Update(ctx, current))
+
+			err := tt.write(ctx, r, stale)
+			require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+			assert.Equal(t, tt.annotations, stale.Annotations)
+
+			got := &api.PerconaServerMongoDB{}
+			require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), got))
+			assert.Equal(t, tt.annotations, got.Annotations)
+		})
+	}
 }

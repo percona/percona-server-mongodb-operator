@@ -400,6 +400,15 @@ func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api
 // don't conflict with this one. cr itself is not overwritten with the
 // response, which would drop the defaults set in memory.
 func (r *ReconcilePerconaServerMongoDB) patchCR(ctx context.Context, cr, orig *api.PerconaServerMongoDB) error {
+	// Without changes the patch would only carry the resourceVersion and fail on a stale cr for nothing.
+	data, err := client.MergeFrom(orig).Data(cr)
+	if err != nil {
+		return errors.Wrap(err, "build patch")
+	}
+	if string(data) == "{}" {
+		return nil
+	}
+
 	patched := cr.DeepCopy()
 	if err := r.client.Patch(ctx, patched, client.MergeFromWithOptions(orig, client.MergeFromWithOptimisticLock{})); err != nil {
 		return err
