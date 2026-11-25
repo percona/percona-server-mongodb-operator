@@ -1207,12 +1207,14 @@ func TestShrinkStepdownRetry(t *testing.T) {
 
 	t.Run("isPodPrimary failure causes soft retry", func(t *testing.T) {
 		primaryPod := newPod(cr.Namespace, stsName+"-0", labels)
+		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build()
 
 		rec := events.NewFakeRecorder(10)
 		r := &ReconcilePerconaServerMongoDB{
-			client:   fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build(),
-			scheme:   s,
-			recorder: rec,
+			client:    cl,
+			apiReader: cl,
+			scheme:    s,
+			recorder:  rec,
 		}
 
 		state := api.PVCShrinkState{

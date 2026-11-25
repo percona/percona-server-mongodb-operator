@@ -59,11 +59,12 @@ func fakeReconciler(t *testing.T, objs ...client.Object) *ReconcilePerconaServer
 	t.Cleanup(func() { crons.crons.Stop() })
 
 	return &ReconcilePerconaServerMongoDB{
-		client:   cl,
-		scheme:   s,
-		crons:    crons,
-		lockers:  newLockStore(),
-		recorder: &events.FakeRecorder{},
+		client:    cl,
+		apiReader: cl,
+		scheme:    s,
+		crons:     crons,
+		lockers:   newLockStore(),
+		recorder:  &events.FakeRecorder{},
 		serverVersion: &version.ServerVersion{
 			Platform: version.PlatformKubernetes,
 			Info:     k8sversion.Info{GitVersion: "v1.30.0"},

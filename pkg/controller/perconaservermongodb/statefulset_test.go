@@ -289,6 +289,7 @@ func updateSts(t *testing.T, filename string, sts *appsv1.StatefulSet) {
 	delete(sts.Annotations, "percona.com/last-config-hash")
 	delete(sts.Spec.Template.Annotations, naming.AnnotationSSLHash)
 	delete(sts.Spec.Template.Annotations, naming.AnnotationSSLInternalHash)
+	delete(sts.Spec.Template.Annotations, naming.AnnotationPBMTLSHash)
 
 	data, err := yaml.Marshal(sts)
 	if err != nil {

@@ -63,6 +63,7 @@ func buildFakeClient(objs ...client.Object) *ReconcilePerconaServerMongoDB {
 
 	return &ReconcilePerconaServerMongoDB{
 		client:                 cl,
+		apiReader:              cl,
 		scheme:                 s,
 		lockers:                newLockStore(),
 		recorder:               &events.FakeRecorder{},
