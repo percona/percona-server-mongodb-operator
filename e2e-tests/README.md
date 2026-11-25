@@ -217,6 +217,7 @@ What the report contains:
 * Steps from the shared helpers in `lib/` and `conftest.py` (deploy operator, apply CR, wait for pods, mongosh calls).
 * On failure: operator logs, Kubernetes resources, events, PBM status and mongod logs. For a bash test, also the last 1000 lines of the script output.
 * Secrets are masked in step titles, attachments and kubectl error messages, and in the failure diagnostics of the HTML report:
+  * the exact values of the users and storage Secrets of the test namespace, read when the test fails, wherever they appear (user names and values shorter than 8 characters stay visible);
   * `user:password@host` and `pwd: ...`;
   * `KEY=value` anywhere, and `key: value` at the start of a line or a JSON field, when the key names a password, secret, token, credentials or a key (for example `AWS_SECRET_ACCESS_KEY=`, `secretAccessKey:`, `tls.key:`);
   * `--password ...`, `mongosh -p ...`, `Bearer ...`, `vault operator unseal ...`;

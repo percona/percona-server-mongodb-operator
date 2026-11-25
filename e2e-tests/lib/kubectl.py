@@ -314,6 +314,28 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     logger.info(f"{resource} was deleted")
 
 
+def wait_certificate(cert_name: str, timeout: int = 600) -> None:
+    """Wait for a cert-manager Certificate to be ready, also while it does not exist yet."""
+    deadline = time.time() + timeout
+    while (remaining := int(deadline - time.time())) > 0:
+        try:
+            kubectl_bin(
+                "wait",
+                "--for=condition=Ready",
+                f"certificate/{cert_name}",
+                f"--timeout={min(60, remaining)}s",
+            )
+            return
+        except subprocess.CalledProcessError:
+            time.sleep(1)
+    conditions = kubectl_bin(
+        "get", f"certificate/{cert_name}", "-o", "jsonpath={.status.conditions}", check=False
+    )
+    raise TimeoutError(
+        f"Certificate {cert_name} not ready within {timeout}s, conditions: {conditions}"
+    )
+
+
 @step("Wait for cluster {cluster_name} to be {target_state}")
 def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 1500) -> None:
     """Wait for psmdb cluster to reach a specific state (e.g. 'ready', 'paused')."""

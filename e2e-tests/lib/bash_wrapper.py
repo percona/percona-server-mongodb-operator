@@ -9,6 +9,7 @@ from typing import IO
 import pytest
 
 from .allure_support import attach_text
+from .secret_scan import register_known_secrets
 
 # Lines of script output kept for the report when the script fails.
 OUTPUT_TAIL_LINES = 1000
@@ -69,5 +70,9 @@ def run_bash_test(test_name: str) -> None:
         proc.stdout.close()
 
     if returncode != 0:
+        # The bash harness writes the test namespace to this file (e2e-tests/functions).
+        namespace_file = Path(os.environ.get("PYTEST_NAMESPACE_FILE", ""))
+        if namespace_file.is_file() and (namespace := namespace_file.read_text().strip()):
+            register_known_secrets(namespace)
         attach_text("".join(tail), f"Bash test output (last {OUTPUT_TAIL_LINES} lines)")
         pytest.fail(f"Test {test_name} failed with exit code {returncode}")
