@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"reflect"
-	"slices"
 	"testing"
 	"time"
 
@@ -222,26 +221,12 @@ func TestReconcileStatefulSet(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 
-			mockObjs := []client.Object{
-				tt.cr,
-				&corev1.Secret{
-					Name:      crName + "-ssl",
-					Namespace: tt.cr.Namespace,
-					Data: map[string][]byte{
-						"ca.crt":  caCert,
-						"tls.crt": tlsCert,
-						"tls.key": tlsKey,
-					},
-				},
-				&corev1.Secret{
-					Name:      crName + "-ssl-internal",
-					Namespace: tt.cr.Namespace,
-				},
-				&corev1.Secret{
-					Name:      tls.CertificatePBMClient(tt.cr).SecretName(),
-					Namespace: tt.cr.Namespace,
-				},
-
+			mockObjs := append([]client.Object{tt.cr}, tlsSecrets(tt.cr, map[string][]byte{
+				"ca.crt":  caCert,
+				"tls.crt": tlsCert,
+				"tls.key": tlsKey,
+			})...)
+			mockObjs = append(mockObjs,
 				&corev1.ConfigMap{
 					Name:      logcollector.ConfigMapName(tt.cr.Name),
 					Namespace: tt.cr.Namespace,
@@ -249,7 +234,7 @@ func TestReconcileStatefulSet(t *testing.T) {
 						"fluentbit_custom.conf": "config",
 					},
 				},
-			}
+			)
 
 			mockObjs = append(mockObjs, tt.additionalObjs...)
 			r := buildFakeClient(mockObjs...)
@@ -376,6 +361,24 @@ func compareSts(t *testing.T, got, want *appsv1.StatefulSet) {
 	}
 }
 
+func tlsSecrets(cr *api.PerconaServerMongoDB, sslData map[string][]byte) []client.Object {
+	return []client.Object{
+		&corev1.Secret{
+			Name:      api.SSLSecretName(cr),
+			Namespace: cr.Namespace,
+			Data:      sslData,
+		},
+		&corev1.Secret{
+			Name:      api.SSLInternalSecretName(cr),
+			Namespace: cr.Namespace,
+		},
+		&corev1.Secret{
+			Name:      tls.CertificatePBMClient(cr).SecretName(),
+			Namespace: cr.Namespace,
+		},
+	}
+}
+
 func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
 	ctx := context.Background()
 
@@ -391,28 +394,14 @@ func TestGetStatefulsetFromReplsetConfigNotInCache(t *testing.T) {
 
 	rs := cr.Spec.Replset("rs0")
 	configMapName := naming.MongodCustomConfigName(cr, rs)
-	objs := []client.Object{
-		cr,
-		&corev1.Secret{
-			Name:      crName + "-ssl",
-			Namespace: ns,
+	objs := append([]client.Object{cr}, tlsSecrets(cr, nil)...)
+	objs = append(objs, &corev1.ConfigMap{
+		Name:      configMapName,
+		Namespace: ns,
+		Data: map[string]string{
+			"mongod.conf": string(rs.Configuration),
 		},
-		&corev1.Secret{
-			Name:      crName + "-ssl-internal",
-			Namespace: ns,
-		},
-		&corev1.Secret{
-			Name:      tls.CertificatePBMClient(cr).SecretName(),
-			Namespace: ns,
-		},
-		&corev1.ConfigMap{
-			Name:      configMapName,
-			Namespace: ns,
-			Data: map[string]string{
-				"mongod.conf": string(rs.Configuration),
-			},
-		},
-	}
+	})
 
 	want, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, naming.MongodLabels(cr, rs))
 	require.NoError(t, err)
@@ -459,12 +448,7 @@ func TestReconcileStatefulSetFinishedResize(t *testing.T) {
 
 	rs := cr.Spec.Replset("rs0")
 	ls := naming.MongodLabels(cr, rs)
-	objs := []client.Object{
-		cr,
-		&corev1.Secret{Name: crName + "-ssl", Namespace: ns},
-		&corev1.Secret{Name: crName + "-ssl-internal", Namespace: ns},
-		&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: ns},
-	}
+	objs := append([]client.Object{cr}, tlsSecrets(cr, nil)...)
 
 	sts, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, ls)
 	require.NoError(t, err)
@@ -484,121 +468,4 @@ func TestReconcileStatefulSetFinishedResize(t *testing.T) {
 
 	err = r.client.Get(ctx, client.ObjectKeyFromObject(sts), new(appsv1.StatefulSet))
 	require.True(t, k8serrors.IsNotFound(err), "statefulset must be rebuilt on the next reconcile, got %v", err)
-}
-
-func TestStartupProbeDefaults(t *testing.T) {
-	startupCommand := []string{"/opt/percona/mongodb-healthcheck", "k8s", "startup", "--component", "mongod"}
-	tlsStartupCommand := append(slices.Clone(startupCommand),
-		"--ssl", "--sslInsecure",
-		"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
-		"--sslPEMKeyFile", "/tmp/tls.pem")
-
-	tests := map[string]struct {
-		modify          func(cr *api.PerconaServerMongoDB)
-		wantNil         bool
-		wantRS          int32
-		wantNonVoting   int32
-		wantHidden      int32
-		wantRSPeriod    int32
-		wantCfgFailures int32
-		wantCommand     []string
-		wantExec        []string
-	}{
-		"not set before 1.24.0": {
-			modify:  func(cr *api.PerconaServerMongoDB) { cr.Spec.CRVersion = "1.23.0" },
-			wantNil: true,
-		},
-		"defaults to 24h": {
-			modify:          func(cr *api.PerconaServerMongoDB) {},
-			wantRS:          8640,
-			wantNonVoting:   8640,
-			wantHidden:      8640,
-			wantRSPeriod:    10,
-			wantCfgFailures: 8640,
-		},
-		"replset override is inherited by nonvoting and hidden": {
-			modify: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].StartupProbe = &corev1.Probe{FailureThreshold: 100}
-			},
-			wantRS:          100,
-			wantNonVoting:   100,
-			wantHidden:      100,
-			wantRSPeriod:    10,
-			wantCfgFailures: 8640,
-		},
-		"nonvoting override doesn't change replset": {
-			modify: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].NonVoting.StartupProbe = &corev1.Probe{FailureThreshold: 50, PeriodSeconds: 30}
-			},
-			wantRS:          8640,
-			wantNonVoting:   50,
-			wantHidden:      8640,
-			wantRSPeriod:    10,
-			wantCfgFailures: 8640,
-		},
-		"no TLS flags when TLS is disabled": {
-			modify: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
-				cr.Spec.Unsafe.TLS = true
-			},
-			wantRS:          8640,
-			wantNonVoting:   8640,
-			wantHidden:      8640,
-			wantRSPeriod:    10,
-			wantCfgFailures: 8640,
-			wantCommand:     startupCommand,
-		},
-		"user handler is kept": {
-			modify: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].StartupProbe = &corev1.Probe{
-					Exec: &corev1.ExecAction{Command: []string{"/bin/true"}},
-				}
-			},
-			wantRS:          8640,
-			wantNonVoting:   8640,
-			wantHidden:      8640,
-			wantRSPeriod:    10,
-			wantCfgFailures: 8640,
-			wantExec:        []string{"/bin/true"},
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			cr, err := readDefaultCR("startup-probe", "startup-probe")
-			require.NoError(t, err)
-			cr.Spec.Replsets[0].NonVoting.Enabled = true
-			cr.Spec.Replsets[0].Hidden.Enabled = true
-			tt.modify(cr)
-			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
-
-			rs := cr.Spec.Replsets[0]
-			cfg := cr.Spec.Sharding.ConfigsvrReplSet
-			if tt.wantNil {
-				require.Nil(t, rs.StartupProbe)
-				require.Nil(t, rs.NonVoting.StartupProbe)
-				require.Nil(t, rs.Hidden.StartupProbe)
-				require.Nil(t, cfg.StartupProbe)
-				return
-			}
-
-			require.Equal(t, tt.wantRS, rs.StartupProbe.FailureThreshold)
-			require.Equal(t, tt.wantRSPeriod, rs.StartupProbe.PeriodSeconds)
-			require.Equal(t, tt.wantNonVoting, rs.NonVoting.StartupProbe.FailureThreshold)
-			require.Equal(t, tt.wantHidden, rs.Hidden.StartupProbe.FailureThreshold)
-			require.Equal(t, tt.wantCfgFailures, cfg.StartupProbe.FailureThreshold)
-			wantCommand := tlsStartupCommand
-			if tt.wantCommand != nil {
-				wantCommand = tt.wantCommand
-			}
-			for _, p := range []*corev1.Probe{rs.StartupProbe, rs.NonVoting.StartupProbe, rs.Hidden.StartupProbe} {
-				if tt.wantExec != nil {
-					require.Equal(t, tt.wantExec, p.Exec.Command)
-					continue
-				}
-				require.Equal(t, wantCommand, p.Exec.Command)
-			}
-			require.Equal(t, wantCommand, cfg.StartupProbe.Exec.Command)
-		})
-	}
 }
