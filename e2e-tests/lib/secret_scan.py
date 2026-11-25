@@ -10,7 +10,8 @@ looks for well-known credential shapes (AWS keys, Azure account keys, GCP servic
 account keys, private key blocks, MongoDB URIs with a password). A finding reports
 the source, the line number and the rule; the scan's own assertion message masks
 the matched text. The failure report the harness attaches (operator logs, events)
-is not redacted (K8SPSMDB-1940).
+is masked by credential shape only (allure_support.mask); masking the exact secret
+values there is K8SPSMDB-1940.
 
 Only the pods that exist at the time of the scan are read. The operator replaces
 the database pods when a physical restore completes, so a scan after it misses
