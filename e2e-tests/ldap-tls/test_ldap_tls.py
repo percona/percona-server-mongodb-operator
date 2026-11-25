@@ -42,6 +42,7 @@ class TestLdapTLS:
         deploy_openldap(test_paths["test_dir"], config.namespace, tls=True, timeout=600)
         kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets.yml")
 
+    @pytest.mark.dependency()
     def test_replset_ldap_auth(
         self, config: LdapTLSConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
@@ -49,6 +50,7 @@ class TestLdapTLS:
             psmdb_client, test_paths["test_dir"], config.namespace, config.ldap_server
         )
 
+    @pytest.mark.dependency(depends=["TestLdapTLS::test_replset_ldap_auth"])
     def test_sharded_ldap_auth(
         self, config: LdapTLSConfig, test_paths: Paths, psmdb_client: MongoManager
     ) -> None:
