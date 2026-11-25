@@ -26,6 +26,28 @@ spec:
     kind: Issuer
     group: cert-manager.io
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openldap-data
+data:
+  50-perconadba.ldif: |
+    dn: ou=perconadba,dc=ldap,dc=local
+    objectClass: organizationalUnit
+    ou: perconadba
+
+    dn: uid=percona,ou=perconadba,dc=ldap,dc=local
+    objectClass: inetOrgPerson
+    uid: percona
+    cn: percona
+    sn: percona
+    userPassword: password
+
+    dn: cn=admin,ou=perconadba,dc=ldap,dc=local
+    objectClass: groupOfUniqueNames
+    cn: admin
+    uniqueMember: uid=percona,ou=perconadba,dc=ldap,dc=local
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -44,113 +66,54 @@ spec:
     spec:
       serviceAccountName: openldap
       containers:
-        - name: ldap-setup
-          image: docker.io/osixia/openldap:latest
-          command: ["/bin/bash"]
-          args:
-            - -c
-            - |
-              echo "Waiting for LDAP server to be ready..."
-              until ldapsearch -x -H ldap://localhost:389 -b "" -s base >/dev/null 2>&1; do
-                sleep 5
-              done
-              
-              echo "Adding LDAP structure..."
-              ldapadd -x -H ldap://localhost:389 -D "cn=admin,dc=ldap,dc=local" -w adminpassword <<EOF
-              dn: ou=perconadba,dc=ldap,dc=local
-              objectClass: organizationalUnit
-              ou: perconadba
-
-              dn: uid=percona,ou=perconadba,dc=ldap,dc=local
-              objectClass: inetOrgPerson
-              uid: percona
-              cn: percona
-              sn: percona
-              userPassword: password
-
-              dn: cn=admin,ou=perconadba,dc=ldap,dc=local
-              objectClass: groupOfUniqueNames
-              cn: admin
-              uniqueMember: uid=percona,ou=perconadba,dc=ldap,dc=local
-              EOF
-              
-              echo "LDAP structure added successfully"
-              sleep infinity
-          env:
-            - name: LDAP_DOMAIN
-              value: "ldap.local"
-            - name: LDAP_ORGANISATION
-              value: "ldap.local"
-            - name: LDAP_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: adminpassword
-                  name: openldap
         - name: openldap
-          image: docker.io/osixia/openldap:latest
-          imagePullPolicy: "Always"
-          args: ["--copy-service"]
+          image: docker.io/osixia/openldap:2.6.15
           env:
-            - name: LDAP_DOMAIN
+            - name: OPENLDAP_BOOTSTRAP_ORGANIZATION
               value: "ldap.local"
-            - name: LDAP_ORGANISATION
-              value: "ldap.local"
-            - name: LDAP_ADMIN_PASSWORD
+            - name: OPENLDAP_BOOTSTRAP_SUFFIX
+              value: "dc=ldap,dc=local"
+            - name: OPENLDAP_BOOTSTRAP_DATA_ROOT_PASSWORD_HASHED
               valueFrom:
                 secretKeyRef:
                   key: adminpassword
                   name: openldap
-            - name: LDAP_CONFIG_PASSWORD
+            - name: OPENLDAP_BOOTSTRAP_CONFIG_ROOT_PASSWORD_HASHED
               valueFrom:
                 secretKeyRef:
                   key: adminpassword
                   name: openldap
-            - name: LDAP_READONLY_USER
+            - name: OPENLDAP_BOOTSTRAP_DATA_READONLY
               value: "true"
-            - name: LDAP_READONLY_USER_USERNAME
-              value: "readonly"
-            - name: LDAP_READONLY_USER_PASSWORD
+            - name: OPENLDAP_BOOTSTRAP_DATA_READONLY_PASSWORD_HASHED
               value: "readonlypass"
-            - name: CONTAINER_LOG_LEVEL
-              value: "info"
-            - name: LDAP_LDAP_PORT_NUMBER
-              value: "389"
-            - name: LDAP_LDAPS_PORT_NUMBER
-              value: "636"
-            - name: LDAP_TLS
+            - name: OPENLDAP_BOOTSTRAP_TLS
               value: "true"
-            - name: LDAP_TLS_VERIFY_CLIENT
+            - name: OPENLDAP_BOOTSTRAP_TLS_VERIFY_CLIENT
               value: "never"
-            - name: LDAP_TLS_CRT_FILENAME
-              value: "tls.crt"
-            - name: LDAP_TLS_KEY_FILENAME
-              value: "tls.key"
-            - name: LDAP_TLS_CA_CRT_FILENAME
-              value: "ca.crt"
           ports:
             - name: tls-ldap
-              containerPort: 636
+              containerPort: 6360
             - name: tcp-ldap
-              containerPort: 389
-          startupProbe:
-            tcpSocket:
-              port: 636
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 60
+              containerPort: 3890
           readinessProbe:
             tcpSocket:
-              port: 636
+              port: 6360
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 10
           volumeMounts:
             - name: ldap-ca
-              mountPath: /container/service/slapd/assets/certs
+              mountPath: /container/services/openldap/assets/certs
+            - name: openldap-data
+              mountPath: /container/services/openldap-bootstrap/assets/ldif/data/custom
       volumes:
         - name: ldap-ca
           secret:
             secretName: ldap-ca
+        - name: openldap-data
+          configMap:
+            name: openldap-data
 ---
 apiVersion: v1
 kind: Service
