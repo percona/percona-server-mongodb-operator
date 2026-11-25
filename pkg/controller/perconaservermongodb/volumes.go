@@ -701,7 +701,11 @@ type shrinkContext struct {
 	replset       *psmdbv1.ReplsetSpec
 	isRSComponent bool
 	needsStepdown bool
+	// waitingFor is the reason recorded before this reconcile; a Warning is emitted only when it changes.
+	waitingFor string
 }
+
+const shrinkStepDownSeconds = 60
 
 func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 	ctx context.Context,
@@ -733,6 +737,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkVolumesIfNeeded(
 		replset:       replset,
 		isRSComponent: component != naming.ComponentMongos,
 		needsStepdown: component == naming.ComponentMongod || component == naming.ComponentConfigSrv,
+		waitingFor:    state.WaitingFor,
 	}
 
 	// Route to the correct phase
@@ -1038,8 +1043,23 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// PVC deletion waits for its pod to go away, make sure the pod is being deleted.
 		if pvc.DeletionTimestamp != nil {
 			log.Info("Waiting for PVC to be deleted", "pvc", pvc.Name, "pod", pod.Name)
-			if pod.DeletionTimestamp == nil && isPodReady(pod) && !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
-				return nil
+			if pod.DeletionTimestamp == nil && isPodReady(pod) {
+				if !r.shrinkRSHealthy(ctx, sc, &state, &pod) {
+					return nil
+				}
+				// The pod may have been elected after its PVC was deleted. Its data is going away
+				// anyway, so step it down in place instead of tracking it as the primary.
+				if sc.needsStepdown && sc.replset != nil {
+					isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+					if err != nil {
+						r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
+						return nil
+					}
+					if isPrimary {
+						log.Info("Stepping down primary before deleting its pod", "pod", pod.Name)
+						return r.shrinkStepDownPod(ctx, sc, pod)
+					}
+				}
 			}
 			if err := r.client.Delete(ctx, &pod); err != nil && !k8serrors.IsNotFound(err) {
 				return errors.Wrapf(err, "delete pod %s", pod.Name)
@@ -1053,6 +1073,22 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		if pvcRequested.Cmp(targetSize) > 0 {
 			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
+			}
+			// Never replace a primary. Hidden and non-voting members can't become one.
+			if sc.needsStepdown && sc.replset != nil {
+				isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
+				if err != nil {
+					r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
+					return nil
+				}
+				if isPrimary {
+					if isPrimaryPhase {
+						log.Info("Pod is primary again, stepping it down before replacing it", "pod", pod.Name)
+						state.Phase = "stepdown"
+						sc.cr.SetPVCShrinkState(sc.sts.Name, state)
+					}
+					return nil
+				}
 			}
 			log.Info("Deleting PVC for shrink", "pvc", pvc.Name, "pod", pod.Name)
 			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkReplacingMember", "DeletePVC", "Deleting PVC %s and pod %s to recreate them with %s", pvc.Name, pod.Name, state.TargetSize)
@@ -1079,23 +1115,15 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 		// PVC has new size and pod is Ready
 		if sc.isRSComponent && sc.replset != nil {
-			isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+			isPrimary, err := r.shrinkCheckPrimary(ctx, sc, &state, pod, isPrimaryPhase)
 			if err != nil {
-				log.Info("Failed to check RS membership, waiting", "pod", pod.Name, "error", err)
+				r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 				return nil
 			}
 			if isPrimary {
-				if !isPrimaryPhase {
-					// Primary election happened during shrink. Update the
-					// tracked primary so this pod is skipped and processed
-					// in the primary phase instead. Return so the next
-					// reconcile revisits the former primary as a secondary.
-					log.Info("Pod became primary during shrink, updating tracked primary", "pod", pod.Name, "previousPrimary", state.PrimaryPod)
-					state.PrimaryPod = pod.Name
-					sc.cr.SetPVCShrinkState(sc.sts.Name, state)
-					return nil
+				if isPrimaryPhase {
+					log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				}
-				log.Info("Waiting for pod to rejoin as SECONDARY", "pod", pod.Name)
 				return nil
 			}
 		}
@@ -1118,6 +1146,20 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 
 	return nil
+}
+
+// shrinkCheckPrimary reports whether pod is the replset primary. In the secondaries phase a newly elected
+// primary becomes the tracked one, so it's skipped now and replaced last, after a stepdown.
+func (r *ReconcilePerconaServerMongoDB) shrinkCheckPrimary(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, pod corev1.Pod, isPrimaryPhase bool) (bool, error) {
+	isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
+	if err != nil || !isPrimary || isPrimaryPhase {
+		return isPrimary, err
+	}
+	logf.FromContext(ctx).WithName("PVCShrink").Info("Pod became primary during shrink, updating tracked primary",
+		"sts", sc.sts.Name, "pod", pod.Name, "previousPrimary", state.PrimaryPod)
+	state.PrimaryPod = pod.Name
+	sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
+	return true, nil
 }
 
 // shrinkRSHealthy checks every replset member, including hidden, non-voting and arbiter members from other statefulsets.
@@ -1181,9 +1223,23 @@ func (r *ReconcilePerconaServerMongoDB) setShrinkWaiting(sc shrinkContext, state
 	}
 	state.WaitingFor = reason
 	sc.cr.SetPVCShrinkState(sc.sts.Name, *state)
-	if warn {
+	if warn && reason != sc.waitingFor {
 		r.recorder.Eventf(sc.cr, nil, corev1.EventTypeWarning, "PVCShrinkWaiting", "Wait", "Shrink of %s is waiting: %s", sc.sts.Name, reason)
 	}
+}
+
+func (r *ReconcilePerconaServerMongoDB) shrinkPrimaryCheckFailed(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, pod corev1.Pod, err error) {
+	log := logf.FromContext(ctx).WithName("PVCShrink").WithValues("sts", sc.sts.Name, "phase", state.Phase)
+	log.Info("Failed to check if pod is primary, waiting", "pod", pod.Name, "error", err)
+	r.setShrinkWaiting(sc, state, "failed to check whether "+pod.Name+" is primary", true)
+}
+
+func (r *ReconcilePerconaServerMongoDB) shrinkStepDownPod(ctx context.Context, sc shrinkContext, pod corev1.Pod) error {
+	r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", pod.Name)
+	if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, shrinkStepDownSeconds); err != nil {
+		return errors.Wrapf(err, "step down primary %s for PVC shrink", pod.Name)
+	}
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkReplacingHost(ctx context.Context, sc shrinkContext, replacing *corev1.Pod) string {
@@ -1220,11 +1276,7 @@ func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 	if !sc.isRSComponent || sc.replset == nil {
 		return ""
 	}
-	for _, name := range []string{
-		naming.MongodStatefulSetName(sc.cr, sc.replset),
-		naming.NonVotingStatefulSetName(sc.cr, sc.replset),
-		naming.HiddenStatefulSetName(sc.cr, sc.replset),
-	} {
+	for _, name := range replsetMemberStatefulSetNames(sc.cr, sc.replset) {
 		if name == sc.sts.Name {
 			continue
 		}
@@ -1233,6 +1285,25 @@ func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 		}
 	}
 	return ""
+}
+
+// replsetPVCShrinkInProgress reports whether any statefulset of the replset
+// that holds data-bearing members is being shrunk.
+func replsetPVCShrinkInProgress(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) bool {
+	for _, name := range replsetMemberStatefulSetNames(cr, rs) {
+		if _, ok := cr.GetPVCShrinkState(name); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func replsetMemberStatefulSetNames(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) []string {
+	return []string{
+		naming.MongodStatefulSetName(cr, rs),
+		naming.NonVotingStatefulSetName(cr, rs),
+		naming.HiddenStatefulSetName(cr, rs),
+	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
@@ -1255,6 +1326,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	if err := r.client.Get(ctx, client.ObjectKey{Name: state.PrimaryPod, Namespace: sc.cr.Namespace}, &pod); err != nil {
 		if k8serrors.IsNotFound(err) {
 			log.Info("Primary pod not found, skipping stepdown")
+			r.setShrinkWaiting(sc, &state, "", false)
 			state.Phase = "primary"
 		} else {
 			return errors.Wrapf(err, "get primary pod %s", state.PrimaryPod)
@@ -1262,9 +1334,10 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	} else {
 		isPrimary, err := r.isPodPrimary(ctx, sc.cr, pod, sc.replset)
 		if err != nil {
-			log.Info("Failed to check if pod is still primary, retrying", "pod", state.PrimaryPod, "error", err)
+			r.shrinkPrimaryCheckFailed(ctx, sc, &state, pod, err)
 			return nil
 		}
+		r.setShrinkWaiting(sc, &state, "", false)
 		if !isPrimary {
 			log.Info("Primary already stepped down, advancing to primary phase", "pod", state.PrimaryPod)
 		} else {
@@ -1272,9 +1345,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 				return nil
 			}
 			log.Info("Stepping down primary", "pod", state.PrimaryPod)
-			r.recorder.Eventf(sc.cr, &pod, corev1.EventTypeNormal, "PVCShrinkStepDown", "StepDown", "Stepping down primary %s", state.PrimaryPod)
-			if err := r.stepDownPod(ctx, sc.cr, sc.replset, pod, 60); err != nil {
-				return errors.Wrap(err, "step down primary for PVC shrink")
+			if err := r.shrinkStepDownPod(ctx, sc, pod); err != nil {
+				return err
 			}
 		}
 		state.Phase = "primary"

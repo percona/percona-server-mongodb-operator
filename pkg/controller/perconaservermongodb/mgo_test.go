@@ -401,7 +401,7 @@ func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
 
 			// AddNew adds one member per call; repeat to check the 51st stays excluded.
 			for range 2 {
-				_, _, _, err := r.updateConfigMembers(ctx, cli, cr, rs)
+				_, _, _, err := r.updateConfigMembers(ctx, cli, cr, rs, pods.Items)
 				require.NoError(t, err)
 				config, err := cli.ReadConfig(ctx)
 				require.NoError(t, err)
@@ -418,6 +418,45 @@ func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// PVC resize and shrink delete the statefulset with orphaned pods. If the
+// cache drops it mid-reconcile, the replset pods can no longer be listed;
+// members must not be removed or lose their votes because of it.
+func TestUpdateConfigMembersStatefulSetOrphanDeleted(t *testing.T) {
+	ctx := t.Context()
+	cr := newTestCR()
+	cr.Spec.ClusterServiceDNSMode = api.DNSModeInternal
+	cr.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+	pods := fakePodsForRS(cr, rs)
+
+	withSts := buildFakeClient(append(pods, fakeStatefulset(cr, rs, rs.Size, "", naming.ComponentMongod))...)
+	podList, err := psmdb.GetRSPods(ctx, withSts.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 3)
+
+	initialConfig := mongo.RSConfig{Version: 1}
+	for i := range podList.Items {
+		member, err := withSts.getConfigMemberForPod(ctx, cr, rs, i, &podList.Items[i])
+		require.NoError(t, err)
+		initialConfig.Members = append(initialConfig.Members, member)
+	}
+	initialConfig.Members.UpdateVotes(ctx, initialConfig.Members, false, "")
+
+	r := buildFakeClient(pods...)
+	noSts, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Empty(t, noSts.Items, "pods must not be listable without the statefulset")
+	cli := mongoFake.NewClientWithConfig(initialConfig)
+
+	_, _, _, err = r.updateConfigMembers(ctx, cli, cr, rs, podList.Items)
+	require.NoError(t, err)
+
+	config, err := cli.ReadConfig(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, initialConfig.Members, config.Members)
 }
 
 func TestCompareRoles(t *testing.T) {
