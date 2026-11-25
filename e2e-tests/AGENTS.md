@@ -28,6 +28,8 @@ Read the root [`AGENTS.md`](../AGENTS.md) first. These rules cover
   as `deploy_cert_manager`. A new helper in `functions` or `lib/` that changes
   anything outside the test namespace needs a matching rule in
   `PLACEMENT_RULES` (`select_tests.py`) in the same PR.
+- Many tests run at the same time on one CI machine. Write local files into a
+  `mktemp -d` directory, never to a fixed path such as `/tmp/s3-cert.pem`.
 
 ## Running locally
 

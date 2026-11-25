@@ -54,11 +54,13 @@ EOF
 kubectl_bin wait --for=condition=Ready certificate/s3-cert \
   -n ${namespace} --timeout=120s
 
+# Not a fixed /tmp path: other tests run at the same time on the same machine.
+cert_dir=$(mktemp -d)
 kubectl_bin get secret s3-tls -n ${namespace} \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/s3-cert.pem
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > "${cert_dir}/s3-cert.pem"
 
 kubectl_bin create secret generic s3-ca-bundle -n ${namespace} \
-  --from-file=ca.crt=/tmp/s3-cert.pem
+  --from-file=ca.crt="${cert_dir}/s3-cert.pem"
 
 desc 'Deploy first SeaweedFS instance with TLS'
 deploy_s3_storage s3-tls
@@ -129,10 +131,10 @@ kubectl_bin wait --for=condition=Ready certificate/secondary-s3-cert \
   -n ${namespace} --timeout=120s
 
 kubectl_bin get secret secondary-s3-tls -n ${namespace} \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/secondary-s3-cert.pem
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > "${cert_dir}/secondary-s3-cert.pem"
 
 kubectl_bin create secret generic secondary-s3-ca-bundle -n ${namespace} \
-  --from-file=ca.crt=/tmp/secondary-s3-cert.pem
+  --from-file=ca.crt="${cert_dir}/secondary-s3-cert.pem"
 
 deploy_s3_storage "secondary-s3-tls" "secondary-s3-storage"
 
@@ -197,7 +199,7 @@ run_mongo_tls \
 run_restore ${backup_name_single}
 run_recovery_check ${backup_name_single} "" "" "true"
 
-rm -f /tmp/s3-cert.pem /tmp/secondary-s3-cert.pem
+rm -rf "${cert_dir}"
 
 destroy "${namespace}"
 
