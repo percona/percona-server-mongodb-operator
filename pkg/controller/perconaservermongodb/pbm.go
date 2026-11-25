@@ -647,7 +647,7 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 	if err := r.patchCR(ctx, cr, orig); err != nil {
 		cr.Annotations = orig.Annotations
 		l.resyncMutex.Unlock()
-		return errors.Wrapf(err, "annotate %s", psmdbv1.AnnotationResyncInProgress)
+		return errors.Wrap(err, "patch resync annotations")
 	}
 
 	// running in separate goroutine to not block reconciliation

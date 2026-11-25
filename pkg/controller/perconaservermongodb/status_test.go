@@ -1399,3 +1399,27 @@ func TestUpdateMongosFirstStaleKeepsAnnotations(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteStatefulSetForResizeStaleCR(t *testing.T) {
+	t.Parallel()
+
+	existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+	r := buildFakeClient(existing)
+	ctx := t.Context()
+
+	stale := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+	current := stale.DeepCopy()
+	current.Spec.Image = "new-image"
+	require.NoError(t, r.client.Update(ctx, current))
+
+	sts := &appsv1.StatefulSet{Name: "sh-rs0", Namespace: "ns"}
+	sts.Spec.Template.Annotations = map[string]string{naming.AnnotationKubectlRestartedAt: "2026-11-25T00:00:00Z"}
+	require.NoError(t, r.client.Create(ctx, sts))
+
+	err := r.deleteStatefulSetForResize(ctx, stale, sts)
+	require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+	assert.Empty(t, stale.Annotations, "a failed patch must not leave the annotation in memory")
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(sts), &appsv1.StatefulSet{}),
+		"statefulset must not be deleted without preserving restartedAt")
+}

@@ -40,7 +40,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	if rs == nil {
 		return errors.Errorf("replset %s not found in cr", ls[naming.LabelKubernetesReplset])
 	}
-	claimName := config.MongodDataVolClaimName
+	claimName := dataClaimName(ls[naming.LabelKubernetesComponent])
 	volumeSpec := rs.VolumeSpec
 	switch ls[naming.LabelKubernetesComponent] {
 	case naming.ComponentNonVoting:
@@ -48,7 +48,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	case naming.ComponentHidden:
 		volumeSpec = rs.Hidden.VolumeSpec
 	case naming.ComponentSearch:
-		claimName = vectorsearch.DataVolumeName
 		volumeSpec = rs.SearchStorage(cr)
 	}
 	if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
@@ -79,6 +78,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	}
 
 	return nil
+}
+
+func dataClaimName(component string) string {
+	if component == naming.ComponentSearch {
+		return vectorsearch.DataVolumeName
+	}
+	return config.MongodDataVolClaimName
 }
 
 var (
@@ -563,8 +569,6 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 	cr *psmdbv1.PerconaServerMongoDB,
 	sts *appsv1.StatefulSet,
 ) error {
-	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
-
 	if restartedAtValue, exists := sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt]; exists {
 		orig := cr.DeepCopy()
 		if cr.Annotations == nil {
@@ -573,7 +577,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 		cr.Annotations[psmdbv1.AnnotationPreservedRestartedAt(sts.Name)] = restartedAtValue
 		if err := r.patchCR(ctx, cr, orig); err != nil {
 			cr.Annotations = orig.Annotations
-			log.V(1).Info("Failed to preserve restartedAt annotation, continuing", "error", err)
+			return errors.Wrap(err, "preserve restartedAt annotation")
 		}
 	}
 
@@ -932,14 +936,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		return errors.Wrap(err, "save PVC shrink state")
 	}
 
-	// Delete STS with cascade=orphan. If it fails, drop the saved state again:
-	// the old claim template would recreate replaced PVCs with the old size.
+	// Delete STS with cascade=orphan. If it fails, the next reconcile finds
+	// the old claim template and deletes the statefulset again.
 	if err := r.deleteStatefulSetForResize(ctx, sc.cr, sc.sts); err != nil {
-		sc.cr.ClearPVCShrinkState(sc.sts.Name)
-		revertVCT()
-		if werr := r.writeStatus(ctx, sc.cr); werr != nil {
-			log.Error(werr, "Failed to clear PVC shrink state after statefulset delete failed")
-		}
 		return errors.Wrap(err, "delete statefulset for shrink")
 	}
 
@@ -1089,7 +1088,7 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// Use Spec.Requests, not Status.Capacity, because storage classes may round capacity up.
 		pvcRequested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 		if pvcRequested.Cmp(targetSize) > 0 {
-			if ok, err := r.shrinkClaimTemplateReady(ctx, sc, targetSize); err != nil || !ok {
+			if ok, err := r.shrinkClaimTemplateReady(ctx, sc.cr, sc.sts, sc.claimName, targetSize); err != nil || !ok {
 				return err
 			}
 			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
@@ -1171,21 +1170,27 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 
 // shrinkClaimTemplateReady reports whether the live statefulset recreates PVCs with the target size.
 // If it still has the old claim template, it is orphan-deleted to be recreated with the new one.
-func (r *ReconcilePerconaServerMongoDB) shrinkClaimTemplateReady(ctx context.Context, sc shrinkContext, target resource.Quantity) (bool, error) {
+func (r *ReconcilePerconaServerMongoDB) shrinkClaimTemplateReady(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	sts *appsv1.StatefulSet,
+	claimName string,
+	target resource.Quantity,
+) (bool, error) {
 	live := new(appsv1.StatefulSet)
-	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sc.sts), live); err != nil {
-		// a missing statefulset is recreated from the new template, the health check waits for it
+	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), live); err != nil {
+		// a missing statefulset is recreated from the new template
 		if k8serrors.IsNotFound(err) {
 			return true, nil
 		}
-		return false, errors.Wrapf(err, "get statefulset %s", sc.sts.Name)
+		return false, errors.Wrapf(err, "get statefulset %s", sts.Name)
 	}
 	if live.DeletionTimestamp != nil {
 		return false, nil
 	}
 
 	for _, vct := range live.Spec.VolumeClaimTemplates {
-		if vct.Name != sc.claimName {
+		if vct.Name != claimName {
 			continue
 		}
 		size := vct.Spec.Resources.Requests[corev1.ResourceStorage]
@@ -1194,7 +1199,10 @@ func (r *ReconcilePerconaServerMongoDB) shrinkClaimTemplateReady(ctx context.Con
 		}
 		logf.FromContext(ctx).WithName("PVCShrink").Info("Statefulset still has the old claim template, recreating it",
 			"sts", live.Name, "size", size.String(), "targetSize", target.String())
-		return false, errors.Wrap(r.deleteStatefulSetForResize(ctx, sc.cr, live), "delete statefulset for shrink")
+		if err := r.deleteStatefulSetForResize(ctx, cr, live); err != nil {
+			return false, errors.Wrap(err, "delete statefulset for shrink")
+		}
+		return false, nil
 	}
 
 	return true, nil
