@@ -1276,7 +1276,7 @@ func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 	if !sc.isRSComponent || sc.replset == nil {
 		return ""
 	}
-	for _, name := range replsetMemberStatefulSetNames(sc.cr, sc.replset) {
+	for _, name := range naming.ReplsetMemberStatefulSetNames(sc.cr, sc.replset) {
 		if name == sc.sts.Name {
 			continue
 		}
@@ -1290,20 +1290,12 @@ func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 // replsetPVCShrinkInProgress reports whether any statefulset of the replset
 // that holds data-bearing members is being shrunk.
 func replsetPVCShrinkInProgress(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) bool {
-	for _, name := range replsetMemberStatefulSetNames(cr, rs) {
+	for _, name := range naming.ReplsetMemberStatefulSetNames(cr, rs) {
 		if _, ok := cr.GetPVCShrinkState(name); ok {
 			return true
 		}
 	}
 	return false
-}
-
-func replsetMemberStatefulSetNames(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) []string {
-	return []string{
-		naming.MongodStatefulSetName(cr, rs),
-		naming.NonVotingStatefulSetName(cr, rs),
-		naming.HiddenStatefulSetName(cr, rs),
-	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
