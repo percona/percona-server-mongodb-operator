@@ -31,8 +31,6 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 )
 
-func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, ls map[string]string, volumeSpec *psmdbv1.VolumeSpec) error {
-	if err := r.fixVolumeLabels(ctx, sts, volumeSpec.PersistentVolumeClaim); err != nil {
 func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet) error {
 	ls := sts.Spec.Selector.MatchLabels
 	if ls[naming.LabelKubernetesComponent] == naming.ComponentArbiter {
@@ -1371,9 +1369,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, pvcSpec psmdbv1.PVCSpec) error {
-	// PVCs inherit labels from volumeClaimTemplates, not from the StatefulSet selector. The template
-	// intentionally omits mutable metadata, so identify claims by name before applying the labels.
+// fixVolumeLabels updates matching PVC metadata. PVCs inherit labels from volumeClaimTemplates,
+// not from the StatefulSet selector, so identify claims by name before applying mutable metadata.
 func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec psmdbv1.PVCSpec) error {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
@@ -1384,7 +1381,6 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 	}
 
 	for _, pvc := range pvcList.Items {
-		if !validatePVCName(config.MongodDataVolClaimName, pvc, sts) {
 		if !validatePVCName(claimName, pvc, sts) {
 			continue
 		}

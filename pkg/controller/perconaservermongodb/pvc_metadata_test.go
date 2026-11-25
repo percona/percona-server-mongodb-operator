@@ -50,7 +50,7 @@ var _ = Describe("PersistentVolumeClaim metadata reconciliation", func() {
 		Expect(k8sClient.Create(ctx, sts)).To(Succeed())
 		Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
 
-		Expect(reconciler().reconcilePVCs(ctx, cr, sts, selectorLabels, replset.VolumeSpec)).To(Succeed())
+		Expect(reconciler().reconcilePVCs(ctx, cr, sts)).To(Succeed())
 
 		updated := &corev1.PersistentVolumeClaim{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), updated)).To(Succeed())
@@ -87,7 +87,7 @@ var _ = Describe("PersistentVolumeClaim metadata reconciliation", func() {
 		Expect(k8sClient.Create(ctx, sts)).To(Succeed())
 		Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
 
-		Expect(reconciler().reconcilePVCs(ctx, cr, sts, selectorLabels, replset.VolumeSpec)).To(Succeed())
+		Expect(reconciler().reconcilePVCs(ctx, cr, sts)).To(Succeed())
 
 		updated := &corev1.PersistentVolumeClaim{}
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), updated)).To(Succeed())
