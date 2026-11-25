@@ -64,7 +64,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	replsets := cluster.GetAllReplsets()
 
-	if cr.Status.State == psmdbv1.RestoreStateNew {
+	// A restore can leave New for Waiting before it gets here, for example
+	// while it waits for a backup lease, so run the setup until the
+	// statefulsets are changed for the restore.
+	needsSetup := cr.Status.State == psmdbv1.RestoreStateNew
+	if cr.Status.State == psmdbv1.RestoreStateWaiting {
+		prepared, err := r.statefulSetsPreparedForRestore(ctx, cluster)
+		if err != nil {
+			return status, errors.Wrap(err, "check if statefulsets are prepared for physical restore")
+		}
+		needsSetup = !prepared
+	}
+
+	if needsSetup {
 		pod := corev1.Pod{}
 		podName := replsets[0].PodName(cluster, 0)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cluster.Namespace}, &pod); err != nil {
@@ -598,6 +610,21 @@ func (r *ReconcilePerconaServerMongoDBRestore) terminateStatefulSetPods(
 	}
 
 	return terminated, nil
+}
+
+// statefulSetsPreparedForRestore reports whether prepareStatefulSetsForPhysicalRestore
+// has already changed the cluster. It checks the first statefulset that function changes.
+func (r *ReconcilePerconaServerMongoDBRestore) statefulSetsPreparedForRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	rs := cluster.GetAllReplsets()[0]
+	nn := types.NamespacedName{Namespace: cluster.Namespace, Name: naming.MongodStatefulSetName(cluster, rs)}
+
+	sts := appsv1.StatefulSet{}
+	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		return false, errors.Wrapf(err, "get statefulset %s", nn.Name)
+	}
+
+	_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
+	return ok, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
