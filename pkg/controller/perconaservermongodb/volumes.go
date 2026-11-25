@@ -917,16 +917,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		return nil
 	}
 
-	// Delete STS with cascade=orphan (reuse existing function)
-	if err := r.deleteStatefulSetForResize(ctx, sc.cr, sc.sts); err != nil {
-		return errors.Wrap(err, "delete statefulset for shrink")
-	}
-
-	log.Info("PVC shrink preflight passed, starting shrink operation",
-		"targetSize", requested.String(), "primaryPod", primaryPod)
-	r.recorder.Eventf(sc.cr, nil, corev1.EventTypeNormal, "PVCShrinkStarted", "Preflight", "Shrinking volumes of %s from %s to %s", sc.sts.Name, actual.String(), requested.String())
-
-	// Store shrink state in CR status
+	// Save the shrink state before deleting the statefulset. A reconcile that
+	// loses it after the delete no longer knows that a shrink is running.
 	sc.cr.SetPVCShrinkState(sc.sts.Name, psmdbv1.PVCShrinkState{
 		TargetSize:    requested.String(),
 		StartedAt:     time.Now().Format(time.RFC3339),
@@ -934,6 +926,26 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		ProcessedPods: []string{},
 		PrimaryPod:    primaryPod,
 	})
+	if err := r.writeStatus(ctx, sc.cr); err != nil {
+		sc.cr.ClearPVCShrinkState(sc.sts.Name)
+		revertVCT()
+		return errors.Wrap(err, "save PVC shrink state")
+	}
+
+	// Delete STS with cascade=orphan. If it fails, drop the saved state again:
+	// the old claim template would recreate replaced PVCs with the old size.
+	if err := r.deleteStatefulSetForResize(ctx, sc.cr, sc.sts); err != nil {
+		sc.cr.ClearPVCShrinkState(sc.sts.Name)
+		revertVCT()
+		if werr := r.writeStatus(ctx, sc.cr); werr != nil {
+			log.Error(werr, "Failed to clear PVC shrink state after statefulset delete failed")
+		}
+		return errors.Wrap(err, "delete statefulset for shrink")
+	}
+
+	log.Info("PVC shrink preflight passed, starting shrink operation",
+		"targetSize", requested.String(), "primaryPod", primaryPod)
+	r.recorder.Eventf(sc.cr, nil, corev1.EventTypeNormal, "PVCShrinkStarted", "Preflight", "Shrinking volumes of %s from %s to %s", sc.sts.Name, actual.String(), requested.String())
 
 	return nil
 }
@@ -1077,6 +1089,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// Use Spec.Requests, not Status.Capacity, because storage classes may round capacity up.
 		pvcRequested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 		if pvcRequested.Cmp(targetSize) > 0 {
+			if ok, err := r.shrinkClaimTemplateReady(ctx, sc, targetSize); err != nil || !ok {
+				return err
+			}
 			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
 			}
@@ -1152,6 +1167,37 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 
 	return nil
+}
+
+// shrinkClaimTemplateReady reports whether the live statefulset recreates PVCs with the target size.
+// If it still has the old claim template, it is orphan-deleted to be recreated with the new one.
+func (r *ReconcilePerconaServerMongoDB) shrinkClaimTemplateReady(ctx context.Context, sc shrinkContext, target resource.Quantity) (bool, error) {
+	live := new(appsv1.StatefulSet)
+	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sc.sts), live); err != nil {
+		// a missing statefulset is recreated from the new template, the health check waits for it
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, errors.Wrapf(err, "get statefulset %s", sc.sts.Name)
+	}
+	if live.DeletionTimestamp != nil {
+		return false, nil
+	}
+
+	for _, vct := range live.Spec.VolumeClaimTemplates {
+		if vct.Name != sc.claimName {
+			continue
+		}
+		size := vct.Spec.Resources.Requests[corev1.ResourceStorage]
+		if size.Cmp(target) == 0 {
+			return true, nil
+		}
+		logf.FromContext(ctx).WithName("PVCShrink").Info("Statefulset still has the old claim template, recreating it",
+			"sts", live.Name, "size", size.String(), "targetSize", target.String())
+		return false, errors.Wrap(r.deleteStatefulSetForResize(ctx, sc.cr, live), "delete statefulset for shrink")
+	}
+
+	return true, nil
 }
 
 // shrinkCheckPrimary reports whether pod is the replset primary. In the secondaries phase a newly elected

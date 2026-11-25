@@ -2228,3 +2228,123 @@ func eventReasons(rec *events.FakeRecorder) []string {
 		}
 	}
 }
+
+// mongosShrinkFixture builds a ready sharded cluster whose mongos log volumes are 3Gi and requested at 2Gi.
+func mongosShrinkFixture(t *testing.T, vctSize resource.Quantity, objs ...client.Object) (*ReconcilePerconaServerMongoDB, shrinkContext) {
+	t.Helper()
+
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	cr.Spec.Sharding.Enabled = true
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{EnableVolumeShrink: true}
+	cr.Status.State = api.AppStateReady
+
+	labels := naming.MongosLabels(cr)
+	sts := &appsv1.StatefulSet{
+		Name:      naming.MongosStatefulSetName(cr),
+		Namespace: cr.Namespace,
+		Labels:    labels,
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: new(int32(1)),
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
+				Name: config.MongosLogVolClaimName,
+				Spec: corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: vctSize}},
+				},
+			}},
+		},
+	}
+
+	r := buildFakeClient(append([]client.Object{cr, sts}, objs...)...)
+	r.recorder = events.NewFakeRecorder(10)
+
+	stored := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+	stored.Spec = cr.Spec
+
+	return r, shrinkContext{
+		cr:        stored,
+		sts:       sts.DeepCopy(),
+		ls:        labels,
+		claimName: config.MongosLogVolClaimName,
+		component: naming.ComponentMongos,
+	}
+}
+
+func TestShrinkPreflightSavesStateBeforeDeletingStatefulSet(t *testing.T) {
+	t.Parallel()
+
+	requested, actual := resource.MustParse("2Gi"), resource.MustParse("3Gi")
+
+	t.Run("state saved, then statefulset deleted", func(t *testing.T) {
+		t.Parallel()
+		r, sc := mongosShrinkFixture(t, requested)
+
+		require.NoError(t, r.shrinkPreflight(t.Context(), sc, requested, actual))
+
+		stored := &api.PerconaServerMongoDB{}
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.cr), stored))
+		state, ok := stored.GetPVCShrinkState(sc.sts.Name)
+		require.True(t, ok, "shrink state must be saved")
+		assert.Equal(t, "2Gi", state.TargetSize)
+
+		err := r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{})
+		assert.True(t, k8serrors.IsNotFound(err), "statefulset must be deleted, got %v", err)
+	})
+
+	t.Run("stale CR deletes nothing", func(t *testing.T) {
+		t.Parallel()
+		r, sc := mongosShrinkFixture(t, requested)
+
+		edited := sc.cr.DeepCopy()
+		edited.Annotations = map[string]string{"foo": "bar"}
+		require.NoError(t, r.client.Update(t.Context(), edited))
+
+		err := r.shrinkPreflight(t.Context(), sc, requested, actual)
+		require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+
+		_, ok := sc.cr.GetPVCShrinkState(sc.sts.Name)
+		assert.False(t, ok, "state must not stay in memory")
+		vct := sc.sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+		assert.Equal(t, actual.String(), vct.String(), "claim template must be reverted")
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{}), "statefulset must not be deleted")
+	})
+
+	t.Run("failed statefulset delete drops the saved state", func(t *testing.T) {
+		t.Parallel()
+		r, sc := mongosShrinkFixture(t, requested)
+		r.client = interceptorClient(t, r.client, func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+			if _, ok := obj.(*appsv1.StatefulSet); ok {
+				return errors.New("delete failed")
+			}
+			return c.Delete(ctx, obj, opts...)
+		})
+
+		require.Error(t, r.shrinkPreflight(t.Context(), sc, requested, actual))
+
+		stored := &api.PerconaServerMongoDB{}
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.cr), stored))
+		assert.False(t, stored.IsPVCShrinkInProgress(), "saved state must be dropped")
+	})
+}
+
+func TestShrinkRecreatesStatefulSetWithOldClaimTemplate(t *testing.T) {
+	t.Parallel()
+
+	target, old := resource.MustParse("2Gi"), resource.MustParse("3Gi")
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	labels := naming.MongosLabels(cr)
+	podName := naming.MongosStatefulSetName(cr) + "-0"
+	pvc := newPVC(cr.Namespace, config.MongosLogVolClaimName+"-"+podName, labels, old, old)
+
+	r, sc := mongosShrinkFixture(t, old, newPod(cr.Namespace, podName, labels), pvc)
+	state := api.PVCShrinkState{TargetSize: target.String(), Phase: "secondaries", ProcessedPods: []string{}}
+	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
+
+	require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
+
+	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(pvc), &corev1.PersistentVolumeClaim{}), "PVC must not be deleted while the old template would recreate it")
+	err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{})
+	assert.True(t, k8serrors.IsNotFound(err), "statefulset with the old template must be deleted, got %v", err)
+}
