@@ -32,11 +32,7 @@ type mongoClientProvider struct {
 
 type connectFunc func(ctx context.Context, creds psmdb.Credentials) (mongo.Client, error)
 
-// connect tries cached credentials first. On authentication failure, it reads the
-// secret directly and retries.
-//
-// In the logcollector test, the operator updated the clusterAdmin password and reconnected before
-// its secret cache caught up, causing it to set the cluster to an error state.
+// connect tries cached credentials first. On authentication failure, it reads the secret directly and retries.
 func (p *mongoClientProvider) connect(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, f connectFunc) (mongo.Client, error) {
 	cached, err := getInternalCredentials(ctx, p.k8sclient, cr, role)
 	if err != nil {
