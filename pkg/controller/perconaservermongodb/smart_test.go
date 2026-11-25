@@ -493,3 +493,30 @@ func TestSmartUpdateMissingClaims(t *testing.T) {
 		})
 	}
 }
+
+func TestWaitPodRestartIgnoresStatusConflict(t *testing.T) {
+	t.Parallel()
+
+	pod := &corev1.Pod{
+		Name:      "some-name-rs0-0",
+		Namespace: "some-namespace",
+		Labels:    map[string]string{"controller-revision-hash": "rev-2"},
+		Status: corev1.PodStatus{
+			Phase:             corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{{Name: naming.ContainerMongod, Ready: true}},
+		},
+	}
+	existing := &api.PerconaServerMongoDB{Name: "some-name", Namespace: "some-namespace"}
+	existing.Spec.Replsets = []*api.ReplsetSpec{{Name: "rs0", Size: 3}}
+	r := buildFakeClient(existing, pod)
+	ctx := t.Context()
+
+	cr := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), cr))
+
+	edited := cr.DeepCopy()
+	edited.Annotations = map[string]string{"foo": "bar"}
+	require.NoError(t, r.client.Update(ctx, edited))
+
+	assert.NoError(t, r.waitPodRestart(ctx, cr, "rev-2", pod.DeepCopy(), 3))
+}

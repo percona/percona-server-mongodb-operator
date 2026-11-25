@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
@@ -13,8 +14,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -121,9 +120,17 @@ func (r *ReconcilePerconaServerMongoDB) scheduleEnsureVersion(ctx context.Contex
 			return
 		}
 
-		err = r.ensureVersion(ctx, localCr, vs)
-		if err != nil {
+		status := localCr.Status.DeepCopy()
+		if err := r.ensureVersion(ctx, localCr, vs); err != nil {
 			log.Error(err, "ensure version")
+			return
+		}
+		if reflect.DeepEqual(status, &localCr.Status) {
+			return
+		}
+
+		if err := r.writeStatus(ctx, localCr); err != nil {
+			log.Error(err, "write status")
 		}
 	})
 	if err != nil {
@@ -346,7 +353,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		return errors.Wrap(err, "check version")
 	}
 
-	patch := client.MergeFrom(cr.DeepCopy())
+	orig := cr.DeepCopy()
 	if cr.Spec.Image != newVersion.MongoImage {
 		if cr.Status.MongoVersion == "" {
 			log.Info("Set Mongo version", "newVersion", newVersion.MongoImage)
@@ -374,7 +381,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 		cr.Spec.PMM.Image = newVersion.PMMImage
 	}
 
-	err = r.client.Patch(ctx, cr.DeepCopy(), patch)
+	err = r.patchCR(ctx, cr, orig)
 	if err != nil {
 		return errors.Wrap(err, "patch CR")
 	}
@@ -384,21 +391,7 @@ func (r *ReconcilePerconaServerMongoDB) ensureVersion(ctx context.Context, cr *a
 	cr.Status.MongoVersion = newVersion.MongoVersion
 	cr.Status.MongoImage = newVersion.MongoImage
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		c := &api.PerconaServerMongoDB{}
-
-		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
-		if err != nil {
-			return err
-		}
-
-		c.Status.PMMVersion = newVersion.PMMVersion
-		c.Status.BackupVersion = newVersion.BackupVersion
-		c.Status.MongoVersion = newVersion.MongoVersion
-		c.Status.MongoImage = newVersion.MongoImage
-
-		return r.client.Status().Update(ctx, c)
-	})
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
@@ -431,17 +424,5 @@ func (r *ReconcilePerconaServerMongoDB) fetchVersionFromMongo(ctx context.Contex
 	cr.Status.MongoVersion = info.Version
 	cr.Status.MongoImage = cr.Spec.Image
 
-	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		c := &api.PerconaServerMongoDB{}
-
-		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
-		if err != nil {
-			return err
-		}
-
-		c.Status.MongoVersion = info.Version
-		c.Status.MongoImage = cr.Spec.Image
-
-		return r.client.Status().Update(ctx, c)
-	})
+	return nil
 }

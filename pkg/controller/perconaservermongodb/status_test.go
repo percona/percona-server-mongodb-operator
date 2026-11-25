@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -377,6 +378,77 @@ func TestWriteStatusRecreatedCR(t *testing.T) {
 	got := &api.PerconaServerMongoDB{}
 	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(existing), got))
 	assert.Empty(t, got.Status.Replsets)
+}
+
+// A reconcile can start from a cached CR that misses the PVC shrink state
+// written by the previous reconcile. Its status write must fail instead of
+// dropping or rolling back that state.
+func TestWriteStatusKeepsNewerPVCShrinkState(t *testing.T) {
+	t.Parallel()
+
+	rs0Progress := api.PVCShrinkState{TargetSize: "30Gi", Phase: "secondaries", ProcessedPods: []string{"sh-rs0-2"}, PrimaryPod: "sh-rs0-0"}
+	rs1Started := api.PVCShrinkState{TargetSize: "30Gi", Phase: "secondaries", ProcessedPods: []string{}, PrimaryPod: "sh-rs1-0"}
+
+	tests := map[string]struct {
+		staleShrink map[string]api.PVCShrinkState
+	}{
+		"stale copy without shrink state": {
+			staleShrink: nil,
+		},
+		"stale copy with older shrink progress": {
+			staleShrink: map[string]api.PVCShrinkState{
+				"sh-rs0": {TargetSize: "30Gi", Phase: "secondaries", ProcessedPods: []string{}, PrimaryPod: "sh-rs0-0"},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+			r := buildFakeClient(existing)
+			ctx := t.Context()
+
+			stale := &api.PerconaServerMongoDB{}
+			require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+
+			current := stale.DeepCopy()
+			current.Status.PVCShrink = map[string]api.PVCShrinkState{"sh-rs0": rs0Progress, "sh-rs1": rs1Started}
+			require.NoError(t, r.client.Status().Update(ctx, current))
+
+			stale.Status.PVCShrink = tt.staleShrink
+			stale.Status.State = api.AppStateInit
+			err := r.writeStatus(ctx, stale)
+			require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+
+			got := &api.PerconaServerMongoDB{}
+			require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), got))
+			assert.Equal(t, current.Status.PVCShrink, got.Status.PVCShrink)
+		})
+	}
+}
+
+func TestWriteStatusRemovesFinishedPVCShrinkState(t *testing.T) {
+	t.Parallel()
+
+	existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+	existing.Status.PVCShrink = map[string]api.PVCShrinkState{
+		"sh-rs0": {TargetSize: "30Gi", Phase: "primary", PrimaryPod: "sh-rs0-0"},
+		"sh-rs1": {TargetSize: "30Gi", Phase: "secondaries", PrimaryPod: "sh-rs1-0"},
+	}
+	r := buildFakeClient(existing)
+	ctx := t.Context()
+
+	cr := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), cr))
+	cr.ClearPVCShrinkState("sh-rs0")
+
+	require.NoError(t, r.writeStatus(ctx, cr))
+
+	got := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), got))
+	assert.Equal(t, map[string]api.PVCShrinkState{"sh-rs1": existing.Status.PVCShrink["sh-rs1"]}, got.Status.PVCShrink)
 }
 
 func fakeVolumeSpec(t *testing.T) *api.VolumeSpec {
@@ -1153,4 +1225,95 @@ func TestOutdatedContainerNames(t *testing.T) {
 			assert.Equal(t, tt.want, outdatedContainerNames(tt.pod, tt.desired))
 		})
 	}
+}
+
+// Every CR write in a reconcile keeps cr.ResourceVersion current, otherwise
+// the next writeStatus in that reconcile conflicts.
+func TestCRWritesKeepResourceVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		annotations map[string]string
+		write       func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error
+	}{
+		"writeStatus": {
+			write: func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error {
+				cr.Status.State = api.AppStateInit
+				return r.writeStatus(ctx, cr)
+			},
+		},
+		"patchCR": {
+			write: func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error {
+				orig := cr.DeepCopy()
+				cr.Spec.Image = "new-image"
+				return r.patchCR(ctx, cr, orig)
+			},
+		},
+		"setUpdateMongosFirst": {
+			write: func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error {
+				return r.setUpdateMongosFirst(ctx, cr)
+			},
+		},
+		"unsetUpdateMongosFirst": {
+			annotations: map[string]string{api.AnnotationUpdateMongosFirst: "true"},
+			write: func(ctx context.Context, r *ReconcilePerconaServerMongoDB, cr *api.PerconaServerMongoDB) error {
+				return r.unsetUpdateMongosFirst(ctx, cr)
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns", Annotations: tt.annotations}
+			existing.Spec.Sharding.Enabled = true
+			r := buildFakeClient(existing)
+			ctx := t.Context()
+
+			cr := &api.PerconaServerMongoDB{}
+			require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), cr))
+			before := cr.ResourceVersion
+
+			require.NoError(t, tt.write(ctx, r, cr))
+			require.NotEqual(t, before, cr.ResourceVersion)
+
+			cr.Status.State = api.AppStateReady
+			require.NoError(t, r.writeStatus(ctx, cr))
+		})
+	}
+}
+
+func TestPatchCRStale(t *testing.T) {
+	t.Parallel()
+
+	existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+	existing.Spec.Image = "old-image"
+	r := buildFakeClient(existing)
+	ctx := t.Context()
+
+	stale := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+
+	current := stale.DeepCopy()
+	current.Annotations = map[string]string{"foo": "bar"}
+	require.NoError(t, r.client.Update(ctx, current))
+
+	orig := stale.DeepCopy()
+	stale.Spec.Image = "new-image"
+	err := r.patchCR(ctx, stale, orig)
+	require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+
+	got := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), got))
+	assert.Equal(t, "old-image", got.Spec.Image)
+}
+
+func TestWriteStatusDeletedCR(t *testing.T) {
+	t.Parallel()
+
+	r := buildFakeClient()
+	cr := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns", ResourceVersion: "1"}
+
+	assert.NoError(t, r.writeStatus(t.Context(), cr))
 }

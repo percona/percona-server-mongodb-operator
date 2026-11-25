@@ -613,7 +613,7 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 		log.Info("Reverting volume template", "claim", claimName, "component", component, "originalSize", originalSize)
 		pvcSpec.Resources.Requests[corev1.ResourceStorage] = originalSize
 
-		if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+		if err := r.patchCR(ctx, cr, orig); err != nil {
 			return errors.Wrapf(err, "patch psmdb/%s", cr.Name)
 		}
 
@@ -684,7 +684,7 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 		return errors.Errorf("unsupported component %s", component)
 	}
 
-	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+	if err := r.patchCR(ctx, cr, orig); err != nil {
 		return errors.Wrapf(err, "patch psmdb/%s", cr.Name)
 	}
 
