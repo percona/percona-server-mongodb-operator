@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from .allure_support import step
 from .kubectl import kubectl_bin, wait_pod
 from .utils import retry
 
@@ -42,6 +43,7 @@ def _remove_instance_finalizers(resource_kind: str) -> None:
         )
 
 
+@step("Deploy the operator")
 def deploy_operator(test_dir: str, src_dir: str) -> None:
     """Deploy the operator"""
     logger.info("Start PSMDB operator")

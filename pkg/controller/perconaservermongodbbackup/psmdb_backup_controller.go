@@ -490,13 +490,22 @@ func (r *ReconcilePerconaServerMongoDBBackup) getPBMStorage(ctx context.Context,
 		if err != nil {
 			return nil, errors.Wrap(err, "get azure credentials secret")
 		}
+		account := string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey])
+		key := string(azureSecret.Data[backup.AzureStorageAccountKeySecretKey])
+
+		if connStr := string(azureSecret.Data[backup.AzureStorageConnectionStringSecretKey]); connStr != "" {
+			account, key, err = backup.ParseAzureConnectionString(connStr)
+			if err != nil {
+				return nil, errors.Wrap(err, "parse azure connection string")
+			}
+		}
 		azureConf := &azure.Config{
-			Account:     string(azureSecret.Data[backup.AzureStorageAccountNameSecretKey]),
+			Account:     account,
 			Container:   cr.Status.Azure.Container,
 			EndpointURL: cr.Status.Azure.EndpointURL,
 			Prefix:      cr.Status.Azure.Prefix,
 			Credentials: azure.Credentials{
-				Key: storage.MaskedString(azureSecret.Data[backup.AzureStorageAccountKeySecretKey]),
+				Key: storage.MaskedString([]byte(key)),
 			},
 		}
 		return azure.New(azureConf, "", nil)
@@ -721,7 +730,7 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 			log.Info("delete-backup finalizer is deprecated and will be deleted in 1.20.0. Use percona.com/delete-backup instead")
 			fallthrough
 		case naming.FinalizerDeleteBackup:
-			if cr.Status.State == psmdbv1.BackupStateReady {
+			if cr.Status.State == psmdbv1.BackupStateReady || cr.Status.State == psmdbv1.BackupStateCanceled {
 				if err := r.deleteBackupFinalizer(ctx, cr, cluster, b); err != nil {
 					log.Error(err, "failed to run finalizer", "finalizer", f)
 					finalizers = append(finalizers, f)
@@ -784,9 +793,27 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 			}
 			meta = nil
 		}
+		if cr.Status.State == psmdbv1.BackupStateCanceled {
+			var opID string
+			if meta != nil {
+				opID = meta.OPID
+			}
+			active, err := b.PBM().HasBackupLock(ctx, opID)
+			if err != nil {
+				return errors.Wrap(err, "check PBM backup locks before cleanup")
+			}
+			if active {
+				return errors.New("waiting for PBM backup locks to release before cleanup")
+			}
+		}
+	} else if cr.Status.State == psmdbv1.BackupStateCanceled && cluster != nil &&
+		(!cluster.Spec.Pause || cluster.Status.State != psmdbv1.AppStatePaused) {
+		return errors.New("PBM connection unavailable to check backup locks before cleanup")
 	}
+
+	snapshotBackup := len(cr.Status.Snapshots) > 0 || (cr.Status.State == psmdbv1.BackupStateCanceled && cr.Spec.Type == defs.ExternalBackup)
 	if b.PBM() == nil || meta == nil {
-		if len(cr.Status.Snapshots) > 0 {
+		if snapshotBackup {
 			return r.deleteVolumeSnapshots(ctx, cr)
 		}
 
@@ -824,12 +851,19 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 			return errors.Wrap(err, "delete filesystem backup")
 		}
 		return nil
-	case len(cr.Status.Snapshots) > 0:
+	case snapshotBackup:
 		if err := r.deleteVolumeSnapshots(ctx, cr); err != nil {
 			return errors.Wrap(err, "delete volume snapshots")
 		}
 		if err := b.PBM().DeleteBackupMeta(ctx, cr.Status.PBMname); err != nil {
 			return errors.Wrap(err, "delete backup meta")
+		}
+		return nil
+	}
+
+	if cr.Status.State == psmdbv1.BackupStateCanceled {
+		if err := b.PBM().DeleteBackup(ctx, cr.Status.PBMname); err != nil {
+			return errors.Wrap(err, "failed to delete canceled backup")
 		}
 		return nil
 	}
@@ -879,16 +913,18 @@ func (r *ReconcilePerconaServerMongoDBBackup) deleteBackupFinalizer(ctx context.
 func (r *ReconcilePerconaServerMongoDBBackup) deleteVolumeSnapshots(ctx context.Context, cr *psmdbv1.PerconaServerMongoDBBackup) error {
 	log := logf.FromContext(ctx).WithName("deleteVolumeSnapshots").WithValues("backup", cr.Name, "namespace", cr.Namespace, "pbmName", cr.Status.PBMname)
 
-	for _, snapshot := range cr.Status.Snapshots {
-		snapshot := &volumesnapshotv1.VolumeSnapshot{
-			Name:      snapshot.SnapshotName,
-			Namespace: cr.Namespace,
+	for _, info := range cr.Status.Snapshots {
+		for _, name := range info.Names() {
+			snapshot := &volumesnapshotv1.VolumeSnapshot{
+				Name:      name,
+				Namespace: cr.Namespace,
+			}
+			err := r.client.Delete(ctx, snapshot)
+			if client.IgnoreNotFound(err) != nil {
+				return errors.Wrap(err, "delete volume snapshot")
+			}
+			log.Info("Deleted volume snapshot", "snapshot", snapshot.Name)
 		}
-		err := r.client.Delete(ctx, snapshot)
-		if client.IgnoreNotFound(err) != nil {
-			return errors.Wrap(err, "delete volume snapshot")
-		}
-		log.Info("Deleted volume snapshot", "snapshot", snapshot.Name)
 	}
 	return nil
 }

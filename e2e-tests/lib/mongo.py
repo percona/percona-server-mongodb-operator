@@ -7,6 +7,7 @@ from typing import Any
 
 from deepdiff import DeepDiff
 
+from .allure_support import step
 from .kubectl import kubectl_bin
 from .utils import render_yaml_diff, retry
 
@@ -28,6 +29,7 @@ class MongoManager:
         self.client = client
         self.tls = tls
 
+    @step("mongosh {uri}: {command}")
     def run_mongosh(
         self,
         command: str,
@@ -75,6 +77,7 @@ class MongoManager:
         )
         return result
 
+    @step("Compare permissions of {uri} with role {expected_role}")
     def compare_mongo_user(self, uri: str, expected_role: str, test_dir: str) -> None:
         """Compare MongoDB user permissions"""
 
@@ -142,6 +145,7 @@ class MongoManager:
             or diff.pretty()
         )
 
+    @step("Compare result of {command} on {uri}")
     def compare_mongo_cmd(
         self,
         command: str,
@@ -178,6 +182,7 @@ class MongoManager:
 
         retry(_compare, max_attempts=retries, delay=retry_delay)
 
+    @step("Find the primary of {cluster_name}")
     def get_mongo_primary(self, uri: str, cluster_name: str) -> str:
         """Get current MongoDB primary node"""
         primary_endpoint = self.run_mongosh("EJSON.stringify(db.hello().me)", uri)

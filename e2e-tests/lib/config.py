@@ -7,6 +7,7 @@ from typing import Any
 
 import yaml
 
+from .allure_support import step
 from .arch import arch, clean_arch
 from .kubectl import kubectl_bin
 from .utils import env_bool, render_yaml_diff
@@ -101,6 +102,7 @@ def render_cluster_config(config_file: str) -> str:
     return yaml.dump(config)
 
 
+@step("Apply cluster CR {config_file}")
 def apply_cluster(config_file: str) -> None:
     logger.info("Creating PSMDB cluster")
     config_yaml = render_cluster_config(config_file)
@@ -235,6 +237,7 @@ def _assert_yaml_equal(
     assert not message, message
 
 
+@step("Compare {resource} with the expected manifest")
 def compare_kubectl(
     test_dir: str,
     resource: str,

@@ -31,6 +31,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 )
 
@@ -403,6 +404,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 		if pbmIdx != -1 {
 			sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers[:pbmIdx], sts.Spec.Template.Spec.Containers[pbmIdx+1:]...)
 		}
+
+		// pbm can't remove mount points inside the dbpath, journal-migration moves the restored journal back
+		sts.Spec.Template.Spec.Containers[0].VolumeMounts = slices.DeleteFunc(sts.Spec.Template.Spec.Containers[0].VolumeMounts, func(m corev1.VolumeMount) bool {
+			return m.Name == config.MongodJournalVolClaimName || m.Name == config.MongodLogVolClaimName
+		})
 
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "pbm-config",

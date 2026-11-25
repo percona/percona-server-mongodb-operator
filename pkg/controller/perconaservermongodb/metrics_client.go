@@ -9,8 +9,10 @@ import (
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -20,6 +22,15 @@ var defaultPVCUsageBackoff = wait.Backoff{
 	Steps:    5,
 	Duration: 5 * time.Second,
 	Factor:   2.0,
+}
+
+func (r *ReconcilePerconaServerMongoDB) podExecutable(ctx context.Context, pod *corev1.Pod) bool {
+	current := &corev1.Pod{}
+	err := r.client.Get(ctx, client.ObjectKeyFromObject(pod), current)
+	if k8sErrors.IsNotFound(err) {
+		return false
+	}
+	return err != nil || current.DeletionTimestamp == nil
 }
 
 // PVCUsage contains information about PVC disk usage
@@ -62,7 +73,7 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 	var stdout, stderr bytes.Buffer
 	command := []string{"df", "-B1", mountPath}
 
-	err := retry.OnError(backoff, func(err error) bool { return true }, func() error {
+	err := retry.OnError(backoff, func(error) bool { return r.podExecutable(ctx, pod) }, func() error {
 		stdout.Reset()
 		stderr.Reset()
 
