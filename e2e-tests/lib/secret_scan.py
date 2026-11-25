@@ -9,8 +9,9 @@ storage Secrets (raw and base64) and looks for them verbatim. The pattern scan
 looks for well-known credential shapes (AWS keys, Azure account keys, GCP service
 account keys, private key blocks, MongoDB URIs with a password). A finding reports
 the source, the line number and the rule; the scan's own assertion message masks
-the matched text. The failure report the harness attaches (operator logs, events)
-is not redacted (K8SPSMDB-1940).
+the matched text. The failure report the harness attaches (operator logs, events,
+bash output) masks the values of the users and storage Secrets of the test
+namespace (register_known_secrets) and credential shapes (allure_support.mask).
 
 Only the pods that exist at the time of the scan are read. The operator replaces
 the database pods when a physical restore completes, so a scan after it misses
@@ -25,6 +26,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any
 
+from .allure_support import add_known_values
 from .kubectl import kubectl_bin
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,9 @@ STORAGE_SECRETS = (
 
 # Shorter values (bucket names, regions, "admin") match too much.
 MIN_VALUE_LENGTH = 8
+
+# Data keys of user names in the users Secret (MONGODB_BACKUP_USER): not credentials.
+USER_NAME_KEY = re.compile(r"_USER$")
 
 # Placeholders from example manifests that are not credentials.
 ALLOWED_VALUES = frozenset(
@@ -101,8 +106,43 @@ def secret_values(namespace: str, secret_names: tuple[str, ...]) -> dict[str, st
         if not raw.strip():
             continue
         for key, encoded in (json.loads(raw).get("data") or {}).items():
-            values.update(data_values(f"{secret}/{key}", encoded))
+            if not USER_NAME_KEY.search(key):
+                values.update(data_values(f"{secret}/{key}", encoded))
     return values
+
+
+def users_secret_names(namespace: str) -> tuple[str, ...]:
+    """The users Secret of every psmdb cluster in `namespace`, and the operator's
+    internal copy of it."""
+    out = kubectl_bin(
+        "get",
+        "psmdb",
+        "-n",
+        namespace,
+        "-o",
+        r'jsonpath={range .items[*]}{.metadata.name}{" "}{.spec.secrets.users}{"\n"}{end}',
+    )
+    names: list[str] = []
+    for line in out.splitlines():
+        cluster, _, users = line.partition(" ")
+        if cluster:
+            names += [users.strip() or f"{cluster}-secrets", f"internal-{cluster}-users"]
+    return tuple(names)
+
+
+def register_known_secrets(namespace: str) -> None:
+    """Mask the values of the users and storage Secrets of `namespace` in the report.
+
+    Errors are logged: a failure report without these values is masked by
+    credential shape only.
+    """
+    try:
+        names = users_secret_names(namespace) + STORAGE_SECRETS
+        values = secret_values(namespace, names)
+    except (subprocess.CalledProcessError, ValueError) as e:
+        logger.warning(f"Could not read the secrets of {namespace} to mask them: {e}")
+        return
+    add_known_values(values.values())
 
 
 def data_values(name: str, encoded: str) -> dict[str, str]:
