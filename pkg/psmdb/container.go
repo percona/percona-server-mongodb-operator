@@ -23,9 +23,12 @@ type containerFnParams struct {
 	useConfigFile            bool
 	livenessProbe            *api.LivenessProbeExtended
 	readinessProbe           *corev1.Probe
+	startupProbe             *corev1.Probe
 	containerSecurityContext *corev1.SecurityContext
 	containerEnv             []corev1.EnvVar
 	containerEnvFrom         []corev1.EnvFromSource
+	logVolume                *config.LogVolume
+	journalMount             *corev1.VolumeMount
 }
 
 func container(ctx context.Context, cr *api.PerconaServerMongoDB, params containerFnParams) (corev1.Container, error) {
@@ -38,6 +41,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		useConfigFile            = params.useConfigFile
 		livenessProbe            = params.livenessProbe
 		readinessProbe           = params.readinessProbe
+		startupProbe             = params.startupProbe
 		containerSecurityContext = params.containerSecurityContext
 		containerEnv             = params.containerEnv
 		containerEnvFrom         = params.containerEnvFrom
@@ -49,6 +53,17 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 			Name:      config.MongodDataVolClaimName,
 			MountPath: config.MongodContainerDataDir,
 		},
+	}
+
+	if logVol := params.logVolume; logVol != nil {
+		volumes = append(volumes, corev1.VolumeMount{
+			Name:      logVol.Name,
+			MountPath: logVol.MountPath,
+		})
+	}
+
+	if params.journalMount != nil {
+		volumes = append(volumes, *params.journalMount)
 	}
 
 	if mountKeyFile {
@@ -197,6 +212,7 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		WorkingDir:      config.MongodContainerDataDir,
 		LivenessProbe:   &livenessProbe.Probe,
 		ReadinessProbe:  readinessProbe,
+		StartupProbe:    startupProbe,
 		Resources:       resources,
 		SecurityContext: containerSecurityContext,
 		VolumeMounts:    volumes,

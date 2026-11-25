@@ -13,7 +13,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -153,6 +152,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	containerEnvFrom := replset.EnvFrom
 	livenessProbe := replset.LivenessProbe
 	readinessProbe := replset.ReadinessProbe
+	startupProbe := replset.StartupProbe
 	configName := naming.MongodCustomConfigName(cr, replset)
 	logCollectionConfigName := logcollector.ConfigMapName(cr.Name)
 
@@ -178,6 +178,7 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		configName = naming.NonVotingConfigMapName(cr, replset)
 		livenessProbe = replset.NonVoting.LivenessProbe
 		readinessProbe = replset.NonVoting.ReadinessProbe
+		startupProbe = replset.NonVoting.StartupProbe
 		volumeSpec = replset.NonVoting.VolumeSpec
 	case naming.ComponentHidden:
 		containerName = naming.ContainerHidden
@@ -190,7 +191,25 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		configName = naming.HiddenConfigMapName(cr, replset)
 		livenessProbe = replset.Hidden.LivenessProbe
 		readinessProbe = replset.Hidden.ReadinessProbe
+		startupProbe = replset.Hidden.StartupProbe
 		volumeSpec = replset.Hidden.VolumeSpec
+	}
+
+	logPVC := replset.LogPVC(cr, ls[naming.LabelKubernetesComponent])
+	logVol := config.MongodLogVolume()
+	var mongodLogVol *config.LogVolume
+	if logPVC != nil {
+		logVol = config.MongodPVCLogVolume()
+		mongodLogVol = &logVol
+	}
+
+	journalPVC := replset.JournalPVC(cr, ls[naming.LabelKubernetesComponent])
+	var journalMount *corev1.VolumeMount
+	if journalPVC != nil {
+		journalMount = &corev1.VolumeMount{
+			Name:      config.MongodJournalVolClaimName,
+			MountPath: config.MongodContainerJournalDir,
+		}
 	}
 
 	// Resources come from what the operator committed for this component when VPA
@@ -308,9 +327,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		useConfigFile:            configs.MongoDConf.Type.IsUsable(),
 		livenessProbe:            livenessProbe,
 		readinessProbe:           readinessProbe,
+		startupProbe:             startupProbe,
 		containerSecurityContext: containerSecurityContext,
 		containerEnv:             containerEnv,
 		containerEnvFrom:         containerEnvFrom,
+		logVolume:                mongodLogVol,
+		journalMount:             journalMount,
 	}
 	c, err := container(ctx, cr, params)
 	if err != nil {
@@ -320,6 +342,12 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 	initContainers := psmdbInit.Containers(cr, initImage)
 	for i := range initContainers {
 		initContainers[i].Resources = c.Resources
+	}
+
+	if journalPVC != nil {
+		migration := psmdbInit.JournalMigrationContainer(cr, containerSecurityContext)
+		migration.Resources = c.Resources
+		initContainers = append(initContainers, migration)
 	}
 
 	containers, ok := multiAZ.WithSidecars(c)
@@ -419,7 +447,11 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 			if name, err := replset.CustomReplsetName(); err == nil {
 				rsName = name
 			}
-			containers = append(containers, backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret))
+			backupC := backupAgentContainer(ctx, cr, rsName, replset.GetPort(), cr.TLSEnabled(), secrets.SSLSecret)
+			if journalMount != nil {
+				backupC.VolumeMounts = append(backupC.VolumeMounts, *journalMount)
+			}
+			containers = append(containers, backupC)
 
 			if cr.CompareVersion("1.22.0") >= 0 && cr.Spec.Backup.HookScript.Specified() {
 				name := cr.Spec.Backup.HookScript.ConfigMapRef.Name
@@ -439,11 +471,28 @@ func StatefulSpec(ctx context.Context, cr *api.PerconaServerMongoDB, replset *ap
 		pmmC := pmm.Container(ctx, cr, secrets.UsersSecret, replset.GetPort(), cr.Spec.PMM.MongodParams)
 		if pmmC != nil {
 			volumes = AddPMMTmpVolume(cr, pmmC, volumes)
+			if mongodLogVol != nil {
+				pmmC.VolumeMounts = append(pmmC.VolumeMounts, corev1.VolumeMount{
+					Name:      mongodLogVol.Name,
+					MountPath: mongodLogVol.MountPath,
+					ReadOnly:  true,
+				})
+			}
 			containers = append(containers, *pmmC)
 		}
 
+		if journalPVC != nil {
+			volumeClaimTemplates = append(volumeClaimTemplates,
+				extraPVC(cr, config.MongodJournalVolClaimName, journalPVC))
+		}
+
+		if logPVC != nil {
+			volumeClaimTemplates = append(volumeClaimTemplates,
+				extraPVC(cr, config.MongodLogVolClaimName, logPVC))
+		}
+
 		if cr.CompareVersion("1.21.0") >= 0 {
-			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), config.MongodLogVolume())
+			logCollectorCs, err := logcollector.Containers(cr, replset.GetPort(), logVol)
 			if err != nil {
 				log.Error(err, "error preparing logcollector containers")
 			}
@@ -792,9 +841,13 @@ func BuildMongoDBURI(ctx context.Context, cr *api.PerconaServerMongoDB, tlsEnabl
 	uri := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
 	if tlsEnabled {
 		if ok := sslSecretDataExist(ctx, sslSecret); ok {
-			// the certificate tmp/tls.pem is created on the fly during the execution of build/pbm-entry.sh
-			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=%s/ca.crt", config.SSLDir)
-			if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates) {
+			// the PEM file is created on the fly during the execution of build/pbm-entry.sh
+			pemFile := "/tmp/tls.pem"
+			if cr.CompareVersion("1.24.0") >= 0 {
+				pemFile = naming.PBMClientTLSPEMFile
+			}
+			uri += fmt.Sprintf("/?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s/ca.crt", pemFile, config.SSLDir)
+			if cr.InvalidCertificatesAllowed() {
 				uri += "&tlsInsecure=true"
 			}
 		}
@@ -839,6 +892,19 @@ func PersistentVolumeClaim(name, namespace string, spec *api.VolumeSpec) corev1.
 	if spec.PersistentVolumeClaim.PersistentVolumeClaimSpec != nil {
 		pvc.Spec = *spec.PersistentVolumeClaim.PersistentVolumeClaimSpec
 	}
+	return pvc
+}
+
+func extraPVC(cr *api.PerconaServerMongoDB, name string, storage *api.PVCSpec) corev1.PersistentVolumeClaim {
+	pvc := corev1.PersistentVolumeClaim{
+		Name:      name,
+		Namespace: cr.Namespace,
+	}
+
+	if storage.PersistentVolumeClaimSpec != nil {
+		pvc.Spec = *storage.PersistentVolumeClaimSpec
+	}
+
 	return pvc
 }
 

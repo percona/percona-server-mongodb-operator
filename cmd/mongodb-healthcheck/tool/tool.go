@@ -53,6 +53,7 @@ func (app *App) Run(ctx context.Context) error {
 	k8sCmd := app.Command("k8s", "Performs liveness check for MongoDB on Kubernetes")
 	livenessCmd := k8sCmd.Command("liveness", "Run a liveness check of MongoDB").Default()
 	readinessCmd := k8sCmd.Command("readiness", "Run a readiness check of MongoDB")
+	startupCmd := k8sCmd.Command("startup", "Run a startup check of MongoDB")
 	_ = livenessCmd.Flag("startupDelaySeconds", "Deprecated").Default("7200").Uint64()
 	component := k8sCmd.Flag("component", "").Default("mongod").String()
 
@@ -120,6 +121,12 @@ func (app *App) Run(ctx context.Context) error {
 			if err != nil {
 				return errors.Wrap(err, "member failed Kubernetes readiness check")
 			}
+		}
+
+	case startupCmd.FullCommand():
+		log.Info("Running Kubernetes startup check for component", "component", component)
+		if err := healthcheck.MongodStartupCheck(ctx, cnf); err != nil {
+			return errors.Wrap(err, "member failed Kubernetes startup check")
 		}
 	}
 	return nil

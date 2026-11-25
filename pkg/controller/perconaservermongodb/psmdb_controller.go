@@ -8,7 +8,6 @@ import (
 	"io"
 	"maps"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -30,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,7 +59,10 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/versionservice"
 )
 
-const eventRegardingNameIndex = "regarding.name"
+const (
+	controllerName          = "psmdb-controller"
+	eventRegardingNameIndex = "regarding.name"
+)
 
 func eventRegardingNameIndexer(o client.Object) []string {
 	evt, ok := o.(*eventsv1.Event)
@@ -118,11 +121,12 @@ func newReconciler(ctx context.Context, mgr manager.Manager) (reconcile.Reconcil
 		apiReader:              mgr.GetAPIReader(),
 		scheme:                 mgr.GetScheme(),
 		serverVersion:          sv,
-		reconcileIn:            util.ReconcileInterval(logf.Log.WithName("psmdb-controller"), "RECONCILE_INTERVAL"),
+		reconcileIn:            util.ReconcileInterval(logf.Log.WithName(controllerName), "RECONCILE_INTERVAL"),
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
 		newPBM:                 backup.NewPBM,
 		restConfig:             mgr.GetConfig(),
+		recorder:               mgr.GetEventRecorder(controllerName),
 		newCertManagerCtrlFunc: tls.NewCertManagerController,
 		secretProviderHandler:  pkgSecret.NewProviderHandler(secretProviders...),
 
@@ -163,7 +167,7 @@ func getOperatorPodImage(ctx context.Context) (string, error) {
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return builder.ControllerManagedBy(mgr).
 		For(&api.PerconaServerMongoDB{}).
-		Named("psmdb-controller").
+		Named(controllerName).
 		Complete(r)
 }
 
@@ -211,6 +215,7 @@ type ReconcilePerconaServerMongoDB struct {
 	apiReader  client.Reader
 	scheme     *runtime.Scheme
 	restConfig *rest.Config
+	recorder   events.EventRecorder
 
 	crons                 CronRegistry
 	clientcmd             ClientCmd
@@ -1054,7 +1059,12 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 				mongodPodsMap[pod.Name] = true
 			}
 			for _, pvc := range mongodPVCs.Items {
-				if after, ok := strings.CutPrefix(pvc.Name, psmdbconfig.MongodDataVolClaimName+"-"); ok {
+				for _, claimName := range []string{psmdbconfig.MongodDataVolClaimName, psmdbconfig.MongodLogVolClaimName, psmdbconfig.MongodJournalVolClaimName} {
+					after, ok := strings.CutPrefix(pvc.Name, claimName+"-")
+					if !ok {
+						continue
+					}
+
 					podName := after
 					if _, ok := mongodPodsMap[podName]; !ok {
 						// remove the orphan pvc
@@ -1064,6 +1074,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteOrphanPVCs(ctx context.Context, cr
 							return errors.Wrapf(err, "failed to delete PVC %s", pvc.Name)
 						}
 					}
+					break
 				}
 			}
 		}
@@ -1464,7 +1475,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 }
 
 func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if !cr.Spec.Sharding.Enabled {
+	if !cr.Spec.Sharding.Enabled || cr.CompareVersion("1.24.0") < 0 {
 		return nil
 	}
 
@@ -1505,11 +1516,12 @@ func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr
 	ls := naming.MongosLabels(cr)
 
 	// autoscaling grows the request in the spec, which the resize below applies
-	if err := r.reconcileStorageAutoscaling(ctx, cr, msSts, psmdbconfig.MongosLogVolClaimName, pvcSpec, ls); err != nil {
+	pvcSpec, err = r.reconcileStorageAutoscaling(ctx, cr, msSts, psmdbconfig.MongosLogVolClaimName, pvcSpec, ls)
+	if err != nil {
 		logf.FromContext(ctx).Error(err, "failed to reconcile storage autoscaling", "statefulset", msSts.Name)
 	}
 
-	if err := r.resizeVolumesIfNeeded(ctx, cr, msSts, ls, psmdbconfig.MongosLogVolClaimName, *pvcSpec); err != nil {
+	if _, err := r.resizeVolumesIfNeeded(ctx, cr, msSts, ls, psmdbconfig.MongosLogVolClaimName, *pvcSpec); err != nil {
 		return errors.Wrap(err, "resize mongos volumes")
 	}
 	return nil
@@ -1557,16 +1569,11 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	}
 	if err == nil && cr.CompareVersion("1.23.1") >= 0 {
 		currentVCT = sts.Spec.VolumeClaimTemplates
-		hasLogVCT := slices.ContainsFunc(sts.Spec.VolumeClaimTemplates, func(vct corev1.PersistentVolumeClaim) bool {
-			return vct.Name == psmdbconfig.MongosLogVolClaimName
+		recreated, err := r.recreateStsForClaims(ctx, cr, sts, map[string]bool{
+			psmdbconfig.MongosLogVolClaimName: cr.Spec.Sharding.Mongos.LogStorage() != nil,
 		})
-		wantLogVCT := cr.Spec.Sharding.Mongos.LogStorage() != nil
-		if hasLogVCT != wantLogVCT {
-			log.Info("Recreating mongos statefulset to change log storage")
-			if err := r.client.Delete(ctx, sts, client.PropagationPolicy(metav1.DeletePropagationOrphan)); client.IgnoreNotFound(err) != nil {
-				return errors.Wrapf(err, "delete statefulset/%s", sts.Name)
-			}
-			return nil
+		if err != nil || recreated {
+			return err
 		}
 
 		if _, ok := sts.Annotations[api.AnnotationPVCResizeInProgress]; ok {

@@ -412,6 +412,11 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 	}
 
 	for _, replset := range repls {
+		for _, c := range replset.storageComponents() {
+			setDefaultAccessModes(storagePVC(cr, c.journal))
+			setDefaultAccessModes(logPVC(cr, c.log))
+		}
+
 		if len(cr.Name+replset.Name) > clusterNameMaxLen {
 			return errors.Errorf("cluster name (%s) + replset name (%s) is too long, must be no more than %d characters", cr.Name, replset.Name, clusterNameMaxLen)
 		}
@@ -554,6 +559,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 			}
 		}
 
+		if cr.CompareVersion("1.24.0") >= 0 {
+			replset.StartupProbe = startupProbeWithDefaults(replset.StartupProbe, defaultStartupProbe(cr))
+		}
+
 		if cr.CompareVersion("1.6.0") >= 0 && len(replset.ServiceAccountName) == 0 {
 			replset.ServiceAccountName = WorkloadSA
 		}
@@ -573,6 +582,10 @@ func (cr *PerconaServerMongoDB) CheckNSetDefaults(ctx context.Context, platform 
 
 		if err := replset.Hidden.SetDefaults(cr, replset); err != nil {
 			return errors.Wrap(err, "set nonvoting defaults")
+		}
+
+		if err := cr.validateStorage(replset); err != nil {
+			return errors.Wrapf(err, "replset %s", replset.Name)
 		}
 	}
 
@@ -953,6 +966,10 @@ func (nv *NonVotingSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) 
 		nv.ReadinessProbe.FailureThreshold = rs.ReadinessProbe.FailureThreshold
 	}
 
+	if cr.CompareVersion("1.24.0") >= 0 {
+		nv.StartupProbe = startupProbeWithDefaults(nv.StartupProbe, rs.StartupProbe)
+	}
+
 	if len(nv.ServiceAccountName) == 0 {
 		nv.ServiceAccountName = WorkloadSA
 	}
@@ -1066,6 +1083,9 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 
 	h.setLivenessProbe(cr, rs)
 	h.setReadinessProbe(cr, rs)
+	if cr.CompareVersion("1.24.0") >= 0 {
+		h.StartupProbe = startupProbeWithDefaults(h.StartupProbe, rs.StartupProbe)
+	}
 
 	if len(h.ServiceAccountName) == 0 {
 		h.ServiceAccountName = WorkloadSA
@@ -1089,6 +1109,52 @@ func (h *HiddenSpec) SetDefaults(cr *PerconaServerMongoDB, rs *ReplsetSpec) erro
 	}
 
 	return nil
+}
+
+// defaultStartupProbe holds off liveness until mongod accepts connections.
+func defaultStartupProbe(cr *PerconaServerMongoDB) *corev1.Probe {
+	probe := &corev1.Probe{
+		Exec: &corev1.ExecAction{
+			Command: []string{
+				"/opt/percona/mongodb-healthcheck",
+				"k8s", "startup",
+				"--component", "mongod",
+			},
+		},
+		TimeoutSeconds:   10,
+		PeriodSeconds:    10,
+		SuccessThreshold: 1,
+		FailureThreshold: 8640, // 24h with the default period
+	}
+	if cr.TLSEnabled() {
+		probe.Exec.Command = append(probe.Exec.Command,
+			"--ssl", "--sslInsecure",
+			"--sslCAFile", "/etc/mongodb-ssl/ca.crt",
+			"--sslPEMKeyFile", "/tmp/tls.pem")
+	}
+	return probe
+}
+
+func startupProbeWithDefaults(probe, defaults *corev1.Probe) *corev1.Probe {
+	if probe == nil {
+		return defaults.DeepCopy()
+	}
+	if probe.ProbeHandler == (corev1.ProbeHandler{}) {
+		probe.ProbeHandler = *defaults.ProbeHandler.DeepCopy()
+	}
+	if probe.TimeoutSeconds < 1 {
+		probe.TimeoutSeconds = defaults.TimeoutSeconds
+	}
+	if probe.PeriodSeconds < 1 {
+		probe.PeriodSeconds = defaults.PeriodSeconds
+	}
+	if probe.SuccessThreshold < 1 {
+		probe.SuccessThreshold = defaults.SuccessThreshold
+	}
+	if probe.FailureThreshold < 1 {
+		probe.FailureThreshold = defaults.FailureThreshold
+	}
+	return probe
 }
 
 func (rs *ReplsetSpec) setSafeDefaults(log logr.Logger) {
@@ -1350,4 +1416,70 @@ func validateOCIStorages(cr *PerconaServerMongoDB) error {
 	}
 
 	return nil
+}
+
+var (
+	errStorageCRVersion = errors.New("dedicated storage requires crVersion 1.24.0 or newer")
+	errJournalInMemory  = errors.New("journalStorage is not supported with the inMemory storage engine")
+	errJournalNoDataPVC = errors.New("journalStorage requires the data volume to be a persistentVolumeClaim")
+	errLogNoCollector   = errors.New("logStorage requires the log collector to be enabled")
+)
+
+type storageComponent struct {
+	prefix  string
+	enabled bool
+	journal *StorageSpec
+	log     *StorageSpec
+	volume  *VolumeSpec
+}
+
+// storageComponents lists the members of rs that can have dedicated storage. The arbiter has none.
+func (rs *ReplsetSpec) storageComponents() []storageComponent {
+	return []storageComponent{
+		{enabled: true, journal: rs.JournalStorage, log: rs.LogStorage, volume: rs.VolumeSpec},
+		{prefix: "nonvoting.", enabled: rs.NonVoting.Enabled, journal: rs.NonVoting.JournalStorage, log: rs.NonVoting.LogStorage, volume: rs.NonVoting.VolumeSpec},
+		{prefix: "hidden.", enabled: rs.Hidden.Enabled, journal: rs.Hidden.JournalStorage, log: rs.Hidden.LogStorage, volume: rs.Hidden.VolumeSpec},
+	}
+}
+
+func (cr *PerconaServerMongoDB) validateStorage(rs *ReplsetSpec) error {
+	for _, c := range rs.storageComponents() {
+		if !c.enabled {
+			continue
+		}
+
+		if c.log != nil {
+			name := c.prefix + "logStorage"
+			if cr.CompareVersion("1.24.0") < 0 {
+				return errors.Wrap(errStorageCRVersion, name)
+			}
+			if !cr.IsLogCollectorEnabled() {
+				return errors.Wrap(errLogNoCollector, name)
+			}
+		}
+
+		if c.journal != nil {
+			name := c.prefix + "journalStorage"
+			if cr.CompareVersion("1.24.0") < 0 {
+				return errors.Wrap(errStorageCRVersion, name)
+			}
+			if rs.Storage != nil && rs.Storage.Engine == StorageEngineInMemory {
+				return errors.Wrap(errJournalInMemory, name)
+			}
+			if c.volume == nil || c.volume.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
+				return errors.Wrap(errJournalNoDataPVC, name)
+			}
+		}
+	}
+
+	return nil
+}
+
+func setDefaultAccessModes(pvc *PVCSpec) {
+	if pvc == nil || pvc.PersistentVolumeClaimSpec == nil {
+		return
+	}
+	if len(pvc.AccessModes) == 0 {
+		pvc.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce}
+	}
 }

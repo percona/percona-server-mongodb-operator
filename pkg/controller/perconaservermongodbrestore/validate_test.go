@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,7 +22,9 @@ import (
 
 	fakeClientcmd "github.com/percona/percona-server-mongodb-operator/clientcmd/fake"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
 
 func TestValidate(t *testing.T) {
@@ -496,5 +501,139 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 		scheme:     s,
 		newPBMFunc: fakeBackup.NewPBM,
 		clientcmd:  fakeClientcmd.New(),
+	}
+}
+
+func TestValidateJournalStorage(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name:      "my-cluster",
+		Namespace: ns,
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			Replsets: []*psmdbv1.ReplsetSpec{{
+				Name:   "rs0",
+				Size:   1,
+				Hidden: psmdbv1.HiddenSpec{Enabled: true, Size: 1},
+			}},
+		},
+	}
+	rs := cluster.Spec.Replsets[0]
+
+	sts := func(name string, journal bool) *appsv1.StatefulSet {
+		sfs := &appsv1.StatefulSet{Name: name, Namespace: ns}
+		sfs.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{{Name: config.MongodDataVolClaimName}}
+		if journal {
+			sfs.Spec.VolumeClaimTemplates = append(sfs.Spec.VolumeClaimTemplates, corev1.PersistentVolumeClaim{Name: config.MongodJournalVolClaimName})
+		}
+		return sfs
+	}
+	mongod := naming.MongodStatefulSetName(cluster, rs)
+	hidden := naming.HiddenStatefulSetName(cluster, rs)
+
+	tests := map[string]struct {
+		journalSnapshot string
+		mongodJournal   bool
+		hiddenJournal   bool
+		wantErr         string
+	}{
+		"journal snapshot with journal storage everywhere": {
+			journalSnapshot: "journal-rs0",
+			mongodJournal:   true,
+			hiddenJournal:   true,
+		},
+		"journal snapshot without journal storage": {
+			journalSnapshot: "journal-rs0",
+			wantErr:         "backup has a journal snapshot for replset rs0 but statefulset " + mongod + " has no journalStorage",
+		},
+		"journal snapshot with hidden lacking journal storage": {
+			journalSnapshot: "journal-rs0",
+			mongodJournal:   true,
+			wantErr:         "backup has a journal snapshot for replset rs0 but statefulset " + hidden + " has no journalStorage",
+		},
+		"no journal snapshot needs no journal storage": {},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			bcp := &psmdbv1.PerconaServerMongoDBBackup{
+				Name:      "my-backup",
+				Namespace: ns,
+				Status: psmdbv1.PerconaServerMongoDBBackupStatus{
+					Snapshots: psmdbv1.SnapshotInfos{
+						{ReplsetName: "rs0", SnapshotName: "snapshot-rs0", JournalSnapshotName: tt.journalSnapshot},
+					},
+				},
+			}
+			r := fakeReconciler(cluster, bcp, sts(mongod, tt.mongodJournal), sts(hidden, tt.hiddenJournal))
+
+			err := r.validateJournalStorage(t.Context(), cluster, bcp)
+			if tt.wantErr != "" {
+				require.EqualError(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestValidateSnapshotExistence(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+	s := runtime.NewScheme()
+	require.NoError(t, volumesnapshotv1.AddToScheme(s))
+	snapshot := func(name string) client.Object {
+		return &volumesnapshotv1.VolumeSnapshot{Name: name, Namespace: ns}
+	}
+
+	tests := map[string]struct {
+		info     psmdbv1.SnapshotInfo
+		existing []client.Object
+		wantErr  string
+	}{
+		"data snapshot only": {
+			info:     psmdbv1.SnapshotInfo{ReplsetName: "rs0", SnapshotName: "data-rs0"},
+			existing: []client.Object{snapshot("data-rs0")},
+		},
+		"data and journal snapshots": {
+			info:     psmdbv1.SnapshotInfo{ReplsetName: "rs0", SnapshotName: "data-rs0", JournalSnapshotName: "journal-rs0"},
+			existing: []client.Object{snapshot("data-rs0"), snapshot("journal-rs0")},
+		},
+		"missing journal snapshot": {
+			info:     psmdbv1.SnapshotInfo{ReplsetName: "rs0", SnapshotName: "data-rs0", JournalSnapshotName: "journal-rs0"},
+			existing: []client.Object{snapshot("data-rs0")},
+			wantErr:  "get volume snapshot journal-rs0",
+		},
+		"missing data snapshot": {
+			info:     psmdbv1.SnapshotInfo{ReplsetName: "rs0", SnapshotName: "data-rs0", JournalSnapshotName: "journal-rs0"},
+			existing: []client.Object{snapshot("journal-rs0")},
+			wantErr:  "get volume snapshot data-rs0",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := &ReconcilePerconaServerMongoDBRestore{
+				client: fake.NewClientBuilder().WithScheme(s).WithObjects(tt.existing...).Build(),
+			}
+			bcp := &psmdbv1.PerconaServerMongoDBBackup{
+				Name:      "my-backup",
+				Namespace: ns,
+				Status:    psmdbv1.PerconaServerMongoDBBackupStatus{Snapshots: psmdbv1.SnapshotInfos{tt.info}},
+			}
+
+			err := r.validateSnapshotExistence(t.Context(), bcp)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
 	}
 }

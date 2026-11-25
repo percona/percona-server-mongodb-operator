@@ -15,7 +15,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -210,7 +209,7 @@ func getMongoUri(ctx context.Context, k8sclient client.Client, cr *psmdbv1.Perco
 	}
 
 	murl += fmt.Sprintf("?tls=true&tlsCertificateKeyFile=%s&tlsCAFile=%s", tlsPemFile, caCertFile)
-	if ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, psmdbv1.DefaultAllowInvalidCertificates) {
+	if cr.InvalidCertificatesAllowed() {
 		murl += "&tlsInsecure=true"
 	}
 
@@ -613,7 +612,7 @@ func GetPBMStorageAzureConfig(
 	key := string(azureSecret.Data[AzureStorageAccountKeySecretKey])
 
 	if connStr := string(azureSecret.Data[AzureStorageConnectionStringSecretKey]); connStr != "" {
-		account, key, err = parseAzureConnectionString(connStr)
+		account, key, err = ParseAzureConnectionString(connStr)
 		if err != nil {
 			return config.StorageConf{}, errors.Wrap(err, "parse azure connection string")
 		}
@@ -635,11 +634,11 @@ func GetPBMStorageAzureConfig(
 	return storageConf, nil
 }
 
-// parseAzureConnectionString extracts AccountName and AccountKey from an Azure
+// ParseAzureConnectionString extracts AccountName and AccountKey from an Azure
 // storage connection string of the form:
 //
 //	DefaultEndpointsProtocol=https;AccountName=<name>;AccountKey=<key>;EndpointSuffix=core.windows.net
-func parseAzureConnectionString(connStr string) (account, key string, err error) {
+func ParseAzureConnectionString(connStr string) (account, key string, err error) {
 	for part := range strings.SplitSeq(strings.TrimRight(connStr, ";"), ";") {
 		// Use approach (strings.SplitN per segment with limit 2) so that
 		// base64-padded AccountKey values containing '=' are handled correctly.
