@@ -2343,9 +2343,8 @@ func TestClearStalePVCShrinkStates(t *testing.T) {
 	enableNonVoting := func(cr *api.PerconaServerMongoDB) { cr.Spec.Replsets[0].NonVoting.Enabled = true }
 
 	tests := map[string]struct {
-		modify   func(cr *api.PerconaServerMongoDB)
-		noShrink bool
-		want     []string
+		modify func(cr *api.PerconaServerMongoDB)
+		want   []string
 	}{
 		"all statefulsets still in the spec": {
 			modify: func(cr *api.PerconaServerMongoDB) {
@@ -2386,9 +2385,6 @@ func TestClearStalePVCShrinkStates(t *testing.T) {
 			},
 			want: []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos},
 		},
-		"no shrink in progress": {
-			noShrink: true,
-		},
 	}
 
 	for name, tt := range tests {
@@ -2408,10 +2404,8 @@ func TestClearStalePVCShrinkStates(t *testing.T) {
 			if tt.modify != nil {
 				tt.modify(cr)
 			}
-			if !tt.noShrink {
-				for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
-					cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
-				}
+			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
+				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
 			}
 
 			repls := cr.Spec.Replsets
@@ -2437,7 +2431,7 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 	)
 
 	tests := map[string]struct {
-		pause bool
+		setup func(cr *api.PerconaServerMongoDB) []client.Object
 		want  []string
 	}{
 		"entries of removed statefulsets are dropped": {
@@ -2445,8 +2439,34 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 		},
 		// pause disables hidden and nonVoting members in memory, their shrink must survive it
 		"paused cluster keeps every entry": {
-			pause: true,
-			want:  []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg},
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				cr.Spec.Pause = true
+				return nil
+			},
+			want: []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg},
+		},
+		// a running backup postpones the pause, the spec is reconciled as it is
+		"paused cluster with a running backup drops entries of removed statefulsets": {
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				cr.Spec.Pause = true
+				return []client.Object{&api.PerconaServerMongoDBBackup{
+					Name:      "backup",
+					Namespace: cr.Namespace,
+					Spec:      api.PerconaServerMongoDBBackupSpec{ClusterName: cr.Name},
+					Status:    api.PerconaServerMongoDBBackupStatus{State: api.BackupStateRunning},
+				}}
+			},
+			want: []string{rs0, rs0Hidden, cfg},
+		},
+		// with no pods left the sharding toggle unpauses and the spec without sharding is reconciled
+		"sharding disabled drops config server and mongos entries": {
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				cr.Spec.Backup.Enabled = true
+				cr.Spec.Sharding.Enabled = false
+				cr.Status.AddCondition(api.ClusterCondition{Type: api.AppStateSharding, Status: api.ConditionTrue})
+				return nil
+			},
+			want: []string{rs0, rs0Hidden},
 		},
 	}
 
@@ -2459,12 +2479,15 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 			require.True(t, cr.Spec.Sharding.Enabled)
 			require.False(t, cr.Spec.Replsets[0].NonVoting.Enabled)
 			cr.Spec.Replsets[0].Hidden.Enabled = true
-			cr.Spec.Pause = tt.pause
+			var objs []client.Object
+			if tt.setup != nil {
+				objs = tt.setup(cr)
+			}
 			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg} {
 				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
 			}
 
-			r := buildFakeClient(cr)
+			r := buildFakeClient(append([]client.Object{cr}, objs...)...)
 			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
 			r.crons = NewCronRegistry()
 

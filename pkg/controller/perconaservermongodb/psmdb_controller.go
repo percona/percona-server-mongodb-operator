@@ -1477,15 +1477,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if !cr.Spec.Sharding.Enabled || cr.CompareVersion("1.24.0") < 0 {
-		return nil
-	}
+// mongosLogStorageResizable reports whether mongos log volumes are resized and shrunk.
+func mongosLogStorageResizable(cr *api.PerconaServerMongoDB) bool {
+	return cr.Spec.Sharding.Enabled && cr.CompareVersion("1.24.0") >= 0 && cr.Spec.Sharding.Mongos.LogStorage() != nil
+}
 
-	pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
-	if pvcSpec == nil {
+func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !mongosLogStorageResizable(cr) {
 		return nil
 	}
+	pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
 
 	if rstRunning, err := r.isRestoreRunning(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to check running restores")

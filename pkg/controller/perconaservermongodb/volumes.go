@@ -1362,8 +1362,7 @@ func clearStalePVCShrinkStates(ctx context.Context, cr *psmdbv1.PerconaServerMon
 			wanted[naming.HiddenStatefulSetName(cr, rs)] = true
 		}
 	}
-	// resizeMongosPVCs runs the mongos shrink only from 1.24.0
-	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos.LogStorage() != nil && cr.CompareVersion("1.24.0") >= 0 {
+	if mongosLogStorageResizable(cr) {
 		wanted[naming.MongosStatefulSetName(cr)] = true
 	}
 
