@@ -165,6 +165,13 @@ func TestPBMConfigPriority(t *testing.T) {
 		cfg, err := GetPBMConfig(context.Background(), cli, cr, cr.Spec.Backup.Storages["test-s3-storage"])
 		require.NoError(t, err)
 		require.Empty(t, cfg.Backup.Priority)
+
+		// The other backupOptions still reach PBM without priorities.
+		opts := cr.Spec.Backup.Configuration.BackupOptions
+		require.Equal(t, opts.OplogSpanMin, cfg.Backup.OplogSpanMin)
+		require.Equal(t, opts.NumParallelCollections, cfg.Backup.NumParallelCollections)
+		require.NotNil(t, cfg.Backup.Timeouts)
+		require.Equal(t, opts.Timeouts.Starting, cfg.Backup.Timeouts.Starting)
 	})
 
 	t.Run("legacy cr version", func(t *testing.T) {
