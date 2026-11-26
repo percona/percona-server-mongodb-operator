@@ -78,6 +78,17 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 	log := logf.FromContext(ctx)
 
 	status := restore.Status
+
+	// A restore can leave New for Waiting without running reconcileSnapshotNew,
+	// for example while it waits for a backup lease.
+	if prepared, err := r.statefulSetsPreparedForRestore(ctx, cluster); err != nil {
+		return status, errors.Wrap(err, "check if statefulsets are prepared for restore")
+	} else if !prepared {
+		if err := r.updatePBMConfigSecret(ctx, cluster); err != nil {
+			return status, errors.Wrap(err, "update PBM config secret")
+		}
+	}
+
 	if err := r.createOrUpdateDBConfigSecret(ctx, cluster); err != nil {
 		return status, errors.Wrap(err, "create db config secret")
 	}

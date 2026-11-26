@@ -80,7 +80,7 @@ spec:
           insecureSkipTLSVerify: false
     tasks:
       - name: each-hour
-        enabled: true
+        enabled: false
         schedule: "0 */1 * * *"
         storageName: local-s3
         compressionType: gzip
