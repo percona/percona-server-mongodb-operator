@@ -8,6 +8,14 @@ import groovy.transform.Field
 @Field int clusterCount = 15
 // Tests that run at the same time on each cluster. 1 runs one test at a time per cluster.
 @Field int testsPerCluster = 3
+// Cluster load with several tests per cluster: `kubectl top nodes` every loadIntervalSeconds. A
+// cluster counts as highly loaded when its busiest node stays at loadCpuPercent CPU or
+// loadMemoryPercent memory for loadHighAfterSeconds without a break.
+@Field int loadIntervalSeconds = 30
+@Field int loadCpuPercent = 90
+@Field int loadMemoryPercent = 70
+@Field int loadHighAfterSeconds = 120
+@Field def clusterLoadLines = [:]
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
@@ -168,6 +176,214 @@ boolean publishAllureReport() {
         echo "Warning: failed to publish the Allure report: ${exc}"
         return false
     }
+}
+
+// The Allure timeline groups tests by their host and thread labels. All slots run on one Jenkins
+// agent, so pytest gives every test the same host. This sets host to the cluster and thread to the
+// slot, adds the cluster load while each test case ran, and moves the results into
+// e2e-tests/allure-results. A problem here does not fail the build.
+void finishSlotAllureResults(String resultsDir, String cluster, String slot) {
+    try {
+        withEnv([
+            "RESULTS=${resultsDir}",
+            "LABEL_HOST=${CLUSTER_NAME}-${cluster}",
+            "LABEL_THREAD=${slot}",
+            "LOAD_SAMPLES=${clusterLoadSamples(cluster)}",
+            "CPU_LIMIT=${loadCpuPercent}",
+            "MEM_LIMIT=${loadMemoryPercent}",
+            "INTERVAL=${loadIntervalSeconds}"
+        ]) {
+            sh '''
+                [ -d "$RESULTS" ] || exit 0
+                for result in "$RESULTS"/*-result.json; do
+                    [ -f "$result" ] || continue
+                    jq --arg host "$LABEL_HOST" --arg thread "$LABEL_THREAD" '
+                        .labels = ([(.labels // [])[] | select(.name != "host" and .name != "thread")]
+                            + [{"name": "host", "value": $host}, {"name": "thread", "value": $thread}])
+                    ' "$result" > "$result.tmp" && mv "$result.tmp" "$result"
+
+                    [ -s "$LOAD_SAMPLES" ] || continue
+                    # The window starts one interval before the test case, so a short case still gets a sample.
+                    start=$(jq -r '((.start // 0) / 1000 | floor)' "$result")
+                    stop=$(jq -r '((.stop // 0) / 1000 | ceil)' "$result")
+                    from=$((start - INTERVAL))
+                    summary=$(awk -v cpu_limit="$CPU_LIMIT" -v mem_limit="$MEM_LIMIT" -v interval="$INTERVAL" \
+                        -v from="$from" -v to="$stop" -f "$LOAD_SAMPLES.awk" "$LOAD_SAMPLES")
+                    get() { printf '%s\\n' "$summary" | sed -n "s/^$1=//p"; }
+                    [ "$(get samples)" != 0 ] || continue
+
+                    value="busiest node CPU $(get cpu_peak)%, memory $(get mem_peak)%"
+                    [ "$(get cpu_over)" = 0 ] || value="$value; CPU ${CPU_LIMIT}%+ for $(get cpu_over)s"
+                    [ "$(get mem_over)" = 0 ] || value="$value; memory ${MEM_LIMIT}%+ for $(get mem_over)s"
+
+                    attachment="$(basename "$result" -result.json)-cluster-load-attachment.txt"
+                    {
+                        echo "Cluster load while the test case ran ($value)."
+                        echo "Samples every ${INTERVAL}s from kubectl top nodes, seconds from the test case start."
+                        echo
+                        echo "second node cpu cpu% memory memory%"
+                        awk -v from="$from" -v to="$stop" -v start="$start" \
+                            '$1 >= from && $1 <= to { $1 = $1 - start; print }' "$LOAD_SAMPLES"
+                    } > "$RESULTS/$attachment"
+
+                    # excluded: the value differs between attempts, and Allure groups a retry with its
+                    # earlier attempts only when their parameters match.
+                    jq --arg value "$value" --arg source "$attachment" '
+                        .parameters = ((.parameters // []) + [{"name": "Cluster load", "value": $value, "excluded": true}])
+                        | .attachments = ((.attachments // []) + [{"name": "Cluster load", "source": $source, "type": "text/plain"}])
+                    ' "$result" > "$result.tmp" && mv "$result.tmp" "$result"
+                done
+                mkdir -p e2e-tests/allure-results
+                find "$RESULTS" -mindepth 1 -maxdepth 1 -exec mv -f {} e2e-tests/allure-results/ \\;
+                rm -rf "$RESULTS"
+            '''
+        }
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (allureErr) {
+        echo "Warning: failed to label the Allure results in ${resultsDir}: ${allureErr}"
+    }
+}
+
+String clusterLoadSamples(String cluster) {
+    return "${env.WORKSPACE}/cluster-load-${CLUSTER_NAME}-${cluster}.samples"
+}
+
+// Appends `kubectl top nodes` of the cluster to its samples file every loadIntervalSeconds, in a
+// background loop on the agent: <epoch> <node> <cpu cores> <cpu%> <memory> <memory%>. The loop
+// stops when finishClusterLoad deletes the pid file or the workspace is deleted. GKE has
+// metrics-server by default; without it the file stays empty.
+void startClusterLoad(String cluster) {
+    def samples = clusterLoadSamples(cluster)
+    try {
+        // Written once here: the slots of the cluster read it at the same time.
+        writeFile file: "${samples}.awk", text: clusterLoadAwk()
+        withEnv([
+            "KUBECONFIG=/tmp/${CLUSTER_NAME}-${cluster}",
+            "LOAD_SAMPLES=${samples}",
+            "LOAD_INTERVAL=${loadIntervalSeconds}"
+        ]) {
+            // JENKINS_NODE_COOKIE and BUILD_ID keep Jenkins from killing the loop when this step ends.
+            sh '''
+                rm -f "$LOAD_SAMPLES" "$LOAD_SAMPLES.pid"
+                touch "$LOAD_SAMPLES"
+                JENKINS_NODE_COOKIE=dontKillMe BUILD_ID=dontKillMe nohup bash -c '
+                    while [ -e "$LOAD_SAMPLES" ]; do
+                        now=$(date +%s)
+                        kubectl top nodes --no-headers --request-timeout=20s 2>/dev/null \
+                            | sed "s/^/$now /" >> "$LOAD_SAMPLES"
+                        sleep "$LOAD_INTERVAL"
+                    done
+                ' </dev/null >/dev/null 2>&1 &
+                echo $! > "$LOAD_SAMPLES.pid"
+            '''
+        }
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (loadErr) {
+        echo "Warning: cluster load sampling did not start on ${CLUSTER_NAME}-${cluster}: ${loadErr}"
+    }
+}
+
+// Stops sampling and prints one line with the cluster's load, which writeClusterLoadEnvironment
+// also adds to the Allure overview. Never fails the build.
+void finishClusterLoad(String cluster) {
+    def samples = clusterLoadSamples(cluster)
+    try {
+        def output = sh(returnStdout: true, script: """
+            if [ -f '${samples}.pid' ]; then
+                kill "\$(cat '${samples}.pid')" 2>/dev/null || true
+                rm -f '${samples}.pid'
+            fi
+            if [ ! -s '${samples}' ]; then echo samples=0; exit 0; fi
+            awk -v cpu_limit=${loadCpuPercent} -v mem_limit=${loadMemoryPercent} \
+                -v interval=${loadIntervalSeconds} -v from=0 -v to=0 \
+                -f '${samples}.awk' '${samples}'
+        """).trim()
+        def s = [samples: '0']
+        for (line in output.split('\n')) {
+            def parts = line.split('=', 2)
+            if (parts.size() == 2) {
+                s[parts[0]] = parts[1]
+            }
+        }
+        if (s.samples == '0') {
+            echo "Cluster load on ${CLUSTER_NAME}-${cluster}: no samples (is metrics-server running?)"
+            return
+        }
+        def high = (s.cpu_longest as Integer) >= loadHighAfterSeconds || (s.mem_longest as Integer) >= loadHighAfterSeconds
+        def summary = "${high ? 'HIGH ' : ''}busiest node CPU peak ${s.cpu_peak}% " +
+            "(${s.cpu_over}s at ${loadCpuPercent}%+), memory peak ${s.mem_peak}% " +
+            "(${s.mem_over}s at ${loadMemoryPercent}%+), cluster average CPU peak ${s.cluster_cpu_peak}%"
+        echo "Cluster load on ${CLUSTER_NAME}-${cluster}: ${summary}"
+        recordClusterLoad(cluster, summary)
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (loadErr) {
+        echo "Warning: cluster load report failed on ${CLUSTER_NAME}-${cluster}: ${loadErr}"
+    }
+}
+
+@NonCPS
+void recordClusterLoad(String cluster, String summary) {
+    synchronized (clusterLoadLines) {
+        clusterLoadLines[cluster] = summary
+    }
+}
+
+// One Environment entry per cluster on the Allure overview. Tests write environment.properties
+// into their results, so this runs after they all finished.
+void writeClusterLoadEnvironment() {
+    if (!clusterLoadLines || !fileExists('e2e-tests/allure-results')) {
+        return
+    }
+    def lines = ["Tests.per.cluster=${testsPerCluster}"]
+    for (cluster in clusterLoadLines.keySet().sort()) {
+        lines << "Cluster.load.${cluster}=${clusterLoadLines[cluster]}"
+    }
+    def file = 'e2e-tests/allure-results/environment.properties'
+    def existing = fileExists(file) ? readFile(file).trim() : ''
+    writeFile file: file, text: (existing ? existing + '\n' : '') + lines.join('\n') + '\n'
+}
+
+// Reduces the samples to one line per timestamp (the busiest node) and prints key=value lines.
+// Time above a limit counts whole sample intervals; *_longest is the longest unbroken stretch.
+String clusterLoadAwk() {
+    return '''
+BEGIN { cpu_peak = -1; mem_peak = -1; cluster_peak = -1 }
+function flush() {
+    if (ts == "") return
+    n++
+    if (maxc >= cpu_limit) { cpu_over += interval; cpu_run += interval } else cpu_run = 0
+    if (cpu_run > cpu_longest) cpu_longest = cpu_run
+    if (maxm >= mem_limit) { mem_over += interval; mem_run += interval } else mem_run = 0
+    if (mem_run > mem_longest) mem_longest = mem_run
+    mean = sumc / cnt
+    mean_total += mean
+    if (mean > cluster_peak) cluster_peak = mean
+    if (maxc > cpu_peak) { cpu_peak = maxc; cpu_node = maxcn; cpu_at = ts }
+    if (maxm > mem_peak) { mem_peak = maxm; mem_node = maxmn; mem_at = ts }
+}
+$4 ~ /%$/ && $6 ~ /%$/ && $1 >= from && (to == 0 || $1 <= to) {
+    if ($1 != ts) { flush(); ts = $1; maxc = -1; maxm = -1; sumc = 0; cnt = 0 }
+    c = $4 + 0
+    m = $6 + 0
+    if (c > maxc) { maxc = c; maxcn = $2 }
+    if (m > maxm) { maxm = m; maxmn = $2 }
+    sumc += c
+    cnt++
+}
+END {
+    flush()
+    if (n == 0) { print "samples=0"; exit }
+    printf "samples=%d\\n", n
+    printf "cpu_peak=%d\\ncpu_node=%s\\ncpu_at=%s\\n", cpu_peak, cpu_node, cpu_at
+    printf "cpu_over=%d\\ncpu_longest=%d\\n", cpu_over, cpu_longest
+    printf "mem_peak=%d\\nmem_node=%s\\nmem_at=%s\\n", mem_peak, mem_node, mem_at
+    printf "mem_over=%d\\nmem_longest=%d\\n", mem_over, mem_longest
+    printf "cluster_cpu_peak=%d\\ncluster_cpu_mean=%d\\n", cluster_peak, mean_total / n
+}
+'''
 }
 
 void pushReportFile() {
@@ -468,7 +684,12 @@ void clusterRunner(String cluster) {
         if (testsPerCluster > 1) {
             if (countSkippedTests() > 0 && currentBuild.nextBuild == null) {
                 createCluster(cluster)
-                runTestSlots(cluster)
+                startClusterLoad(cluster)
+                try {
+                    runTestSlots(cluster)
+                } finally {
+                    finishClusterLoad(cluster)
+                }
                 shutdownCluster(cluster)
             }
             return
@@ -547,6 +768,8 @@ void runSlotTest(Integer testId, String slot) {
         def suffix = sh(script: "head -c 3 /dev/urandom | od -An -tx1 | tr -d ' \\n'", returnStdout: true).trim()
         operatorNs = "${testName}-${suffix}-op"
     }
+    // One folder per attempt: finishSlotAllureResults labels its results with the cluster and slot.
+    def allureDir = "e2e-tests/allure-results-slots/${testName}-${new Date().getTime()}"
 
     sh """
         rm -rf '${slotDir}'
@@ -561,10 +784,12 @@ void runSlotTest(Integer testId, String slot) {
         export CLEAN_NAMESPACE=0
         export SKIP_DELETE=1
         export OPERATOR_NS='${operatorNs}'
+        export ALLURE_RESULTS_DIR='${allureDir}'
         ${test.ownCluster ? '' : 'export SHARED_CLUSTER=1'}
     """
 
     runTest(testId, slotExports, operatorNs, false)
+    finishSlotAllureResults(allureDir, test.cluster, slot)
 
     def failed = test.result != 'passed'
     if (failed && !test.ownCluster && currentBuild.nextBuild == null) {
@@ -1259,6 +1484,7 @@ pipeline {
                         """
                         junit testResults: reportXml, healthScaleFactor: 1.0
                         archiveArtifacts "${reportXml}"
+                        writeClusterLoadEnvironment()
                         def allurePublished = publishAllureReport()
 
                         unstash 'IMAGE'
