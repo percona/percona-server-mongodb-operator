@@ -29,8 +29,7 @@ BACKUP_INCREMENTAL = ["backup-s3-compatible-not-base-1", "backup-s3-compatible-n
 BACKUP_ARBITER_NV = "backup-s3-compatible-arbiter-nv"
 
 BACKUP_TIMEOUT = 600
-# Same bound the bash test used for the restore to be requested.
-RESTORE_REQUESTED_TIMEOUT = 3000
+RESTORE_REQUESTED_TIMEOUT = 1200
 
 
 @pytest.fixture(scope="class")
