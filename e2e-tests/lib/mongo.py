@@ -24,6 +24,20 @@ _TLS_FLAGS = (
 )
 
 
+def service_uri(
+    service: str, namespace: str, user: str = "myApp", password: str = "myPass"
+) -> str:
+    """URI of a replset or mongos service, for example some-name-rs0."""
+    return f"{user}:{password}@{service}.{namespace}"
+
+
+def member_uri(
+    replset: str, index: int, namespace: str, user: str = "myApp", password: str = "myPass"
+) -> str:
+    """URI of one replset member pod, for example some-name-rs0-1."""
+    return f"{user}:{password}@{replset}-{index}.{replset}.{namespace}"
+
+
 class MongoManager:
     def __init__(self, client: str, tls: bool = False):
         self.client = client

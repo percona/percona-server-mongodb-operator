@@ -12,6 +12,7 @@ from rich.highlighter import RegexHighlighter
 from rich.theme import Theme
 
 from .cli import git_bin
+from .kubectl import kubectl_bin
 
 logger = logging.getLogger(__name__)
 
@@ -179,3 +180,32 @@ def get_git_branch() -> str:
         return "unknown"
 
     return re.sub(r"[^a-zA-Z0-9-]", "-", branch.lower())
+
+
+def aws_cli_s3(
+    command: str,
+    endpoint: str,
+    access_key_id: str = "some-access-key",
+    secret_access_key: str = "some-secret-key",
+) -> str:
+    """Run an aws-cli command against an S3 endpoint from a throwaway pod.
+
+    The default credentials are SeaweedFS's, so the deploy_s3_storage fixture can
+    create the bucket before the test applies its secret.
+    """
+    return kubectl_bin(
+        "run",
+        "-i",
+        "--rm",
+        "aws-cli",
+        f"--image={os.environ.get('IMAGE_AWS_CLI')}",
+        "--restart=Never",
+        f"--env=AWS_ACCESS_KEY_ID={access_key_id}",
+        f"--env=AWS_SECRET_ACCESS_KEY={secret_access_key}",
+        "--env=AWS_DEFAULT_REGION=us-east-1",
+        "--",
+        "--no-verify-ssl",
+        "--endpoint-url",
+        endpoint,
+        *command.split(),
+    )
