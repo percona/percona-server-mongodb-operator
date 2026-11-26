@@ -445,6 +445,34 @@ func TestExternalService(t *testing.T) {
 	}
 }
 
+func TestServicePort(t *testing.T) {
+	t.Parallel()
+
+	const port = "net:\n  port: 27019\n"
+	cr := &api.PerconaServerMongoDB{
+		Name:      "test-cr",
+		Namespace: "test-ns",
+		Spec: api.PerconaServerMongoDBSpec{
+			CRVersion: version.Version(),
+			Sharding:  api.Sharding{Mongos: &api.MongosSpec{Configuration: port}},
+		},
+	}
+	rs := &api.ReplsetSpec{Name: "rs0", Configuration: port}
+
+	tests := map[string][]corev1.ServicePort{
+		"headless": Service(cr, rs).Spec.Ports,
+		"external": ExternalService(cr, rs, "test-cr-rs0-0").Spec.Ports,
+		"mongos":   MongosServiceSpec(cr, "test-cr-mongos").Ports,
+	}
+	for name, ports := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Len(t, ports, 1)
+			assert.Equal(t, int32(27019), ports[0].Port)
+			assert.Equal(t, intstr.FromInt32(27019), ports[0].TargetPort)
+		})
+	}
+}
+
 func TestBuildDNSHostname(t *testing.T) {
 	t.Parallel()
 

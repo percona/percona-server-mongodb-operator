@@ -207,9 +207,6 @@ main() {
 	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
-	desc 'check if statefulset created with expected config'
-	compare_kubectl statefulset/$cluster
-
 	write_initial_data
 
 	wait_backup_agent $cluster-0

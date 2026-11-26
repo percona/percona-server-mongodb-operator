@@ -1,6 +1,6 @@
 # QA
 
-Last verified: 2026-11-04
+Last verified: 2026-11-25
 
 Rules for test code wherever it lives: e2e tests, golden files, CI test
 selection, the scripts and `make` targets that run tests, and Go tests.
@@ -103,16 +103,28 @@ when missing, unless marked otherwise.
   defaults: `conftest.py` sets `SKIP_DELETE=1`, so a documented `pytest`
   command that promises cleanup sets `SKIP_DELETE=0`. Minor.
 
-## Golden files (`e2e-tests/<name>/compare/`)
+## Golden files
 
-- The compare filter removes `image` fields before comparing
-  (`compare_kubectl` in `e2e-tests/functions`); do not flag them.
-- Volatile fields (uid, resourceVersion, timestamps, generated passwords or
-  hashes) in a golden file fail every run.
-- A new Kubernetes object created by the change needs a golden file and a
-  compare call; otherwise it is a coverage gap.
-- Variants (`-oc` for OpenShift, and others) change together with the shared
-  shape. The PR checklist asks for the `-oc` files.
+`e2e-tests/<name>/compare/` holds only `*.json` query results and the few
+`*.yml` files `compare_metadata` and the PBM config checks read. Rendered
+Kubernetes objects are checked by unit tests that assert the fields a change
+affects (`pkg/psmdb/*_test.go`, `pkg/psmdb/tls/*_test.go`, and the controller
+tests). Whole-object golden files remain in two places:
+`TestReconcileStatefulSet` (`testdata/reconcile-statefulset/`) and
+`TestUpgradeConsistency` (`testdata/upgrade-consistency/`, one render per
+supported crVersion, rotated by `make update-upgrade-consistency-test`).
+
+- A change to how a CR field renders comes with a unit test that sets the
+  field and asserts the rendered result. Missing test: Major.
+- A `compare_kubectl` call or a `*.yml` object snapshot added to an e2e test
+  is a finding: the rendering belongs in a unit test, and the e2e step checks
+  only the field that proves the operator acted. Major.
+- A change that alters `testdata/upgrade-consistency/` for an older crVersion
+  restarts running clusters when the operator is upgraded, unless it is gated
+  by `CompareVersion`. Major.
+- Regenerate golden files with `UPDATE_COMPARE_FILES=1 go test` on the
+  package; a golden file that changes without a code change depends on
+  something volatile (generated certificates, map order). Major.
 
 ## CI selection (`e2e-tests/tests.yaml`)
 

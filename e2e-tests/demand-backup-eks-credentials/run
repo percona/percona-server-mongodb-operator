@@ -25,9 +25,6 @@ apply_cluster $test_dir/conf/$cluster.yml
 desc 'check if all 3 Pods started'
 wait_for_running $cluster 3
 
-desc 'check if service and statefulset created with expected config'
-compare_kubectl statefulset/$cluster
-
 desc 'create user'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \

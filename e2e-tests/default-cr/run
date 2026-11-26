@@ -83,10 +83,6 @@ function main() {
 	desc 'check if all 3 Pods started'
 	wait_cluster_consistency $cluster 70
 
-	desc 'check if service and statefulset created with expected config'
-	compare_kubectl statefulset/$cluster-rs0
-	compare_kubectl statefulset/$cluster-cfg
-
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"
 	compare_generation "1" "statefulset" "${cluster}-mongos"
@@ -124,10 +120,6 @@ function main() {
 	yq eval '.spec.upgradeOptions.versionServiceEndpoint = "https://check-dev.percona.com"' $deploy_dir/cr-minimal.yaml | add_arch_to_psmdb - | kubectl_bin apply -f -
 	desc 'check if all Pods started'
 	wait_cluster_consistency "${cluster}"
-
-	desc 'check if service and statefulset created with expected config'
-	compare_kubectl statefulset/"${cluster}"-rs0
-	compare_kubectl statefulset/"${cluster}"-cfg
 
 	compare_generation "1" "statefulset" "${cluster}-rs0"
 	compare_generation "1" "statefulset" "${cluster}-cfg"

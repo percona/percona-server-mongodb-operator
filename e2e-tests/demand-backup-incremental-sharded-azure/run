@@ -60,7 +60,7 @@ check_backup_in_storage ${backup_name_azure} azure cfg
 
 log 'running restore'
 run_restore "${backup_name_azure}"
-run_recovery_check "${backup_name_azure}" "_restore_sharded" "sharded"
+run_recovery_check "${backup_name_azure}" "sharded"
 check_exported_mongos_service_endpoint "$lbEndpoint"
 
 desc 'test passed'

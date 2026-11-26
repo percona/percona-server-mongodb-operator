@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 import yaml
-from lib.config import apply_cluster, compare_kubectl, compare_metadata
+from lib.config import apply_cluster, compare_metadata
 from lib.kubectl import kubectl_bin, wait_for_delete, wait_for_running
 from lib.utils import Paths
 
@@ -53,11 +53,6 @@ def _wait_all_started(cluster: str) -> None:
     wait_for_running(f"{cluster}-mongos", 3)
 
 
-def _compare_statefulsets(test_dir: str, cluster: str, namespace: str) -> None:
-    for component in ("rs0", "cfg", "mongos"):
-        compare_kubectl(test_dir, f"statefulset/{cluster}-{component}", namespace)
-
-
 @pytest.fixture(scope="class")
 def saved_secrets() -> dict[str, str]:
     """Holds the operator-issued secrets saved during the test class run."""
@@ -101,7 +96,6 @@ class TestCustomTLS:
         apply_cluster(f"{test_paths['test_dir']}/conf/{cluster}.yml")
         _wait_all_started(cluster)
 
-        _compare_statefulsets(test_paths["test_dir"], cluster, config.namespace)
         compare_metadata(test_paths["test_dir"], f"secret/{cluster}-ssl")
 
     @pytest.mark.dependency(depends=["TestCustomTLS::test_custom_non_internal_cert"])
@@ -119,6 +113,5 @@ class TestCustomTLS:
         apply_cluster(f"{test_paths['test_dir']}/conf/{cluster}.yml")
         _wait_all_started(cluster)
 
-        _compare_statefulsets(test_paths["test_dir"], cluster, config.namespace)
         compare_metadata(test_paths["test_dir"], f"secret/{cluster}-ssl")
         compare_metadata(test_paths["test_dir"], f"secret/{cluster}-ssl-internal")

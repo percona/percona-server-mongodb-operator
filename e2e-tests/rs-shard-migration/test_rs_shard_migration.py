@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from lib.arch import add_arch_scheduling
 from lib.backup import run_backup, wait_backup
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import kubectl_bin, wait_cluster_consistency, wait_for_running, wait_pod
 from lib.mongo import MongoManager
 from lib.utils import Paths
@@ -75,14 +75,12 @@ class TestRsShardMigration:
     """Convert a replica set with a hidden member into a sharded cluster and back."""
 
     @pytest.mark.dependency()
-    def test_create_replset_cluster(self, config: MigrationConfig, test_paths: Paths) -> None:
+    def test_create_replset_cluster(self, test_paths: Paths) -> None:
         """Create an unsharded cluster with a hidden member and write data to it"""
         apply_cluster(f"{test_paths['test_dir']}/conf/{CLUSTER}.yml")
 
         wait_pod(HIDDEN_POD)
         wait_for_running(REPLSET, CLUSTER_SIZE)
-
-        compare_kubectl(test_paths["test_dir"], f"statefulset/{REPLSET}", config.namespace)
 
     @pytest.mark.dependency(depends=["TestRsShardMigration::test_create_replset_cluster"])
     def test_hidden_member_joined_replset(

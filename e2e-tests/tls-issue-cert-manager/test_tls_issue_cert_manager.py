@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import kubectl_bin, wait_for_delete, wait_for_running
 from lib.utils import Paths, retry
 
@@ -37,6 +37,13 @@ def _check_tls_secret(secret_name: str) -> None:
     data = json.loads(kubectl_bin("get", f"secrets/{secret_name}", "-o", "json"))
     for key in ("ca.crt", "tls.crt", "tls.key"):
         assert data.get("data", {}).get(key), f"Secret {secret_name} missing data key {key}"
+
+
+def _assert_certificate_field(name: str, jsonpath: str, expected: str) -> None:
+    actual = kubectl_bin("get", f"certificate/{name}", "-o", f"jsonpath={{{jsonpath}}}").strip()
+    assert actual == expected, (
+        f"certificate/{name} {jsonpath} is {actual!r}, expected {expected!r}"
+    )
 
 
 def _deploy_cmctl(src_dir: str, conf_dir: str) -> None:
@@ -103,20 +110,18 @@ class TestUserManagedCertManager:
     def test_user_issuer_not_overwritten(
         self, config: TLSCertManagerConfig, test_paths: Paths
     ) -> None:
-        """Deploy with issuerConf, validate operator preserves user issuers."""
+        """Deploy with issuerConf, check the operator issues certificates from the user issuer."""
         cluster = config.cluster
         test_dir = test_paths["test_dir"]
-        ns = config.namespace
 
         apply_cluster(f"{test_dir}/conf/{cluster}-user-issuer.yml")
         _wait_all_started(cluster)
 
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-ca-issuer", ns, postfix="-custom")
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-issuer", ns, postfix="-custom")
-        compare_kubectl(test_dir, f"certificate/{cluster}-ca-cert", ns, postfix="-custom")
-
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl", ns)
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl-internal", ns)
+        for cert in (f"{cluster}-ssl", f"{cluster}-ssl-internal"):
+            _assert_certificate_field(
+                cert, ".metadata.ownerReferences[0].kind", "PerconaServerMongoDB"
+            )
+            _assert_certificate_field(cert, ".spec.issuerRef.name", f"{cluster}-psmdb-issuer")
 
         _check_tls_secret(f"{cluster}-ssl")
 
@@ -126,10 +131,9 @@ class TestUserManagedCertManager:
     def test_user_certificates_preserved(
         self, config: TLSCertManagerConfig, test_paths: Paths
     ) -> None:
-        """Pre-create certs, deploy cluster, validate operator preserves them."""
+        """Pre-create certs, deploy cluster, check the operator leaves them to the user."""
         cluster = config.cluster
         test_dir = test_paths["test_dir"]
-        ns = config.namespace
 
         kubectl_bin("delete", "psmdb", "--all")
         wait_for_delete(f"psmdb/{cluster}", 180)
@@ -149,8 +153,6 @@ class TestUserManagedCertManager:
         apply_cluster(f"{test_dir}/conf/{cluster}.yml")
         _wait_all_started(cluster)
 
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl", ns, postfix="-custom")
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl-internal", ns, postfix="-custom")
-        compare_kubectl(test_dir, f"certificate/{cluster}-ca-cert", ns, postfix="-custom")
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-ca-issuer", ns, postfix="-custom")
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-issuer", ns, postfix="-custom")
+        for cert in (f"{cluster}-ssl", f"{cluster}-ssl-internal"):
+            _assert_certificate_field(cert, ".spec.subject.organizations[0]", "CUSTOM")
+            _assert_certificate_field(cert, ".metadata.ownerReferences", "")

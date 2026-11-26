@@ -148,34 +148,3 @@ def arch_run_overrides() -> str:
             }
         }
     )
-
-
-def clean_arch(node: object) -> None:
-    """Strip the arch nodeSelector/toleration so compare files stay arch-agnostic."""
-    if isinstance(node, list):
-        for item in node:
-            clean_arch(item)
-        return
-    if not isinstance(node, dict):
-        return
-
-    selector = node.get("nodeSelector")
-    if isinstance(selector, dict):
-        selector.pop(ARCH_NODE_SELECTOR_KEY, None)
-        if not selector:
-            node.pop("nodeSelector")
-
-    tolerations = node.get("tolerations")
-    if isinstance(tolerations, list):
-        kept = [
-            t
-            for t in tolerations
-            if not (isinstance(t, dict) and t.get("key") == ARCH_NODE_SELECTOR_KEY)
-        ]
-        if kept:
-            node["tolerations"] = kept
-        else:
-            node.pop("tolerations")
-
-    for child in node.values():
-        clean_arch(child)

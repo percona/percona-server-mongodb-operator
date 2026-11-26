@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
+import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
-from lib.config import apply_cluster, compare_kubectl, render_cluster_config
+import yaml
+from lib.config import apply_cluster, render_cluster_config
 from lib.kubectl import kubectl_bin, wait_for_running
-from lib.utils import Paths, retry
+from lib.utils import Paths
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +33,24 @@ def setup_tests(test_paths: Paths) -> None:
     kubectl_bin("apply", "-f", f"{test_paths['conf_dir']}/secrets.yml")
 
 
+def _mongod_resources(sts: str) -> dict[str, Any]:
+    data = json.loads(kubectl_bin("get", "statefulset", sts, "-o", "json"))
+    for container in data["spec"]["template"]["spec"]["containers"]:
+        if container["name"] == "mongod":
+            return container.get("resources") or {}
+    raise AssertionError(f"statefulset/{sts} has no mongod container")
+
+
+def _wait_mongod_resources(sts: str, expected: dict[str, Any], attempts: int = 10) -> None:
+    actual: dict[str, Any] = {}
+    for _ in range(attempts):
+        actual = _mongod_resources(sts)
+        if actual == expected:
+            return
+        time.sleep(2)
+    raise AssertionError(f"statefulset/{sts} mongod resources: expected {expected}, got {actual}")
+
+
 class TestLimits:
     """Test PSMDB cluster creation with various CPU/Memory limits and requests"""
 
@@ -36,13 +58,12 @@ class TestLimits:
         "cluster",
         ["no-limits-rs0", "no-requests-rs0", "no-requests-no-limits-rs0"],
     )
-    def test_cr_config(self, config: LimitsConfig, test_paths: Paths, cluster: str) -> None:
-        """Create cluster, verify statefulset, increase resources and verify again"""
+    def test_cr_config(self, test_paths: Paths, cluster: str) -> None:
+        """Create cluster, increase resources and check the statefulset picks them up"""
         conf_file = f"{test_paths['test_dir']}/conf/{cluster}.yml"
 
         apply_cluster(conf_file)
         wait_for_running(cluster, 1, False)
-        compare_kubectl(test_paths["test_dir"], f"statefulset/{cluster}", config.namespace)
 
         increased = (
             render_cluster_config(conf_file)
@@ -51,13 +72,8 @@ class TestLimits:
             .replace("0.5G", "1G")
         )
         kubectl_bin("apply", "-f", "-", input_data=increased)
-        retry(
-            lambda: compare_kubectl(
-                test_paths["test_dir"], f"statefulset/{cluster}", config.namespace, "-increased"
-            ),
-            max_attempts=10,
-            delay=2,
-        )
+        expected = yaml.safe_load(increased)["spec"]["replsets"][0].get("resources") or {}
+        _wait_mongod_resources(cluster, expected)
 
         kubectl_bin("delete", "-f", conf_file)
 

@@ -19,7 +19,7 @@
 **Tests**
 - [ ] Is an E2E test/test case added for the new feature/change?
 - [ ] Are unit tests added where appropriate?
-- [ ] Are OpenShift compare files changed for E2E tests (`compare/*-oc.yml`)?
+- [ ] Are unit tests added for changed rendering, and `testdata/upgrade-consistency/` unchanged for older crVersions?
 
 **Config/Logging/Testability**
 - [ ] Are all needed new/changed options added to default YAML files?

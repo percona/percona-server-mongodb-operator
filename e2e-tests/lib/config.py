@@ -1,72 +1,15 @@
 import logging
 import os
-import subprocess
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from .allure_support import step
-from .arch import arch, clean_arch
 from .kubectl import kubectl_bin
 from .utils import env_bool, render_yaml_diff
 
 logger = logging.getLogger(__name__)
-
-
-# Keys removed wherever they appear in the tree.
-_DELETE_KEYS_ANYWHERE = {
-    "creationTimestamp",
-    "namespace",
-    "uid",
-    "image",
-    "clusterIP",
-    "clusterIPs",
-    "dataSource",
-    "procMount",
-    "storageClassName",
-    "finalizers",
-    "volumeName",
-    "kubernetes.io/pvc-protection",
-    "volume.beta.kubernetes.io/storage-provisioner",
-    "volume.kubernetes.io/storage-provisioner",
-    "volume.kubernetes.io/selected-node",
-    "percona.com/last-config-hash",
-    "percona.com/configuration-hash",
-    "percona.com/ssl-hash",
-    "percona.com/ssl-internal-hash",
-    "percona.com/pbm-tls-hash",
-    "healthCheckNodePort",
-    "nodePort",
-}
-
-# Scalars replaced wherever they appear (exact match).
-_VALUE_REPLACEMENTS = {"extensions/v1beta1": "apps/v1", "batch/v1beta1": "batch/v1"}
-
-_EACH = object()  # list-wildcard sentinel for path navigation
-
-# Fixed paths removed (segment tuples so dotted annotation keys are safe).
-_DELETE_PATHS = [
-    ("metadata", "ownerReferences", _EACH, "apiVersion"),
-    ("metadata", "managedFields"),
-    ("metadata", "resourceVersion"),
-    ("metadata", "selfLink"),
-    ("metadata", "annotations", "cloud.google.com/neg"),
-    ("metadata", "annotations", "field.cattle.io/publicEndpoints"),
-    ("metadata", "annotations", "metallb.io/ip-allocated-from-pool"),
-    ("metadata", "annotations", "networking.gke.io/target-pool"),
-    ("metadata", "annotations", "kubectl.kubernetes.io/last-applied-configuration"),
-    ("status",),
-    ("spec", "volumeMode"),
-    ("spec", "volumeClaimTemplates", _EACH, "apiVersion"),
-    ("spec", "volumeClaimTemplates", _EACH, "kind"),
-    ("spec", "ipFamilies"),
-    ("spec", "ipFamilyPolicy"),
-    ("spec", "persistentVolumeClaimRetentionPolicy"),
-    ("spec", "internalTrafficPolicy"),
-    ("spec", "allocateLoadBalancerNodePorts"),
-]
 
 
 def render_cluster_config(config_file: str) -> str:
@@ -116,103 +59,6 @@ def apply_cluster(config_file: str) -> None:
     kubectl_bin("apply", "-f", "-", input_data=config_yaml)
 
 
-def _delete_path(
-    node: object, path: tuple[Any, ...], when: Callable[[Any], bool] | None = None
-) -> None:
-    """Delete the key at the end of `path`, expanding `_EACH` over lists.
-
-    With `when`, the final key is deleted only if `when(value)` is true.
-    """
-    *parents, last = path
-    for i, segment in enumerate(parents):
-        if segment is _EACH:
-            if isinstance(node, list):
-                for item in node:
-                    _delete_path(item, path[i + 1 :], when)
-            return
-        if not isinstance(node, dict) or segment not in node:
-            return
-        node = node[segment]
-
-    if isinstance(node, dict) and last in node and (when is None or when(node[last])):
-        del node[last]
-
-
-def _delete_list_items(
-    node: object, path: tuple[Any, ...], predicate: Callable[[Any], bool]
-) -> None:
-    """Filter out items matching `predicate` from the list at `path`."""
-    *parents, last = path
-    for i, segment in enumerate(parents):
-        if segment is _EACH:
-            if isinstance(node, list):
-                for item in node:
-                    _delete_list_items(item, path[i + 1 :], predicate)
-            return
-        if not isinstance(node, dict) or segment not in node:
-            return
-        node = node[segment]
-
-    if isinstance(node, dict) and isinstance(node.get(last), list):
-        node[last] = [item for item in node[last] if not predicate(item)]
-
-
-def _walk(node: object, namespace: str) -> None:
-    """Single pass: drop keys anywhere, replace scalar values, sub namespace."""
-    if isinstance(node, dict):
-        for key in [k for k in node if k in _DELETE_KEYS_ANYWHERE]:
-            del node[key]
-        for key, value in node.items():
-            if isinstance(value, str):
-                node[key] = _filter_scalar(value, namespace)
-            else:
-                _walk(value, namespace)
-    elif isinstance(node, list):
-        for i, item in enumerate(node):
-            if isinstance(item, str):
-                node[i] = _filter_scalar(item, namespace)
-            else:
-                _walk(item, namespace)
-
-
-def _filter_scalar(value: str, namespace: str) -> str:
-    if value in _VALUE_REPLACEMENTS:
-        return _VALUE_REPLACEMENTS[value]
-    return value.replace(namespace, "NAME_SPACE")
-
-
-def filter_yaml(
-    yaml_content: str, namespace: str, resource: str = "", skip_generation_check: bool = False
-) -> str:
-    """Filter YAML content for stable resource comparisons."""
-    data = yaml.safe_load(yaml_content)
-    if data is None:
-        return yaml_content
-
-    for path in _DELETE_PATHS:
-        _delete_path(data, path)
-    _delete_path(
-        data,
-        ("spec", "volumeClaimTemplates", _EACH, "spec", "volumeMode"),
-        when=lambda v: v == "Filesystem",
-    )
-    _delete_list_items(
-        data,
-        ("spec", "template", "spec", "containers", _EACH, "env"),
-        lambda e: isinstance(e, dict) and e.get("name") == "NAMESPACE",
-    )
-
-    if "cronjob" in resource.lower() or skip_generation_check:
-        _delete_path(data, ("metadata", "generation"))
-
-    _walk(data, namespace)
-
-    if arch():
-        clean_arch(data)
-
-    return yaml.dump(data, sort_keys=False)
-
-
 def _expected_compare_path(test_dir: str, resource: str, postfix: str = "") -> Path:
     expected_path = Path(test_dir) / "compare" / f"{resource.replace('/', '_')}{postfix}.yml"
     if not os.environ.get("OPENSHIFT"):
@@ -235,43 +81,6 @@ def _assert_yaml_equal(
     """Assert two parsed YAML structures match, showing a unified diff on failure."""
     message = render_yaml_diff(expected_data, actual_data, expected_label, actual_label)
     assert not message, message
-
-
-@step("Compare {resource} with the expected manifest")
-def compare_kubectl(
-    test_dir: str,
-    resource: str,
-    namespace: str,
-    postfix: str = "",
-    skip_generation_check: bool = False,
-) -> None:
-    """Compare kubectl resource with expected output using yq filtering"""
-    expected_result = _expected_compare_path(test_dir, resource, postfix)
-
-    try:
-        actual_yaml = kubectl_bin("get", resource, "-o", "yaml")
-        filtered_actual = filter_yaml(actual_yaml, namespace, resource, skip_generation_check)
-
-        if env_bool("UPDATE_COMPARE_FILES"):
-            expected_result.write_text(filtered_actual)
-            return
-
-        if not expected_result.exists():
-            raise FileNotFoundError(
-                f"No compare file for {resource}: {expected_result} "
-                f"(run with UPDATE_COMPARE_FILES=1 to create it)"
-            )
-        filtered_expected = filter_yaml(
-            expected_result.read_text(), namespace, resource, skip_generation_check
-        )
-
-        actual_data = yaml.safe_load(filtered_actual)
-        expected_data = yaml.safe_load(filtered_expected)
-
-        _assert_yaml_equal(expected_data, actual_data, str(expected_result), resource)
-
-    except subprocess.CalledProcessError as e:
-        raise ValueError(f"Failed to process resource {resource}: {e}") from e
 
 
 def compare_metadata(test_dir: str, resource: str, postfix: str = "") -> None:

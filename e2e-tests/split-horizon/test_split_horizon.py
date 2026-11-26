@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from functools import partial
 
 import pytest
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import (
     kubectl_bin,
     wait_cluster_consistency,
@@ -186,20 +186,9 @@ class TestSplitHorizon:
 
     @pytest.mark.dependency()
     def test_create_cluster(self, config: SplitHorizonConfig, test_paths: Paths) -> None:
-        """Create cluster with 3 horizons and compare certificates and issuers"""
-        cluster = config.cluster
-        apply_cluster(f"{test_paths['test_dir']}/conf/{cluster}-3horizons.yml")
+        """Create cluster with 3 horizons"""
+        apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster}-3horizons.yml")
         _wait_cluster(config, 3)
-
-        for resource in (
-            f"certificate/{cluster}-ssl",
-            f"certificate/{cluster}-ssl-internal",
-            f"certificate/{cluster}-ca-cert",
-            f"issuer/{cluster}-psmdb-ca-issuer",
-            f"issuer/{cluster}-psmdb-issuer",
-        ):
-            compare_kubectl(test_paths["test_dir"], resource, config.namespace)
-            logger.info(f"{resource} matches expected spec")
 
     @pytest.mark.dependency(depends=["TestSplitHorizon::test_create_cluster"])
     def test_connect_via_horizons(self, config: SplitHorizonConfig, test_paths: Paths) -> None:
@@ -229,14 +218,6 @@ class TestSplitHorizon:
 
         for secret in (f"{cluster}-ssl", f"{cluster}-ssl-internal"):
             kubectl_bin("wait", "--for=condition=Ready", f"certificate/{secret}", "--timeout=300s")
-            compare_kubectl(
-                test_paths["test_dir"],
-                f"certificate/{secret}",
-                config.namespace,
-                postfix="-5horizons",
-                skip_generation_check=True,
-            )
-            logger.info(f"certificate/{secret} matches expected spec with 5 horizons")
             for i in (3, 4):
                 san = f"{config.replset}-{i}.{HORIZON_DOMAIN}"
                 retry(partial(_assert_cert_san, secret, san), max_attempts=30, delay=10)

@@ -36,10 +36,6 @@ if kubectl_bin get secret "$cluster-mongodb-encryption-key"; then
 	exit 1
 fi
 
-desc 'check if service and statefulset created with expected config'
-compare_kubectl statefulset/$cluster-rs0
-compare_kubectl statefulset/$cluster-cfg
-
 desc 'create user'
 run_mongos \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \

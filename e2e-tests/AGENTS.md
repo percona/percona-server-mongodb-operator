@@ -11,9 +11,8 @@ Read the root [`AGENTS.md`](../AGENTS.md) first. These rules cover
   is being ported from bash to pytest; follow the existing pytest tests.
 - `make e2e-test TEST=<name>` runs one test. It prefers `test_*.py` and falls
   back to the bash `run` through `test_pytest_wrapper.py`.
-- Expected objects live in `<name>/compare/` (`*.yml` Kubernetes objects,
-  `*.json` query results). OpenShift variants end in `-oc`; when a shared
-  shape changes, update every variant.
+- Expected query results live in `<name>/compare/*.json`. Kubernetes objects
+  the operator renders are checked by unit tests, not by e2e.
 - CI picks tests from `tests.yaml` (suites `pr`, `release`, `distro`,
   `minikube`, `backups`, plus platform and MongoDB version skips), listed with
   `uv run e2e-tests/select_tests.py list --suite pr`. A test directory that is
@@ -47,8 +46,10 @@ check against that.
   full e2e run takes about 30 hours of test time on 15 GKE clusters. Keep e2e
   for what needs a real cluster: MongoDB behavior, data, backups and restores,
   upgrades, failover, networking, and integration with Kubernetes and external
-  systems. When an e2e test adds a golden-file check for a new field, add or
-  point to the unit test that covers the rendering.
+  systems. Do not snapshot whole objects in e2e: a new rendering gets a unit
+  test that asserts the rendered fields. When an e2e step must prove the
+  operator acted on the cluster, check that one field with `check_jsonpath`
+  (`e2e-tests/functions`) or `kubectl get -o jsonpath`.
 - **No unit tests for the Python e2e code.** `lib/`, `conftest.py` and the
   OLM test helpers are test code; the e2e runs exercise them. `make py-check`
   (ruff, mypy, the fixture check) is the only check they get without a

@@ -174,16 +174,12 @@ for i in "${!cases[@]}"; do
 	wait_for_running "${cluster}-rs0" 3
 	sleep 20
 
-	desc 'check if statefulset created with expected config'
-	compare_kubectl "statefulset/${cluster}-rs0"
-
 	desc 'create user myApp'
 	run_mongo 'db.createUser({user: "myApp", pwd: "myPass", roles: [{ db: "myApp", role: "readWrite" }]})' \
 		"userAdmin:userAdmin123456@${cluster}-rs0.${namespace}"
 
 	desc 'write data, read from all'
 	run_mongo 'use myApp\n db.test.insert({ x: 100500 })' "myApp:myPass@${cluster}-rs0.${namespace}"
-	compare_kubectl "statefulset/${cluster}-rs0"
 
 	pods=($(kubectl get pods -l app.kubernetes.io/name=percona-server-mongodb -o=name))
 	if [ ${#pods[@]} -eq 0 ]; then

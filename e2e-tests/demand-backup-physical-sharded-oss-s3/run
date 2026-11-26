@@ -64,7 +64,7 @@ echo "Drop collection"
 run_mongos 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${namespace}"
 echo 'Check backup and restore -- oss-s3'
 run_restore ${backup_name_oss_s3}
-run_recovery_check ${backup_name_oss_s3} "_restore_sharded" 'sharded'
+run_recovery_check ${backup_name_oss_s3} 'sharded'
 check_exported_mongos_service_endpoint "$lbEndpoint"
 
 destroy "$namespace"

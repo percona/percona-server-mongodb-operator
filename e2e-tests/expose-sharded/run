@@ -57,6 +57,10 @@ function compare_mongo_config() {
 	fi
 }
 
+function get_mongod_args() {
+	kubectl_bin get sts "$1" -o jsonpath='{.spec.template.spec.containers[?(@.name=="mongod")].args}'
+}
+
 function expose_cluster() {
 	expose_type=$1
 	expose_status=${2:-true}
@@ -108,16 +112,14 @@ function main() {
 	wait_for_running $cluster-mongos 3
 	wait_cluster_consistency "${cluster}"
 
-	desc 'check if service and statefulset created with expected config'
-	compare_kubectl statefulset/$cluster-rs0
-	compare_kubectl statefulset/$cluster-cfg
-	compare_kubectl statefulset/$cluster-mongos ""
-
 	desc 'disabling sharding'
 	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": false}]'
 	sleep 10
 	wait_cluster_consistency "$cluster" 60
-	compare_kubectl statefulset/$cluster-rs0 "-sharding-disabled" "skip_generation_check"
+	if [[ $(get_mongod_args "$cluster-rs0") == *--shardsvr* ]]; then
+		echo "statefulset/$cluster-rs0 still runs mongod with --shardsvr"
+		exit 1
+	fi
 
 	if [[ "$(kubectl_bin get sts -o yaml | yq '.items | length')" != 1 ]]; then
 		echo "Expected to have only 1 statefulset $cluster-rs0"
@@ -128,9 +130,10 @@ function main() {
 	kubectl_bin patch psmdb $cluster --type='json' -p='[{"op": "replace", "path": "/spec/sharding/enabled", "value": true}]'
 	sleep 10
 	wait_cluster_consistency "$cluster" 60
-	compare_kubectl statefulset/$cluster-rs0 "-sharding-enabled" "skip_generation_check"
-	compare_kubectl statefulset/$cluster-cfg
-	compare_kubectl statefulset/$cluster-mongos ""
+	if [[ $(get_mongod_args "$cluster-rs0") != *--shardsvr* ]]; then
+		echo "statefulset/$cluster-rs0 runs mongod without --shardsvr"
+		exit 1
+	fi
 
 	desc 'write data, read from all'
 	run_mongos \

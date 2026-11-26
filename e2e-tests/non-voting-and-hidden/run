@@ -42,11 +42,6 @@ log 'check if Pods are started'
 wait_for_running "${cluster}-rs0" 3 "false"
 wait_for_cluster_state ${cluster} ready
 
-log 'check if statefulsets created with expected config'
-compare_kubectl "statefulset/${cluster}-rs0"
-compare_kubectl "statefulset/${cluster}-rs0-nv"
-compare_kubectl "statefulset/${cluster}-rs0-hidden"
-
 log 'check if rs.config is correct'
 compare_rs_config 'rs.config().members.filter(m => m.tags.nonVoting == "true").map(m => m.votes)' \
 	"clusterAdmin:clusterAdmin123456@${cluster}-rs0.${namespace}" \

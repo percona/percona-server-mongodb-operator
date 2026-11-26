@@ -88,9 +88,6 @@ apply_cluster $test_dir/conf/$cluster.yml
 desc 'check if all 3 Pods started and cluster is ready'
 wait_for_running $cluster-rs0 3
 
-desc 'check if service and statefulset created with expected config'
-compare_kubectl statefulset/$cluster-rs0
-
 desc 'verify IRSA env was injected into the backup-agent container'
 kubectl exec $cluster-rs0-0 -c backup-agent -- sh -c 'if [ -z "$AWS_ROLE_ARN" ]; then echo "Variable AWS_ROLE_ARN not set" && exit 1; else echo "Variable AWS_ROLE_ARN is set"; fi'
 

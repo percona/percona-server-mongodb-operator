@@ -68,10 +68,6 @@ main() {
 	spinup_psmdb "$cluster" "$test_dir/conf/$cluster.yml" "1"
 	wait_cluster_consistency "${cluster/-rs0/}"
 
-	desc 'check if service and pvc created with expected config'
-	compare_kubectl service/$cluster
-	compare_kubectl "pvc/mongod-data-one-pod-rs0-0"
-
 	desc 'check system log'
 	run_mongo \
 		'db.serverCmdLineOpts()' \
@@ -84,9 +80,6 @@ main() {
 
 	desc 'create secret and check custom config'
 	apply_mongod_secret "${cluster}" "$test_dir/conf/mongod-secret.yml"
-
-	desc 'check if statefulset created with expected config'
-	compare_kubectl "statefulset/$cluster" "-secret"
 
 	run_mongo \
 		'db.serverCmdLineOpts()' \

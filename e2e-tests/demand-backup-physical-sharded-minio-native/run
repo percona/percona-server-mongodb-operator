@@ -58,7 +58,7 @@ run_mongos_tls 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-mongos.${na
 echo 'Check backup and restore -- local-s3'
 backup_dest_local_s3=$(get_backup_dest "${backup_name_local_s3}")
 run_restore ${backup_name_local_s3}
-run_recovery_check ${backup_name_local_s3} "_restore_sharded" "sharded" "true"
+run_recovery_check ${backup_name_local_s3} "sharded" "true"
 
 destroy "$namespace"
 

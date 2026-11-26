@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -599,6 +600,63 @@ func TestStartupProbeDefaults(t *testing.T) {
 				require.Equal(t, wantCommand, p.Exec.Command)
 			}
 			require.Equal(t, wantCommand, cfg.StartupProbe.Exec.Command)
+		})
+	}
+}
+
+func TestReconcileStatefulSetMongodConfigSource(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		configMap  bool
+		secret     bool
+		wantSecret bool
+	}{
+		"configmap":            {configMap: true},
+		"secret":               {secret: true, wantSecret: true},
+		"secret and configmap": {configMap: true, secret: true, wantSecret: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("config-source", "config-source")
+			require.NoError(t, err)
+			cr.Spec.Backup.Enabled = false
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+			rs := cr.Spec.Replsets[0]
+			configName := naming.MongodCustomConfigName(cr, rs)
+
+			objs := []client.Object{
+				cr,
+				&corev1.Secret{Name: api.SSLSecretName(cr), Namespace: cr.Namespace},
+				&corev1.Secret{Name: api.SSLInternalSecretName(cr), Namespace: cr.Namespace},
+			}
+			if tt.configMap {
+				objs = append(objs, &corev1.ConfigMap{Name: configName, Namespace: cr.Namespace, Data: map[string]string{"mongod.conf": "{}"}})
+			}
+			if tt.secret {
+				objs = append(objs, &corev1.Secret{Name: configName, Namespace: cr.Namespace, Data: map[string][]byte{"mongod.conf": []byte("{}")}})
+			}
+			r := buildFakeClient(objs...)
+
+			sts, err := r.reconcileStatefulSet(t.Context(), cr, rs, naming.MongodLabels(cr, rs))
+			require.NoError(t, err)
+
+			i := slices.IndexFunc(sts.Spec.Template.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == "config" })
+			require.NotEqual(t, -1, i)
+			vol := sts.Spec.Template.Spec.Volumes[i]
+			if tt.wantSecret {
+				require.NotNil(t, vol.Secret)
+				assert.Equal(t, configName, vol.Secret.SecretName)
+				assert.Nil(t, vol.ConfigMap)
+			} else {
+				require.NotNil(t, vol.ConfigMap)
+				assert.Equal(t, configName, vol.ConfigMap.Name)
+				assert.Nil(t, vol.Secret)
+			}
+			assert.Contains(t, sts.Spec.Template.Spec.Containers[0].Args, "--config=/etc/mongodb-config/mongod.conf")
 		})
 	}
 }

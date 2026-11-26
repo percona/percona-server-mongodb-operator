@@ -97,9 +97,6 @@ cert_count=$(kubectl_bin exec ${cluster}-rs0-0 -n ${namespace} -c backup-agent -
 
 [ "$cert_count" = "1" ]
 
-desc 'Compare StatefulSet'
-compare_kubectl "statefulset/${cluster}-rs0"
-
 ###############################################################################
 # Backup & restore
 ###############################################################################

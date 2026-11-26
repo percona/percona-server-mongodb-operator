@@ -109,11 +109,11 @@ envtest case once the field has an enum marker.
 </details>
 
 <details>
-<summary>⚪ <b>6. Suggestion</b>: no e2e check of the rendered PDB</summary>
+<summary>⚪ <b>6. Suggestion</b>: no e2e check that a drain respects the PDB</summary>
 
-No e2e golden file contains a PDB, so nothing in the `pr` suite would catch a
-change to the rendered policy. Say in the PR description that no drain test
-is added, or add the PDB to an existing golden file.
+The unit test from finding 2 pins the rendered policy, but nothing shows that
+a node drain waits for an unhealthy pod. Say in the PR description that no
+drain test is added.
 
 </details>
 
