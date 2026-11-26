@@ -612,8 +612,9 @@ func (r *ReconcilePerconaServerMongoDBRestore) terminateStatefulSetPods(
 	return terminated, nil
 }
 
-// statefulSetsPreparedForRestore reports whether prepareStatefulSetsForPhysicalRestore
-// has already changed the cluster. It checks the first statefulset that function changes.
+// statefulSetsPreparedForRestore reports whether the statefulsets were already changed for the restore.
+// Setup always runs before that change, so the annotation also means setup is done and must not run
+// again: the pods are in restore mode. Checking the first statefulset is enough, since it is changed first.
 func (r *ReconcilePerconaServerMongoDBRestore) statefulSetsPreparedForRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
 	rs := cluster.GetAllReplsets()[0]
 	nn := types.NamespacedName{Namespace: cluster.Namespace, Name: naming.MongodStatefulSetName(cluster, rs)}
