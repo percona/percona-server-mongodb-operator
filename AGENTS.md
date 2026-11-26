@@ -90,6 +90,7 @@ diffs with known defects; rerun it when a guideline or a review skill changes.
 | `review-architecture` | review a diff against `docs/guidelines/architecture.md` |
 | `review-go-style` | review a diff against `docs/guidelines/go-style.md` |
 | `review-qa` | review tests against `docs/guidelines/qa.md` |
+| `review-pr` | review a PR or branch across architecture, Go style and QA |
 | `test-plan` | write a manual test plan for a change, and list what the tests already cover |
 
 To run a skill in Claude Code, type its name as a command, for example

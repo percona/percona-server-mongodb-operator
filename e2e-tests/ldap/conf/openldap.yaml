@@ -6,6 +6,28 @@ type: Opaque
 stringData:
   adminpassword: adminpassword
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openldap-data
+data:
+  50-perconadba.ldif: |
+    dn: ou=perconadba,dc=ldap,dc=local
+    objectClass: organizationalUnit
+    ou: perconadba
+
+    dn: uid=percona,ou=perconadba,dc=ldap,dc=local
+    objectClass: inetOrgPerson
+    uid: percona
+    cn: percona
+    sn: percona
+    userPassword: password
+
+    dn: cn=admin,ou=perconadba,dc=ldap,dc=local
+    objectClass: groupOfUniqueNames
+    cn: admin
+    uniqueMember: uid=percona,ou=perconadba,dc=ldap,dc=local
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,93 +46,43 @@ spec:
     spec:
       serviceAccountName: openldap
       containers:
-        - name: ldap-setup
-          image: docker.io/osixia/openldap:latest
-          command: ["/bin/bash"]
-          args:
-            - -c
-            - |
-              echo "Waiting for LDAP server to be ready..."
-              sleep 60
-              
-              echo "Adding LDAP structure..."
-              ldapadd -x -H ldap://localhost:389 -D "cn=admin,dc=ldap,dc=local" -w adminpassword <<EOF
-              dn: ou=perconadba,dc=ldap,dc=local
-              objectClass: organizationalUnit
-              ou: perconadba
-
-              dn: uid=percona,ou=perconadba,dc=ldap,dc=local
-              objectClass: inetOrgPerson
-              uid: percona
-              cn: percona
-              sn: percona
-              userPassword: password
-
-              dn: cn=admin,ou=perconadba,dc=ldap,dc=local
-              objectClass: groupOfUniqueNames
-              cn: admin
-              uniqueMember: uid=percona,ou=perconadba,dc=ldap,dc=local
-              EOF
-              
-              echo "LDAP structure added successfully"
-              sleep infinity
-          env:
-            - name: LDAP_DOMAIN
-              value: "ldap.local"
-            - name: LDAP_ORGANISATION
-              value: "ldap.local"
-            - name: LDAP_ADMIN_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  key: adminpassword
-                  name: openldap
         - name: openldap
-          image: docker.io/osixia/openldap:latest
-          imagePullPolicy: "Always"
-          args: ["--copy-service"]
+          image: docker.io/osixia/openldap:2.6.15
           env:
-            - name: LDAP_DOMAIN
+            - name: OPENLDAP_BOOTSTRAP_ORGANIZATION
               value: "ldap.local"
-            - name: LDAP_ORGANISATION
-              value: "ldap.local"
-            - name: LDAP_ADMIN_PASSWORD
+            - name: OPENLDAP_BOOTSTRAP_SUFFIX
+              value: "dc=ldap,dc=local"
+            - name: OPENLDAP_BOOTSTRAP_DATA_ROOT_PASSWORD_HASHED
               valueFrom:
                 secretKeyRef:
                   key: adminpassword
                   name: openldap
-            - name: LDAP_CONFIG_PASSWORD
+            - name: OPENLDAP_BOOTSTRAP_CONFIG_ROOT_PASSWORD_HASHED
               valueFrom:
                 secretKeyRef:
                   key: adminpassword
                   name: openldap
-            - name: LDAP_READONLY_USER
+            - name: OPENLDAP_BOOTSTRAP_DATA_READONLY
               value: "true"
-            - name: LDAP_READONLY_USER_USERNAME
-              value: "readonly"
-            - name: LDAP_READONLY_USER_PASSWORD
+            - name: OPENLDAP_BOOTSTRAP_DATA_READONLY_PASSWORD_HASHED
               value: "readonlypass"
-            - name: CONTAINER_LOG_LEVEL
-              value: "info"
-            - name: LDAP_PORT_NUMBER
-              value: "389"
           ports:
             - name: tcp-ldap
-              containerPort: 389
+              containerPort: 3890
           readinessProbe:
             tcpSocket:
-              port: 389
-            initialDelaySeconds: 60
+              port: 3890
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 5
-          livenessProbe:
-            tcpSocket:
-              port: 389
-            initialDelaySeconds: 60
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
-      volumes: []
+            failureThreshold: 10
+          volumeMounts:
+            - name: openldap-data
+              mountPath: /container/services/openldap-bootstrap/assets/ldif/data/custom
+      volumes:
+        - name: openldap-data
+          configMap:
+            name: openldap-data
 ---
 apiVersion: v1
 kind: Service

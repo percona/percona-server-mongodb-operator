@@ -89,6 +89,7 @@ func reconciler() *ReconcilePerconaServerMongoDB {
 
 	return (&ReconcilePerconaServerMongoDB{
 		client:                 k8sClient,
+		apiReader:              k8sClient,
 		scheme:                 k8sClient.Scheme(),
 		crons:                  NewCronRegistry(),
 		lockers:                newLockStore(),
