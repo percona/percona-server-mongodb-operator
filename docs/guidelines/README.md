@@ -46,8 +46,11 @@ Every review skill follows these steps.
      collapsed for the rest; inside: where, what, the rule, the proof and
      the fix, as a `diff` block when the fix is short;
    - action items as a task list with the markers;
-   - last line, in `<sub>`: what was run to confirm findings, or that
-     nothing was run.
+   - a test plan, when the review has one, after the action items: the
+     scenarios in a collapsed block under a three-line summary, then a table
+     of the automated test that could replace each scenario;
+   - last line, in `<sub>`: the commit reviewed, what was run to confirm
+     findings (or that nothing was run), and the CI status at that commit.
    [`review-comment-example.md`](review-comment-example.md) shows the format.
 6. **Verification.** You may build the code and run tests to confirm a
    finding, only on your own copy: a git worktree at the head of the branch
