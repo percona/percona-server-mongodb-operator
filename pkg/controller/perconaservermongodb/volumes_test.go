@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -2321,6 +2322,77 @@ func TestReconcileMongosStatefulsetKeepsShrinkTarget(t *testing.T) {
 			vct := sts.Spec.VolumeClaimTemplates[0]
 			assert.Equal(t, config.MongosLogVolClaimName, vct.Name)
 			assert.Equal(t, tt.want, new(vct.Spec.Resources.Requests[corev1.ResourceStorage]).String())
+		})
+	}
+}
+
+func TestClearStalePVCShrinkStates(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rs0          = "some-cluster-rs0"
+		rs0Hidden    = "some-cluster-rs0-hidden"
+		rs0NonVoting = "some-cluster-rs0-nv"
+		removedRS    = "some-cluster-rs9"
+		cfg          = "some-cluster-cfg"
+		mongos       = "some-cluster-mongos"
+	)
+
+	tests := map[string]struct {
+		modify func(cr *api.PerconaServerMongoDB)
+		want   []string
+	}{
+		"all statefulsets still in the spec": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Hidden.Enabled = true
+				cr.Spec.Replsets[0].NonVoting.Enabled = true
+			},
+			want: []string{rs0, rs0Hidden, rs0NonVoting, cfg, mongos},
+		},
+		"hidden and nonVoting disabled": {
+			want: []string{rs0, cfg, mongos},
+		},
+		"mongos log storage removed": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Sharding.Mongos.Logs = nil
+			},
+			want: []string{rs0, cfg},
+		},
+		"sharding disabled": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Sharding.Enabled = false
+			},
+			want: []string{rs0},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", "ns")
+			require.NoError(t, err)
+			require.Equal(t, "rs0", cr.Spec.Replsets[0].Name)
+			require.Len(t, cr.Spec.Replsets, 1)
+			require.True(t, cr.Spec.Sharding.Enabled)
+			require.False(t, cr.Spec.Replsets[0].Hidden.Enabled)
+			require.False(t, cr.Spec.Replsets[0].NonVoting.Enabled)
+			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("1Gi").PersistentVolumeClaim}
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+			if tt.modify != nil {
+				tt.modify(cr)
+			}
+			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
+				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
+			}
+
+			repls := cr.Spec.Replsets
+			if cr.Spec.Sharding.Enabled {
+				repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
+			}
+			clearStalePVCShrinkStates(t.Context(), cr, repls)
+
+			assert.ElementsMatch(t, tt.want, slices.Collect(maps.Keys(cr.Status.PVCShrink)))
 		})
 	}
 }

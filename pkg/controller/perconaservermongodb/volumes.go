@@ -1343,6 +1343,36 @@ func unhealthyRSMember(status mongo.Status, replacingHost string) *mongo.Member 
 	return replacing
 }
 
+// clearStalePVCShrinkStates drops the shrink state of statefulsets the spec no longer has,
+// e.g. hidden members or mongos log storage disabled during the shrink. Nothing else clears
+// it, and a shrink in progress blocks smart updates, backups and other shrinks.
+func clearStalePVCShrinkStates(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, repls []*psmdbv1.ReplsetSpec) {
+	if !cr.IsPVCShrinkInProgress() {
+		return
+	}
+
+	wanted := make(map[string]bool)
+	for _, rs := range repls {
+		wanted[naming.MongodStatefulSetName(cr, rs)] = true
+		if rs.NonVoting.Enabled {
+			wanted[naming.NonVotingStatefulSetName(cr, rs)] = true
+		}
+		if rs.Hidden.Enabled {
+			wanted[naming.HiddenStatefulSetName(cr, rs)] = true
+		}
+	}
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos.LogStorage() != nil {
+		wanted[naming.MongosStatefulSetName(cr)] = true
+	}
+
+	for name := range cr.Status.PVCShrink {
+		if !wanted[name] {
+			logf.FromContext(ctx).WithName("PVCShrink").Info("Clearing shrink state of a removed statefulset", "sts", name)
+			cr.ClearPVCShrinkState(name)
+		}
+	}
+}
+
 // shrinkingReplsetStatefulSet returns another statefulset of the same replset with a shrink in progress.
 func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 	if !sc.isRSComponent || sc.replset == nil {

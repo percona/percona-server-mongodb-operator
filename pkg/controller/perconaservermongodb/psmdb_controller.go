@@ -392,6 +392,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
 
+	clearStalePVCShrinkStates(ctx, cr, repls)
+
 	err = r.reconcileMongodConfigMaps(ctx, cr, repls)
 	if err != nil {
 		return reconcile.Result{}, errors.Wrap(err, "reconcile mongod configmaps")
