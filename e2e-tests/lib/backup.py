@@ -149,6 +149,7 @@ def run_backup(
     storage: str,
     backup_name: str = "",
     backup_type: str = "logical",
+    cluster_name: str = "",
 ) -> str:
     """Start a backup from the test's conf/backup-<storage>.yml and return its name."""
     name = backup_name or f"backup-{storage}"
@@ -158,6 +159,8 @@ def run_backup(
     doc["metadata"]["name"] = name
     doc["spec"]["storageName"] = storage
     doc["spec"]["type"] = backup_type
+    if cluster_name:
+        doc["spec"]["clusterName"] = cluster_name
 
     logger.info(f"Running backup {name}")
     kubectl_bin("apply", "-f", "-", input_data=yaml.dump(doc))

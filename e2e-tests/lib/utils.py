@@ -197,6 +197,7 @@ def aws_cli_s3(
         "run",
         "-i",
         "--rm",
+        "--quiet",
         "aws-cli",
         f"--image={os.environ.get('IMAGE_AWS_CLI')}",
         "--restart=Never",

@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   finalizers:
   - percona.com/delete-psmdb-pvc
-  name: some-name
+  name: some-name-arbiter-nv
 spec:
   #platform: openshift
   image:

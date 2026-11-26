@@ -32,10 +32,33 @@ def service_uri(
 
 
 def member_uri(
-    replset: str, index: int, namespace: str, user: str = "myApp", password: str = "myPass"
+    replset: str,
+    index: int | str,
+    namespace: str,
+    user: str = "myApp",
+    password: str = "myPass",
 ) -> str:
-    """URI of one replset member pod, for example some-name-rs0-1."""
+    """URI of one replset member pod, for example some-name-rs0-1 or some-name-rs0-nv-0."""
     return f"{user}:{password}@{replset}-{index}.{replset}.{namespace}"
+
+
+def data_members(cluster: str, replset: str = "rs0") -> list[str]:
+    """Pod suffixes of the data-bearing members of a replset, read from the live CR.
+
+    Regular members are "0", "1", ...; non-voting and hidden ones are "nv-0" and
+    "hidden-0". The arbiter holds no data, so it is left out. Pass each suffix to
+    member_uri.
+    """
+    cr = json.loads(kubectl_bin("get", "psmdb", cluster, "-o", "json"))
+    rs = next((r for r in cr["spec"]["replsets"] if r["name"] == replset), None)
+    assert rs, f"psmdb/{cluster} has no replset {replset}"
+
+    members = [str(i) for i in range(rs["size"])]
+    for kind, prefix in (("nonvoting", "nv"), ("hidden", "hidden")):
+        spec = rs.get(kind) or {}
+        if spec.get("enabled"):
+            members += [f"{prefix}-{i}" for i in range(spec.get("size", 0))]
+    return members
 
 
 class MongoManager:
