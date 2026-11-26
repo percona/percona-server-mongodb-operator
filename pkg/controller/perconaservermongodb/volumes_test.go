@@ -2428,6 +2428,7 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 		rs0NonVoting = "some-cluster-rs0-nv"
 		removedRS    = "some-cluster-rs9"
 		cfg          = "some-cluster-cfg"
+		mongos       = "some-cluster-mongos"
 	)
 
 	tests := map[string]struct {
@@ -2435,7 +2436,7 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 		want  []string
 	}{
 		"entries of removed statefulsets are dropped": {
-			want: []string{rs0, rs0Hidden, cfg},
+			want: []string{rs0, rs0Hidden, cfg, mongos},
 		},
 		// pause disables hidden and nonVoting members in memory, their shrink must survive it
 		"paused cluster keeps every entry": {
@@ -2443,7 +2444,7 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 				cr.Spec.Pause = true
 				return nil
 			},
-			want: []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg},
+			want: []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos},
 		},
 		// a running backup postpones the pause, the spec is reconciled as it is
 		"paused cluster with a running backup drops entries of removed statefulsets": {
@@ -2456,12 +2457,11 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 					Status:    api.PerconaServerMongoDBBackupStatus{State: api.BackupStateRunning},
 				}}
 			},
-			want: []string{rs0, rs0Hidden, cfg},
+			want: []string{rs0, rs0Hidden, cfg, mongos},
 		},
 		// with no pods left the sharding toggle unpauses and the spec without sharding is reconciled
 		"sharding disabled drops config server and mongos entries": {
 			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
-				cr.Spec.Backup.Enabled = true
 				cr.Spec.Sharding.Enabled = false
 				cr.Status.AddCondition(api.ClusterCondition{Type: api.AppStateSharding, Status: api.ConditionTrue})
 				return nil
@@ -2478,12 +2478,15 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 			require.NoError(t, err)
 			require.True(t, cr.Spec.Sharding.Enabled)
 			require.False(t, cr.Spec.Replsets[0].NonVoting.Enabled)
+			// the sharding toggle only runs with backups enabled
+			require.True(t, cr.Spec.Backup.Enabled)
 			cr.Spec.Replsets[0].Hidden.Enabled = true
+			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("1Gi").PersistentVolumeClaim}
 			var objs []client.Object
 			if tt.setup != nil {
 				objs = tt.setup(cr)
 			}
-			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg} {
+			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
 				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
 			}
 
