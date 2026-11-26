@@ -362,27 +362,13 @@ func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, c
 
 // writeStatus writes cr.Status with the resourceVersion cr was read at. If the
 // CR changed since then, the write fails with a conflict: cr may come from a
-// stale cache and miss status written by the previous reconcile.
+// stale cache and miss status written by the previous reconcile. A recreated
+// CR has a new resourceVersion and conflicts too.
+// It writes a copy so that the response does not replace the defaults set on cr.Spec.
 func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	c := &api.PerconaServerMongoDB{}
+	c := cr.DeepCopy()
 
-	err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
-	if k8serrors.IsNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return errors.Wrap(err, "write status")
-	}
-
-	// The CR might be deleted and recreated with the same name while we were reconciling the old one.
-	if c.UID != cr.UID {
-		return nil
-	}
-
-	c.ResourceVersion = cr.ResourceVersion
-	c.Status = cr.Status
-
-	err = r.client.Status().Update(ctx, c)
+	err := r.client.Status().Update(ctx, c)
 	if k8serrors.IsNotFound(err) {
 		return nil
 	}

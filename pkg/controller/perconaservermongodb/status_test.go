@@ -363,22 +363,48 @@ func TestUpdateStatus(t *testing.T) {
 func TestWriteStatusRecreatedCR(t *testing.T) {
 	t.Parallel()
 
-	existing := &api.PerconaServerMongoDB{
-		Name:      "some-name",
-		Namespace: "some-namespace",
-		UID:       "new-uid",
-	}
+	existing := &api.PerconaServerMongoDB{Name: "some-name", Namespace: "some-namespace"}
 	r := buildFakeClient(existing)
+	ctx := t.Context()
 
-	stale := existing.DeepCopy()
-	stale.UID = "old-uid"
+	stale := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+	require.NoError(t, r.client.Delete(ctx, stale.DeepCopy()))
+	require.NoError(t, r.client.Create(ctx, &api.PerconaServerMongoDB{Name: "some-name", Namespace: "some-namespace"}))
+
 	stale.Status.Replsets = map[string]api.ReplsetStatus{"rs0": {Initialized: true}}
-
-	require.NoError(t, r.writeStatus(t.Context(), stale))
+	err := r.writeStatus(ctx, stale)
+	require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
 
 	got := &api.PerconaServerMongoDB{}
-	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(existing), got))
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), got))
 	assert.Empty(t, got.Status.Replsets)
+}
+
+// The reconcile keeps using cr after a status write, so its in-memory spec defaults must survive it.
+func TestWriteStatusKeepsInMemorySpec(t *testing.T) {
+	t.Parallel()
+
+	existing := &api.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+	r := buildFakeClient(existing)
+	ctx := t.Context()
+
+	cr := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), cr))
+	readAt := cr.ResourceVersion
+	cr.Spec.Image = "defaulted-image"
+	cr.Status.State = api.AppStateReady
+
+	require.NoError(t, r.writeStatus(ctx, cr))
+
+	assert.Equal(t, "defaulted-image", cr.Spec.Image)
+	assert.NotEqual(t, readAt, cr.ResourceVersion)
+
+	got := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), got))
+	assert.Equal(t, api.AppStateReady, got.Status.State)
+	assert.Empty(t, got.Spec.Image)
+	assert.Equal(t, got.ResourceVersion, cr.ResourceVersion)
 }
 
 // A reconcile can start from a cached CR that misses the PVC shrink state
