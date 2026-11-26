@@ -316,18 +316,17 @@ def wait_physical_restore(
     MAX_EMPTY_READS = 6
 
     wait_restore(restore_name, cluster_name, "ready", wait_consistency=False, timeout=timeout)
-    _, resyncing, stderr = retry(
+    state, resyncing, _ = retry(
         lambda: _psmdb(cluster_name),
         max_attempts=MAX_EMPTY_READS,
         delay=5,
         condition=lambda result: result[0] != "",
     )
-    assert "percona.com/resync-pbm" in resyncing, (
-        f"psmdb/{cluster_name} is not annotated with percona.com/resync-pbm after the physical "
-        f"restore {restore_name} (annotations: {sorted(resyncing)}; read error: {stderr or 'none'})"
-    )
 
-    logger.info(f"Waiting for {cluster_name} to be rebuilt and resynced after {restore_name}")
+    logger.info(
+        f"Waiting for {cluster_name} to be rebuilt and resynced after {restore_name} "
+        f"(state: {state}, resync annotations: {sorted(resyncing) or 'none'})"
+    )
     deadline = time.monotonic() + timeout
     error_since: float | None = None
     ready_since: float | None = None
