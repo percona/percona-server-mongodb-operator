@@ -273,6 +273,15 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
+// IsAuthenticationError reports whether MongoDB returned AuthenticationFailed.
+func IsAuthenticationError(err error) bool {
+	// https://www.mongodb.com/docs/manual/reference/error-codes/#mongodb-error-18
+	const authenticationFailedCode = 18
+
+	var cmdErr mongo.CommandError
+	return errors.As(err, &cmdErr) && cmdErr.HasErrorCode(authenticationFailedCode)
+}
+
 // isTransientError reports whether err is a connection level failure that may succeed on a retry.
 func isTransientError(err error) bool {
 	if err == nil {

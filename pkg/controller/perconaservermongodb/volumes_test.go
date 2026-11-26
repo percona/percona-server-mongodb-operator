@@ -1207,10 +1207,14 @@ func TestShrinkStepdownRetry(t *testing.T) {
 
 	t.Run("isPodPrimary failure causes soft retry", func(t *testing.T) {
 		primaryPod := newPod(cr.Namespace, stsName+"-0", labels)
+		cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build()
 
+		rec := events.NewFakeRecorder(10)
 		r := &ReconcilePerconaServerMongoDB{
-			client: fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(cr, primaryPod).Build(),
-			scheme: s,
+			client:    cl,
+			apiReader: cl,
+			scheme:    s,
+			recorder:  rec,
 		}
 
 		state := api.PVCShrinkState{
@@ -1225,6 +1229,8 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		got, ok := cr.GetPVCShrinkState(stsName)
 		require.True(t, ok)
 		assert.Equal(t, "stepdown", got.Phase, "phase should remain stepdown so next reconcile retries")
+		assert.Equal(t, "failed to check whether "+primaryPod.Name+" is primary", got.WaitingFor)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
 	})
 
 	t.Run("pod not found advances to primary phase", func(t *testing.T) {
@@ -1236,6 +1242,7 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		state := api.PVCShrinkState{
 			Phase:      "stepdown",
 			PrimaryPod: stsName + "-0",
+			WaitingFor: "failed to check whether " + stsName + "-0 is primary",
 		}
 		cr.SetPVCShrinkState(stsName, state)
 
@@ -1245,6 +1252,7 @@ func TestShrinkStepdownRetry(t *testing.T) {
 		got, ok := cr.GetPVCShrinkState(stsName)
 		require.True(t, ok)
 		assert.Equal(t, "primary", got.Phase, "missing pod should advance to primary phase")
+		assert.Empty(t, got.WaitingFor, "reason about the missing pod should be cleared")
 	})
 
 	t.Run("needsStepdown false skips to primary phase", func(t *testing.T) {
@@ -1472,13 +1480,17 @@ func TestUnhealthyRSMember(t *testing.T) {
 }
 
 type shrinkMongoProvider struct {
-	status       mongo.Status
-	isPrimary    bool
-	stepDowns    int
-	rsDials      int
-	rsRetryDials int
-	dialErr      error
-	statusErr    error
+	status    mongo.Status
+	isPrimary bool
+	// primaryPod, if set, is the only pod a standalone client reports as primary.
+	primaryPod    string
+	standaloneErr error
+	stepDownErr   error
+	stepDowns     int
+	rsDials       int
+	rsRetryDials  int
+	dialErr       error
+	statusErr     error
 }
 
 func (p *shrinkMongoProvider) Mongo(ctx context.Context, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
@@ -1501,12 +1513,16 @@ func (p *shrinkMongoProvider) Mongos(ctx context.Context, cr *api.PerconaServerM
 }
 
 func (p *shrinkMongoProvider) Standalone(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, host string, tlsEnabled bool, opts ...mongo.ConfigOption) (mongo.Client, error) {
-	return &shrinkMongoClient{Client: mongoFake.NewClient(), p: p}, nil
+	if p.standaloneErr != nil {
+		return nil, p.standaloneErr
+	}
+	return &shrinkMongoClient{Client: mongoFake.NewClient(), p: p, host: host}, nil
 }
 
 type shrinkMongoClient struct {
 	mongo.Client
-	p *shrinkMongoProvider
+	p    *shrinkMongoProvider
+	host string
 }
 
 func (c *shrinkMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) {
@@ -1517,12 +1533,15 @@ func (c *shrinkMongoClient) RSStatus(ctx context.Context) (mongo.Status, error) 
 }
 
 func (c *shrinkMongoClient) IsMaster(ctx context.Context) (*mongo.IsMasterResp, error) {
+	if c.p.primaryPod != "" {
+		return &mongo.IsMasterResp{IsMaster: strings.HasPrefix(c.host, c.p.primaryPod+".")}, nil
+	}
 	return &mongo.IsMasterResp{IsMaster: c.p.isPrimary}, nil
 }
 
 func (c *shrinkMongoClient) StepDown(ctx context.Context, seconds int, force bool) error {
 	c.p.stepDowns++
-	return nil
+	return c.p.stepDownErr
 }
 
 func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
@@ -1672,6 +1691,118 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
 	})
 
+	t.Run("stepdown clears a failed primary check once the pod is no longer primary", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, standaloneErr: errors.New("dial failed")}
+		r, _ := newReconciler(p)
+		cr.SetPVCShrinkState(stsName, stepdownState)
+
+		require.NoError(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		require.Equal(t, "stepdown", got.Phase)
+		require.NotEmpty(t, got.WaitingFor)
+
+		p.standaloneErr = nil
+		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
+		got, ok = cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "primary", got.Phase)
+		assert.Empty(t, got.WaitingFor, "reason should be cleared once the primary check succeeds")
+	})
+
+	t.Run("stepdown phase stays when the stepdown fails", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, isPrimary: true, stepDownErr: errors.New("no electable secondary")}
+		r, _ := newReconciler(p)
+		cr.SetPVCShrinkState(stsName, stepdownState)
+
+		require.Error(t, r.shrinkStepdown(t.Context(), sc, stepdownState))
+		assert.Equal(t, 1, p.stepDowns)
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase)
+	})
+
+	t.Run("secondaries phase tracks a member elected before its replacement", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, primaryPod: stsName + "-1"}
+		r, rec := newReconciler(p)
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		// -2 is replaced first: it's not primary.
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 2, pvcCount(t, r))
+
+		// -2's PVC is recreated with the new size; -1, elected meanwhile, is tracked instead of replaced.
+		require.NoError(t, r.client.Create(t.Context(), newPVC(cr.Namespace, config.MongodDataVolClaimName+"-"+stsName+"-2", labels, resource.MustParse("3Gi"), resource.MustParse("3Gi"))))
+		state := secondariesState
+		state.ProcessedPods = []string{stsName + "-2"}
+		cr.SetPVCShrinkState(stsName, state)
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
+		assert.Equal(t, 3, pvcCount(t, r), "primary must not be replaced without a stepdown")
+		assert.Equal(t, []string{"Normal PVCShrinkReplacingMember"}, eventReasons(rec))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "secondaries", got.Phase)
+		assert.Equal(t, stsName+"-1", got.PrimaryPod)
+
+		// The former primary -0 is replaced next, as a secondary.
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, got, false))
+		assert.Equal(t, 2, pvcCount(t, r))
+		pvc := corev1.PersistentVolumeClaim{}
+		err := r.client.Get(t.Context(), client.ObjectKey{Namespace: cr.Namespace, Name: config.MongodDataVolClaimName + "-" + stsName + "-0"}, &pvc)
+		assert.True(t, k8serrors.IsNotFound(err), "former primary's PVC should be deleted, got %v", err)
+	})
+
+	t.Run("secondaries phase keeps PVC when the primary check fails", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: healthy, standaloneErr: errors.New("dial failed")})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.Equal(t, 3, pvcCount(t, r), "PVC must not be deleted while it's unknown whether the pod is primary")
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, stsName+"-0", got.PrimaryPod)
+		assert.Contains(t, got.WaitingFor, "is primary")
+
+		// The health check clears the reason before the primary check sets it again.
+		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
+		got, ok = cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, "is primary")
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
+	})
+
+	t.Run("hidden and non-voting members are replaced without a primary check", func(t *testing.T) {
+		r, _ := newReconciler(&shrinkMongoProvider{status: healthy, standaloneErr: errors.New("dial failed")})
+		noStepdown := sc
+		noStepdown.needsStepdown = false
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), noStepdown, secondariesState, false))
+		assert.Equal(t, 2, pvcCount(t, r))
+	})
+
+	t.Run("primary phase steps down a re-elected primary before replacing it", func(t *testing.T) {
+		r, rec := newReconciler(&shrinkMongoProvider{status: healthy, primaryPod: stsName + "-0"})
+		state := api.PVCShrinkState{
+			Phase:         "primary",
+			TargetSize:    "3Gi",
+			PrimaryPod:    stsName + "-0",
+			ProcessedPods: []string{stsName + "-1", stsName + "-2"},
+		}
+		cr.SetPVCShrinkState(stsName, state)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, true))
+		assert.Equal(t, 3, pvcCount(t, r), "primary must not be replaced without a stepdown")
+		assert.Empty(t, eventReasons(rec))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "stepdown", got.Phase)
+		assert.Equal(t, stsName+"-0", got.PrimaryPod)
+	})
+
 	t.Run("primary phase completes shrink", func(t *testing.T) {
 		r, rec := newReconciler(&shrinkMongoProvider{status: healthy})
 		state := api.PVCShrinkState{
@@ -1748,6 +1879,29 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "stepdown", got.Phase)
 		assert.ElementsMatch(t, []string{stsName + "-1", stsName + "-2"}, got.ProcessedPods)
+	})
+
+	t.Run("replaced member is not done when the primary check fails", func(t *testing.T) {
+		r, rec := replaced(t, &shrinkMongoProvider{status: statusWith("", 0), standaloneErr: errors.New("dial failed")})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Empty(t, got.ProcessedPods)
+		assert.Equal(t, "failed to check whether "+stsName+"-2 is primary", got.WaitingFor)
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec))
+	})
+
+	t.Run("replaced member elected primary becomes the tracked primary", func(t *testing.T) {
+		r, _ := replaced(t, &shrinkMongoProvider{status: statusWith("", 0), primaryPod: stsName + "-2"})
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, stsName+"-2", got.PrimaryPod)
+		assert.Empty(t, got.ProcessedPods)
 	})
 
 	t.Run("primary phase does not complete while last member is in initial sync", func(t *testing.T) {
@@ -1979,6 +2133,74 @@ func TestShrinkPausesOnUnhealthyMember(t *testing.T) {
 
 		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
 		assert.False(t, podExists(t, r, stsName+"-2"))
+	})
+
+	t.Run("running pod of a terminating PVC elected primary is stepped down before deletion", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, primaryPod: stsName + "-2"}
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(true)...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.True(t, podExists(t, r, stsName+"-2"), "primary must not be deleted without a stepdown")
+		assert.Equal(t, 1, p.stepDowns)
+		assert.Equal(t, []string{"Normal PVCShrinkStepDown"}, eventReasons(rec))
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Equal(t, "secondaries", got.Phase)
+		assert.Equal(t, stsName+"-0", got.PrimaryPod, "pod with a terminating PVC must not become the tracked primary")
+
+		p.primaryPod = stsName + "-0"
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, got, false))
+		assert.False(t, podExists(t, r, stsName+"-2"))
+		assert.Equal(t, 1, p.stepDowns)
+	})
+
+	t.Run("running pod of a terminating PVC is kept when the primary check fails", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, standaloneErr: errors.New("dial failed")}
+		rec := events.NewFakeRecorder(10)
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(true)...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            rec,
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.NoError(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.True(t, podExists(t, r, stsName+"-2"), "pod must not be deleted while it's unknown whether it is primary")
+		assert.Zero(t, p.stepDowns)
+
+		got, ok := cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, stsName+"-2")
+
+		require.NoError(t, r.shrinkVolumesIfNeeded(t.Context(), cr, sts, labels, config.MongodDataVolClaimName, api.PVCSpec{}, got))
+		got, ok = cr.GetPVCShrinkState(stsName)
+		require.True(t, ok)
+		assert.Contains(t, got.WaitingFor, "is primary")
+		assert.Equal(t, []string{"Warning PVCShrinkWaiting"}, eventReasons(rec), "waiting event should be emitted once")
+	})
+
+	t.Run("running primary of a terminating PVC is kept when the stepdown fails", func(t *testing.T) {
+		p := &shrinkMongoProvider{status: healthy, primaryPod: stsName + "-2", stepDownErr: errors.New("no electable secondary")}
+		r := &ReconcilePerconaServerMongoDB{
+			client:              fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(terminatingPVC(true)...).Build(),
+			scheme:              s,
+			mongoClientProvider: p,
+			recorder:            &events.FakeRecorder{},
+		}
+		cr.SetPVCShrinkState(stsName, secondariesState)
+
+		require.Error(t, r.shrinkProcessPods(t.Context(), sc, secondariesState, false))
+		assert.True(t, podExists(t, r, stsName+"-2"), "primary must not be deleted when the stepdown fails")
+		assert.Equal(t, 1, p.stepDowns)
 	})
 
 	t.Run("not ready pod of a terminating PVC is deleted while a member is unhealthy", func(t *testing.T) {

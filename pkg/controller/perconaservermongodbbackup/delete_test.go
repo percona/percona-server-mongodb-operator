@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	volumesnapshotv1 "github.com/kubernetes-csi/external-snapshotter/client/v8/apis/volumesnapshot/v1"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,9 +34,12 @@ func TestReconcileDeleteCanceledBackup(t *testing.T) {
 
 	tests := map[string]struct {
 		backupType    defs.BackupType
+		pause         bool
+		clusterState  psmdbv1.AppState
 		pbmErr        error
 		deleteErr     error
 		missingMeta   bool
+		withSnapshot  bool
 		waitForLock   bool
 		wantFinalizer bool
 	}{
@@ -50,8 +54,29 @@ func TestReconcileDeleteCanceledBackup(t *testing.T) {
 		},
 		"retains the finalizer when PBM is unavailable": {
 			backupType:    defs.LogicalBackup,
+			clusterState:  psmdbv1.AppStateReady,
 			pbmErr:        errors.New("PBM unavailable"),
 			wantFinalizer: true,
+		},
+		"retains the finalizer while the cluster is stopping and PBM is unavailable": {
+			backupType:    defs.LogicalBackup,
+			pause:         true,
+			clusterState:  psmdbv1.AppStateStopping,
+			pbmErr:        errors.New("PBM unavailable"),
+			wantFinalizer: true,
+		},
+		"retains the finalizer while the cluster is resuming and PBM is unavailable": {
+			backupType:    defs.LogicalBackup,
+			clusterState:  psmdbv1.AppStatePaused,
+			pbmErr:        errors.New("PBM unavailable"),
+			wantFinalizer: true,
+		},
+		"deletes snapshots when the cluster is paused and PBM is unavailable": {
+			backupType:   defs.ExternalBackup,
+			pause:        true,
+			clusterState: psmdbv1.AppStatePaused,
+			pbmErr:       errors.New("PBM unavailable"),
+			withSnapshot: true,
 		},
 		"deletes remaining snapshot backup metadata": {
 			backupType: defs.ExternalBackup,
@@ -70,6 +95,7 @@ func TestReconcileDeleteCanceledBackup(t *testing.T) {
 			cr.Finalizers = []string{naming.FinalizerDeleteBackup}
 			cr.Spec.Type = tt.backupType
 			cr.Status.PBMname = "pbm-backup"
+
 			if tt.backupType == defs.ExternalBackup {
 				cr.Spec.VolumeSnapshotClass = new("snapshot-class")
 				cr.Status.ReplsetNames = []string{"rs0"}
@@ -82,10 +108,20 @@ func TestReconcileDeleteCanceledBackup(t *testing.T) {
 				}
 			}
 
+			var snapshot *volumesnapshotv1.VolumeSnapshot
+			if tt.withSnapshot {
+				snapshot = &volumesnapshotv1.VolumeSnapshot{
+					Name:      naming.VolumeSnapshotName(cr, "rs0"),
+					Namespace: cr.Namespace,
+				}
+				cr.Status.Snapshots = psmdbv1.SnapshotInfos{{ReplsetName: "rs0", SnapshotName: snapshot.Name}}
+			}
+
 			cluster := &psmdbv1.PerconaServerMongoDB{
 				Name:      cr.Spec.ClusterName,
 				Namespace: cr.Namespace,
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					Pause:     tt.pause,
 					CRVersion: version.Version(),
 					Backup: psmdbv1.BackupSpec{
 						Storages: map[string]psmdbv1.BackupStorageSpec{
@@ -93,9 +129,12 @@ func TestReconcileDeleteCanceledBackup(t *testing.T) {
 						},
 					},
 				},
+				Status: psmdbv1.PerconaServerMongoDBStatus{State: tt.clusterState},
 			}
-			cl := fake.NewClientBuilder().
-				WithScheme(backupScheme(t)).
+			scheme := backupScheme(t)
+			require.NoError(t, volumesnapshotv1.AddToScheme(scheme))
+			builder := fake.NewClientBuilder().
+				WithScheme(scheme).
 				WithObjects(cr.DeepCopy(), cluster).
 				WithStatusSubresource(cr).
 				WithInterceptorFuncs(interceptor.Funcs{
@@ -105,8 +144,11 @@ func TestReconcileDeleteCanceledBackup(t *testing.T) {
 						}
 						return cl.Get(ctx, key, obj, opts...)
 					},
-				}).
-				Build()
+				})
+			if snapshot != nil {
+				builder.WithObjects(snapshot)
+			}
+			cl := builder.Build()
 
 			pbm := NewMockPBM(gomock.NewController(t))
 			r := &ReconcilePerconaServerMongoDBBackup{
@@ -164,6 +206,14 @@ func TestReconcileDeleteCanceledBackup(t *testing.T) {
 					assert.Equal(t, cr.Finalizers, got.Finalizers)
 				} else {
 					assert.True(t, k8serrors.IsNotFound(err), "backup should be removed after cleanup: %v", err)
+				}
+				if snapshot != nil {
+					err := cl.Get(t.Context(), client.ObjectKeyFromObject(snapshot), &volumesnapshotv1.VolumeSnapshot{})
+					if locked || tt.wantFinalizer {
+						assert.NoError(t, err)
+					} else {
+						assert.True(t, k8serrors.IsNotFound(err), "snapshot should be removed after cleanup: %v", err)
+					}
 				}
 			}
 		})

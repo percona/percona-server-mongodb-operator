@@ -9,6 +9,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from .allure_support import mask, step
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ def kubectl_bin(
     """Execute kubectl command"""
     arg_list, input_data = _apply_arch_scheduling(list(args), input_data)
     cmd = ["kubectl"] + arg_list
-    logger.debug(" ".join(map(str, cmd)))
+    logger.debug(mask(" ".join(map(str, cmd))))
     for attempt in range(10):
         result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
         if result.returncode == 0 or attempt == 9 or not TRANSIENT_ERRORS.search(result.stderr):
@@ -106,7 +107,7 @@ def kubectl_bin(
 
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, cmd, output=result.stdout, stderr=result.stderr
+            result.returncode, [mask(c) for c in cmd], output=result.stdout, stderr=result.stderr
         )
 
     if result.returncode != 0 and return_stderr and not result.stdout:
@@ -172,6 +173,7 @@ def recreate_failed_certificates() -> None:
                 kubectl_bin("delete", "certificate", name, "--ignore-not-found")
 
 
+@step("Wait for pod {pod_name} to be ready")
 def wait_pod(pod_name: str, timeout: int = 360) -> None:
     """Wait for pod to be ready."""
     _wait_for(
@@ -184,6 +186,7 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
     )
 
 
+@step("Wait for cluster {cluster_name} to be ready")
 def _wait_cluster_ready(cluster_name: str, timeout: int) -> None:
     _wait_for(
         f"cluster {cluster_name}", ["psmdb", cluster_name], "{.status.state}", "ready", timeout
@@ -198,6 +201,7 @@ def _replset_field(cluster_name: str, rs_name: str, path: str) -> str:
     ).strip()
 
 
+@step("Wait for {expected_pods} pods of {cluster_name} to be running")
 def wait_for_running(
     cluster_name: str, expected_pods: int, check_cluster_readyness: bool = True, timeout: int = 600
 ) -> None:
@@ -298,6 +302,7 @@ def resource_exists(kind: str, name: str) -> bool:
     )
 
 
+@step("Wait for {resource} to be deleted")
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
     """Wait for a specific resource to be deleted"""
     logger.info(f"Waiting for {resource} to be deleted")
@@ -309,6 +314,29 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     logger.info(f"{resource} was deleted")
 
 
+def wait_certificate(cert_name: str, timeout: int = 600) -> None:
+    """Wait for a cert-manager Certificate to be ready, also while it does not exist yet."""
+    deadline = time.time() + timeout
+    while (remaining := int(deadline - time.time())) > 0:
+        try:
+            kubectl_bin(
+                "wait",
+                "--for=condition=Ready",
+                f"certificate/{cert_name}",
+                f"--timeout={min(60, remaining)}s",
+            )
+            return
+        except subprocess.CalledProcessError:
+            time.sleep(1)
+    conditions = kubectl_bin(
+        "get", f"certificate/{cert_name}", "-o", "jsonpath={.status.conditions}", check=False
+    )
+    raise TimeoutError(
+        f"Certificate {cert_name} not ready within {timeout}s, conditions: {conditions}"
+    )
+
+
+@step("Wait for cluster {cluster_name} to be {target_state}")
 def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 1500) -> None:
     """Wait for psmdb cluster to reach a specific state (e.g. 'ready', 'paused')."""
     _wait_for(
@@ -320,6 +348,7 @@ def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 
     )
 
 
+@step("Wait for cluster {cluster_name} to settle")
 def wait_cluster_consistency(cluster_name: str, timeout: int = 180) -> None:
     """Wait for the PSMDB cluster status to settle back to ready."""
     time.sleep(5)  # give the operator time to leave the "ready" state first
