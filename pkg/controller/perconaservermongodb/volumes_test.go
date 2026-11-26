@@ -2500,6 +2500,11 @@ func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
 			got := &api.PerconaServerMongoDB{}
 			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), got))
 			assert.ElementsMatch(t, tt.want, slices.Collect(maps.Keys(got.Status.PVCShrink)))
+			if !cr.Spec.Sharding.Enabled {
+				cond := got.Status.FindCondition(api.AppStateSharding)
+				require.NotNil(t, cond)
+				assert.Equal(t, api.ConditionFalse, cond.Status, "sharding toggle must have run")
+			}
 		})
 	}
 }
