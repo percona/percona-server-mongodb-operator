@@ -1208,6 +1208,18 @@ func (r *ReconcilePerconaServerMongoDB) shrinkClaimTemplateReady(
 	return true, nil
 }
 
+// pinShrinkTarget sets the claim template's storage request to the shrink target.
+// A size changed during the shrink is applied after it.
+func pinShrinkTarget(sts *appsv1.StatefulSet, claimName string, target resource.Quantity) {
+	for i := range sts.Spec.VolumeClaimTemplates {
+		if sts.Spec.VolumeClaimTemplates[i].Name == claimName {
+			requests := sts.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests.DeepCopy()
+			requests[corev1.ResourceStorage] = target
+			sts.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests = requests
+		}
+	}
+}
+
 // shrinkCheckPrimary reports whether pod is the replset primary. In the secondaries phase a newly elected
 // primary becomes the tracked one, so it's skipped now and replaced last, after a stepdown.
 func (r *ReconcilePerconaServerMongoDB) shrinkCheckPrimary(ctx context.Context, sc shrinkContext, state *psmdbv1.PVCShrinkState, pod corev1.Pod, isPrimaryPhase bool) (bool, error) {

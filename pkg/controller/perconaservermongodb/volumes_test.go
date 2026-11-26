@@ -2276,6 +2276,47 @@ func mongosShrinkFixture(t *testing.T, vctSize resource.Quantity, objs ...client
 	}
 }
 
+func TestReconcileMongosStatefulsetKeepsShrinkTarget(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		shrinking bool
+		want      string
+	}{
+		"shrink in progress uses the shrink target": {shrinking: true, want: "2Gi"},
+		"no shrink uses the CR size":                {want: "1Gi"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", "ns")
+			require.NoError(t, err)
+			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("1Gi").PersistentVolumeClaim}
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+			// the fake cluster has no config server pods to wait for
+			cr.Spec.Sharding.ConfigsvrReplSet.Size = 0
+			if tt.shrinking {
+				cr.SetPVCShrinkState(naming.MongosStatefulSetName(cr), api.PVCShrinkState{Phase: "secondaries", TargetSize: "2Gi"})
+			}
+			r := buildFakeClient(cr,
+				&corev1.Secret{Name: api.SSLSecretName(cr), Namespace: cr.Namespace},
+				&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: cr.Namespace},
+			)
+
+			require.NoError(t, r.reconcileMongosStatefulset(t.Context(), cr))
+
+			sts := &appsv1.StatefulSet{}
+			require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: naming.MongosStatefulSetName(cr), Namespace: cr.Namespace}, sts))
+			require.Len(t, sts.Spec.VolumeClaimTemplates, 1)
+			vct := sts.Spec.VolumeClaimTemplates[0]
+			assert.Equal(t, config.MongosLogVolClaimName, vct.Name)
+			assert.Equal(t, tt.want, new(vct.Spec.Resources.Requests[corev1.ResourceStorage]).String())
+		})
+	}
+}
+
 func TestShrinkPreflightSavesStateBeforeDeletingStatefulSet(t *testing.T) {
 	t.Parallel()
 

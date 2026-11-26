@@ -55,15 +55,8 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 		if err != nil {
 			return nil, errors.Wrapf(err, "parse shrink target size of %s", sfs.Name)
 		}
-		// Keep the shrink target until the shrink is done, a size changed meanwhile is applied after it.
 		claimName := dataClaimName(ls[naming.LabelKubernetesComponent])
-		for i := range sfs.Spec.VolumeClaimTemplates {
-			if sfs.Spec.VolumeClaimTemplates[i].Name == claimName {
-				requests := sfs.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests.DeepCopy()
-				requests[corev1.ResourceStorage] = target
-				sfs.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests = requests
-			}
-		}
+		pinShrinkTarget(sfs, claimName, target)
 		// The claim template can't be updated, a statefulset still having the old one is recreated.
 		ready, err := r.shrinkClaimTemplateReady(ctx, cr, sfs, claimName, target)
 		if err != nil {

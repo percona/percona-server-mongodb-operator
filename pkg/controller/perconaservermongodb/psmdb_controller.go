@@ -23,6 +23,7 @@ import (
 	eventsv1 "k8s.io/api/events/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1685,6 +1686,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if len(currentVCT) > 0 {
 		// Pin the volumeClaimTemplates, they should never change here.
 		sts.Spec.VolumeClaimTemplates = currentVCT
+	}
+	// The statefulset was deleted for the shrink, recreate it with the shrink target.
+	if state, ok := cr.GetPVCShrinkState(sts.Name); ok {
+		target, err := resource.ParseQuantity(state.TargetSize)
+		if err != nil {
+			return errors.Wrapf(err, "parse shrink target size of %s", sts.Name)
+		}
+		pinShrinkTarget(sts, psmdbconfig.MongosLogVolClaimName, target)
 	}
 
 	err = r.createOrUpdate(ctx, sts)
