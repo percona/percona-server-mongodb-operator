@@ -2629,6 +2629,58 @@ func TestShrinkClaimTemplateReady(t *testing.T) {
 				r.client = interceptorClient(t, r.client, failStatefulSetDelete)
 			},
 			wantErr: "delete statefulset for shrink",
+			wantSTS: true,
+		},
+		"stale cache read is not deleted": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				// the fake client ignores UID preconditions, so emulate the API server
+				r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+					Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if err := c.Get(ctx, key, obj, opts...); err != nil {
+							return err
+						}
+						if sts, ok := obj.(*appsv1.StatefulSet); ok {
+							sts.UID = "replaced-uid"
+						}
+						return nil
+					},
+					Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+						options := &client.DeleteOptions{}
+						options.ApplyOptions(opts)
+						if _, ok := obj.(*appsv1.StatefulSet); ok && options.Preconditions != nil && options.Preconditions.UID != nil {
+							live := &appsv1.StatefulSet{}
+							if err := c.Get(ctx, client.ObjectKeyFromObject(obj), live); err != nil {
+								return err
+							}
+							if live.UID != *options.Preconditions.UID {
+								return k8serrors.NewConflict(appsv1.Resource("statefulsets"), obj.GetName(), errors.New("uid mismatch"))
+							}
+						}
+						return c.Delete(ctx, obj, opts...)
+					},
+				})
+			},
+			wantSTS: true,
+		},
+		"stale CR when preserving restartedAt": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				live := &appsv1.StatefulSet{}
+				require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), live))
+				live.Spec.Template.Annotations = map[string]string{naming.AnnotationKubectlRestartedAt: "2026-11-26T00:00:00Z"}
+				require.NoError(t, r.client.Update(t.Context(), live))
+				r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						if _, ok := obj.(*api.PerconaServerMongoDB); ok {
+							return k8serrors.NewConflict(api.SchemeGroupVersion.WithResource("perconaservermongodbs").GroupResource(), obj.GetName(), errors.New("stale"))
+						}
+						return c.Patch(ctx, obj, patch, opts...)
+					},
+				})
+			},
+			wantErr: "preserve restartedAt annotation",
+			wantSTS: true,
 		},
 		"get fails": {
 			vctSize: target,
@@ -2643,6 +2695,7 @@ func TestShrinkClaimTemplateReady(t *testing.T) {
 				})
 			},
 			wantErr: "get statefulset",
+			wantSTS: true,
 		},
 	}
 
@@ -2650,6 +2703,7 @@ func TestShrinkClaimTemplateReady(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			r, sc := mongosShrinkFixture(t, tt.vctSize)
+			base := r.client
 			if tt.prepare != nil {
 				tt.prepare(t, r, &sc)
 			}
@@ -2662,10 +2716,8 @@ func TestShrinkClaimTemplateReady(t *testing.T) {
 			}
 			assert.Equal(t, tt.wantReady, ready)
 
-			if tt.wantErr == "" {
-				err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{})
-				assert.Equal(t, tt.wantSTS, err == nil, "statefulset exists: got err %v", err)
-			}
+			err = base.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{})
+			assert.Equal(t, tt.wantSTS, err == nil, "statefulset exists: got err %v", err)
 		})
 	}
 }

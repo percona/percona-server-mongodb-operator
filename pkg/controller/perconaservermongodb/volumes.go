@@ -565,6 +565,7 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 	ctx context.Context,
 	cr *psmdbv1.PerconaServerMongoDB,
 	sts *appsv1.StatefulSet,
+	opts ...client.DeleteOption,
 ) error {
 	if restartedAtValue, exists := sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt]; exists {
 		orig := cr.DeepCopy()
@@ -578,7 +579,12 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 		}
 	}
 
-	return client.IgnoreNotFound(k8s.OrphanDeleteStatefulSet(ctx, r.client, sts))
+	// a conflict means a precondition in opts failed: sts was already replaced
+	err := k8s.OrphanDeleteStatefulSet(ctx, r.client, sts, opts...)
+	if k8serrors.IsNotFound(err) || k8serrors.IsConflict(err) {
+		return nil
+	}
+	return err
 }
 
 func (r *ReconcilePerconaServerMongoDB) handlePVCResizeFailure(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, claimName string, originalSize resource.Quantity) error {
@@ -1199,7 +1205,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkClaimTemplateReady(
 		}
 		logf.FromContext(ctx).WithName("PVCShrink").Info("Statefulset still has the old claim template, recreating it",
 			"sts", live.Name, "size", size.String(), "targetSize", target.String())
-		if err := r.deleteStatefulSetForResize(ctx, cr, live); err != nil {
+		// live may come from a stale cache and be already replaced by a statefulset with the target size
+		if err := r.deleteStatefulSetForResize(ctx, cr, live, client.Preconditions{UID: &live.UID}); err != nil {
 			return false, errors.Wrap(err, "delete statefulset for shrink")
 		}
 		return false, nil
