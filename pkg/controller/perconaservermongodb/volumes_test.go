@@ -2280,11 +2280,13 @@ func TestReconcileMongosStatefulsetKeepsShrinkTarget(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
-		shrinking bool
-		want      string
+		shrinkTarget string
+		want         string
+		wantErr      string
 	}{
-		"shrink in progress uses the shrink target": {shrinking: true, want: "2Gi"},
+		"shrink in progress uses the shrink target": {shrinkTarget: "2Gi", want: "2Gi"},
 		"no shrink uses the CR size":                {want: "1Gi"},
+		"shrink target does not parse":              {shrinkTarget: "not-a-size", wantErr: "parse shrink target size"},
 	}
 
 	for name, tt := range tests {
@@ -2297,18 +2299,24 @@ func TestReconcileMongosStatefulsetKeepsShrinkTarget(t *testing.T) {
 			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
 			// the fake cluster has no config server pods to wait for
 			cr.Spec.Sharding.ConfigsvrReplSet.Size = 0
-			if tt.shrinking {
-				cr.SetPVCShrinkState(naming.MongosStatefulSetName(cr), api.PVCShrinkState{Phase: "secondaries", TargetSize: "2Gi"})
+			if tt.shrinkTarget != "" {
+				cr.SetPVCShrinkState(naming.MongosStatefulSetName(cr), api.PVCShrinkState{Phase: "secondaries", TargetSize: tt.shrinkTarget})
 			}
 			r := buildFakeClient(cr,
 				&corev1.Secret{Name: api.SSLSecretName(cr), Namespace: cr.Namespace},
 				&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: cr.Namespace},
 			)
 
-			require.NoError(t, r.reconcileMongosStatefulset(t.Context(), cr))
-
+			err = r.reconcileMongosStatefulset(t.Context(), cr)
 			sts := &appsv1.StatefulSet{}
-			require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: naming.MongosStatefulSetName(cr), Namespace: cr.Namespace}, sts))
+			getErr := r.client.Get(t.Context(), types.NamespacedName{Name: naming.MongosStatefulSetName(cr), Namespace: cr.Namespace}, sts)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				assert.True(t, k8serrors.IsNotFound(getErr), "statefulset must not be created, got %v", getErr)
+				return
+			}
+			require.NoError(t, err)
+			require.NoError(t, getErr)
 			require.Len(t, sts.Spec.VolumeClaimTemplates, 1)
 			vct := sts.Spec.VolumeClaimTemplates[0]
 			assert.Equal(t, config.MongosLogVolClaimName, vct.Name)
