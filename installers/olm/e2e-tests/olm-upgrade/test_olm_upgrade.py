@@ -11,12 +11,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from lib.backup import MAX_EMPTY_READS, wait_backup, wait_restore
+from lib.backup import wait_backup, wait_restore
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
 from lib.utils import Paths, env_bool
 from olm import (
     LOCAL_S3,
+    MAX_EMPTY_READS,
     SUBSCRIPTION,
     CatalogTarget,
     apply,
