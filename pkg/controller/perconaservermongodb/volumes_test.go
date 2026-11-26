@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -2338,23 +2339,38 @@ func TestClearStalePVCShrinkStates(t *testing.T) {
 		mongos       = "some-cluster-mongos"
 	)
 
+	enableHidden := func(cr *api.PerconaServerMongoDB) { cr.Spec.Replsets[0].Hidden.Enabled = true }
+	enableNonVoting := func(cr *api.PerconaServerMongoDB) { cr.Spec.Replsets[0].NonVoting.Enabled = true }
+
 	tests := map[string]struct {
-		modify func(cr *api.PerconaServerMongoDB)
-		want   []string
+		modify   func(cr *api.PerconaServerMongoDB)
+		noShrink bool
+		want     []string
 	}{
 		"all statefulsets still in the spec": {
 			modify: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].Hidden.Enabled = true
-				cr.Spec.Replsets[0].NonVoting.Enabled = true
+				enableHidden(cr)
+				enableNonVoting(cr)
 			},
 			want: []string{rs0, rs0Hidden, rs0NonVoting, cfg, mongos},
 		},
-		"hidden and nonVoting disabled": {
-			want: []string{rs0, cfg, mongos},
+		"hidden disabled": {
+			modify: enableNonVoting,
+			want:   []string{rs0, rs0NonVoting, cfg, mongos},
+		},
+		"nonVoting disabled": {
+			modify: enableHidden,
+			want:   []string{rs0, rs0Hidden, cfg, mongos},
 		},
 		"mongos log storage removed": {
 			modify: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.Sharding.Mongos.Logs = nil
+			},
+			want: []string{rs0, cfg},
+		},
+		"crVersion without mongos log shrink": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.23.0"
 			},
 			want: []string{rs0, cfg},
 		},
@@ -2363,6 +2379,15 @@ func TestClearStalePVCShrinkStates(t *testing.T) {
 				cr.Spec.Sharding.Enabled = false
 			},
 			want: []string{rs0},
+		},
+		"paused keeps every entry": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Pause = true
+			},
+			want: []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos},
+		},
+		"no shrink in progress": {
+			noShrink: true,
 		},
 	}
 
@@ -2377,22 +2402,78 @@ func TestClearStalePVCShrinkStates(t *testing.T) {
 			require.True(t, cr.Spec.Sharding.Enabled)
 			require.False(t, cr.Spec.Replsets[0].Hidden.Enabled)
 			require.False(t, cr.Spec.Replsets[0].NonVoting.Enabled)
+			require.GreaterOrEqual(t, cr.CompareVersion("1.24.0"), 0)
 			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("1Gi").PersistentVolumeClaim}
 			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
 			if tt.modify != nil {
 				tt.modify(cr)
 			}
-			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
-				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
+			if !tt.noShrink {
+				for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
+					cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
+				}
 			}
 
 			repls := cr.Spec.Replsets
-			if cr.Spec.Sharding.Enabled {
+			if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 				repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 			}
 			clearStalePVCShrinkStates(t.Context(), cr, repls)
 
 			assert.ElementsMatch(t, tt.want, slices.Collect(maps.Keys(cr.Status.PVCShrink)))
+		})
+	}
+}
+
+func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rs0          = "some-cluster-rs0"
+		rs0Hidden    = "some-cluster-rs0-hidden"
+		rs0NonVoting = "some-cluster-rs0-nv"
+		removedRS    = "some-cluster-rs9"
+		cfg          = "some-cluster-cfg"
+	)
+
+	tests := map[string]struct {
+		pause bool
+		want  []string
+	}{
+		"entries of removed statefulsets are dropped": {
+			want: []string{rs0, rs0Hidden, cfg},
+		},
+		// pause disables hidden and nonVoting members in memory, their shrink must survive it
+		"paused cluster keeps every entry": {
+			pause: true,
+			want:  []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", "ns")
+			require.NoError(t, err)
+			require.True(t, cr.Spec.Sharding.Enabled)
+			require.False(t, cr.Spec.Replsets[0].NonVoting.Enabled)
+			cr.Spec.Replsets[0].Hidden.Enabled = true
+			cr.Spec.Pause = tt.pause
+			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg} {
+				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
+			}
+
+			r := buildFakeClient(cr)
+			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			r.crons = NewCronRegistry()
+
+			_, err = r.Reconcile(t.Context(), reconcile.Request{Name: cr.Name, Namespace: cr.Namespace})
+			require.NoError(t, err)
+
+			got := &api.PerconaServerMongoDB{}
+			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), got))
+			assert.ElementsMatch(t, tt.want, slices.Collect(maps.Keys(got.Status.PVCShrink)))
 		})
 	}
 }

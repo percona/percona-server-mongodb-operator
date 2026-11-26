@@ -1347,7 +1347,8 @@ func unhealthyRSMember(status mongo.Status, replacingHost string) *mongo.Member 
 // e.g. hidden members or mongos log storage disabled during the shrink. Nothing else clears
 // it, and a shrink in progress blocks smart updates, backups and other shrinks.
 func clearStalePVCShrinkStates(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, repls []*psmdbv1.ReplsetSpec) {
-	if !cr.IsPVCShrinkInProgress() {
+	// pause disables hidden and nonVoting members in memory, not in the spec
+	if !cr.IsPVCShrinkInProgress() || cr.Spec.Pause {
 		return
 	}
 
@@ -1361,7 +1362,8 @@ func clearStalePVCShrinkStates(ctx context.Context, cr *psmdbv1.PerconaServerMon
 			wanted[naming.HiddenStatefulSetName(cr, rs)] = true
 		}
 	}
-	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos.LogStorage() != nil {
+	// resizeMongosPVCs runs the mongos shrink only from 1.24.0
+	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.Mongos.LogStorage() != nil && cr.CompareVersion("1.24.0") >= 0 {
 		wanted[naming.MongosStatefulSetName(cr)] = true
 	}
 
