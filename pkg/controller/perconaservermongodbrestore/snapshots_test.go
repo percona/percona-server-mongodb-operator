@@ -1014,6 +1014,55 @@ func TestDeleteStatefulSetsForSnapshotRestore(t *testing.T) {
 		err := r.deleteStatefulSetsForSnapshotRestore(ctx, cluster)
 		assert.NoError(t, err)
 	})
+
+	t.Run("deletes search statefulsets of shards when search is enabled", func(t *testing.T) {
+		rs1 := &psmdbv1.ReplsetSpec{Name: "rs1", Size: 3}
+		cfg := &psmdbv1.ReplsetSpec{Name: "cfg", Size: 3, ClusterRole: psmdbv1.ClusterRoleConfigSvr}
+
+		sharded := cluster.DeepCopy()
+		sharded.Spec.Replsets = append(sharded.Spec.Replsets, rs1)
+		sharded.Spec.Sharding.Enabled = true
+		sharded.Spec.Sharding.ConfigsvrReplSet = cfg
+		sharded.Spec.Search = &psmdbv1.SearchSpec{Enabled: true}
+
+		makeSFS := func(name string) *appsv1.StatefulSet {
+			return &appsv1.StatefulSet{
+				Name:      name,
+				Namespace: ns,
+			}
+		}
+
+		search0 := makeSFS(naming.SearchStatefulSetName(sharded, sharded.Spec.Replsets[0]))
+		search1 := makeSFS(naming.SearchStatefulSetName(sharded, rs1))
+		// The config server replset has no search statefulset. One with that name must be left alone.
+		cfgSearch := makeSFS(naming.SearchStatefulSetName(sharded, cfg))
+
+		r := fakeReconciler(sharded, search0, search1, cfgSearch)
+
+		require.NoError(t, r.deleteStatefulSetsForSnapshotRestore(ctx, sharded))
+
+		for _, sfs := range []*appsv1.StatefulSet{search0, search1} {
+			err := r.client.Get(ctx, client.ObjectKeyFromObject(sfs), &appsv1.StatefulSet{})
+			assert.True(t, k8sErrors.IsNotFound(err), "expected statefulset %s to be deleted", sfs.Name)
+		}
+
+		err := r.client.Get(ctx, client.ObjectKeyFromObject(cfgSearch), &appsv1.StatefulSet{})
+		assert.NoError(t, err, "expected statefulset %s to be kept", cfgSearch.Name)
+	})
+
+	t.Run("keeps search statefulsets when search is disabled", func(t *testing.T) {
+		searchSFS := &appsv1.StatefulSet{
+			Name:      naming.SearchStatefulSetName(cluster, rs),
+			Namespace: ns,
+		}
+
+		r := fakeReconciler(cluster, searchSFS)
+
+		require.NoError(t, r.deleteStatefulSetsForSnapshotRestore(ctx, cluster))
+
+		err := r.client.Get(ctx, client.ObjectKeyFromObject(searchSFS), &appsv1.StatefulSet{})
+		assert.NoError(t, err, "expected statefulset %s to be kept", searchSFS.Name)
+	})
 }
 
 func TestReconcileExternalSnapshotRestoreStateNew(t *testing.T) {
