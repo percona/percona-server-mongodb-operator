@@ -8,6 +8,14 @@ import groovy.transform.Field
 @Field int clusterCount = 15
 // Tests that run at the same time on each cluster. 1 runs one test at a time per cluster.
 @Field int testsPerCluster = 3
+// Cluster load with several tests per cluster: `kubectl top nodes` every loadIntervalSeconds. A
+// cluster counts as highly loaded when its busiest node stays at loadCpuPercent CPU or
+// loadMemoryPercent memory for loadHighAfterSeconds without a break.
+@Field int loadIntervalSeconds = 30
+@Field int loadCpuPercent = 90
+@Field int loadMemoryPercent = 70
+@Field int loadHighAfterSeconds = 120
+@Field def clusterLoadLines = [:]
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
@@ -168,6 +176,230 @@ boolean publishAllureReport() {
         echo "Warning: failed to publish the Allure report: ${exc}"
         return false
     }
+}
+
+// The Allure timeline groups tests by their host and thread labels. All slots run on one Jenkins
+// agent, so pytest gives every test the same host. This sets host to the cluster and thread to the
+// slot, adds a "Cluster" parameter and the cluster load while each test case ran, attaches the
+// cleanup log to the test case that finished last, and moves the results into
+// e2e-tests/allure-results. A problem here does not fail the build.
+void finishSlotAllureResults(String resultsDir, String cluster, String slot, String cleanupLog) {
+    try {
+        withEnv([
+            "RESULTS=${resultsDir}",
+            "LABEL_HOST=${CLUSTER_NAME}-${cluster}",
+            "LABEL_THREAD=${slot}",
+            "CLEANUP_LOG=${cleanupLog}",
+            "LOAD_SAMPLES=${clusterLoadSamples(cluster)}",
+            "CPU_LIMIT=${loadCpuPercent}",
+            "MEM_LIMIT=${loadMemoryPercent}",
+            "INTERVAL=${loadIntervalSeconds}"
+        ]) {
+            sh '''
+                [ -d "$RESULTS" ] || exit 0
+                for result in "$RESULTS"/*-result.json; do
+                    [ -f "$result" ] || continue
+                    # excluded parameters: the values differ between attempts, and Allure groups a retry
+                    # with its earlier attempts only when their parameters match.
+                    jq --arg host "$LABEL_HOST" --arg thread "$LABEL_THREAD" '
+                        .labels = ([(.labels // [])[] | select(.name != "host" and .name != "thread")]
+                            + [{"name": "host", "value": $host}, {"name": "thread", "value": $thread}])
+                        | .parameters = ((.parameters // [])
+                            + [{"name": "Cluster", "value": ($host + " (" + $thread + ")"), "excluded": true}])
+                    ' "$result" > "$result.tmp" && mv "$result.tmp" "$result"
+
+                    [ -s "$LOAD_SAMPLES" ] || continue
+                    # The window starts one interval before the test case, so a short case still gets a sample.
+                    start=$(jq -r '((.start // 0) / 1000 | floor)' "$result")
+                    stop=$(jq -r '((.stop // 0) / 1000 | ceil)' "$result")
+                    from=$((start - INTERVAL))
+                    summary=$(awk -v cpu_limit="$CPU_LIMIT" -v mem_limit="$MEM_LIMIT" -v interval="$INTERVAL" \
+                        -v from="$from" -v to="$stop" -f "$LOAD_SAMPLES.awk" "$LOAD_SAMPLES")
+                    get() { printf '%s\\n' "$summary" | sed -n "s/^$1=//p"; }
+                    [ "$(get samples)" != 0 ] || continue
+
+                    value="busiest node CPU $(get cpu_peak)%, memory $(get mem_peak)%"
+                    [ "$(get cpu_over)" = 0 ] || value="$value; CPU ${CPU_LIMIT}%+ for $(get cpu_over)s"
+                    [ "$(get mem_over)" = 0 ] || value="$value; memory ${MEM_LIMIT}%+ for $(get mem_over)s"
+
+                    attachment="$(basename "$result" -result.json)-cluster-load-attachment.txt"
+                    {
+                        echo "Cluster load while the test case ran ($value)."
+                        echo "Samples every ${INTERVAL}s from kubectl top nodes, seconds from the test case start."
+                        echo
+                        echo "second node cpu cpu% memory memory%"
+                        awk -v from="$from" -v to="$stop" -v start="$start" \
+                            '$1 >= from && $1 <= to { $1 = $1 - start; print }' "$LOAD_SAMPLES"
+                    } > "$RESULTS/$attachment"
+
+                    jq --arg value "$value" --arg source "$attachment" '
+                        .parameters = ((.parameters // []) + [{"name": "Cluster load", "value": $value, "excluded": true}])
+                        | .attachments = ((.attachments // []) + [{"name": "Cluster load", "source": $source, "type": "text/plain"}])
+                    ' "$result" > "$result.tmp" && mv "$result.tmp" "$result"
+                done
+
+                # The cleanup runs once after the whole test, so its log goes to the last test case.
+                last=$(for result in "$RESULTS"/*-result.json; do
+                    [ -f "$result" ] && printf '%s %s\\n' "$(jq -r '.stop // 0' "$result")" "$result"
+                done | sort -n | tail -1 | cut -d' ' -f2-)
+                if [ -n "$last" ] && [ -s "$CLEANUP_LOG" ]; then
+                    attachment="$(basename "$last" -result.json)-cleanup-attachment.txt"
+                    cp "$CLEANUP_LOG" "$RESULTS/$attachment"
+                    jq --arg source "$attachment" '
+                        .attachments = ((.attachments // []) + [{"name": "Cleanup after the test", "source": $source, "type": "text/plain"}])
+                    ' "$last" > "$last.tmp" && mv "$last.tmp" "$last"
+                fi
+                mkdir -p e2e-tests/allure-results
+                find "$RESULTS" -mindepth 1 -maxdepth 1 -exec mv -f {} e2e-tests/allure-results/ \\;
+                rm -rf "$RESULTS"
+            '''
+        }
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (allureErr) {
+        echo "Warning: failed to label the Allure results in ${resultsDir}: ${allureErr}"
+    }
+}
+
+String clusterLoadSamples(String cluster) {
+    return "${env.WORKSPACE}/cluster-load-${CLUSTER_NAME}-${cluster}.samples"
+}
+
+// Appends `kubectl top nodes` of the cluster to its samples file every loadIntervalSeconds, in a
+// background loop on the agent: <epoch> <node> <cpu cores> <cpu%> <memory> <memory%>. The loop
+// stops when finishClusterLoad deletes the pid file or the workspace is deleted. GKE has
+// metrics-server by default; without it the file stays empty.
+void startClusterLoad(String cluster) {
+    def samples = clusterLoadSamples(cluster)
+    try {
+        // Written once here: the slots of the cluster read it at the same time.
+        writeFile file: "${samples}.awk", text: clusterLoadAwk()
+        withEnv([
+            "KUBECONFIG=/tmp/${CLUSTER_NAME}-${cluster}",
+            "LOAD_SAMPLES=${samples}",
+            "LOAD_INTERVAL=${loadIntervalSeconds}"
+        ]) {
+            // JENKINS_NODE_COOKIE and BUILD_ID keep Jenkins from killing the loop when this step ends.
+            sh '''
+                rm -f "$LOAD_SAMPLES" "$LOAD_SAMPLES.pid"
+                touch "$LOAD_SAMPLES"
+                JENKINS_NODE_COOKIE=dontKillMe BUILD_ID=dontKillMe nohup bash -c '
+                    while [ -e "$LOAD_SAMPLES" ]; do
+                        now=$(date +%s)
+                        kubectl top nodes --no-headers --request-timeout=20s 2>/dev/null \
+                            | sed "s/^/$now /" >> "$LOAD_SAMPLES"
+                        sleep "$LOAD_INTERVAL"
+                    done
+                ' </dev/null >/dev/null 2>&1 &
+                echo $! > "$LOAD_SAMPLES.pid"
+            '''
+        }
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (loadErr) {
+        echo "Warning: cluster load sampling did not start on ${CLUSTER_NAME}-${cluster}: ${loadErr}"
+    }
+}
+
+// Stops sampling and prints one line with the cluster's load, which writeClusterLoadEnvironment
+// also adds to the Allure overview. Never fails the build.
+void finishClusterLoad(String cluster) {
+    def samples = clusterLoadSamples(cluster)
+    try {
+        def output = sh(returnStdout: true, script: """
+            if [ -f '${samples}.pid' ]; then
+                kill "\$(cat '${samples}.pid')" 2>/dev/null || true
+                rm -f '${samples}.pid'
+            fi
+            if [ ! -s '${samples}' ]; then echo samples=0; exit 0; fi
+            awk -v cpu_limit=${loadCpuPercent} -v mem_limit=${loadMemoryPercent} \
+                -v interval=${loadIntervalSeconds} -v from=0 -v to=0 \
+                -f '${samples}.awk' '${samples}'
+        """).trim()
+        def s = [samples: '0']
+        for (line in output.split('\n')) {
+            def parts = line.split('=', 2)
+            if (parts.size() == 2) {
+                s[parts[0]] = parts[1]
+            }
+        }
+        if (s.samples == '0') {
+            echo "Cluster load on ${CLUSTER_NAME}-${cluster}: no samples (is metrics-server running?)"
+            return
+        }
+        def high = (s.cpu_longest as Integer) >= loadHighAfterSeconds || (s.mem_longest as Integer) >= loadHighAfterSeconds
+        def summary = "${high ? 'HIGH ' : ''}busiest node CPU peak ${s.cpu_peak}% " +
+            "(${s.cpu_over}s at ${loadCpuPercent}%+), memory peak ${s.mem_peak}% " +
+            "(${s.mem_over}s at ${loadMemoryPercent}%+), cluster average CPU peak ${s.cluster_cpu_peak}%"
+        echo "Cluster load on ${CLUSTER_NAME}-${cluster}: ${summary}"
+        recordClusterLoad(cluster, summary)
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (loadErr) {
+        echo "Warning: cluster load report failed on ${CLUSTER_NAME}-${cluster}: ${loadErr}"
+    }
+}
+
+@NonCPS
+void recordClusterLoad(String cluster, String summary) {
+    synchronized (clusterLoadLines) {
+        clusterLoadLines[cluster] = summary
+    }
+}
+
+// One Environment entry per cluster on the Allure overview. Tests write environment.properties
+// into their results, so this runs after they all finished.
+void writeClusterLoadEnvironment() {
+    if (!clusterLoadLines || !fileExists('e2e-tests/allure-results')) {
+        return
+    }
+    def lines = ["Tests.per.cluster=${testsPerCluster}"]
+    for (cluster in clusterLoadLines.keySet().sort()) {
+        lines << "Cluster.load.${cluster}=${clusterLoadLines[cluster]}"
+    }
+    def file = 'e2e-tests/allure-results/environment.properties'
+    def existing = fileExists(file) ? readFile(file).trim() : ''
+    writeFile file: file, text: (existing ? existing + '\n' : '') + lines.join('\n') + '\n'
+}
+
+// Reduces the samples to one line per timestamp (the busiest node) and prints key=value lines.
+// Time above a limit counts whole sample intervals; *_longest is the longest unbroken stretch.
+String clusterLoadAwk() {
+    return '''
+BEGIN { cpu_peak = -1; mem_peak = -1; cluster_peak = -1 }
+function flush() {
+    if (ts == "") return
+    n++
+    if (maxc >= cpu_limit) { cpu_over += interval; cpu_run += interval } else cpu_run = 0
+    if (cpu_run > cpu_longest) cpu_longest = cpu_run
+    if (maxm >= mem_limit) { mem_over += interval; mem_run += interval } else mem_run = 0
+    if (mem_run > mem_longest) mem_longest = mem_run
+    mean = sumc / cnt
+    mean_total += mean
+    if (mean > cluster_peak) cluster_peak = mean
+    if (maxc > cpu_peak) { cpu_peak = maxc; cpu_node = maxcn; cpu_at = ts }
+    if (maxm > mem_peak) { mem_peak = maxm; mem_node = maxmn; mem_at = ts }
+}
+$4 ~ /%$/ && $6 ~ /%$/ && $1 >= from && (to == 0 || $1 <= to) {
+    if ($1 != ts) { flush(); ts = $1; maxc = -1; maxm = -1; sumc = 0; cnt = 0 }
+    c = $4 + 0
+    m = $6 + 0
+    if (c > maxc) { maxc = c; maxcn = $2 }
+    if (m > maxm) { maxm = m; maxmn = $2 }
+    sumc += c
+    cnt++
+}
+END {
+    flush()
+    if (n == 0) { print "samples=0"; exit }
+    printf "samples=%d\\n", n
+    printf "cpu_peak=%d\\ncpu_node=%s\\ncpu_at=%s\\n", cpu_peak, cpu_node, cpu_at
+    printf "cpu_over=%d\\ncpu_longest=%d\\n", cpu_over, cpu_longest
+    printf "mem_peak=%d\\nmem_node=%s\\nmem_at=%s\\n", mem_peak, mem_node, mem_at
+    printf "mem_over=%d\\nmem_longest=%d\\n", mem_over, mem_longest
+    printf "cluster_cpu_peak=%d\\ncluster_cpu_mean=%d\\n", cluster_peak, mean_total / n
+}
+'''
 }
 
 void pushReportFile() {
@@ -468,7 +700,12 @@ void clusterRunner(String cluster) {
         if (testsPerCluster > 1) {
             if (countSkippedTests() > 0 && currentBuild.nextBuild == null) {
                 createCluster(cluster)
-                runTestSlots(cluster)
+                startClusterLoad(cluster)
+                try {
+                    runTestSlots(cluster)
+                } finally {
+                    finishClusterLoad(cluster)
+                }
                 shutdownCluster(cluster)
             }
             return
@@ -547,6 +784,8 @@ void runSlotTest(Integer testId, String slot) {
     def suffix = sh(script: "head -c 3 /dev/urandom | od -An -tx1 | tr -d ' \\n'", returnStdout: true).trim()
     def namespaceOwner = "${testName}-${suffix}"
     def operatorNs = test.ownCluster ? 'psmdb-operator' : "${testName}-${suffix}-op"
+    // One folder per attempt: finishSlotAllureResults labels its results with the cluster and slot.
+    def allureDir = "e2e-tests/allure-results-slots/${testName}-${new Date().getTime()}"
 
     sh """
         rm -rf '${slotDir}'
@@ -568,6 +807,7 @@ void runSlotTest(Integer testId, String slot) {
         export CLEAN_NAMESPACE=0
         export SKIP_DELETE=1
         export OPERATOR_NS='${operatorNs}'
+        export ALLURE_RESULTS_DIR='${allureDir}'
         export E2E_NAMESPACE_OWNER='${namespaceOwner}'
         ${test.ownCluster ? '' : 'export SHARED_CLUSTER=1'}
     """
@@ -605,6 +845,7 @@ void runSlotTest(Integer testId, String slot) {
     } catch (cleanupErr) {
         echo "Warning: failed to clean up after ${testName}: ${cleanupErr}"
     }
+    finishSlotAllureResults(allureDir, test.cluster, slot, "${slotDir}/cleanup.log")
 }
 
 // Frees the cluster for the next tests. Runs after every test, also a failed one, whose own
@@ -625,80 +866,85 @@ void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster, Str
              "NAMESPACE_OWNER=${namespaceOwner}", "SLOT_DIR=${slotDir}", "VAULT_LOCK=${vaultLock ? 1 : 0}"]) {
         sh '''
             set +e
-            if ! kubectl get --raw='/healthz' --request-timeout=5s >/dev/null 2>&1; then
-                echo "Skipping the cleanup after $TEST_NAME: the cluster is not reachable"
-                exit 0
-            fi
-
-            list_namespaces() {
-                kubectl get namespaces --request-timeout=10s --no-headers -o custom-columns=NAME:.metadata.name "$@"
-            }
-            resources=$(kubectl api-resources --api-group=psmdb.percona.com --namespaced -o name --request-timeout=10s | paste -sd, -)
-            {
-                list_namespaces -l "e2e.percona.com/owner=$NAMESPACE_OWNER"
-                list_namespaces | grep -E "^${TEST_NAME}-[0-9a-f]+(-.*)?\\$"
-                if [ "$OWN_CLUSTER" = 1 ] && [ -s "$SLOT_DIR/namespaces-before" ]; then
-                    # psmdb-operator and cert-manager are removed below, in order.
-                    list_namespaces | grep -vxF -f "$SLOT_DIR/namespaces-before" \
-                        | grep -vE '^(kube-.*|gke-.*|gmp-.*|default|psmdb-operator|cert-manager)$'
+            # The log, with the commands, is also attached to the test in the Allure report.
+            cleanup() {
+                if ! kubectl get --raw='/healthz' --request-timeout=5s >/dev/null 2>&1; then
+                    echo "Skipping the cleanup after $TEST_NAME: the cluster is not reachable"
+                    return 0
                 fi
-            } | sort -u | while read -r namespace; do
-                    echo "Deleting namespace: $namespace"
-                    if [ -n "$resources" ]; then
-                        kubectl get "$resources" -n "$namespace" -o name --request-timeout=10s 2>/dev/null \
-                            | while read -r object; do
-                                kubectl patch "$object" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
-                            done
+
+                list_namespaces() {
+                    kubectl get namespaces --request-timeout=10s --no-headers -o custom-columns=NAME:.metadata.name "$@"
+                }
+                resources=$(kubectl api-resources --api-group=psmdb.percona.com --namespaced -o name --request-timeout=10s | paste -sd, -)
+                {
+                    list_namespaces -l "e2e.percona.com/owner=$NAMESPACE_OWNER"
+                    list_namespaces | grep -E "^${TEST_NAME}-[0-9a-f]+(-.*)?\\$"
+                    if [ "$OWN_CLUSTER" = 1 ] && [ -s "$SLOT_DIR/namespaces-before" ]; then
+                        # psmdb-operator and cert-manager are removed below, in order.
+                        list_namespaces | grep -vxF -f "$SLOT_DIR/namespaces-before" \
+                            | grep -vE '^(kube-.*|gke-.*|gmp-.*|default|psmdb-operator|cert-manager)$'
                     fi
-                    kubectl delete namespace "$namespace" --wait=false --request-timeout=10s
-                done
-            kubectl get clusterrole,clusterrolebinding --request-timeout=10s -o name \
-                | grep -E -- "-${TEST_NAME}-[0-9a-f]+-op\\$" \
-                | xargs -r kubectl delete --ignore-not-found --wait=false --request-timeout=10s
-
-            if [ "$VAULT_LOCK" = 1 ]; then
-                kubectl delete clusterrole,clusterrolebinding,mutatingwebhookconfiguration \
-                    -l 'app.kubernetes.io/instance in (vault-service,users-vault-service)' \
-                    --ignore-not-found --request-timeout=30s
-            fi
-
-            if [ "$OWN_CLUSTER" != 1 ]; then
-                exit 0
-            fi
-            kubectl delete namespace psmdb-operator --ignore-not-found --timeout=120s
-            kubectl delete clusterrolebinding service-account-percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
-            kubectl delete clusterrole percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
-
-            selector=app.kubernetes.io/instance=cert-manager
-            if kubectl get namespace cert-manager --request-timeout=10s >/dev/null 2>&1 \
-                || [ -n "$(kubectl get crd -l "$selector" -o name --request-timeout=10s 2>/dev/null)" ]; then
-                echo "Removing cert-manager left by $TEST_NAME"
-                kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration -l "$selector" --ignore-not-found --request-timeout=30s
-                kubectl delete clusterrole,clusterrolebinding -l "$selector" --ignore-not-found --request-timeout=30s
-                kubectl delete role,rolebinding -n kube-system -l "$selector" --ignore-not-found --request-timeout=30s
-                # Wait: the operator decides how to issue certificates by whether these CRDs exist.
-                kubectl delete crd -l "$selector" --ignore-not-found --timeout=180s
-                kubectl delete namespace cert-manager --ignore-not-found --timeout=180s
-            fi
-
-            kubectl delete crd verticalpodautoscalers.autoscaling.k8s.io verticalpodautoscalercheckpoints.autoscaling.k8s.io \
-                --ignore-not-found --timeout=120s
-            kubectl delete deployment vpa-recommender -n kube-system --ignore-not-found --request-timeout=30s
-
-            kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration,clusterrole,clusterrolebinding \
-                -o name --request-timeout=10s | grep -E 'chaos-mesh|/validate-auth$' \
-                | xargs -r kubectl delete --ignore-not-found --request-timeout=30s
-            for crd in $(kubectl get crd -o name --request-timeout=10s | grep -E '\\.chaos-mesh\\.org$'); do
-                kubectl get "${crd#*/}" --all-namespaces --no-headers --request-timeout=10s \
-                    -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name 2>/dev/null \
-                    | while read -r namespace name; do
-                        kubectl patch "${crd#*/}" "$name" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                } | sort -u | while read -r namespace; do
+                        echo "Deleting namespace: $namespace"
+                        if [ -n "$resources" ]; then
+                            kubectl get "$resources" -n "$namespace" -o name --request-timeout=10s 2>/dev/null \
+                                | while read -r object; do
+                                    kubectl patch "$object" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                                done
+                        fi
+                        kubectl delete namespace "$namespace" --wait=false --request-timeout=10s
                     done
-                kubectl delete "$crd" --ignore-not-found --timeout=60s
-            done
+                kubectl get clusterrole,clusterrolebinding --request-timeout=10s -o name \
+                    | grep -E -- "-${TEST_NAME}-[0-9a-f]+-op\\$" \
+                    | xargs -r kubectl delete --ignore-not-found --wait=false --request-timeout=10s
 
-            kubectl delete clusterrole,clusterrolebinding monitoring --ignore-not-found --request-timeout=30s
-            kubectl delete clusterrolebinding pmm-psmdb-operator-cluster-wide --ignore-not-found --request-timeout=30s
+                if [ "$VAULT_LOCK" = 1 ]; then
+                    kubectl delete clusterrole,clusterrolebinding,mutatingwebhookconfiguration \
+                        -l 'app.kubernetes.io/instance in (vault-service,users-vault-service)' \
+                        --ignore-not-found --request-timeout=30s
+                fi
+
+                if [ "$OWN_CLUSTER" != 1 ]; then
+                    return 0
+                fi
+                kubectl delete namespace psmdb-operator --ignore-not-found --timeout=120s
+                kubectl delete clusterrolebinding service-account-percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
+                kubectl delete clusterrole percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
+
+                selector=app.kubernetes.io/instance=cert-manager
+                if kubectl get namespace cert-manager --request-timeout=10s >/dev/null 2>&1 \
+                    || [ -n "$(kubectl get crd -l "$selector" -o name --request-timeout=10s 2>/dev/null)" ]; then
+                    echo "Removing cert-manager left by $TEST_NAME"
+                    kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration -l "$selector" --ignore-not-found --request-timeout=30s
+                    kubectl delete clusterrole,clusterrolebinding -l "$selector" --ignore-not-found --request-timeout=30s
+                    kubectl delete role,rolebinding -n kube-system -l "$selector" --ignore-not-found --request-timeout=30s
+                    # Wait: the operator decides how to issue certificates by whether these CRDs exist.
+                    kubectl delete crd -l "$selector" --ignore-not-found --timeout=180s
+                    kubectl delete namespace cert-manager --ignore-not-found --timeout=180s
+                fi
+
+                kubectl delete crd verticalpodautoscalers.autoscaling.k8s.io verticalpodautoscalercheckpoints.autoscaling.k8s.io \
+                    --ignore-not-found --timeout=120s
+                kubectl delete deployment vpa-recommender -n kube-system --ignore-not-found --request-timeout=30s
+
+                kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration,clusterrole,clusterrolebinding \
+                    -o name --request-timeout=10s | grep -E 'chaos-mesh|/validate-auth$' \
+                    | xargs -r kubectl delete --ignore-not-found --request-timeout=30s
+                for crd in $(kubectl get crd -o name --request-timeout=10s | grep -E '\\.chaos-mesh\\.org$'); do
+                    kubectl get "${crd#*/}" --all-namespaces --no-headers --request-timeout=10s \
+                        -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name 2>/dev/null \
+                        | while read -r namespace name; do
+                            kubectl patch "${crd#*/}" "$name" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                        done
+                    kubectl delete "$crd" --ignore-not-found --timeout=60s
+                done
+
+                kubectl delete clusterrole,clusterrolebinding monitoring --ignore-not-found --request-timeout=30s
+                kubectl delete clusterrolebinding pmm-psmdb-operator-cluster-wide --ignore-not-found --request-timeout=30s
+            }
+            cleanup > "$SLOT_DIR/cleanup.log" 2>&1
+            cat "$SLOT_DIR/cleanup.log"
             exit 0
         '''
     }
@@ -1310,6 +1556,7 @@ pipeline {
                         """
                         junit testResults: reportXml, healthScaleFactor: 1.0
                         archiveArtifacts "${reportXml}"
+                        writeClusterLoadEnvironment()
                         def allurePublished = publishAllureReport()
 
                         unstash 'IMAGE'
