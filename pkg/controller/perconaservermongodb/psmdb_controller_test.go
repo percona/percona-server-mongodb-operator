@@ -252,6 +252,47 @@ var _ = Describe("PerconaServerMongoDB CRD Validation", Ordered, func() {
 		})
 	})
 
+	Context("Multiple replsets validation", func() {
+		It("should reject multiple replsets when sharding is disabled", func() {
+			cr, err := readDefaultCR("psmdb-multi-rs-unsharded", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Sharding.Enabled = false
+			rs1 := cr.Spec.Replsets[0].DeepCopy()
+			rs1.Name = "rs1"
+			cr.Spec.Replsets = append(cr.Spec.Replsets, rs1)
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multiple replsets require sharding to be enabled"))
+		})
+
+		It("should allow a single replset when sharding is disabled", func() {
+			cr, err := readDefaultCR("psmdb-single-rs-unsharded", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			cr.Spec.Sharding.Enabled = false
+
+			err = k8sClient.Create(ctx, cr)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should reject disabling sharding on a cluster with multiple replsets", func() {
+			cr, err := readDefaultCR("psmdb-multi-rs-disable-sharding", ns)
+			Expect(err).NotTo(HaveOccurred())
+
+			rs1 := cr.Spec.Replsets[0].DeepCopy()
+			rs1.Name = "rs1"
+			cr.Spec.Replsets = append(cr.Spec.Replsets, rs1)
+			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
+
+			cr.Spec.Sharding.Enabled = false
+			err = k8sClient.Update(ctx, cr)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multiple replsets require sharding to be enabled"))
+		})
+	})
+
 	Context("PMM querySource validation", func() {
 		It("should reject mongolog query source when logcollector is disabled", func() {
 			cr, err := readDefaultCR("psmdb-mongolog-lc-disabled", ns)

@@ -31880,6 +31880,9 @@ spec:
             - message: pmm.querySource 'mongolog' requires logcollector to be enabled
               rule: '!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue(''profiler'')
                 != ''mongolog'' || self.?logcollector.?enabled.orValue(false)'
+            - message: multiple replsets require sharding to be enabled
+              rule: self.?sharding.?enabled.orValue(false) || size(self.?replsets.orValue([]))
+                <= 1
           status:
             properties:
               backupConfigHash:
