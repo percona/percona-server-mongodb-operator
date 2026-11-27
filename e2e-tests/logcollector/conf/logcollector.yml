@@ -9,7 +9,7 @@ spec:
     enabled: false
   tls:
     mode: requireTLS
-    allowInvalidCertificates: true
+    allowInvalidCertificates: false
   replsets:
     - name: rs0
       size: 3

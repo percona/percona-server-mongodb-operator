@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,7 +50,22 @@ func (r *ReconcilePerconaServerMongoDB) reconcileStatefulSet(ctx context.Context
 	// recreated with the new VolumeClaimTemplate before pods can be processed.
 	// Ensure the STS exists first, then run the shrink state machine, and skip
 	// smartUpdate/PDB/autoscaling which would conflict with the rolling process.
-	if _, ok := cr.GetPVCShrinkState(sfs.Name); ok {
+	if state, ok := cr.GetPVCShrinkState(sfs.Name); ok {
+		target, err := resource.ParseQuantity(state.TargetSize)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse shrink target size of %s", sfs.Name)
+		}
+		claimName := dataClaimName(ls[naming.LabelKubernetesComponent])
+		pinShrinkTarget(sfs, claimName, target)
+		// The claim template can't be updated, a statefulset still having the old one is recreated.
+		ready, err := r.shrinkClaimTemplateReady(ctx, cr, sfs, claimName, target)
+		if err != nil {
+			return nil, err
+		}
+		if !ready {
+			return sfs, nil
+		}
+
 		err = r.createOrUpdate(ctx, sfs)
 		if err != nil {
 			return nil, errors.Wrapf(err, "update StatefulSet %s", sfs.Name)
