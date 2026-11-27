@@ -25,10 +25,10 @@ const (
 const (
 	ComponentMongod         = "mongod"
 	ComponentMongos         = "mongos"
-	ComponentNonVoting      = "nonVoting"
+	ComponentNonVoting      = psmdbv1.ComponentNonVoting
 	ComponentNonVotingShort = "nv"
-	ComponentHidden         = "hidden"
-	ComponentArbiter        = "arbiter"
+	ComponentHidden         = psmdbv1.ComponentHidden
+	ComponentArbiter        = psmdbv1.ComponentArbiter
 	ComponentSearch         = "search"
 	ComponentConfigSrv      = "cfg"
 )
@@ -106,6 +106,15 @@ func HiddenPodName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, id
 	return fmt.Sprintf("%s-%d", HiddenStatefulSetName(cr, rs), idx)
 }
 
+// ReplsetMemberStatefulSetNames returns the names of the statefulsets that run data-bearing members of rs.
+func ReplsetMemberStatefulSetNames(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) []string {
+	return []string{
+		MongodStatefulSetName(cr, rs),
+		NonVotingStatefulSetName(cr, rs),
+		HiddenStatefulSetName(cr, rs),
+	}
+}
+
 func ArbiterStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentArbiter)
 }
@@ -128,6 +137,10 @@ func PBMHookScriptConfigMapName(cr *psmdbv1.PerconaServerMongoDB) string {
 func VolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
 	hash := fmt.Sprintf("%x", md5.Sum([]byte(bcp.Spec.ClusterName+bcp.Name+rsName)))
 	return fmt.Sprintf("%s-%s-%s", bcp.Name, strings.ToLower(rsName), hash[:5])
+}
+
+func JournalVolumeSnapshotName(bcp *psmdbv1.PerconaServerMongoDBBackup, rsName string) string {
+	return VolumeSnapshotName(bcp, rsName) + "-journal"
 }
 
 func ReplsetNamespacedName(cr *psmdbv1.PerconaServerMongoDB, rsName string) types.NamespacedName {

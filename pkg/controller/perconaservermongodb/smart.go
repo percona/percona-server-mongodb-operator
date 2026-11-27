@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -145,6 +145,26 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		return nil
 	}
 
+	if pod, ok := podBlockingClaimRollout(sfs, list.Items); ok {
+		if blocked, err := r.smartUpdateBlocked(ctx, cr, sfs); err != nil || blocked {
+			return err
+		}
+
+		isPrimary, err := r.isPodPrimary(ctx, cr, pod, replset)
+		if err != nil {
+			return errors.Wrap(err, "is pod primary")
+		}
+		if isPrimary {
+			if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+				return err
+			}
+		}
+
+		log.Info("statefulset can't create missing pods until this pod has its volume claims, recreating it", "pod", pod.Name)
+
+		return r.recreateNWait(ctx, cr, sfs.Status.UpdateRevision, &pod, waitLimit)
+	}
+
 	if rsStatus, ok := cr.Status.Replsets[replset.Name]; ok {
 		// Members are reported only after the replset is reconciled (e.g. added
 		// as a shard). Until then, pods outside the replset have no users and
@@ -167,33 +187,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	if cr.IsPVCShrinkInProgress() {
-		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
-		return nil
-	}
-
-	isBackupRunning, err := r.isBackupRunning(ctx, cr)
-	if err != nil {
-		return errors.Wrap(err, "failed to check active backups")
-	}
-	if isBackupRunning {
-		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
-		return nil
-	}
-
-	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
-	if err != nil {
-		if cr.Status.State == api.AppStateError {
-			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
-		} else {
-			return errors.Wrap(err, "failed to check active jobs")
-		}
-	}
-
-	_, ok = sfs.Annotations[api.AnnotationRestoreInProgress]
-	if !ok && hasActiveJobs {
-		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
-		return nil
+	if blocked, err := r.smartUpdateBlocked(ctx, cr, sfs); err != nil || blocked {
+		return err
 	}
 
 	if sfs.Name == cr.Name+"-"+api.ConfigReplSetName {
@@ -203,7 +198,16 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
+	component := sfs.Labels[naming.LabelKubernetesComponent]
+	canStepDown := component != naming.ComponentNonVoting && component != naming.ComponentHidden
+
+	missingClaims := podsMissingClaimVolumes(sfs, list.Items)
+	if missingClaims {
+		log.Info("pods are missing a volume claim, updating them from the lowest ordinal")
+		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i < j })
+	} else {
+		sortPodsByOrdinal(list.Items, func(i, j int) bool { return i > j })
+	}
 
 	var primaryPod corev1.Pod
 	for _, pod := range list.Items {
@@ -211,7 +215,11 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		if err != nil {
 			return errors.Wrap(err, "is pod primary")
 		}
-		if isPrimary {
+		if isPrimary && missingClaims && podsMissingClaimVolumes(sfs, []corev1.Pod{pod}) {
+			if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+				return err
+			}
+		} else if isPrimary {
 			primaryPod = pod
 			log.Info("primary pod detected", "pod", pod.Name)
 			continue
@@ -224,10 +232,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 		}
 	}
 
-	component := sfs.Labels[naming.LabelKubernetesComponent]
-	// Primary can't be one of NonVoting and Hidden members, so we don't need to step down
 	// If the primary is external, we can't match it with a running pod and it'll have an empty name
-	if component != naming.ComponentNonVoting && component != naming.ComponentHidden && len(primaryPod.Name) > 0 {
+	if canStepDown && len(primaryPod.Name) > 0 {
 		updateRevision := sfs.Status.UpdateRevision
 
 		resized := primaryPod.Labels["controller-revision-hash"] == updateRevision
@@ -244,30 +250,8 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 				return errors.Wrap(err, "wait primary pod ready")
 			}
 		} else {
-			forceStepDown := replset.Size == 1
-			log.Info("doing step down...", "force", forceStepDown)
-			cl, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
-			if err != nil {
-				return fmt.Errorf("failed to get mongo client: %v", err)
-			}
-
-			defer func() {
-				err := cl.Disconnect(ctx)
-				if err != nil {
-					log.Error(err, "failed to close connection")
-				}
-			}()
-
-			err = cl.StepDown(ctx, 60, forceStepDown)
-			if err != nil {
-				if strings.Contains(err.Error(), "No electable secondaries caught up") {
-					err = cl.StepDown(ctx, 60, true)
-					if err != nil {
-						return errors.Wrap(err, "failed to do forced step down")
-					}
-				} else {
-					return errors.Wrap(err, "failed to do step down")
-				}
+			if err := r.stepDownPrimary(ctx, cr, replset); err != nil {
+				return err
 			}
 
 			log.Info("apply changes to primary pod", "pod", primaryPod.Name)
@@ -280,6 +264,105 @@ func (r *ReconcilePerconaServerMongoDB) smartUpdate(
 	log.Info("smart update finished for statefulset")
 
 	return nil
+}
+
+func (r *ReconcilePerconaServerMongoDB) stepDownPrimary(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec) error {
+	log := logf.FromContext(ctx)
+
+	forceStepDown := replset.Size == 1
+	log.Info("doing step down...", "force", forceStepDown)
+
+	client, err := r.mongoClientWithRole(ctx, cr, replset, api.RoleClusterAdmin)
+	if err != nil {
+		return errors.Wrap(err, "get mongo client")
+	}
+
+	defer func() {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Error(err, "failed to close connection")
+		}
+	}()
+
+	err = client.StepDown(ctx, 60, forceStepDown)
+	if err != nil {
+		if strings.Contains(err.Error(), "No electable secondaries caught up") {
+			err = client.StepDown(ctx, 60, true)
+			if err != nil {
+				return errors.Wrap(err, "failed to do forced step down")
+			}
+		} else {
+			return errors.Wrap(err, "failed to do step down")
+		}
+	}
+
+	return nil
+}
+
+// smartUpdateBlocked reports whether a PVC shrink, backup or PBM job forbids restarting pods.
+func (r *ReconcilePerconaServerMongoDB) smartUpdateBlocked(ctx context.Context, cr *api.PerconaServerMongoDB, sfs *appsv1.StatefulSet) (bool, error) {
+	log := logf.FromContext(ctx).WithName("SmartUpdate").WithValues("statefulset", sfs.Name)
+
+	if cr.IsPVCShrinkInProgress() {
+		log.Info("can't start 'SmartUpdate': PVC shrink in progress")
+		return true, nil
+	}
+
+	isBackupRunning, err := r.isBackupRunning(ctx, cr)
+	if err != nil {
+		return false, errors.Wrap(err, "failed to check active backups")
+	}
+	if isBackupRunning {
+		log.Info("can't start 'SmartUpdate': waiting for running backups to be finished")
+		return true, nil
+	}
+
+	hasActiveJobs, err := backup.HasActiveJobs(ctx, r.newPBM, r.client, cr, backup.Job{}, backup.NotPITRLock)
+	if err != nil {
+		if cr.Status.State == api.AppStateError {
+			log.Info("Failed to check active jobs. Proceeding with Smart Update because the cluster is in an error state", "error", err.Error())
+		} else {
+			return false, errors.Wrap(err, "failed to check active jobs")
+		}
+	}
+
+	_, ok := sfs.Annotations[api.AnnotationRestoreInProgress]
+	if !ok && hasActiveJobs {
+		log.Info("can't start 'SmartUpdate': waiting for active jobs to be finished")
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// podsMissingClaimVolumes reports whether a pod lacks a volume for one of the claim templates.
+func podsMissingClaimVolumes(sfs *appsv1.StatefulSet, pods []corev1.Pod) bool {
+	for _, pod := range pods {
+		for _, vct := range sfs.Spec.VolumeClaimTemplates {
+			if !slices.ContainsFunc(pod.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == vct.Name }) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func podBlockingClaimRollout(sfs *appsv1.StatefulSet, pods []corev1.Pod) (corev1.Pod, bool) {
+	if sfs.Spec.Replicas == nil || len(pods) >= int(*sfs.Spec.Replicas) {
+		return corev1.Pod{}, false
+	}
+
+	pods = slices.Clone(pods)
+	sortPodsByOrdinal(pods, func(i, j int) bool { return i < j })
+
+	for _, pod := range pods {
+		if podsMissingClaimVolumes(sfs, []corev1.Pod{pod}) {
+			return pod, true
+		}
+	}
+
+	return corev1.Pod{}, false
 }
 
 func (r *ReconcilePerconaServerMongoDB) shouldUpdateMongosFirst(ctx context.Context, cr *api.PerconaServerMongoDB) (bool, error) {
@@ -299,29 +382,16 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 		return nil
 	}
 
-	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		c := new(api.PerconaServerMongoDB)
-		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
-			return err
-		}
-		if _, ok := c.Annotations[api.AnnotationUpdateMongosFirst]; ok {
-			return nil
-		}
-		if c.Annotations == nil {
-			c.Annotations = make(map[string]string)
-		}
-		c.Annotations[api.AnnotationUpdateMongosFirst] = "true"
-
-		return r.client.Update(ctx, c)
-	})
-	if err != nil {
-		return err
-	}
-
+	orig := cr.DeepCopy()
 	if cr.Annotations == nil {
 		cr.Annotations = make(map[string]string)
 	}
 	cr.Annotations[api.AnnotationUpdateMongosFirst] = "true"
+
+	if err := r.patchCR(ctx, cr, orig); err != nil {
+		cr.Annotations = orig.Annotations
+		return err
+	}
 
 	return nil
 }
@@ -330,24 +400,17 @@ func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Conte
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
-	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		c := new(api.PerconaServerMongoDB)
-		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
-			return err
-		}
-		if _, ok := c.Annotations[api.AnnotationUpdateMongosFirst]; !ok {
-			return nil
-		}
-
-		delete(c.Annotations, api.AnnotationUpdateMongosFirst)
-
-		return r.client.Update(ctx, c)
-	})
-	if err != nil {
-		return err
+	if _, ok := cr.Annotations[api.AnnotationUpdateMongosFirst]; !ok {
+		return nil
 	}
 
+	orig := cr.DeepCopy()
 	delete(cr.Annotations, api.AnnotationUpdateMongosFirst)
+
+	if err := r.patchCR(ctx, cr, orig); err != nil {
+		cr.Annotations = orig.Annotations
+		return err
+	}
 
 	return nil
 }
@@ -397,6 +460,10 @@ func (r *ReconcilePerconaServerMongoDB) setPrimary(ctx context.Context, cr *api.
 		if err != nil {
 			return errors.Wrapf(err, "failed to freeze %s pod", pod.Name)
 		}
+	}
+
+	if primaryPod.Name == "" {
+		return nil
 	}
 
 	if err := r.stepDownPod(ctx, cr, rs, primaryPod, sleepSeconds); err != nil {
@@ -639,6 +706,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		poll = defaultPodRestartPoll
 	}
 
+	statusConflict := false
 	for range waitLimit {
 		select {
 		case <-ctx.Done():
@@ -651,9 +719,18 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 			return errors.Wrap(err, "get pod")
 		}
 
-		// We update status in every loop to not wait until the end of smart update
-		if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
-			return errors.Wrap(err, "update status")
+		// We update status in every loop to not wait until the end of smart update.
+		// A conflict means the CR changed since this reconcile read it, so every
+		// later CR write in this reconcile conflicts too. The restart goes on
+		// without status updates and the next reconcile starts from the new CR.
+		if !statusConflict {
+			if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
+				if !k8sErrors.IsConflict(err) {
+					return errors.Wrap(err, "update status")
+				}
+				statusConflict = true
+				logf.FromContext(ctx).V(1).Info("CR changed during pod restart, skipping status updates", "pod", pod.Name)
+			}
 		}
 
 		ready := false

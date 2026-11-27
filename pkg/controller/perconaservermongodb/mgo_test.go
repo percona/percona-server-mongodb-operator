@@ -3,8 +3,10 @@ package perconaservermongodb
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"testing"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -399,7 +401,7 @@ func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
 
 			// AddNew adds one member per call; repeat to check the 51st stays excluded.
 			for range 2 {
-				_, _, _, err := r.updateConfigMembers(ctx, cli, cr, rs)
+				_, _, _, err := r.updateConfigMembers(ctx, cli, cr, rs, pods.Items)
 				require.NoError(t, err)
 				config, err := cli.ReadConfig(ctx)
 				require.NoError(t, err)
@@ -416,6 +418,45 @@ func TestUpdateConfigMembersExternalNodeLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+// PVC resize and shrink delete the statefulset with orphaned pods. If the
+// cache drops it mid-reconcile, the replset pods can no longer be listed;
+// members must not be removed or lose their votes because of it.
+func TestUpdateConfigMembersStatefulSetOrphanDeleted(t *testing.T) {
+	ctx := t.Context()
+	cr := newTestCR()
+	cr.Spec.ClusterServiceDNSMode = api.DNSModeInternal
+	cr.Spec.ClusterServiceDNSSuffix = "svc.cluster.local"
+	rs := cr.Spec.Replsets[0]
+	rs.Size = 3
+	pods := fakePodsForRS(cr, rs)
+
+	withSts := buildFakeClient(append(pods, fakeStatefulset(cr, rs, rs.Size, "", naming.ComponentMongod))...)
+	podList, err := psmdb.GetRSPods(ctx, withSts.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Len(t, podList.Items, 3)
+
+	initialConfig := mongo.RSConfig{Version: 1}
+	for i := range podList.Items {
+		member, err := withSts.getConfigMemberForPod(ctx, cr, rs, i, &podList.Items[i])
+		require.NoError(t, err)
+		initialConfig.Members = append(initialConfig.Members, member)
+	}
+	initialConfig.Members.UpdateVotes(ctx, initialConfig.Members, false, "")
+
+	r := buildFakeClient(pods...)
+	noSts, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
+	require.NoError(t, err)
+	require.Empty(t, noSts.Items, "pods must not be listable without the statefulset")
+	cli := mongoFake.NewClientWithConfig(initialConfig)
+
+	_, _, _, err = r.updateConfigMembers(ctx, cli, cr, rs, podList.Items)
+	require.NoError(t, err)
+
+	config, err := cli.ReadConfig(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, initialConfig.Members, config.Members)
 }
 
 func TestCompareRoles(t *testing.T) {
@@ -465,6 +506,21 @@ func TestCompareRoles(t *testing.T) {
 				{DB: "admin", Role: string(api.RoleClusterMonitor)},
 			},
 			expected: false,
+		},
+		"order is different across databases": {
+			x: []mongo.Role{
+				{DB: "admin", Role: "readWrite"},
+				{DB: "local", Role: "backup"},
+				{DB: "admin", Role: "clusterMonitor"},
+				{DB: "config", Role: "read"},
+			},
+			y: []mongo.Role{
+				{DB: "config", Role: "read"},
+				{DB: "admin", Role: "clusterMonitor"},
+				{DB: "local", Role: "backup"},
+				{DB: "admin", Role: "readWrite"},
+			},
+			expected: true,
 		},
 	}
 
@@ -821,4 +877,79 @@ func TestRemoveUndesiredMembers(t *testing.T) {
 			assert.NotEmptyf(t, cfg.Members, "config must never be left without members")
 		})
 	}
+}
+
+// fakeResolver is a test double for dnsResolver.
+type fakeResolver struct {
+	ips     []net.IPAddr
+	err     error
+	gotHost string
+}
+
+func (f *fakeResolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, error) {
+	f.gotHost = host
+	return f.ips, f.err
+}
+
+func TestHostResolvable(t *testing.T) {
+	t.Parallel()
+
+	const host = "my-cluster-rs0-0.psmdb.svc.clusterset.local"
+
+	tests := map[string]struct {
+		resolver    *fakeResolver
+		expectedOK  bool
+		expectedErr bool
+	}{
+		"resolves to an IP": {
+			resolver:    &fakeResolver{ips: []net.IPAddr{{IP: net.ParseIP("10.0.0.1")}}},
+			expectedOK:  true,
+			expectedErr: false,
+		},
+		"resolves to multiple IPs": {
+			resolver: &fakeResolver{ips: []net.IPAddr{
+				{IP: net.ParseIP("10.0.0.1")},
+				{IP: net.ParseIP("10.0.0.2")},
+			}},
+			expectedOK:  true,
+			expectedErr: false,
+		},
+		"lookup error": {
+			resolver:    &fakeResolver{err: errors.New("no such host")},
+			expectedOK:  false,
+			expectedErr: true,
+		},
+		"no addresses without error": {
+			resolver:    &fakeResolver{ips: nil},
+			expectedOK:  false,
+			expectedErr: false,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ok, err := hostResolvable(context.Background(), tt.resolver, host)
+
+			if tt.expectedErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.expectedOK, ok)
+			assert.Equal(t, host+".", tt.resolver.gotHost)
+		})
+	}
+}
+
+func TestReconcilerResolverDefault(t *testing.T) {
+	t.Parallel()
+
+	// no resolver configured -> falls back to the system default resolver
+	r := &ReconcilePerconaServerMongoDB{}
+	assert.Same(t, net.DefaultResolver, r.resolver())
+
+	// configured resolver is returned as-is
+	fake := &fakeResolver{}
+	r.dnsResolver = fake
+	assert.Same(t, fake, r.resolver())
 }

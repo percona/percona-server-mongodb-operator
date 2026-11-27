@@ -47,8 +47,10 @@ manifests: $(DEPLOYDIR)/crd.yaml $(DEPLOYDIR)/bundle.yaml $(DEPLOYDIR)/cw-bundle
 
 # Run a single e2e test via pytest (native Python or bash wrapper).
 # Usage: make e2e-test TEST=init-deploy
-# Optional: REPORT_OPTS=... to override HTML/JUnit report flags
-REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml
+# Optional: REPORT_OPTS=... to override HTML/JUnit/Allure report flags
+# Optional: ALLURE_RESULTS_DIR=... to write Allure results elsewhere (for example one folder per test)
+ALLURE_RESULTS_DIR ?= e2e-tests/allure-results
+REPORT_OPTS ?= --html=e2e-tests/reports/$(TEST).html --junitxml=e2e-tests/reports/$(TEST).xml --alluredir=$(ALLURE_RESULTS_DIR)
 
 .PHONY: e2e-test
 e2e-test: uv ## Run a single e2e test via pytest (TEST=<name>)
@@ -61,6 +63,17 @@ endif
 	else \
 		$(UV) run pytest e2e-tests/test_pytest_wrapper.py --test-name=$(TEST) $(REPORT_OPTS); \
 	fi
+
+.PHONY: allure-report
+allure-report: ## Open the Allure report for the collected e2e results (needs the allure CLI)
+	$(if $(ALLURE_RESULTS_DIR),,$(error ALLURE_RESULTS_DIR is empty))
+	@command -v allure >/dev/null || { echo "allure not found: install the Allure 2 CLI (https://allurereport.org/docs/install/)"; exit 1; }
+	@if [ -d e2e-tests/allure-report/history ]; then \
+		rm -rf $(ALLURE_RESULTS_DIR)/history; \
+		cp -R e2e-tests/allure-report/history $(ALLURE_RESULTS_DIR)/history; \
+	fi
+	allure generate --clean -o e2e-tests/allure-report $(ALLURE_RESULTS_DIR)
+	allure open e2e-tests/allure-report
 
 ##@ Build
 
@@ -104,10 +117,16 @@ py-fmt: uv ## Format and organize imports in e2e-tests
 	$(UV) run ruff format $(PY_DIRS)
 
 # MYPYPATH: the OLM tests import the shared harness (lib.*) from e2e-tests/.
-py-check: uv ## Run ruff and mypy checks on e2e-tests
+py-check: uv py-setup-plan ## Run ruff, mypy and the fixture check on e2e-tests
 	$(UV) run ruff check $(PY_DIRS)
 	$(UV) run mypy e2e-tests/
 	MYPYPATH=e2e-tests $(UV) run mypy installers/olm/e2e-tests/
+
+# -p no:dependency: pytest-dependency would skip dependent tests before their fixtures resolve.
+SETUP_PLAN = $(UV) run pytest --setup-plan -q -p no:cacheprovider -p no:dependency
+py-setup-plan: uv ## Check that every test's fixtures exist (no cluster needed)
+	$(SETUP_PLAN) e2e-tests/
+	PYTHONPATH=e2e-tests:installers/olm/e2e-tests $(SETUP_PLAN) -p conftest installers/olm/e2e-tests/
 
 # go-get-tool will 'go get' any package $2 and install it to $1.
 PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Tests for PSMDB Operator"
 requires-python = ">=3.13,<3.15"
 dependencies = [
+    "allure-pytest>=2.16.2",
     "deepdiff>=8.5.0",
     "junitparser>=3.2.0",
     "mypy>=1.16.0",
@@ -19,10 +20,13 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-v -s --self-contained-html"
+addopts = "-v -s --self-contained-html --allure-link-pattern=issue:https://perconadev.atlassian.net/browse/{}"
 render_collapsed = "all"
 junit_family = "xunit2"
 junit_suite_name = "psmdb-e2e-tests"
+# Registered here as well, so `make py-setup-plan` (which disables the plugin) runs
+# without unknown-mark warnings.
+markers = ["dependency: test depends on earlier tests (pytest-dependency)"]
 
 [[tool.mypy.overrides]]
 module = ["pytest_html.*"]

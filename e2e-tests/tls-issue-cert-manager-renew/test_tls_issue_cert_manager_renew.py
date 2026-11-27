@@ -12,12 +12,15 @@ import yaml
 from lib.config import apply_cluster, compare_kubectl
 from lib.kubectl import (
     kubectl_bin,
+    wait_certificate,
     wait_for_cluster_state,
     wait_for_running,
 )
 from lib.utils import Paths
 
 logger = logging.getLogger(__name__)
+
+pytestmark = pytest.mark.usefixtures("no_cert_race_workaround")
 
 CLUSTER = "some-name"
 
@@ -60,26 +63,9 @@ def _deploy_cmctl(src_dir: str, conf_dir: str) -> None:
     kubectl_bin("apply", "-f", f"{conf_dir}/cmctl.yml")
 
 
-def _wait_certificate(cert_name: str, timeout: int = 600) -> None:
-    """Wait for a cert-manager Certificate to be ready."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            kubectl_bin(
-                "wait",
-                "--for=condition=Ready",
-                f"certificate/{cert_name}",
-                "--timeout=60s",
-            )
-            return
-        except Exception:
-            time.sleep(1)
-    raise TimeoutError(f"Certificate {cert_name} not ready within {timeout}s")
-
-
 def _renew_certificate(cert_name: str) -> None:
     """Renew a cert-manager certificate using cmctl."""
-    _wait_certificate(cert_name)
+    wait_certificate(cert_name)
     logger.info(f"Renewing certificate {cert_name}")
 
     pod_name = kubectl_bin(

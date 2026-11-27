@@ -20,7 +20,6 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -267,7 +266,7 @@ func Config(ctx context.Context, k8sclient client.Client, cr *api.PerconaServerM
 	}
 
 	return tls.Config{
-		InsecureSkipVerify: ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, api.DefaultAllowInvalidCertificates),
+		InsecureSkipVerify: cr.InvalidCertificatesAllowed(),
 		RootCAs:            pool,
 		Certificates:       []tls.Certificate{cert},
 	}, nil

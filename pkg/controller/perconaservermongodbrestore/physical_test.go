@@ -17,6 +17,7 @@ import (
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -141,6 +142,11 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 								{
 									Name:  "mongod",
 									Image: "percona/percona-server-mongodb:latest",
+									VolumeMounts: []corev1.VolumeMount{
+										{Name: config.MongodDataVolClaimName, MountPath: config.MongodContainerDataDir},
+										{Name: config.MongodJournalVolClaimName, MountPath: config.MongodContainerJournalDir},
+										{Name: config.MongodLogVolClaimName, MountPath: config.MongodContainerDataLogsDir},
+									},
 								},
 								{
 									Name:  naming.ContainerBackupAgent,
@@ -200,6 +206,14 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
 					return c.MountPath == "/etc/pbm/"
 				}))
+			assert.True(t,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
+					return c.Name == config.MongodDataVolClaimName
+				}))
+			assert.False(t,
+				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
+					return c.Name == config.MongodJournalVolClaimName || c.Name == config.MongodLogVolClaimName
+				}))
 
 			assert.Equal(t, tt.wantAWSChecksumEnvs,
 				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
@@ -211,7 +225,11 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				}))
 
 			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
-			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+			pemFile := "/tmp/pbm-tls.pem"
+			if tt.crVersion == "1.22.0" {
+				pemFile = "/tmp/tls.pem"
+			}
+			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=" + pemFile + "&tlsCAFile=/etc/mongodb-ssl/ca.crt"
 			if tt.wantTLSInsecure {
 				expectedURI += "&tlsInsecure=true"
 			}
@@ -420,6 +438,10 @@ func TestIsContainerUnavailableError(t *testing.T) {
 		},
 		"container stopped": {
 			err:  errors.New(`describe restore stderr:  stdout: : Internal error occurred: error executing command in container: failed to exec in container: failed to start exec "5611bd31": OCI runtime exec failed: exec failed: cannot exec in a stopped container`),
+			want: true,
+		},
+		"container killed during exec": {
+			err:  errors.New("describe restore stderr:  stdout: : command terminated with exit code 137"),
 			want: true,
 		},
 		"pbm error": {
