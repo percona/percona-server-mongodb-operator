@@ -241,10 +241,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			assert.Equal(t, "/opt/percona/physical-restore-ps-entry.sh", mongod.Command[0])
 
 			assert.Contains(t, updatedSTS.Spec.Template.Spec.Volumes, corev1.Volume{
-				Name: "pbm-config",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{SecretName: "my-cluster-pbm-config"},
-				},
+				Name:   "pbm-config",
+				Secret: &corev1.SecretVolumeSource{SecretName: "my-cluster-pbm-config"},
 			})
 			assert.Contains(t, mongod.VolumeMounts, corev1.VolumeMount{Name: "pbm-config", MountPath: "/etc/pbm/", ReadOnly: true})
 			assert.Contains(t, mongod.VolumeMounts, extraMount)

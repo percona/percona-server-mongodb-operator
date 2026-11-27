@@ -140,9 +140,9 @@ def _assert_writable_primary(config: SplitHorizonConfig) -> None:
     logger.info("Connected through horizon hostnames and landed on a writable primary")
 
 
-def _cert_sans(secret: str) -> list[str]:
+def _cert_sans(secret_name: str) -> list[str]:
     cert = base64.b64decode(
-        kubectl_bin("get", "secret", secret, "-o", "jsonpath={.data.tls\\.crt}")
+        kubectl_bin("get", "secret", secret_name, "-o", "jsonpath={.data.tls\\.crt}")
     )
     text = subprocess.run(
         ["openssl", "x509", "-noout", "-text"], input=cert, capture_output=True, check=True
@@ -150,10 +150,10 @@ def _cert_sans(secret: str) -> list[str]:
     return re.findall(r"DNS:([^,\s]+)", text)
 
 
-def _assert_cert_san(secret: str, san: str) -> None:
-    sans = _cert_sans(secret)
-    assert san in sans, f"SAN {san} not found in secret {secret}: {sans}"
-    logger.info(f"Secret {secret} has SAN {san}")
+def _assert_cert_san(secret_name: str, san: str) -> None:
+    sans = _cert_sans(secret_name)
+    assert san in sans, f"SAN {san} not found in secret {secret_name}: {sans}"
+    logger.info(f"Secret {secret_name} has SAN {san}")
 
 
 def _assert_no_horizons_in_rs_conf(config: SplitHorizonConfig) -> None:

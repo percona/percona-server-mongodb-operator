@@ -1267,11 +1267,11 @@ func TestStatefulSpecMongod(t *testing.T) {
 			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
 				c := spec.Template.Spec.Containers[0]
 				assert.Equal(t, &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: livenessCmd("7200")}},
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7200")},
 					InitialDelaySeconds: 60, TimeoutSeconds: 10, PeriodSeconds: 30, FailureThreshold: 4,
 				}, c.LivenessProbe)
 				assert.Equal(t, &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
+					Exec:                &corev1.ExecAction{Command: readinessCmd},
 					InitialDelaySeconds: 10, TimeoutSeconds: 2, PeriodSeconds: 3, SuccessThreshold: 1, FailureThreshold: 8,
 				}, c.ReadinessProbe)
 			},
@@ -1279,39 +1279,39 @@ func TestStatefulSpecMongod(t *testing.T) {
 		"user probes": {
 			modify: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.Replsets[0].LivenessProbe = &api.LivenessProbeExtended{
-					Probe:               corev1.Probe{InitialDelaySeconds: 61, TimeoutSeconds: 6, PeriodSeconds: 31, SuccessThreshold: 1, FailureThreshold: 5},
+					InitialDelaySeconds: 61, TimeoutSeconds: 6, PeriodSeconds: 31, SuccessThreshold: 1, FailureThreshold: 5,
 					StartupDelaySeconds: 7201, //nolint:staticcheck // still rendered as --startupDelaySeconds
 				}
 				cr.Spec.Replsets[0].ReadinessProbe = &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(27017)}},
+					TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt32(27017)},
 					InitialDelaySeconds: 11, TimeoutSeconds: 3, PeriodSeconds: 4, SuccessThreshold: 2, FailureThreshold: 9,
 				}
 			},
 			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
 				c := spec.Template.Spec.Containers[0]
 				assert.Equal(t, &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: livenessCmd("7201")}},
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7201")},
 					InitialDelaySeconds: 61, TimeoutSeconds: 6, PeriodSeconds: 31, SuccessThreshold: 1, FailureThreshold: 5,
 				}, c.LivenessProbe)
 				assert.Equal(t, &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromInt32(27017)}},
+					TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt32(27017)},
 					InitialDelaySeconds: 11, TimeoutSeconds: 3, PeriodSeconds: 4, SuccessThreshold: 2, FailureThreshold: 9,
 				}, c.ReadinessProbe)
 			},
 		},
 		"user probes keep unset defaults": {
 			modify: func(cr *api.PerconaServerMongoDB) {
-				cr.Spec.Replsets[0].LivenessProbe = &api.LivenessProbeExtended{Probe: corev1.Probe{FailureThreshold: 3}}
+				cr.Spec.Replsets[0].LivenessProbe = &api.LivenessProbeExtended{FailureThreshold: 3}
 				cr.Spec.Replsets[0].ReadinessProbe = &corev1.Probe{FailureThreshold: 5}
 			},
 			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
 				c := spec.Template.Spec.Containers[0]
 				assert.Equal(t, &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: livenessCmd("7200")}},
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7200")},
 					InitialDelaySeconds: 60, TimeoutSeconds: 10, PeriodSeconds: 30, FailureThreshold: 3,
 				}, c.LivenessProbe)
 				assert.Equal(t, &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
+					Exec:                &corev1.ExecAction{Command: readinessCmd},
 					InitialDelaySeconds: 10, TimeoutSeconds: 2, PeriodSeconds: 3, SuccessThreshold: 1, FailureThreshold: 5,
 				}, c.ReadinessProbe)
 			},
@@ -1321,13 +1321,13 @@ func TestStatefulSpecMongod(t *testing.T) {
 			modify: func(cr *api.PerconaServerMongoDB) {
 				cr.Spec.Replsets[0].NonVoting.Enabled = true
 				cr.Spec.Replsets[0].NonVoting.LivenessProbe = &api.LivenessProbeExtended{
-					Probe:               corev1.Probe{InitialDelaySeconds: 70, PeriodSeconds: 31, FailureThreshold: 3},
+					InitialDelaySeconds: 70, PeriodSeconds: 31, FailureThreshold: 3,
 					StartupDelaySeconds: 7201, //nolint:staticcheck // still rendered as --startupDelaySeconds
 				}
 			},
 			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
 				assert.Equal(t, &corev1.Probe{
-					ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: livenessCmd("7201")}},
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7201")},
 					InitialDelaySeconds: 70, TimeoutSeconds: 10, PeriodSeconds: 31, FailureThreshold: 3,
 				}, spec.Template.Spec.Containers[0].LivenessProbe)
 			},
@@ -1655,9 +1655,7 @@ func TestStatefulSpecBackupAgent(t *testing.T) {
 
 	nfs := corev1.Volume{
 		Name: "backup-nfs",
-		VolumeSource: corev1.VolumeSource{
-			NFS: &corev1.NFSVolumeSource{Server: "nfs-service", Path: "/psmdb"},
-		},
+		NFS:  &corev1.NFSVolumeSource{Server: "nfs-service", Path: "/psmdb"},
 	}
 
 	tests := map[string]struct {
@@ -1760,11 +1758,9 @@ func TestStatefulSpecBackupAgent(t *testing.T) {
 			if slices.Contains(tt.wantVolumes, config.PBMHookscriptVolClaimName) {
 				assert.Contains(t, volumes, corev1.Volume{
 					Name: config.PBMHookscriptVolClaimName,
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: &corev1.ConfigMapVolumeSource{
-							LocalObjectReference: corev1.LocalObjectReference{Name: "test-cr-pbm-hookscript"},
-							Optional:             new(true),
-						},
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						Name:     "test-cr-pbm-hookscript",
+						Optional: new(true),
 					},
 				})
 			}

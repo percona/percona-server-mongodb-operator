@@ -662,8 +662,8 @@ func TestApplyCertManagerCertificatesObjects(t *testing.T) {
 
 	const ns = "cm-objects"
 	userAnnotations := map[string]string{"some-random-annotation": "true"}
-	caIssuerSpec := cm.IssuerSpec{IssuerConfig: cm.IssuerConfig{SelfSigned: new(cm.SelfSignedIssuer)}}
-	issuerSpec := cm.IssuerSpec{IssuerConfig: cm.IssuerConfig{CA: &cm.CAIssuer{SecretName: "some-name-ca-cert"}}}
+	caIssuerSpec := cm.IssuerSpec{SelfSigned: new(cm.SelfSignedIssuer)}
+	issuerSpec := cm.IssuerSpec{CA: &cm.CAIssuer{SecretName: "some-name-ca-cert"}}
 	caCertSpec := func(kind string) cm.CertificateSpec {
 		return cm.CertificateSpec{
 			IsCA:       true,

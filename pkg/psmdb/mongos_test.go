@@ -658,8 +658,8 @@ func TestMongosTemplateSpec(t *testing.T) {
 			configType: config.VolumeSourceConfigMap,
 			wantVolumes: map[string]corev1.VolumeSource{
 				"config": {ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: "test-cr-mongos"},
-					Optional:             new(true),
+					Name:     "test-cr-mongos",
+					Optional: new(true),
 				}},
 			},
 			wantMounts: []corev1.VolumeMount{{Name: "config", MountPath: config.MongosConfigDir}},
@@ -677,8 +677,8 @@ func TestMongosTemplateSpec(t *testing.T) {
 			setup: func(cr *api.PerconaServerMongoDB) { cr.Spec.Sharding.Mongos.HookScript.Script = "echo hook" },
 			wantVolumes: map[string]corev1.VolumeSource{
 				config.HookscriptVolClaimName: {ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: "test-cr-mongos-hookscript"},
-					Optional:             new(true),
+					Name:     "test-cr-mongos-hookscript",
+					Optional: new(true),
 				}},
 			},
 			wantMounts: []corev1.VolumeMount{{Name: config.HookscriptVolClaimName, MountPath: config.HookscriptMountPath}},
