@@ -110,6 +110,7 @@ func TestHandleReplsetInitPassesConfigWithoutShell(t *testing.T) {
 type initMongoClientProvider struct {
 	clusterAdminErr  error
 	userAdminErr     error
+	mongosErr        error
 	cr               *api.PerconaServerMongoDB
 	pods             []client.Object
 	clusterAdminConf *mongo.DialConfig
@@ -139,6 +140,9 @@ func (p *initMongoClientProvider) Mongo(ctx context.Context, cr *api.PerconaServ
 }
 
 func (p *initMongoClientProvider) Mongos(ctx context.Context, cr *api.PerconaServerMongoDB, role api.SystemUserRole, opts ...mongo.ConfigOption) (mongo.Client, error) {
+	if p.mongosErr != nil {
+		return nil, p.mongosErr
+	}
 	return &fakeMongoClient{pods: p.pods, cr: p.cr, connectionCount: new(atomic.Int32), Client: mongoFake.NewClient()}, nil
 }
 
@@ -685,6 +689,65 @@ func TestReconcileClusterShardMembersDuringPVCShrink(t *testing.T) {
 			}
 			require.Len(t, config.Members, 1)
 			assert.Equal(t, cr.Name+"-"+rs.Name+"-0", config.Members[0].Tags["podName"])
+		})
+	}
+}
+
+// Enabling servicePerPod re-signs the certificate with the per-pod mongos hostnames, but mongos
+// serves the old one until it restarts. The shard check must not dial mongos in that window.
+func TestReconcileClusterWaitsForMongosCert(t *testing.T) {
+	logf.SetLogger(zap.New(zap.WriteTo(io.Discard)))
+
+	tests := map[string]struct {
+		mongosHash string
+		wantDial   bool
+	}{
+		"mongos runs an outdated certificate": {mongosHash: "outdated-hash"},
+		"mongos runs the current certificate": {mongosHash: "current", wantDial: true},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			ctx := t.Context()
+			provider := &initMongoClientProvider{
+				mongosErr: errors.New("mongos dialed"),
+				rsClient:  mongoFake.NewClientWithConfig(mongo.RSConfig{Version: 1}),
+			}
+			r, cr, rs := setupReplsetInitTest(t, provider, &replsetInitExecRecorder{})
+			cr.Spec.TLS.AllowInvalidCertificates = new(false)
+			cr.Spec.Sharding.Enabled = true
+			cr.Spec.Sharding.Mongos = &api.MongosSpec{Size: 1}
+			rs.ClusterRole = api.ClusterRoleShardSvr
+			cr.Status.Replsets[rs.Name] = api.ReplsetStatus{
+				Initialized:  true,
+				Status:       api.AppStateReady,
+				AddedAsShard: new(true),
+			}
+			cr.Status.Mongos = &api.MongosStatus{Status: api.AppStateReady}
+
+			sslSecret := &corev1.Secret{
+				Name:      api.SSLSecretName(cr),
+				Namespace: cr.Namespace,
+				Data:      map[string][]byte{"tls.crt": []byte("current")},
+			}
+			require.NoError(t, r.client.Create(ctx, sslSecret))
+
+			hash := tt.mongosHash
+			if hash == "current" {
+				hash = secretHash(sslSecret)
+			}
+			mongosPods := []corev1.Pod{{
+				Name:        cr.Name + "-mongos-0",
+				Namespace:   cr.Namespace,
+				Annotations: map[string]string{naming.AnnotationSSLHash: hash},
+			}}
+
+			_, _, err := r.reconcileCluster(ctx, cr, rs, mongosPods)
+			if tt.wantDial {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "mongos dialed")
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }

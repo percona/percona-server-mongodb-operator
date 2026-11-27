@@ -1792,14 +1792,6 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	annotation[naming.AnnotationSSLHash] = ""
 	annotation[naming.AnnotationSSLInternalHash] = ""
 
-	getHash := func(secret *corev1.Secret) string {
-		if secret == nil {
-			return ""
-		}
-		secretString := fmt.Sprintln(secret.Data)
-		return fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
-	}
-
 	getSecret := func(name string) (*corev1.Secret, error) {
 		secretObj := corev1.Secret{}
 		err := r.client.Get(
@@ -1838,7 +1830,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLSecretName(cr))
 	}
-	annotation[naming.AnnotationSSLHash] = getHash(sslSecret)
+	annotation[naming.AnnotationSSLHash] = secretHash(sslSecret)
 	if cr.CompareVersion("1.24.0") >= 0 && cr.TLSEnabled() && cr.Spec.Backup.Enabled {
 		name := tls.CertificatePBMClient(cr).SecretName()
 		secret, err := getSecret(name)
@@ -1858,7 +1850,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		if err != nil {
 			return nil, errors.Wrapf(err, "get secret/%s", name)
 		}
-		annotation[naming.AnnotationPBMTLSHash] = getHash(secret)
+		annotation[naming.AnnotationPBMTLSHash] = secretHash(secret)
 	}
 
 	sslInternalSecret, err := getSecret(api.SSLInternalSecretName(cr))
@@ -1885,7 +1877,7 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 		}
 		return nil, errors.Wrapf(err, "get secret/%s", api.SSLInternalSecretName(cr))
 	}
-	annotation[naming.AnnotationSSLInternalHash] = getHash(sslInternalSecret)
+	annotation[naming.AnnotationSSLInternalHash] = secretHash(sslInternalSecret)
 
 	cr.Status.AddCondition(api.ClusterCondition{
 		Status: api.ConditionTrue,
@@ -1893,6 +1885,14 @@ func (r *ReconcilePerconaServerMongoDB) sslAnnotation(ctx context.Context, cr *a
 	})
 
 	return annotation, nil
+}
+
+func secretHash(secret *corev1.Secret) string {
+	if secret == nil {
+		return ""
+	}
+	secretString := fmt.Sprintln(secret.Data)
+	return fmt.Sprintf("%x", md5.Sum([]byte(secretString)))
 }
 
 func (r *ReconcilePerconaServerMongoDB) reconcilePDB(ctx context.Context, cr *api.PerconaServerMongoDB, spec *api.PodDisruptionBudgetSpec, labels map[string]string, namespace string, owner client.Object) error {
