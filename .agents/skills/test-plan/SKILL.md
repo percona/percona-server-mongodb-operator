@@ -72,8 +72,14 @@ Needs a manual check:
      Failure signs: ...
 Cleanup: ...
 Not covered by this plan: <item>: <reason>
-Suggested automated tests: <scenario that should become a unit or e2e test>
+Automation:
+  | # | Scenario | Test type | Where | Added time | Flake risk |
 ```
 
 Order the scenarios by risk, highest first. When the plan is posted as a PR
 comment, keep the scenarios in a collapsed block under a three-line summary.
+
+For the automation table: prefer a unit or envtest test, then a step in an
+existing e2e test that already creates the cluster, then a new e2e test.
+Estimate the added time from the waits in that test and say it is an
+estimate. End with which tests belong in this PR and which in a follow-up.

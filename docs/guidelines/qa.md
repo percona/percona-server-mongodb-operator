@@ -26,6 +26,9 @@ both.
   pod it snapshotted, the operator pod included: a replaced pod has a fresh
   `restartCount` and log.
 - A new reconcile branch or CR field has a test for the error path too.
+- A review proves this on its own copy: for each new branch or write in
+  `pkg/`, remove the line or invert the condition and run the package tests.
+  A change that no test catches is a finding; name the mutation in it.
 - A negative check (an object must not exist, a line must not appear) has a
   positive control: the same check finds the object or line when it is
   present.

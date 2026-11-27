@@ -167,7 +167,7 @@ CASES: dict[str, list[Edit]] = {
             "replace",
             ARBITER,
             "from lib.kubectl import kubectl_bin, wait_for_running, wait_pod\n",
-            "from lib.kubectl import kubectl_bin, wait_for_cluster_state, wait_for_running, wait_pod\n",
+            "from lib.kubectl import kubectl_bin, wait_cr_state, wait_for_running, wait_pod\n",
         ),
         (
             "append",
@@ -194,7 +194,7 @@ CASES: dict[str, list[Edit]] = {
             return kubectl_bin("get", "pod", arbiter_pod, "-o", "jsonpath={{.metadata.uid}}").strip()
 
         # Start from a settled cluster, so a failure below comes from the restart.
-        wait_for_cluster_state(cr_name, "ready")
+        wait_cr_state("psmdb", cr_name, "ready", timeout=300)
         state = member_state()
         assert state == "ARBITER", f"arbiter not healthy before the restart: {{state!r}}"
         uid_before = pod_uid()
@@ -218,8 +218,8 @@ CASES: dict[str, list[Edit]] = {
         logger.info(f"{{arbiter_pod}} rejoined as ARBITER")
 
         # Prove the operator reconciles the cluster after the restart: bump the CR generation
-        # with a field no pod template uses (the version-service cron is idle with apply=disabled)
-        # and wait for the operator to observe it.
+        # with a field no pod template uses (the version-service cron stays idle: the test CR
+        # has upgradeOptions.apply=Never) and wait for the operator to observe it.
         before = kubectl_bin("get", "psmdb", cr_name, "-o", "jsonpath={{.metadata.generation}}")
         generation = kubectl_bin(
             "patch",
@@ -227,24 +227,34 @@ CASES: dict[str, list[Edit]] = {
             cr_name,
             "--type=merge",
             "-p",
-            '{{"spec":{{"upgradeOptions":{{"apply":"disabled","schedule":"0 4 * * *"}}}}}}',
+            '{{"spec":{{"upgradeOptions":{{"schedule":"0 4 * * *"}}}}}}',
             "-o",
             "jsonpath={{.metadata.generation}}",
         ).strip()
         assert int(generation) > int(before), f"generation not bumped: {{before}}, {{generation}}"
-        observed_path = "jsonpath={{.status.observedGeneration}}"
+        # An empty read is unknown, not a state: three in a row fail the step.
+        status_path = "jsonpath={{.status.state}}|{{.status.observedGeneration}}"
         deadline = time.time() + 300
-        observed = ""
+        cr_state, observed, empty_reads = "", "", 0
         while time.time() < deadline:
-            observed = kubectl_bin(
-                "get", "psmdb", cr_name, "-o", observed_path, check=False
-            ).strip()
-            if observed == generation:
-                break
+            out = kubectl_bin("get", "psmdb", cr_name, "-o", status_path, check=False).strip()
+            if out in ("", "|"):
+                empty_reads += 1
+                assert empty_reads < 3, f"psmdb/{{cr_name}} status unreadable 3 times in a row"
+            else:
+                empty_reads = 0
+                cr_state, _, observed = out.partition("|")
+                assert cr_state != "error", f"psmdb/{{cr_name}} in error, generation {{generation}}"
+                if observed == generation:
+                    break
             time.sleep(5)
         else:
-            pytest.fail(f"generation {{generation}} not observed in 300s, last seen: {{observed!r}}")
-        wait_for_cluster_state(cr_name, "ready")
+            pytest.fail(
+                f"generation {{generation}} not observed in 300s, last seen: {{cr_state!r}} {{observed!r}}"
+            )
+        wait_cr_state("psmdb", cr_name, "ready", timeout=300)
+        state = member_state()
+        assert state == "ARBITER", f"arbiter not ARBITER after the reconcile: {{state!r}}"
 
         psmdb_client.compare_mongo_cmd(
             "find({{}}, {{ _id: 0 }}).toArray()",
@@ -293,18 +303,6 @@ CASES: dict[str, list[Edit]] = {
         ),
     ],
     "C3-unit-test": [
-        (
-            "replace",
-            NAMING_TEST,
-            'import "testing"\n',
-            (
-                "import (\n"
-                '\t"testing"\n'
-                "\n"
-                '\tpsmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"\n'
-                ")\n"
-            ),
-        ),
         (
             "append",
             NAMING_TEST,
@@ -357,11 +355,26 @@ func TestMongodStatefulSetName(t *testing.T) {
             '        _deploy_cmctl(test_paths["src_dir"], test_paths["conf_dir"])\n        time.sleep(60)\n',
             (
                 '        _deploy_cmctl(test_paths["src_dir"], test_paths["conf_dir"])\n'
-                "        kubectl_bin(\n"
-                '            "wait", "--for=condition=Ready", "certificate/some-name-ca-cert", "--timeout=120s"\n'
-                "        )\n"
+                '        wait_certificate(f"{CLUSTER}-ca-cert", timeout=120)\n'
             ),
         ),
+        (
+            "replace",
+            TLS_TEST,
+            "from lib.kubectl import kubectl_bin, wait_for_delete, wait_for_running\n",
+            "from lib.kubectl import kubectl_bin, wait_certificate, wait_for_delete, wait_for_running\n",
+        ),
+        (
+            "replace",
+            TLS_TEST,
+            '        kubectl_bin("apply", "-f", f"{test_dir}/conf/some-name-ssl.yml")\n        time.sleep(60)\n',
+            (
+                '        kubectl_bin("apply", "-f", f"{test_dir}/conf/some-name-ssl.yml")\n'
+                '        wait_certificate(f"{cluster}-ssl-internal", timeout=120)\n'
+                '        wait_certificate(f"{cluster}-ssl", timeout=120)\n'
+            ),
+        ),
+        ("replace", TLS_TEST, "import logging\nimport time\n", "import logging\n"),
     ],
 }
 
