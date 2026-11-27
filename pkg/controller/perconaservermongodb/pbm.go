@@ -638,13 +638,16 @@ func (r *ReconcilePerconaServerMongoDB) resyncPBMIfNeeded(ctx context.Context, c
 
 	log.Info("resync is needed for all storages")
 
-	err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationResyncInProgress: "true"})
-	if err != nil {
-		return errors.Wrapf(err, "annotate %s", psmdbv1.AnnotationResyncInProgress)
+	orig := cr.DeepCopy()
+	if cr.Annotations == nil {
+		cr.Annotations = make(map[string]string)
 	}
-
-	if err := k8s.DeannotateObject(ctx, r.client, cr, psmdbv1.AnnotationResyncPBM); err != nil {
-		return errors.Wrapf(err, "delete annotation %s", psmdbv1.AnnotationResyncPBM)
+	cr.Annotations[psmdbv1.AnnotationResyncInProgress] = "true"
+	delete(cr.Annotations, psmdbv1.AnnotationResyncPBM)
+	if err := r.patchCR(ctx, cr, orig); err != nil {
+		cr.Annotations = orig.Annotations
+		l.resyncMutex.Unlock()
+		return errors.Wrap(err, "patch resync annotations")
 	}
 
 	// running in separate goroutine to not block reconciliation
