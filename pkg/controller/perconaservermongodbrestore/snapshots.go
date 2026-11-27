@@ -141,7 +141,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotWaiting(
 		stdoutBuf.Reset()
 		stderrBuf.Reset()
 
-		err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreCmd, nil, stdoutBuf, stderrBuf, false)
+		err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreCmd, nil, stdoutBuf, stderrBuf)
 		if err != nil {
 			log.Error(err, "Restore failed to start", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
 			return errors.Wrapf(err, "start restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
@@ -202,7 +202,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileSnapshotRequested(
 			return errors.Wrap(err, "get pod")
 		}
 
-		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf); err != nil {
 			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 
@@ -780,7 +780,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) runPBMRestoreFinish(
 		stdoutBuf.Reset()
 		stderrBuf.Reset()
 
-		err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreFinishCmd, nil, stdoutBuf, stderrBuf, false)
+		err := r.clientcmd.Exec(ctx, &pod, "mongod", restoreFinishCmd, nil, stdoutBuf, stderrBuf)
 		if err != nil {
 			log.Error(err, "Failed to finish restore", "pod", pod.Name, "stderr", stderrBuf.String(), "stdout", stdoutBuf.String())
 			return errors.Wrapf(err, "restore-finish stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
@@ -839,7 +839,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) awaitPBMRestoreFinish(
 			return errors.Wrap(err, "get pod")
 		}
 
-		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf, false); err != nil {
+		if err := r.clientcmd.Exec(ctx, &pod, "mongod", command, nil, stdoutBuf, stderrBuf); err != nil {
 			return errors.Wrapf(err, "describe restore stderr: %s stdout: %s", stderrBuf.String(), stdoutBuf.String())
 		}
 

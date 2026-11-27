@@ -20,8 +20,8 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/defs"
 	pbmVersion "github.com/percona/percona-backup-mongodb/pbm/version"
 
-	fakeClientcmd "github.com/percona/percona-server-mongodb-operator/clientcmd/fake"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	fakePodexec "github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	fakeBackup "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
@@ -500,7 +500,7 @@ func fakeReconciler(objs ...client.Object) *ReconcilePerconaServerMongoDBRestore
 		client:     cl,
 		scheme:     s,
 		newPBMFunc: fakeBackup.NewPBM,
-		clientcmd:  fakeClientcmd.New(),
+		clientcmd:  fakePodexec.New(),
 	}
 }
 

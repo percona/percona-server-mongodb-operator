@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
@@ -160,7 +161,7 @@ type replsetInitExecRecorder struct {
 	initInput                 string
 }
 
-func (m *replsetInitExecRecorder) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+func (m *replsetInitExecRecorder) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	joined := strings.Join(command, " ")
 	switch {
 	case strings.Contains(joined, "--version"):
@@ -290,7 +291,7 @@ func hasInitCondition(cr *api.PerconaServerMongoDB, rsName string) bool {
 	return false
 }
 
-func setupReplsetInitTest(t *testing.T, provider *initMongoClientProvider, exec ClientCmd) (*ReconcilePerconaServerMongoDB, *api.PerconaServerMongoDB, *api.ReplsetSpec) {
+func setupReplsetInitTest(t *testing.T, provider *initMongoClientProvider, exec podexec.Client) (*ReconcilePerconaServerMongoDB, *api.PerconaServerMongoDB, *api.ReplsetSpec) {
 	t.Helper()
 
 	ctx := context.Background()

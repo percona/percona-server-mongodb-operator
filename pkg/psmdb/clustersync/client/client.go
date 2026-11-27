@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	stderrors "errors"
-	"io"
 	"slices"
 	"strings"
 
@@ -13,8 +12,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8sclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
 )
@@ -43,19 +42,15 @@ var (
 // https://docs.percona.com/percona-clustersync-for-mongodb/high-availability.html
 const notActiveCode = "not_active"
 
-type podExecer interface {
-	Exec(ctx context.Context, pod *corev1.Pod, container string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
-}
-
 type Client struct {
 	k8s  k8sclient.Client
-	exec podExecer
+	exec podexec.Client
 	cr   *psmdbv1.PerconaServerMongoDBClusterSync
 
 	activePod string
 }
 
-func New(k8s k8sclient.Client, cc clientcmd.Client, cr *psmdbv1.PerconaServerMongoDBClusterSync) *Client {
+func New(k8s k8sclient.Client, cc podexec.Client, cr *psmdbv1.PerconaServerMongoDBClusterSync) *Client {
 	return &Client{k8s: k8s, exec: cc, cr: cr}
 }
 
@@ -135,7 +130,7 @@ func (c *Client) run(ctx context.Context, readOnly bool, args ...string) ([]byte
 	var transportErr error
 	for _, pod := range pods {
 		var stdout, stderr bytes.Buffer
-		execErr := c.exec.Exec(ctx, pod, clustersync.ContainerName, cmd, nil, &stdout, &stderr, false)
+		execErr := c.exec.Exec(ctx, pod, clustersync.ContainerName, cmd, nil, &stdout, &stderr)
 		if execErr == nil {
 			c.activePod = pod.Name
 			return stdout.Bytes(), nil

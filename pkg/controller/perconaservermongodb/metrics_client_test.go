@@ -12,21 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	fakePodexec "github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 )
-
-// mockClientCmd is a mock implementation of the ClientCmd interface for testing
-type mockClientCmd struct {
-	execFunc func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error
-}
-
-func (m *mockClientCmd) Exec(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
-	if m.execFunc != nil {
-		return m.execFunc(ctx, pod, containerName, command, stdin, stdout, stderr, tty)
-	}
-	return nil
-}
 
 func TestGetPVCUsageFromMetrics(t *testing.T) {
 	t.Parallel()
@@ -128,8 +117,8 @@ func TestGetPVCUsageFromMetrics(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx := t.Context()
 
-			mockCmd := &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+			mockCmd := &fakePodexec.Client{
+				ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					if tt.dfError != nil {
 						if stderr != nil {
 							_, _ = stderr.Write([]byte("error executing df command"))
@@ -220,8 +209,8 @@ func TestGetPVCUsageFromMetricsRetry(t *testing.T) {
 
 			calls := 0
 			r := buildFakeClient(tt.objects(pod)...)
-			r.clientcmd = &mockClientCmd{
-				execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+			r.clientcmd = &fakePodexec.Client{
+				ExecFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer) error {
 					calls++
 					return errors.New(`unable to upgrade connection: pods "test-pod-0" not found`)
 				},
@@ -265,8 +254,8 @@ func TestGetPVCUsageFromMetricsContainer(t *testing.T) {
 
 			r := &ReconcilePerconaServerMongoDB{
 				pvcUsageBackoff: testPVCUsageBackoff,
-				clientcmd: &mockClientCmd{
-					execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer, tty bool) error {
+				clientcmd: &fakePodexec.Client{
+					ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 						gotContainer = containerName
 						gotCommand = command
 						_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on

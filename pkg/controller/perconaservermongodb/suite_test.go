@@ -18,9 +18,9 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/percona/percona-server-mongodb-operator/clientcmd"
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
@@ -82,7 +82,7 @@ const testPodRestartPoll = time.Millisecond
 
 // nolint:all
 func reconciler() *ReconcilePerconaServerMongoDB {
-	cli, err := clientcmd.NewClient(cfg)
+	cli, err := podexec.NewClient(cfg)
 	if err != nil {
 		Expect(err).ToNot(HaveOccurred())
 	}

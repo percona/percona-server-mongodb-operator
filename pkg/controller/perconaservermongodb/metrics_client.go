@@ -77,7 +77,7 @@ func (r *ReconcilePerconaServerMongoDB) getPVCUsageFromMetrics(
 		stdout.Reset()
 		stderr.Reset()
 
-		err := r.clientcmd.Exec(ctx, pod, containerName, command, nil, &stdout, &stderr, false)
+		err := r.clientcmd.Exec(ctx, pod, containerName, command, nil, &stdout, &stderr)
 		if err != nil {
 			return errors.Wrapf(err, "failed to execute df on %s in pod %s container %s: %s", mountPath, pod.Name, containerName, stderr.String())
 		}
