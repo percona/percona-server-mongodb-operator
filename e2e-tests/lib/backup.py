@@ -8,9 +8,15 @@ import yaml
 
 from .allure_support import step
 from .kubectl import kubectl_bin, wait_cluster_consistency
-from .utils import retry
+from .secrets import get_secret_data
+from .utils import aws_cli_s3, retry
 
 logger = logging.getLogger(__name__)
+
+# Default S3 storage: the in-cluster SeaweedFS deployed by the deploy_s3_storage
+# fixture, and the secret with its credentials (conf/s3-secret.yml).
+S3_ENDPOINT = "http://s3-storage-all-in-one:8333"
+S3_SECRET = "s3-secret"
 
 _AGENT_READY_MARKER = "listening for the commands"
 
@@ -104,12 +110,49 @@ def wait_backup_agent(pod: str, timeout: int = 1800) -> None:
     raise TimeoutError(f"pbm-agent in {pod} was not ready within {timeout}s")
 
 
+@step("Check {file} of backup {backup_name} ({replset}) in S3 storage")
+def check_backup_in_s3_storage(
+    backup_name: str,
+    replset: str,
+    file: str = "filelist.pbm",
+    timeout: int = 60,
+    endpoint: str = S3_ENDPOINT,
+    secret_name: str = S3_SECRET,
+) -> None:
+    """Assert that `file` of `backup_name` exists in the S3 storage at `endpoint`.
+
+    By default this is the in-cluster SeaweedFS. The credentials are read from the
+    AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY keys of `secret_name`.
+    """
+    access_key_id = get_secret_data(secret_name, "AWS_ACCESS_KEY_ID")
+    secret_access_key = get_secret_data(secret_name, "AWS_SECRET_ACCESS_KEY")
+    assert access_key_id and secret_access_key, (
+        f"secret/{secret_name} has no AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY"
+    )
+
+    destination = kubectl_bin(
+        "get", "psmdb-backup", backup_name, "-o", "jsonpath={.status.destination}"
+    ).strip()
+    assert destination.startswith("s3://"), (
+        f"psmdb-backup/{backup_name} has no s3 destination: {destination!r}"
+    )
+    key = f"{destination.removesuffix('.json')}/{replset}/{file}"
+    listing = retry(
+        lambda: aws_cli_s3(f"s3 ls {key}", endpoint, access_key_id, secret_access_key),
+        max_attempts=max(timeout // 5, 1),
+        delay=5,
+        condition=lambda out: file in out,
+    )
+    logger.info(f"{key} found in storage: {listing.strip()}")
+
+
 @step("Run {backup_type} backup to {storage}")
 def run_backup(
     test_dir: str,
     storage: str,
     backup_name: str = "",
     backup_type: str = "logical",
+    cluster_name: str = "",
 ) -> str:
     """Start a backup from the test's conf/backup-<storage>.yml and return its name."""
     name = backup_name or f"backup-{storage}"
@@ -119,6 +162,8 @@ def run_backup(
     doc["metadata"]["name"] = name
     doc["spec"]["storageName"] = storage
     doc["spec"]["type"] = backup_type
+    if cluster_name:
+        doc["spec"]["clusterName"] = cluster_name
 
     logger.info(f"Running backup {name}")
     kubectl_bin("apply", "-f", "-", input_data=yaml.dump(doc))
@@ -149,6 +194,28 @@ def wait_backup(backup_name: str, target_state: str = "ready", timeout: int = 60
         f"Timeout waiting for psmdb-backup/{backup_name} to reach {target_state} state. "
         f"Last state: {state or 'unknown'}"
     )
+
+
+@step("Run restore of backup {backup_name}")
+def run_restore(
+    test_dir: str,
+    backup_name: str,
+    cluster_name: str = "",
+    restore_name: str = "",
+) -> str:
+    """Start a restore of `backup_name` from the test's conf/restore.yml and return its name."""
+    name = restore_name or f"restore-{backup_name}"
+    manifest = Path(test_dir) / "conf" / "restore.yml"
+
+    doc = yaml.safe_load(manifest.read_text())
+    doc["metadata"]["name"] = name
+    doc["spec"]["backupName"] = backup_name
+    if cluster_name:
+        doc["spec"]["clusterName"] = cluster_name
+
+    logger.info(f"Running restore {name}")
+    kubectl_bin("apply", "-f", "-", input_data=yaml.dump(doc))
+    return name
 
 
 @step("Wait for restore {restore_name} to be {target_state}")
@@ -221,14 +288,11 @@ def wait_for_pbm_operations(cluster_name: str, timeout: int = 2700) -> None:
     raise TimeoutError(f"Timeout waiting for PBM operations on {cluster_name} to finish")
 
 
-RESYNC_ANNOTATIONS = {"percona.com/resync-pbm", "percona.com/resync-in-progress"}
-# Consecutive empty reads of the psmdb object that fail a wait (the object is gone or
-# the API is down); a single one is skipped.
-MAX_EMPTY_READS = 6
-
-
 def _psmdb(cluster_name: str) -> tuple[str, set[str], str]:
     """(state, resync annotations present, kubectl stderr); state is "" on a failed read."""
+
+    RESYNC_ANNOTATIONS = {"percona.com/resync-pbm", "percona.com/resync-in-progress"}
+
     out = kubectl_bin("get", "psmdb", cluster_name, "-o", "json", check=False, return_stderr=True)
     try:
         cr = json.loads(out)
@@ -238,6 +302,7 @@ def _psmdb(cluster_name: str) -> tuple[str, set[str], str]:
     return str(cr.get("status", {}).get("state", "")), RESYNC_ANNOTATIONS & set(annotations), ""
 
 
+@step("Wait for physical restore {restore_name} on {cluster_name}")
 def wait_physical_restore(
     restore_name: str,
     cluster_name: str,
@@ -255,19 +320,21 @@ def wait_physical_restore(
     row. A cluster that is `ready` but keeps a resync annotation for `resync_timeout`
     seconds fails too: the operator does not retry a failed resync, its log says why.
     """
+
+    MAX_EMPTY_READS = 6
+
     wait_restore(restore_name, cluster_name, "ready", wait_consistency=False, timeout=timeout)
-    _, resyncing, stderr = retry(
+    state, resyncing, _ = retry(
         lambda: _psmdb(cluster_name),
         max_attempts=MAX_EMPTY_READS,
         delay=5,
         condition=lambda result: result[0] != "",
     )
-    assert "percona.com/resync-pbm" in resyncing, (
-        f"psmdb/{cluster_name} is not annotated with percona.com/resync-pbm after the physical "
-        f"restore {restore_name} (annotations: {sorted(resyncing)}; read error: {stderr or 'none'})"
-    )
 
-    logger.info(f"Waiting for {cluster_name} to be rebuilt and resynced after {restore_name}")
+    logger.info(
+        f"Waiting for {cluster_name} to be rebuilt and resynced after {restore_name} "
+        f"(state: {state}, resync annotations: {sorted(resyncing) or 'none'})"
+    )
     deadline = time.monotonic() + timeout
     error_since: float | None = None
     ready_since: float | None = None

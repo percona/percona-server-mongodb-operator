@@ -173,7 +173,7 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
 
-  demand-backup-incremental-minio:
+  demand-backup-incremental-s3-compatible:
     suites: [pr, release, minikube, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]

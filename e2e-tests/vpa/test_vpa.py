@@ -260,7 +260,6 @@ class TestVPA:
             kubectl_bin("apply", "-n", ns2, "-f", "-", input_data=cr)
             _assert_cluster_ready(CLUSTER, namespace=ns2)
 
-
             _set_update_mode(CLUSTER, "Auto", namespace=ns2)
 
             # Same VPA object name as in the first namespace.

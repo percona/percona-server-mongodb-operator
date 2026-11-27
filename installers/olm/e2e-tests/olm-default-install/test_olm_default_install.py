@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from lib.backup import MAX_EMPTY_READS
 from lib.kubectl import kubectl_bin, schedulable_nodes
 from lib.mongo import MongoManager
 from lib.utils import Paths, env_bool
@@ -19,6 +18,7 @@ from olm import (
     ALLOWED_OPERATOR_ERRORS,
     APP_PASSWORD,
     APP_USER,
+    MAX_EMPTY_READS,
     CatalogTarget,
     assert_operator_healthy,
     cluster_uri,

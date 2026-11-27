@@ -27,6 +27,7 @@ from lib.secrets import get_cloud_secret_default
 from lib.utils import (
     K8sHighlighter,
     Paths,
+    aws_cli_s3,
     env_bool,
     get_cr_version,
     get_git_branch,
@@ -697,26 +698,6 @@ def deploy_cert_manager() -> Generator[Callable[..., None]]:
     yield _deploy
 
     _delete_cert_manager()
-
-
-def aws_cli_s3(command: str, endpoint: str) -> str:
-    """Run an aws-cli command against the S3 fixture from a throwaway pod."""
-    return kubectl_bin(
-        "run",
-        "-i",
-        "--rm",
-        "aws-cli",
-        f"--image={os.environ.get('IMAGE_AWS_CLI')}",
-        "--restart=Never",
-        "--env=AWS_ACCESS_KEY_ID=some-access-key",
-        "--env=AWS_SECRET_ACCESS_KEY=some-secret-key",
-        "--env=AWS_DEFAULT_REGION=us-east-1",
-        "--",
-        "--no-verify-ssl",
-        "--endpoint-url",
-        endpoint,
-        *command.split(),
-    )
 
 
 @pytest.fixture(scope="class")
