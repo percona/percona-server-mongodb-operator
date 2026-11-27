@@ -21,7 +21,7 @@ spec:
           credentialsSecret: aws-s3-secret
           region: us-east-1
           bucket: operator-testing
-          prefix: psmdb-scheduled-backup
+          prefix: psmdb-NAME_SPACE
           insecureSkipTLSVerify: false
       local-s3:
         type: s3
@@ -36,12 +36,12 @@ spec:
         gcs:
           credentialsSecret: gcp-cs-sa-key-secret
           bucket: operator-testing
-          prefix: psmdb-scheduled-backup
+          prefix: psmdb-NAME_SPACE
       azure-blob:
         type: azure
         azure:
           container: operator-testing
-          prefix: psmdb-scheduled-backup
+          prefix: psmdb-NAME_SPACE
           credentialsSecret: azure-secret
     tasks:
     - name: weekly
