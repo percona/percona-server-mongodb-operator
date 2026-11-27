@@ -2,9 +2,11 @@ package perconaservermongodb
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"reflect"
 	"slices"
 	"sort"
@@ -67,6 +69,32 @@ func shouldSetDefaultRWConcern(cr *api.PerconaServerMongoDB, replset *api.Replse
 	return replset.Arbiter.Enabled || externalArbiterFound || cr.Spec.DefaultRWConcern != nil
 }
 
+// dnsResolver resolves hostnames to IP addresses. It is satisfied by
+// *net.Resolver and can be replaced in tests.
+type dnsResolver interface {
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+}
+
+// resolver returns the configured DNS resolver, falling back to the default
+// system resolver when none is set.
+func (r *ReconcilePerconaServerMongoDB) resolver() dnsResolver {
+	if r.dnsResolver != nil {
+		return r.dnsResolver
+	}
+	return net.DefaultResolver
+}
+
+// hostResolvable reports whether host resolves to at least one IP address.
+// A resolver error is returned to the caller; a successful lookup with no
+// addresses returns (false, nil).
+func hostResolvable(ctx context.Context, resolver dnsResolver, host string) (bool, error) {
+	ips, err := resolver.LookupIPAddr(ctx, strings.TrimSuffix(host, ".")+".")
+	if err != nil {
+		return false, err
+	}
+	return len(ips) > 0, nil
+}
+
 func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr *api.PerconaServerMongoDB, replset *api.ReplsetSpec, mongosPods []corev1.Pod) (api.AppState, map[string]api.ReplsetMemberStatus, error) {
 	log := logf.FromContext(ctx)
 
@@ -122,6 +150,15 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			if !imported {
 				log.Info("waiting for service import", "replset", replset.Name, "serviceExport", se.Name)
 				return api.AppStateInit, nil, nil
+			}
+			// check if the hostname is resolvable yet; DNS may lag behind the service import
+			if !cr.Status.Replsets[replset.Name].Initialized {
+				host := psmdb.GetMCSHost(cr, se.Name)
+				resolved, err := hostResolvable(ctx, r.resolver(), host)
+				if err != nil || !resolved {
+					log.Info("waiting for imported service hostname to resolve to an IP", "replset", replset.Name, "host", host, "error", err)
+					return api.AppStateInit, nil, nil
+				}
 			}
 		}
 	}
@@ -237,12 +274,18 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		replset.ClusterRole == api.ClusterRoleShardSvr {
 
 		rsStatus := cr.Status.Replsets[replset.Name]
+		addedAsShard := rsStatus.AddedAsShard != nil && *rsStatus.AddedAsShard
 
-		if len(mongosPods) > 0 &&
+		switch {
+		case addedAsShard && replsetPVCShrinkInProgress(cr, replset):
+			// The replset status stays Init until the shrink finishes, but the
+			// members it replaces must be reconciled in the meantime.
+			log.V(1).Info("PVC shrink in progress, reconciling shard members", "replset", replset.Name)
+		case len(mongosPods) > 0 &&
 			rsStatus.Initialized &&
 			rsStatus.Status == api.AppStateReady &&
 			cr.Status.Mongos != nil &&
-			cr.Status.Mongos.Status == api.AppStateReady {
+			cr.Status.Mongos.Status == api.AppStateReady:
 
 			mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 			if err != nil {
@@ -286,7 +329,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 
 			rsStatus.AddedAsShard = new(true)
 			cr.Status.Replsets[replset.Name] = rsStatus
-		} else {
+		default:
 			// Keep the members recorded on init. Smart update waits for them,
 			// and mongos isn't created until smart update finishes.
 			return api.AppStateInit, rsStatus.Members, nil
@@ -302,7 +345,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 		}
 	}
 
-	rsMembers, liveMembers, votesPending, err := r.updateConfigMembers(ctx, cli, cr, replset)
+	rsMembers, liveMembers, votesPending, err := r.updateConfigMembers(ctx, cli, cr, replset, pods.Items)
 	if err != nil {
 		return api.AppStateError, nil, errors.Wrap(err, "failed to update config members")
 	}
@@ -425,16 +468,11 @@ func (r *ReconcilePerconaServerMongoDB) getConfigMemberForExternalNode(id int, e
 	return member
 }
 
-func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec) (map[string]api.ReplsetMemberStatus, int, bool, error) {
+func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context, cli mongo.Client, cr *api.PerconaServerMongoDB, rs *api.ReplsetSpec, pods []corev1.Pod) (map[string]api.ReplsetMemberStatus, int, bool, error) {
 	log := logf.FromContext(ctx)
 	// Primary with a Secondary and an Arbiter (PSA)
 	rsMembers := make(map[string]api.ReplsetMemberStatus)
 	unsafePSA := cr.Spec.Unsafe.ReplsetSize && rs.Arbiter.Enabled && rs.Arbiter.Size == 1 && !rs.NonVoting.Enabled && rs.Size == 2
-
-	pods, err := psmdb.GetRSPods(ctx, r.client, cr, rs.Name)
-	if err != nil {
-		return rsMembers, 0, false, errors.Wrap(err, "get rs pods")
-	}
 
 	cnf, err := cli.ReadConfig(ctx)
 	if err != nil {
@@ -447,9 +485,9 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 	}
 
 	members := mongo.ConfigMembers{}
-	for key, pod := range pods.Items {
+	for key, pod := range pods {
 		if key >= mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", rs.Name)
+			log.Error(errReplsetLimit, "skipping replset member", "rs", rs.Name)
 			break
 		}
 
@@ -468,8 +506,8 @@ func (r *ReconcilePerconaServerMongoDB) updateConfigMembers(ctx context.Context,
 
 	memberC := len(members)
 	for i, extNode := range rs.ExternalNodes {
-		if memberC+i+1 >= mongo.MaxMembers {
-			log.Error(errReplsetLimit, "rs", rs.Name)
+		if memberC+i+1 > mongo.MaxMembers {
+			log.Error(errReplsetLimit, "skipping replset member", "rs", rs.Name)
 			break
 		}
 
@@ -1183,11 +1221,7 @@ func compareRoles(x []mongo.Role, y []mongo.Role) bool {
 	}
 
 	sortFunc := func(a mongo.Role, b mongo.Role) int {
-		if a.DB < b.DB || a.Role < b.Role {
-			return -1
-		}
-
-		return 0
+		return cmp.Or(cmp.Compare(a.DB, b.DB), cmp.Compare(a.Role, b.Role))
 	}
 
 	slices.SortFunc(x, sortFunc)

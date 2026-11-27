@@ -148,6 +148,26 @@ EOF
     }
 }
 
+// Publishes the Allure report of the tests run in this build. It is kept with the build in
+// Jenkins (not uploaded to S3) and removed by the build retention. A publishing problem
+// does not fail the build. Returns true when the report was published.
+boolean publishAllureReport() {
+    if (sh(returnStatus: true, script: 'ls e2e-tests/allure-results/*-result.json >/dev/null 2>&1') != 0) {
+        echo 'No Allure results in e2e-tests/allure-results, skipping the Allure report'
+        return false
+    }
+    try {
+        allure includeProperties: false, results: [[path: 'e2e-tests/allure-results']]
+        return true
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (Throwable exc) {
+        // Throwable: a missing plugin raises NoSuchMethodError, which is not an Exception.
+        echo "Warning: failed to publish the Allure report: ${exc}"
+        return false
+    }
+}
+
 void pushReportFile() {
     echo "Push ${reportHtml} to S3!"
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
@@ -928,23 +948,41 @@ pipeline {
                         }
                         makeReport()
                         normalizeReports()
-                        
+
+                        // pytest_html_merger needs at least one real pytest-html report. When every test
+                        // was already passed in a previous build, only placeholders exist and it fails.
+                        def hasHtmlReports = sh(returnStatus: true, script: "grep -qs 'Report generated on ' e2e-tests/reports/*.html") == 0
+
                         sh """
                             export PATH="\$HOME/.local/bin:\$PATH"
-                            uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
                             uv run junitparser merge --glob 'e2e-tests/reports/*.xml' ${reportXml}
                         """
-                        formatReportDuration(reportHtml)
                         junit testResults: reportXml, healthScaleFactor: 1.0
-                        archiveArtifacts "${reportXml}, ${reportHtml}"
-                        pushReportFile()
-
-                        def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
-                        currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
+                        archiveArtifacts "${reportXml}"
+                        def allurePublished = publishAllureReport()
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\nTest report: [report](${reportUrl})\r\n"
+                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\n"
+
+                        if (hasHtmlReports) {
+                            sh """
+                                export PATH="\$HOME/.local/bin:\$PATH"
+                                uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
+                            """
+                            formatReportDuration(reportHtml)
+                            archiveArtifacts "${reportHtml}"
+                            pushReportFile()
+
+                            def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
+                            currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
+                            TestsReport = TestsReport + "Test report: [report](${reportUrl})\r\n"
+                        } else {
+                            echo "No pytest-html reports in e2e-tests/reports, skipping the HTML report merge"
+                        }
+                        if (allurePublished) {
+                            TestsReport = TestsReport + "Allure report: [allure](${env.BUILD_URL}allure/) (tests that ran and finished in this build only; see the table above for timeouts)\r\n"
+                        }
                         pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")

@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	k8sversion "k8s.io/apimachinery/pkg/version"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -221,6 +222,13 @@ type TLSSpec struct {
 	// +kubebuilder:default=auto
 	// +kubebuilder:validation:Enum={auto,userProvidedOnly}
 	CertManagementPolicy CertManagementPolicy `json:"certManagementPolicy,omitempty"`
+}
+
+func (cr *PerconaServerMongoDB) InvalidCertificatesAllowed() bool {
+	if cr.CompareVersion("1.24.0") < 0 {
+		return true
+	}
+	return ptr.Deref(cr.Spec.TLS.AllowInvalidCertificates, DefaultAllowInvalidCertificates)
 }
 
 func (spec *PerconaServerMongoDBSpec) Replset(name string) *ReplsetSpec {
@@ -659,10 +667,19 @@ type NonVotingSpec struct {
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	StartupProbe             *corev1.Probe              `json:"startupProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
+
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
+	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -680,10 +697,19 @@ type HiddenSpec struct {
 	VolumeSpec               *VolumeSpec                `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe              `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended     `json:"livenessProbe,omitempty"`
+	StartupProbe             *corev1.Probe              `json:"startupProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	Configuration            MongoConfiguration         `json:"configuration,omitempty"`
 	VPA                      *ComponentVPASpec          `json:"vpa,omitempty"`
+
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
+	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
 
 	MultiAZ `json:",inline"`
 }
@@ -919,6 +945,7 @@ type ReplsetSpec struct {
 	VolumeSpec               *VolumeSpec                  `json:"volumeSpec,omitempty"`
 	ReadinessProbe           *corev1.Probe                `json:"readinessProbe,omitempty"`
 	LivenessProbe            *LivenessProbeExtended       `json:"livenessProbe,omitempty"`
+	StartupProbe             *corev1.Probe                `json:"startupProbe,omitempty"`
 	PodSecurityContext       *corev1.PodSecurityContext   `json:"podSecurityContext,omitempty"`
 	ContainerSecurityContext *corev1.SecurityContext      `json:"containerSecurityContext,omitempty"`
 	Storage                  *MongodSpecStorage           `json:"storage,omitempty"`
@@ -934,6 +961,24 @@ type ReplsetSpec struct {
 	EnvFrom                  []corev1.EnvFromSource       `json:"envFrom,omitempty"`
 	VPA                      *ComponentVPASpec            `json:"vpa,omitempty"`
 	Search                   *SearchReplsetOverride       `json:"search,omitempty"`
+
+	// JournalStorage moves the WiredTiger journal to its own PVC at /data/db/journal.
+	// Enabling it on running pods needs SmartUpdate and rolls members one at a time; disabling is rejected. Only the size can change later.
+	JournalStorage *StorageSpec `json:"journalStorage,omitempty"`
+
+	// LogStorage moves mongod logs to their own PVC at /data/db/logs. Needs the log collector.
+	// Toggling it on running pods needs SmartUpdate and recreates the statefulset; data PVCs are kept.
+	LogStorage *StorageSpec `json:"logStorage,omitempty"`
+}
+
+func (r *ReplsetSpec) SearchStorage(cr *PerconaServerMongoDB) *VolumeSpec {
+	if r != nil && r.Search != nil && r.Search.Storage != nil {
+		return r.Search.Storage
+	}
+	if cr.Spec.Search != nil {
+		return cr.Spec.Search.Storage
+	}
+	return nil
 }
 
 func (r *ReplsetSpec) GetHorizons(withPorts bool) map[string]map[string]string {
@@ -1088,8 +1133,8 @@ type StorageScalingSpec struct {
 	// When enabled, the operator skips internal autoscaling and resize operations
 	EnableExternalAutoscaling bool `json:"enableExternalAutoscaling,omitempty"`
 
-	// EnableVolumeScaling allows volume expansion/resizing operations
-	// When disabled, PVC sizes will not be modified even if storage changes in the spec
+	// EnableVolumeScaling allows volume expansion operations
+	// When disabled, PVC sizes will not be scaled up even if storage changes in the spec
 	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
 
 	// EnableVolumeShrink allows PVC shrink operations by deleting and recreating PVCs
@@ -1957,6 +2002,7 @@ const (
 	AnnotationResyncPBM                = "percona.com/resync-pbm"
 	AnnotationResyncInProgress         = "percona.com/resync-in-progress"
 	AnnotationPVCResizeInProgress      = "percona.com/pvc-resize-in-progress"
+	AnnotationPVCResizeClaim           = "percona.com/pvc-resize-claim"
 	annotationPreservedRestartedAtBase = "percona.com/preserved-restarted-at"
 )
 
@@ -1970,6 +2016,7 @@ type PVCShrinkState struct {
 	Phase         string   `json:"phase"`
 	ProcessedPods []string `json:"processedPods"`
 	PrimaryPod    string   `json:"primaryPod"`
+	WaitingFor    string   `json:"waitingFor,omitempty"`
 }
 
 func (cr *PerconaServerMongoDB) IsPVCShrinkInProgress() bool {
@@ -2148,6 +2195,15 @@ type LogCollectorSpec struct {
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
+// StorageSpec defines a dedicated PVC for an extra mongod volume.
+type StorageSpec struct {
+	// PersistentVolumeClaim specifies the PVC backing the volume. When set, the
+	// data is written to a dedicated volume instead of the mongod data volume.
+	//
+	// +kubebuilder:validation:XValidation:rule="has(self.resources) && has(self.resources.requests) && 'storage' in self.resources.requests",message="persistentVolumeClaim.resources.requests.storage must be set"
+	PersistentVolumeClaim *PVCSpec `json:"persistentVolumeClaim,omitempty"`
+}
+
 // LogRotateSpec defines the configuration for the logrotate container.
 type LogRotateSpec struct {
 	// Configuration allows overriding the default logrotate configuration.
@@ -2174,6 +2230,55 @@ type LogRotateSpec struct {
 
 func (cr *PerconaServerMongoDB) IsLogCollectorEnabled() bool {
 	return cr.Spec.LogCollector != nil && cr.Spec.LogCollector.Enabled
+}
+
+// Component label values of replset members, aliased in pkg/naming.
+const (
+	ComponentNonVoting = "nonVoting"
+	ComponentHidden    = "hidden"
+	ComponentArbiter   = "arbiter"
+)
+
+// LogPVC returns the PVC spec for mongod logs of the given component, or nil
+// when logs stay on the data volume.
+func (r *ReplsetSpec) LogPVC(cr *PerconaServerMongoDB, component string) *PVCSpec {
+	_, logs := r.componentStorage(component)
+	return logPVC(cr, logs)
+}
+
+// JournalPVC returns the PVC spec for the WiredTiger journal of the given
+// component, or nil when the journal stays on the data volume.
+func (r *ReplsetSpec) JournalPVC(cr *PerconaServerMongoDB, component string) *PVCSpec {
+	journal, _ := r.componentStorage(component)
+	return storagePVC(cr, journal)
+}
+
+// componentStorage returns the journal and log storage of a replset component. The arbiter has none.
+func (r *ReplsetSpec) componentStorage(component string) (journal, logs *StorageSpec) {
+	switch component {
+	case ComponentArbiter:
+		return nil, nil
+	case ComponentNonVoting:
+		return r.NonVoting.JournalStorage, r.NonVoting.LogStorage
+	case ComponentHidden:
+		return r.Hidden.JournalStorage, r.Hidden.LogStorage
+	}
+	return r.JournalStorage, r.LogStorage
+}
+
+// logPVC follows the log collector: with it off nothing collects or rotates the logs.
+func logPVC(cr *PerconaServerMongoDB, storage *StorageSpec) *PVCSpec {
+	if !cr.IsLogCollectorEnabled() {
+		return nil
+	}
+	return storagePVC(cr, storage)
+}
+
+func storagePVC(cr *PerconaServerMongoDB, storage *StorageSpec) *PVCSpec {
+	if cr.CompareVersion("1.24.0") < 0 || storage == nil {
+		return nil
+	}
+	return storage.PersistentVolumeClaim
 }
 
 func (cr *PerconaServerMongoDB) GetAllReplsets() []*ReplsetSpec {

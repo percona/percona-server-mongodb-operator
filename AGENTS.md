@@ -17,9 +17,12 @@ Contribution rules (CLA, Jira, branches, review) are in
 
 - `pkg/`: operator code. `pkg/apis/psmdb/v1` holds the CRD types,
   `pkg/controller/*` the reconcilers.
-- `deploy/`: generated manifests (`crd.yaml`, `rbac.yaml`, `operator.yaml`,
-  bundles) and the example `cr.yaml`. `crVersion` in `deploy/cr.yaml` is the
-  version e2e tests treat as current.
+- `deploy/`: manifests and the example `cr.yaml`. `make generate manifests`
+  generates `crd.yaml`, `bundle.yaml` and `cw-bundle.yaml`, and sets the
+  operator image in `operator.yaml` and `cw-operator.yaml`; `make manifests`
+  alone misses new CRD fields. `rbac.yaml` and `cw-rbac.yaml` are edited by
+  hand; the code has no `+kubebuilder:rbac` markers.
+  `crVersion` in `deploy/cr.yaml` is the version e2e tests treat as current.
 - `pkg/version/version.txt`: the operator version.
 - `e2e-tests/`: end-to-end tests against a real cluster.
 - `installers/olm/`: OLM bundle and catalog tooling.
@@ -42,7 +45,8 @@ These are the checks CI runs on every PR. Run the ones that match your change.
 | Change | Command |
 | ------ | ------- |
 | Go code | `make test` (unit and envtest), golangci-lint |
-| CRD types or RBAC markers | `make generate manifests`, then commit the generated files |
+| CRD types (`pkg/apis/`) | `make generate manifests`, then commit the generated files |
+| RBAC | edit `deploy/rbac.yaml` and `deploy/cw-rbac.yaml`, then `make manifests` to rebuild the bundles |
 | Python under `e2e-tests/` | `make py-fmt` and `make py-check` (ruff and mypy) |
 | Shell scripts | `shellcheck`, and `shfmt -bn -ci -s` (the CI formatter flags) |
 
@@ -52,8 +56,57 @@ These are the checks CI runs on every PR. Run the ones that match your change.
   `K8SPSMDB-1753: Add OLM bundle upgrade e2e test`.
 - Fill in `.github/pull_request_template.md`; say which checklist items do not
   apply instead of deleting them.
+- Write the PR description for a reviewer who has not seen the plan. Problem
+  and Cause take one to three sentences each; Solution is at most five
+  one-line bullets saying what the PR adds or changes, followed by one line on
+  how it was tested. Put run commands, detailed results, what the tests leave
+  out and follow-ups in a collapsed `<details>` block. Acceptance criteria,
+  file lists and design decisions stay in the ticket or a proposal.
+- A PR that only adds or changes tests starts with a table of those tests and
+  what each checks, above the template; Problem, Cause and Solution then stay
+  to a sentence or two each.
 - Never commit credentials. Test secrets come from `e2e-tests/conf/`, and
   `e2e-tests/conf/cloud-secret.yml` is gitignored.
 - Scripts must run on Linux CI and on macOS: GNU make 3.81, bash 3.2 and BSD
   `sed`/`awk` are what a Mac has by default. Test there or avoid GNU-only
   features.
+
+## Skills and guidelines
+
+Skills in `.agents/skills/` follow the [Agent Skills](https://agentskills.io)
+standard; Claude Code finds them through the symlinks in `.claude/skills/`.
+Guidelines in `docs/guidelines/` hold the rules each review skill applies.
+Content for agents lives only in these tool-neutral files and in `AGENTS.md`;
+tool-specific directories only point at them. The rules for maintaining them
+are in [`docs/guidelines/agent-files.md`](docs/guidelines/agent-files.md).
+The review set in `.agents/evals/review-set/` checks the review skills against
+diffs with known defects; rerun it when a guideline or a review skill changes.
+
+| Skill | Use it to |
+| ----- | --------- |
+| `plan` | turn a ticket into acceptance criteria and a plan, or a proposal |
+| `implement` | build the plan, tests first, one reviewable step at a time |
+| `verify` | run the checks, tests and reviews, and report what was verified |
+| `review-architecture` | review a diff against `docs/guidelines/architecture.md` |
+| `review-go-style` | review a diff against `docs/guidelines/go-style.md` |
+| `review-qa` | review tests against `docs/guidelines/qa.md` |
+| `review-pr` | review a PR or branch across architecture, Go style and QA |
+| `test-plan` | write a manual test plan for a change, and list what the tests already cover |
+
+To run a skill in Claude Code, type its name as a command, for example
+`/review-qa` or `/plan K8SPSMDB-1234`. In any other agent, name the file:
+"Follow `.agents/skills/review-qa/SKILL.md` and review this branch against
+`main`." Reviews cost tokens: run them before asking for a human review, not
+after every small commit.
+
+## Commands
+
+- Run without asking: read-only commands (`git status`, `git diff`,
+  `kubectl get`, `kubectl describe`, `kubectl logs`), builds, unit tests,
+  generators and linters from the table above.
+- Confirm with the user first: anything that changes a cluster
+  (`kubectl apply`, `kubectl delete`, `make e2e-test`, `make deploy`), pushing
+  container images, and `git push`. Every push restarts the Jenkins e2e run
+  for the PR, so push in batches.
+- Never: delete resources on a cluster you did not create, force-push a
+  shared branch, or write credentials or kubeconfig files into the repo.

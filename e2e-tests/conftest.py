@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 import yaml
+from lib.allure_support import add_labels, step, write_environment
 from lib.arch import helm_arch_set_args, helm_arch_set_string_args
 from lib.cli import helm_bin, oc_bin
 from lib.kubectl import (
@@ -75,6 +76,10 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     Path(_NAMESPACE_FILE).unlink(missing_ok=True)
 
 
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    write_environment(session.config)
+
+
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption("--test-name", action="store", default=None, help="Bash test name to run")
 
@@ -83,6 +88,7 @@ def pytest_collection_modifyitems(
     session: pytest.Session, config: pytest.Config, items: list[pytest.Item]
 ) -> None:
     """Rename bash wrapper tests to show actual test name."""
+    add_labels(config, items)
     test_name = config.getoption("--test-name")
     if not test_name:
         return
@@ -122,10 +128,21 @@ def _wait_for_nodes_ready() -> None:
         time.sleep(_NODES_READY_INTERVAL)
 
 
+def _setup_plan(config: pytest.Config) -> bool:
+    """True under `pytest --setup-plan`: fixtures are resolved, nothing is executed.
+
+    `make py-setup-plan` runs the suite this way without a cluster to catch a renamed
+    or removed fixture, so no hook may call kubectl in this mode.
+    """
+    return bool(config.getoption("setupplan", False))
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item: pytest.Item) -> None:
     """Print newline after pytest's verbose test name output and gate on node readiness."""
     print()
+    if _setup_plan(item.config):
+        return
     _wait_for_nodes_ready()
 
 
@@ -179,6 +196,9 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
     outcome: Any = yield
     report = outcome.get_result()
 
+    if _setup_plan(item.config):
+        return
+
     # Handle the call phase, and setup failures (where infra fixtures break and
     # there is no call phase). Skip passing setup/teardown to avoid duplicate work.
     if not (report.when == "call" or (report.when == "setup" and report.failed)):
@@ -207,6 +227,14 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
 def setup_env_vars() -> None:
     """Setup environment variables for the test session."""
     init_env()
+
+
+@pytest.fixture(scope="module")
+def no_cert_race_workaround() -> Generator[None]:
+    """Turn off recreate_failed_certificates in tests where certificate issuance is under test."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("CERT_RACE_WORKAROUND", "0")
+        yield
 
 
 def init_env() -> list[str]:
@@ -308,6 +336,7 @@ def _wait_for_project_delete(project: str, timeout: int = 180) -> None:
 
 @pytest.fixture(scope="class")
 def create_namespace() -> Callable[[str], str]:
+    @step("Create namespace {namespace}")
     def _create_namespace(namespace: str) -> str:
         """Create kubernetes namespace and clean up if exists."""
 
@@ -387,6 +416,7 @@ def _delete_namespace_crs(ns: str) -> None:
         _kubectl_quietly("delete", kind, "--all", "-n", ns, "--ignore-not-found", "--wait=false")
 
 
+@step("Clean up the test environment")
 def _cleanup_infra(test_paths: Paths, namespaces: list[str]) -> None:
     """Best-effort teardown: strip finalizers, fire-and-forget deletes, never hang."""
     logger.info("Cleaning up test environment")
@@ -437,6 +467,7 @@ def create_infra(
     global _current_namespace
     created_namespaces: list[str] = []
 
+    @step("Create test infrastructure for {test_name}")
     def _create_infra(test_name: str) -> str:
         """Create the necessary infrastructure for the tests."""
         global _current_namespace
@@ -517,6 +548,7 @@ def _cert_manager_url() -> str:
     return f"https://github.com/cert-manager/cert-manager/releases/download/v{os.environ.get('CERT_MANAGER_VER')}/cert-manager.yaml"
 
 
+@step("Delete cert-manager")
 def _delete_cert_manager() -> None:
     """Remove cert-manager before another test can use its stale API resources."""
     if env_bool("RANCHER"):
@@ -623,6 +655,7 @@ def destroy_cert_manager() -> Callable[[], None]:
 def deploy_cert_manager() -> Generator[Callable[..., None]]:
     """Deploy Cert Manager and clean up after tests."""
 
+    @step("Deploy cert-manager")
     def _deploy(*extra_args: str) -> None:
         if env_bool("RANCHER"):
             logger.info("Rancher cluster detected, skipping cert-manager deployment")
@@ -749,7 +782,8 @@ def deploy_s3_storage() -> Generator[None]:
         )
 
     logger.info(f"Creating S3 bucket: {bucket}")
-    aws_cli_s3(f"s3 mb s3://{bucket}", endpoint)
+    # The S3 gateway starts after the pod is Ready; retry until it accepts connections.
+    retry(lambda: aws_cli_s3(f"s3 mb s3://{bucket}", endpoint), max_attempts=12, delay=10)
 
     yield
 

@@ -5,8 +5,11 @@ import re
 import subprocess
 import time
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
+from .allure_support import mask, step
 from .arch import add_arch_to_manifest, arch, arch_run_overrides
 
 logger = logging.getLogger(__name__)
@@ -17,6 +20,9 @@ TRANSIENT_ERRORS = re.compile(
     r"|etcdserver: request timed out|the server is currently unable to handle the request"
     r"|Unable to connect to the server|connection reset by peer"
 )
+
+# keep in sync with recreate_failed_certificates in e2e-tests/functions
+CERT_KEY_MISMATCH = "CSR not signed by referenced private key"
 
 
 def _read_manifest(source: str) -> str | None:
@@ -84,7 +90,7 @@ def kubectl_bin(
     """Execute kubectl command"""
     arg_list, input_data = _apply_arch_scheduling(list(args), input_data)
     cmd = ["kubectl"] + arg_list
-    logger.debug(" ".join(map(str, cmd)))
+    logger.debug(mask(" ".join(map(str, cmd))))
     for attempt in range(10):
         result = subprocess.run(cmd, capture_output=True, text=True, input=input_data, check=False)
         if result.returncode == 0 or attempt == 9 or not TRANSIENT_ERRORS.search(result.stderr):
@@ -101,7 +107,7 @@ def kubectl_bin(
 
     if check and result.returncode != 0:
         raise subprocess.CalledProcessError(
-            result.returncode, cmd, output=result.stdout, stderr=result.stderr
+            result.returncode, [mask(c) for c in cmd], output=result.stdout, stderr=result.stderr
         )
 
     if result.returncode != 0 and return_stderr and not result.stdout:
@@ -110,11 +116,19 @@ def kubectl_bin(
     return result.stdout
 
 
-def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, timeout: int) -> None:
+def _wait_for(
+    what: str,
+    resource: list[str],
+    jsonpath: str,
+    expected: str,
+    timeout: int,
+    every_10s: Callable[[], None] | None = None,
+) -> None:
     """Poll `kubectl get` until the jsonpath value equals `expected`, else raise TimeoutError."""
     logger.info(f"Waiting for {what} to be ready...")
     deadline = time.time() + timeout
     status = ""
+    attempt = 0
     while time.time() < deadline:
         status = kubectl_bin(
             "get", *resource, "-o", f"jsonpath={jsonpath}", check=False, return_stderr=True
@@ -122,6 +136,9 @@ def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, time
         if status == expected:
             logger.info(f"{what} is ready")
             return
+        attempt += 1
+        if every_10s and attempt % 10 == 0:
+            every_10s()
         time.sleep(1)
 
     raise TimeoutError(
@@ -129,6 +146,34 @@ def _wait_for(what: str, resource: list[str], jsonpath: str, expected: str, time
     )
 
 
+def recreate_failed_certificates() -> None:
+    """Delete Certificates that hit cert-manager's private key race so the operator recreates them.
+
+    cert-manager can generate two private keys for one Certificate ("CSR not signed by
+    referenced private key") and then back off for up to an hour. Tests of certificate
+    issuance set CERT_RACE_WORKAROUND=0 so an operator bug fails them.
+    """
+    if os.environ.get("CERT_RACE_WORKAROUND", "1") == "0":
+        return
+    out = kubectl_bin("get", "certificate", "-o", "json", check=False)
+    if not out.strip():
+        return
+    for cert in json.loads(out).get("items", []):
+        if not any(
+            owner.get("kind") == "PerconaServerMongoDB"
+            and owner.get("apiVersion", "").startswith("psmdb.percona.com/")
+            for owner in cert.get("metadata", {}).get("ownerReferences", [])
+        ):
+            continue
+        for cond in cert.get("status", {}).get("conditions", []):
+            message = cond.get("message", "")
+            if cond["type"] == "Issuing" and CERT_KEY_MISMATCH in message:
+                name = cert["metadata"]["name"]
+                logger.warning(f"Certificate {name} failed to issue, recreating it: {message}")
+                kubectl_bin("delete", "certificate", name, "--ignore-not-found")
+
+
+@step("Wait for pod {pod_name} to be ready")
 def wait_pod(pod_name: str, timeout: int = 360) -> None:
     """Wait for pod to be ready."""
     _wait_for(
@@ -137,9 +182,11 @@ def wait_pod(pod_name: str, timeout: int = 360) -> None:
         "{.status.phase} {.status.conditions[?(@.type=='Ready')].status}",
         "Running True",
         timeout,
+        every_10s=recreate_failed_certificates,
     )
 
 
+@step("Wait for cluster {cluster_name} to be ready")
 def _wait_cluster_ready(cluster_name: str, timeout: int) -> None:
     _wait_for(
         f"cluster {cluster_name}", ["psmdb", cluster_name], "{.status.state}", "ready", timeout
@@ -154,6 +201,7 @@ def _replset_field(cluster_name: str, rs_name: str, path: str) -> str:
     ).strip()
 
 
+@step("Wait for {expected_pods} pods of {cluster_name} to be running")
 def wait_for_running(
     cluster_name: str, expected_pods: int, check_cluster_readyness: bool = True, timeout: int = 600
 ) -> None:
@@ -178,6 +226,83 @@ def wait_for_running(
         _wait_cluster_ready(cluster_name.replace(f"-{rs_name}", ""), timeout)
 
 
+def wait_deployment_ready(name: str, expected_replicas: int, timeout: int = 300) -> None:
+    """Wait for a Deployment to report the expected number of ready replicas."""
+    _wait_for(
+        f"deployment/{name} readyReplicas={expected_replicas}",
+        ["deployment", name],
+        "{.status.readyReplicas}",
+        str(expected_replicas),
+        timeout,
+    )
+
+
+def cr_state(kind: str, name: str) -> str:
+    """Read .status.state of a CR, '' when unavailable."""
+    return kubectl_bin("get", kind, name, "-o", "jsonpath={.status.state}", check=False).strip()
+
+
+def wait_cr_state(
+    kind: str,
+    name: str,
+    expected: str,
+    timeout: int = 600,
+    fail_states: tuple[str, ...] = ("error",),
+) -> None:
+    """Wait for a CR to reach .status.state, failing fast on a terminal state."""
+    logger.info(f"Waiting for {kind}/{name} state={expected}")
+    deadline = time.time() + timeout
+    state = ""
+    while time.time() < deadline:
+        state = cr_state(kind, name)
+        if state == expected:
+            logger.info(f"{kind}/{name} reached state={expected}")
+            return
+        if state in fail_states:
+            error = kubectl_bin(
+                "get", kind, name, "-o", "jsonpath={.status.error}", check=False
+            ).strip()
+            raise AssertionError(f"{kind}/{name} is in state={state}: {error or 'no error set'}")
+        time.sleep(2)
+
+    raise TimeoutError(
+        f"Timeout waiting for {kind}/{name} state={expected}. Last state: {state or 'unknown'}"
+    )
+
+
+def assert_cr_state_stable(kind: str, name: str, expected: str, duration: int = 30) -> None:
+    """Assert a CR stays in .status.state for the whole duration."""
+    logger.info(f"Asserting {kind}/{name} stays in state={expected} for {duration}s")
+    deadline = time.time() + duration
+    while time.time() < deadline:
+        state = cr_state(kind, name)
+        assert state == expected, (
+            f"{kind}/{name} transitioned to state={state or 'unknown'}, expected {expected}"
+        )
+        time.sleep(5)
+
+
+def event_reasons(name: str) -> list[str]:
+    """Reasons of all events recorded for an object."""
+    out = kubectl_bin(
+        "get",
+        "events",
+        "--field-selector",
+        f"involvedObject.name={name}",
+        "-o",
+        "jsonpath={.items[*].reason}",
+        check=False,
+    )
+    return out.split()
+
+
+def resource_exists(kind: str, name: str) -> bool:
+    return bool(
+        kubectl_bin("get", kind, name, "-o", "name", "--ignore-not-found", check=False).strip()
+    )
+
+
+@step("Wait for {resource} to be deleted")
 def wait_for_delete(resource: str, timeout: int = 180) -> None:
     """Wait for a specific resource to be deleted"""
     logger.info(f"Waiting for {resource} to be deleted")
@@ -189,6 +314,29 @@ def wait_for_delete(resource: str, timeout: int = 180) -> None:
     logger.info(f"{resource} was deleted")
 
 
+def wait_certificate(cert_name: str, timeout: int = 600) -> None:
+    """Wait for a cert-manager Certificate to be ready, also while it does not exist yet."""
+    deadline = time.time() + timeout
+    while (remaining := int(deadline - time.time())) > 0:
+        try:
+            kubectl_bin(
+                "wait",
+                "--for=condition=Ready",
+                f"certificate/{cert_name}",
+                f"--timeout={min(60, remaining)}s",
+            )
+            return
+        except subprocess.CalledProcessError:
+            time.sleep(1)
+    conditions = kubectl_bin(
+        "get", f"certificate/{cert_name}", "-o", "jsonpath={.status.conditions}", check=False
+    )
+    raise TimeoutError(
+        f"Certificate {cert_name} not ready within {timeout}s, conditions: {conditions}"
+    )
+
+
+@step("Wait for cluster {cluster_name} to be {target_state}")
 def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 1500) -> None:
     """Wait for psmdb cluster to reach a specific state (e.g. 'ready', 'paused')."""
     _wait_for(
@@ -200,6 +348,7 @@ def wait_for_cluster_state(cluster_name: str, target_state: str, timeout: int = 
     )
 
 
+@step("Wait for cluster {cluster_name} to settle")
 def wait_cluster_consistency(cluster_name: str, timeout: int = 180) -> None:
     """Wait for the PSMDB cluster status to settle back to ready."""
     time.sleep(5)  # give the operator time to leave the "ready" state first
@@ -297,3 +446,20 @@ def detect_arch() -> str:
     )
     unique = {a for a in arches.split() if a}
     return "arm64" if unique == {"arm64"} else ""
+
+
+def schedulable_nodes(nodes: list[dict[str, Any]]) -> list[str]:
+    """Names of the nodes (items of `kubectl get nodes -o json`) that take ordinary pods.
+
+    A node is left out when it is cordoned or has a NoSchedule or NoExecute taint, as
+    control-plane nodes have (node-role.kubernetes.io/master or control-plane).
+    """
+    return [
+        node["metadata"]["name"]
+        for node in nodes
+        if not node.get("spec", {}).get("unschedulable")
+        and not any(
+            taint.get("effect") in ("NoSchedule", "NoExecute")
+            for taint in node.get("spec", {}).get("taints") or []
+        )
+    ]

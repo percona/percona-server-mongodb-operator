@@ -31,6 +31,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/backup"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	psmdbInit "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/init"
 )
 
@@ -63,7 +64,19 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 
 	replsets := cluster.GetAllReplsets()
 
-	if cr.Status.State == psmdbv1.RestoreStateNew {
+	// A restore can leave New for Waiting before it gets here, for example
+	// while it waits for a backup lease, so run the setup until the
+	// statefulsets are changed for the restore.
+	needsSetup := cr.Status.State == psmdbv1.RestoreStateNew
+	if cr.Status.State == psmdbv1.RestoreStateWaiting {
+		prepared, err := r.statefulSetsPreparedForRestore(ctx, cluster)
+		if err != nil {
+			return status, errors.Wrap(err, "check if statefulsets are prepared for physical restore")
+		}
+		needsSetup = !prepared
+	}
+
+	if needsSetup {
 		pod := corev1.Pod{}
 		podName := replsets[0].PodName(cluster, 0)
 		if err := r.client.Get(ctx, types.NamespacedName{Name: podName, Namespace: cluster.Namespace}, &pod); err != nil {
@@ -404,6 +417,11 @@ func (r *ReconcilePerconaServerMongoDBRestore) updateStatefulSetForPhysicalResto
 			sts.Spec.Template.Spec.Containers = append(sts.Spec.Template.Spec.Containers[:pbmIdx], sts.Spec.Template.Spec.Containers[pbmIdx+1:]...)
 		}
 
+		// pbm can't remove mount points inside the dbpath, journal-migration moves the restored journal back
+		sts.Spec.Template.Spec.Containers[0].VolumeMounts = slices.DeleteFunc(sts.Spec.Template.Spec.Containers[0].VolumeMounts, func(m corev1.VolumeMount) bool {
+			return m.Name == config.MongodJournalVolClaimName || m.Name == config.MongodLogVolClaimName
+		})
+
 		sts.Spec.Template.Spec.Volumes = append(sts.Spec.Template.Spec.Volumes, corev1.Volume{
 			Name: "pbm-config",
 			Secret: &corev1.SecretVolumeSource{
@@ -592,6 +610,22 @@ func (r *ReconcilePerconaServerMongoDBRestore) terminateStatefulSetPods(
 	}
 
 	return terminated, nil
+}
+
+// statefulSetsPreparedForRestore reports whether the statefulsets were already changed for the restore.
+// Setup always runs before that change, so the annotation also means setup is done and must not run
+// again: the pods are in restore mode. Checking the first statefulset is enough, since it is changed first.
+func (r *ReconcilePerconaServerMongoDBRestore) statefulSetsPreparedForRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
+	rs := cluster.GetAllReplsets()[0]
+	nn := types.NamespacedName{Namespace: cluster.Namespace, Name: naming.MongodStatefulSetName(cluster, rs)}
+
+	sts := appsv1.StatefulSet{}
+	if err := r.client.Get(ctx, nn, &sts); err != nil {
+		return false, errors.Wrapf(err, "get statefulset %s", nn.Name)
+	}
+
+	_, ok := sts.Annotations[psmdbv1.AnnotationRestoreInProgress]
+	return ok, nil
 }
 
 func (r *ReconcilePerconaServerMongoDBRestore) prepareStatefulSetsForPhysicalRestore(ctx context.Context, cluster *psmdbv1.PerconaServerMongoDB) (bool, error) {
@@ -1096,11 +1130,13 @@ func isTransientNetworkError(err error) bool {
 
 // isContainerUnavailableError reports exec failures caused by the target
 // container not running, e.g. while pods restart at the end of a restore.
+// Exit code 137 means the exec was killed because the container stopped while it ran.
 func isContainerUnavailableError(err error) bool {
 	for _, s := range []string{
 		"container is not created or running",
 		"container not found",
 		"cannot exec in a stopped container",
+		"command terminated with exit code 137",
 	} {
 		if strings.Contains(err.Error(), s) {
 			return true

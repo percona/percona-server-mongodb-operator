@@ -3,6 +3,7 @@ package perconaservermongodb
 import (
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/percona/percona-backup-mongodb/pbm/config"
 	"github.com/percona/percona-backup-mongodb/pbm/storage"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/azure"
@@ -10,10 +11,17 @@ import (
 	"github.com/percona/percona-backup-mongodb/pbm/storage/gcs"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/mio"
 	"github.com/percona/percona-backup-mongodb/pbm/storage/s3"
-	"github.com/percona/percona-server-mongodb-operator/pkg/version"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
 func TestIsResyncNeeded(t *testing.T) {
@@ -751,4 +759,119 @@ func TestHashPBMConfiguration(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEqual(t, hash1, hash2)
 	})
+}
+
+// recordingLogSink records every log call so that tests can assert on the level.
+type recordingLogSink struct {
+	infos  []recordedLog
+	errors []recordedLog
+}
+
+type recordedLog struct {
+	level int
+	msg   string
+}
+
+func (s *recordingLogSink) Init(logr.RuntimeInfo) {}
+
+func (s *recordingLogSink) Enabled(int) bool { return true }
+
+func (s *recordingLogSink) Info(level int, msg string, _ ...any) {
+	s.infos = append(s.infos, recordedLog{level: level, msg: msg})
+}
+
+func (s *recordingLogSink) Error(_ error, msg string, _ ...any) {
+	s.errors = append(s.errors, recordedLog{msg: msg})
+}
+
+func (s *recordingLogSink) WithValues(...any) logr.LogSink { return s }
+
+func (s *recordingLogSink) WithName(string) logr.LogSink { return s }
+
+func TestReconcileBackupVersionNoReadyPods(t *testing.T) {
+	const (
+		ns     = "test-ns"
+		crName = "some-name"
+		rsName = "rs0"
+	)
+
+	newCR := func() *psmdbv1.PerconaServerMongoDB {
+		return &psmdbv1.PerconaServerMongoDB{
+			Name: crName, Namespace: ns,
+			Spec: psmdbv1.PerconaServerMongoDBSpec{
+				Backup: psmdbv1.BackupSpec{
+					Enabled: true,
+					Image:   "percona/percona-backup-mongodb:latest",
+				},
+				Replsets: []*psmdbv1.ReplsetSpec{{Name: rsName, Size: 3}},
+			},
+			Status: psmdbv1.PerconaServerMongoDBStatus{Ready: 1},
+		}
+	}
+
+	tests := map[string]struct {
+		pods func(cr *psmdbv1.PerconaServerMongoDB) []client.Object
+	}{
+		"no pods": {
+			pods: func(*psmdbv1.PerconaServerMongoDB) []client.Object { return nil },
+		},
+		"pod is not ready": {
+			pods: func(cr *psmdbv1.PerconaServerMongoDB) []client.Object {
+				return []client.Object{&corev1.Pod{
+					Name:      crName + "-" + rsName + "-0",
+					Namespace: ns,
+					Labels:    naming.RSLabels(cr, cr.Spec.Replsets[0]),
+					Status:    corev1.PodStatus{Phase: corev1.PodPending},
+				}}
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := newCR()
+			sts := psmdb.NewStatefulSet(naming.MongodStatefulSetName(cr, cr.Spec.Replsets[0]), ns)
+
+			r := buildFakeClient(append(tt.pods(cr), cr, sts)...)
+
+			sink := new(recordingLogSink)
+			ctx := logf.IntoContext(t.Context(), logr.New(sink))
+
+			require.NoError(t, r.reconcileBackupVersion(ctx, cr))
+
+			assert.Empty(t, sink.errors, "a missing backup agent is not an error")
+			assert.Equal(t, []recordedLog{{level: 1, msg: "no ready pods to get pbm-agent version"}}, sink.infos)
+			assert.Empty(t, cr.Status.BackupVersion)
+		})
+	}
+}
+
+func TestResyncPBMIfNeededStaleCR(t *testing.T) {
+	t.Parallel()
+
+	existing := &psmdbv1.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+	existing.Annotations = map[string]string{psmdbv1.AnnotationResyncPBM: "true"}
+	existing.Spec.Backup.Enabled = true
+	existing.Spec.Replsets = []*psmdbv1.ReplsetSpec{{Name: "rs0", Size: 3}}
+	r := fakeReconciler(t, existing)
+	ctx := t.Context()
+
+	stale := &psmdbv1.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+	stale.Status.State = psmdbv1.AppStateReady
+	current := stale.DeepCopy()
+	current.Spec.Image = "new-image"
+	require.NoError(t, r.client.Update(ctx, current))
+
+	err := r.resyncPBMIfNeeded(ctx, stale)
+	require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+	assert.Equal(t, map[string]string{psmdbv1.AnnotationResyncPBM: "true"}, stale.Annotations)
+
+	stored := &psmdbv1.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stored))
+	assert.Equal(t, map[string]string{psmdbv1.AnnotationResyncPBM: "true"}, stored.Annotations)
+
+	l := r.lockers.LoadOrCreate(stale.NamespacedName().String())
+	require.True(t, l.resyncMutex.TryLock(), "resync lock must be released after a failed patch")
+	l.resyncMutex.Unlock()
 }
