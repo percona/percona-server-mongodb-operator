@@ -207,14 +207,14 @@ test_backup_deletion() {
 	local incremental_base_dest=$(get_backup_dest "${BACKUP_NAME_LOCAL_S3}-incremental-base")
 	local logical_dest=$(get_backup_dest "${BACKUP_NAME_LOCAL_S3}-logical")
 
-	kubectl_bin delete psmdb-backup "${BACKUP_NAME_LOCAL_S3}-incremental-base" --wait=false
-	wait_for_delete "psmdb-backup/${BACKUP_NAME_LOCAL_S3}-incremental-base" 180
-	check_backup_deletion_gcs "$incremental_base_dest"
-
-	# base backup can only be deleted if PiTR is disabled
+	# PBM refuses to delete a backup that is the base for PiTR while PiTR is enabled
 	log "disabling PiTR on ${cluster}"
 	kubectl_bin patch psmdb "${cluster}" --type='merge' \
 		--patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
+
+	kubectl_bin delete psmdb-backup "${BACKUP_NAME_LOCAL_S3}-incremental-base" --wait=false
+	wait_for_delete "psmdb-backup/${BACKUP_NAME_LOCAL_S3}-incremental-base" 180
+	check_backup_deletion_gcs "$incremental_base_dest"
 
 	kubectl_bin delete psmdb-backup "${BACKUP_NAME_LOCAL_S3}-logical" --wait=false
 	wait_for_delete "psmdb-backup/${BACKUP_NAME_LOCAL_S3}-logical" 180
