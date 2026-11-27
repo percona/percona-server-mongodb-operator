@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
@@ -30,6 +29,7 @@ import (
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -45,6 +45,8 @@ func TestApplyObservedStatus(t *testing.T) {
 		wantStartedAtSet       bool
 		wantStartedAtUnchanged bool
 		wantConditions         map[string]metav1.ConditionStatus
+		wantRunningReason      string
+		wantInitialSync        *psmdbv1.ClusterSyncInitialSync
 	}{
 		"idle does not set startedAt": {
 			observed:       client.Status{State: "idle"},
@@ -107,6 +109,76 @@ func TestApplyObservedStatus(t *testing.T) {
 			wantStartedAtUnchanged: true,
 			wantConditions:         map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
 		},
+		"running clone copies initialSync progress": {
+			observed: client.Status{State: "running", InitialSync: &client.InitialSync{
+				EstimatedCloneSizeBytes: 100,
+				ClonedSizeBytes:         40,
+			}},
+			wantState:        psmdbv1.ClusterSyncStateRunning,
+			wantStartedAtSet: true,
+			wantInitialSync:  &psmdbv1.ClusterSyncInitialSync{EstimatedCloneSizeBytes: 100, ClonedSizeBytes: 40},
+			wantConditions:   map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionTrue},
+		},
+		"failed clone after start sets Running reason InitialSyncFailed": {
+			initial: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+				StartedAt: &metav1.Time{Time: time.Now().Add(-time.Minute)},
+			},
+			observed: client.Status{
+				State:       "failed",
+				Error:       "initial clone interrupted by failover and is not resumable",
+				InitialSync: &client.InitialSync{ClonedSizeBytes: 47992004},
+			},
+			wantState:              psmdbv1.ClusterSyncStateFailed,
+			wantError:              "initial clone interrupted by failover and is not resumable",
+			wantStartedAtUnchanged: true,
+			wantInitialSync:        &psmdbv1.ClusterSyncInitialSync{ClonedSizeBytes: 47992004},
+			wantConditions:         map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
+			wantRunningReason:      "InitialSyncFailed",
+		},
+		"failed replication after completed initial sync is not InitialSyncFailed": {
+			initial: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+				StartedAt: &metav1.Time{Time: time.Now().Add(-time.Minute)},
+			},
+			observed: client.Status{
+				State:       "failed",
+				Error:       "source unreachable",
+				InitialSync: &client.InitialSync{Completed: true},
+			},
+			wantState:              psmdbv1.ClusterSyncStateFailed,
+			wantError:              "source unreachable",
+			wantStartedAtUnchanged: true,
+			wantInitialSync:        &psmdbv1.ClusterSyncInitialSync{Completed: true},
+			wantConditions:         map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
+			wantRunningReason:      "PCSMNotRunning",
+		},
+		"pcsm without initialSync clears stale progress": {
+			initial: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+				StartedAt:   &metav1.Time{Time: time.Now().Add(-time.Minute)},
+				InitialSync: &psmdbv1.ClusterSyncInitialSync{ClonedSizeBytes: 1},
+			},
+			observed:               client.Status{State: "failed", Error: "source unreachable"},
+			wantState:              psmdbv1.ClusterSyncStateFailed,
+			wantError:              "source unreachable",
+			wantStartedAtUnchanged: true,
+			wantConditions:         map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionFalse},
+			wantRunningReason:      "PCSMNotRunning",
+		},
+		"InitialSyncFailed reason is replaced once pcsm runs again": {
+			initial: psmdbv1.PerconaServerMongoDBClusterSyncStatus{
+				StartedAt: &metav1.Time{Time: time.Now().Add(-time.Minute)},
+				Conditions: []metav1.Condition{{
+					Type:   psmdbv1.ConditionClusterSyncRunning,
+					Status: metav1.ConditionFalse,
+					Reason: "InitialSyncFailed",
+				}},
+			},
+			observed:               client.Status{State: "running", InitialSync: &client.InitialSync{ClonedSizeBytes: 5}},
+			wantState:              psmdbv1.ClusterSyncStateRunning,
+			wantStartedAtUnchanged: true,
+			wantInitialSync:        &psmdbv1.ClusterSyncInitialSync{ClonedSizeBytes: 5},
+			wantConditions:         map[string]metav1.ConditionStatus{psmdbv1.ConditionClusterSyncRunning: metav1.ConditionTrue},
+			wantRunningReason:      "PCSMRunning",
+		},
 	}
 
 	for name, tc := range tests {
@@ -120,6 +192,12 @@ func TestApplyObservedStatus(t *testing.T) {
 			assert.Equal(t, tc.wantState, s.State)
 			assert.Equal(t, tc.wantLag, s.LagTimeSeconds)
 			assert.Equal(t, tc.wantError, s.Error)
+			assert.Equal(t, tc.wantInitialSync, s.InitialSync)
+			if tc.wantRunningReason != "" {
+				running := meta.FindStatusCondition(s.Conditions, psmdbv1.ConditionClusterSyncRunning)
+				require.NotNil(t, running)
+				assert.Equal(t, tc.wantRunningReason, running.Reason)
+			}
 
 			switch {
 			case tc.wantStartedAtUnchanged:
@@ -470,6 +548,201 @@ func TestReconcileMode(t *testing.T) {
 	}
 }
 
+func TestReconcileModeFailedState(t *testing.T) {
+	t.Parallel()
+
+	started := &metav1.Time{Time: time.Now().Add(-time.Hour)}
+	cloneFailed := client.Status{
+		State:       "failed",
+		Error:       "initial clone interrupted by failover and is not resumable",
+		InitialSync: &client.InitialSync{ClonedSizeBytes: 47992004},
+	}
+	replicationFailed := client.Status{
+		State:       "failed",
+		Error:       "source unreachable",
+		InitialSync: &client.InitialSync{Completed: true},
+	}
+	legacyFailed := client.Status{State: "failed", Error: "source unreachable"}
+
+	type calls struct {
+		start             bool
+		pause, finalize   int
+		resumeFromFailure *bool
+	}
+	fromFailure := true
+
+	tests := map[string]struct {
+		specMode      psmdbv1.ClusterSyncMode
+		status        psmdbv1.PerconaServerMongoDBClusterSyncStatus
+		observed      client.Status
+		wantCalls     calls
+		wantMode      psmdbv1.ClusterSyncMode
+		wantCondition bool
+	}{
+		"clone failure sends nothing and reports InitialSyncFailed": {
+			specMode:      psmdbv1.ClusterSyncModeRunning,
+			status:        psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, StartedAt: started},
+			observed:      cloneFailed,
+			wantMode:      psmdbv1.ClusterSyncModeRunning,
+			wantCondition: true,
+		},
+		"replication failure resumes from failure": {
+			specMode:  psmdbv1.ClusterSyncModeRunning,
+			status:    psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, StartedAt: started},
+			observed:  replicationFailed,
+			wantCalls: calls{resumeFromFailure: &fromFailure},
+			wantMode:  psmdbv1.ClusterSyncModeRunning,
+		},
+		"failure on pcsm without initialSync resumes from failure": {
+			specMode:  psmdbv1.ClusterSyncModeRunning,
+			status:    psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, StartedAt: started},
+			observed:  legacyFailed,
+			wantCalls: calls{resumeFromFailure: &fromFailure},
+			wantMode:  psmdbv1.ClusterSyncModeRunning,
+		},
+		"pause on clone failure mirrors without calling pcsm": {
+			specMode:      psmdbv1.ClusterSyncModePaused,
+			status:        psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, StartedAt: started},
+			observed:      cloneFailed,
+			wantMode:      psmdbv1.ClusterSyncModePaused,
+			wantCondition: true,
+		},
+		"pause on pcsm without initialSync mirrors without calling pcsm": {
+			specMode: psmdbv1.ClusterSyncModePaused,
+			status:   psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, StartedAt: started},
+			observed: legacyFailed,
+			wantMode: psmdbv1.ClusterSyncModePaused,
+		},
+		"finalize on clone failure is not sent and not mirrored": {
+			specMode:      psmdbv1.ClusterSyncModeFinalized,
+			status:        psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning, StartedAt: started},
+			observed:      cloneFailed,
+			wantMode:      psmdbv1.ClusterSyncModeRunning,
+			wantCondition: true,
+		},
+		"recreated CR on a failed checkpoint starts a new run": {
+			specMode:  psmdbv1.ClusterSyncModeRunning,
+			observed:  cloneFailed,
+			wantCalls: calls{start: true},
+			wantMode:  psmdbv1.ClusterSyncModeRunning,
+		},
+		"pause on failure without startedAt mirrors without calling pcsm": {
+			specMode: psmdbv1.ClusterSyncModePaused,
+			status:   psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning},
+			observed: cloneFailed,
+			wantMode: psmdbv1.ClusterSyncModePaused,
+		},
+		"finalize on failure without startedAt is not sent and not mirrored": {
+			specMode: psmdbv1.ClusterSyncModeFinalized,
+			status:   psmdbv1.PerconaServerMongoDBClusterSyncStatus{Mode: psmdbv1.ClusterSyncModeRunning},
+			observed: cloneFailed,
+			wantMode: psmdbv1.ClusterSyncModeRunning,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+				Name: "sync", Namespace: "ns", UID: "u",
+				Spec:   psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: "tgt", Mode: tc.specMode},
+				Status: tc.status,
+			}
+			cl := fake.NewClientBuilder().
+				WithScheme(clusterSyncScheme(t)).
+				WithStatusSubresource(cr).
+				WithObjects(cr).
+				Build()
+			rec := events.NewFakeRecorder(4)
+			r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+			f := &fakePCSM{statusResp: tc.observed}
+
+			require.NoError(t, r.reconcileMode(t.Context(), cr, f, 1))
+
+			assert.Equal(t, tc.wantCalls.start, f.started != nil, "start called")
+			assert.Equal(t, tc.wantCalls.pause, f.paused, "pause calls")
+			assert.Equal(t, tc.wantCalls.finalize, f.finalized, "finalize calls")
+			assert.Equal(t, tc.wantCalls.resumeFromFailure, f.resumed, "resume calls")
+
+			got := &psmdbv1.PerconaServerMongoDBClusterSync{}
+			require.NoError(t, cl.Get(t.Context(), k8sclient.ObjectKeyFromObject(cr), got))
+			assert.Equal(t, tc.wantMode, got.Status.Mode)
+			running := meta.FindStatusCondition(got.Status.Conditions, psmdbv1.ConditionClusterSyncRunning)
+			require.NotNil(t, running)
+			assert.Equal(t, tc.wantCondition, running.Reason == "InitialSyncFailed", "Running reason %s", running.Reason)
+			assert.Equal(t, tc.wantCondition, hasEvent(rec, "InitialSyncFailed"), "InitialSyncFailed event")
+		})
+	}
+}
+
+// A clone can fail before any poll observes running; the successful /start
+// alone must mark the run as started.
+func TestReconcileModeStartThenFailed(t *testing.T) {
+	t.Parallel()
+
+	cr := &psmdbv1.PerconaServerMongoDBClusterSync{
+		Name: "sync", Namespace: "ns", UID: "u",
+		Spec: psmdbv1.PerconaServerMongoDBClusterSyncSpec{ClusterName: "tgt", Mode: psmdbv1.ClusterSyncModeRunning},
+	}
+	cl := fake.NewClientBuilder().
+		WithScheme(clusterSyncScheme(t)).
+		WithStatusSubresource(cr).
+		WithObjects(cr).
+		Build()
+	rec := events.NewFakeRecorder(4)
+	r := &ReconcilePerconaServerMongoDBClusterSync{client: cl, recorder: rec}
+
+	pass := func(f *fakePCSM) *psmdbv1.PerconaServerMongoDBClusterSync {
+		stored := &psmdbv1.PerconaServerMongoDBClusterSync{}
+		require.NoError(t, cl.Get(t.Context(), k8sclient.ObjectKeyFromObject(cr), stored))
+		require.NoError(t, r.reconcileMode(t.Context(), stored, f, 1))
+		require.NoError(t, cl.Get(t.Context(), k8sclient.ObjectKeyFromObject(cr), stored))
+		return stored
+	}
+
+	f := &fakePCSM{statusResp: client.Status{State: "idle"}}
+	got := pass(f)
+	require.NotNil(t, f.started, "expected /start")
+	require.NotNil(t, got.Status.StartedAt, "a successful /start must set startedAt")
+
+	f = &fakePCSM{statusResp: client.Status{
+		State:       "failed",
+		Error:       "initial clone interrupted by failover and is not resumable",
+		InitialSync: &client.InitialSync{ClonedSizeBytes: 1},
+	}}
+	got = pass(f)
+	assert.Nil(t, f.resumed, "a failed clone must not be resumed")
+	running := meta.FindStatusCondition(got.Status.Conditions, psmdbv1.ConditionClusterSyncRunning)
+	require.NotNil(t, running)
+	assert.Equal(t, "InitialSyncFailed", running.Reason)
+	assert.True(t, hasEvent(rec, "InitialSyncFailed"))
+}
+
+func hasEvent(rec *events.FakeRecorder, reason string) bool {
+	for {
+		select {
+		case e := <-rec.Events:
+			if strings.Contains(e, reason) {
+				return true
+			}
+		default:
+			return false
+		}
+	}
+}
+
+// TestReadyReplicas pins the readiness gate for an HA group.
+//
+// The pre-HA gate required every replica to be Ready before the operator
+// would talk to PCSM at all. Under HA that is actively harmful: with three
+// instances, one standby stuck Pending or crash-looping would freeze mode
+// transitions and status updates for a group that is replicating
+// perfectly through its active instance. One Ready instance is enough to
+// drive PCSM, so the gate drops to "at least one" and the shortfall is
+// reported in status.readyReplicas instead of blocking.
+//
+// The observedGeneration check stays: a deployment whose controller has
+// not yet seen the latest spec reports replica counts for the *previous*
+// spec, and acting on those would race the rollout.
 func TestReadyReplicas(t *testing.T) {
 	cr := &psmdbv1.PerconaServerMongoDBClusterSync{Name: "sync", Namespace: "ns"}
 

@@ -1479,6 +1479,17 @@ spec:
                 type: array
               error:
                 type: string
+              initialSync:
+                properties:
+                  clonedSizeBytes:
+                    format: int64
+                    type: integer
+                  completed:
+                    type: boolean
+                  estimatedCloneSizeBytes:
+                    format: int64
+                    type: integer
+                type: object
               lagTimeSeconds:
                 format: int64
                 type: integer

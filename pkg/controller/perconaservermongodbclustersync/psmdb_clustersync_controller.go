@@ -8,7 +8,6 @@ import (
 	"slices"
 	"time"
 
-	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/pkg/errors"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +32,7 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/k8s"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync"
+	clustersyncclient "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/clustersync/client"
 	"github.com/percona/percona-server-mongodb-operator/pkg/util"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
@@ -511,7 +511,15 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 		applyObservedStatus(newStatus, observed, cr.Generation)
 	}
 
-	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil)
+	syncFailed := initialSyncFailed(newStatus)
+	if syncFailed && !initialSyncFailed(&cr.Status) {
+		log.Info("PCSM initial sync failed and cannot be resumed, recreate the ClusterSync to start over",
+			"error", newStatus.Error)
+		r.recorder.Eventf(cr, nil, corev1.EventTypeWarning, "InitialSyncFailed", "InitialSync",
+			"PCSM initial sync failed and cannot be resumed, recreate the ClusterSync to start over: %s", newStatus.Error)
+	}
+
+	action, mirror := nextAction(newStatus.Mode, cr.Spec.Mode, newStatus.State, newStatus.StartedAt != nil, syncFailed)
 	if action != actionNone {
 		if skipAction(action, newStatus.State) {
 			log.Info("PCSM already in matching state, skipping transition",
@@ -558,6 +566,11 @@ func (r *ReconcilePerconaServerMongoDBClusterSync) reconcileMode(ctx context.Con
 				return r.writeStatus(ctx, cr, *newStatus)
 			}
 			r.recordActiveInstance(cr, newStatus, pcsm.ActiveInstance())
+			// A clone can fail before any poll sees running.
+			if action == actionStart {
+				now := metav1.Now()
+				newStatus.StartedAt = &now
+			}
 			log.Info("PCSM transition applied", "from", newStatus.Mode, "to", cr.Spec.Mode, "action", action)
 		}
 	}
@@ -605,6 +618,15 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 	s.LagTimeSeconds = observed.LagTimeSeconds
 	s.Error = observed.Error
 
+	s.InitialSync = nil
+	if is := observed.InitialSync; is != nil {
+		s.InitialSync = &psmdbv1.ClusterSyncInitialSync{
+			Completed:               is.Completed,
+			ClonedSizeBytes:         is.ClonedSizeBytes,
+			EstimatedCloneSizeBytes: is.EstimatedCloneSizeBytes,
+		}
+	}
+
 	if s.StartedAt == nil && s.State == psmdbv1.ClusterSyncStateRunning {
 		now := metav1.Now()
 		s.StartedAt = &now
@@ -613,10 +635,14 @@ func applyObservedStatus(s *psmdbv1.PerconaServerMongoDBClusterSyncStatus, obser
 	runningStatus := metav1.ConditionFalse
 	runningReason := "PCSMNotRunning"
 	runningMsg := fmt.Sprintf("PCSM state: %s", s.State)
-	if s.State == psmdbv1.ClusterSyncStateRunning {
+	switch {
+	case s.State == psmdbv1.ClusterSyncStateRunning:
 		runningStatus = metav1.ConditionTrue
 		runningReason = "PCSMRunning"
 		runningMsg = "PCSM is replicating from source to target"
+	case initialSyncFailed(s):
+		runningReason = "InitialSyncFailed"
+		runningMsg = "PCSM initial sync failed and cannot be resumed; delete and recreate the ClusterSync to start a new sync"
 	}
 	meta.SetStatusCondition(&s.Conditions, metav1.Condition{
 		Type:               psmdbv1.ConditionClusterSyncRunning,

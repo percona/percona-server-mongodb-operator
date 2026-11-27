@@ -203,6 +203,36 @@ func TestClient_Status(t *testing.T) {
 			stub: stubExec{stdout: []byte(`{"state":"failed","error":"source unreachable"}`)},
 			want: Status{State: "failed", Error: "source unreachable"},
 		},
+		"initial sync in progress decodes initialSync": {
+			stub: stubExec{stdout: []byte(`{"state":"running","initialSync":{"estimatedCloneSizeBytes":5028500000,"clonedSizeBytes":47992004,"completed":false,"cloneCompleted":false}}`)},
+			want: Status{State: "running", InitialSync: &InitialSync{
+				EstimatedCloneSizeBytes: 5028500000,
+				ClonedSizeBytes:         47992004,
+			}},
+		},
+		"initial sync completed decodes initialSync": {
+			stub: stubExec{stdout: []byte(`{"state":"running","initialSync":{"estimatedCloneSizeBytes":10,"clonedSizeBytes":10,"completed":true,"cloneCompleted":true}}`)},
+			want: Status{State: "running", InitialSync: &InitialSync{
+				EstimatedCloneSizeBytes: 10,
+				ClonedSizeBytes:         10,
+				Completed:               true,
+			}},
+		},
+		"failed clone with non-zero exit keeps initialSync": {
+			stub: stubExec{
+				stdout: []byte(`{"ok":false,"state":"failed","error":"initial clone interrupted by failover and is not resumable","initialSync":{"clonedSizeBytes":47992004,"completed":false}}`),
+				err:    stderrors.New("exit status 1"),
+			},
+			want: Status{
+				State:       "failed",
+				Error:       "initial clone interrupted by failover and is not resumable",
+				InitialSync: &InitialSync{ClonedSizeBytes: 47992004},
+			},
+		},
+		"older pcsm without initialSync decodes to nil": {
+			stub: stubExec{stdout: []byte(`{"state":"failed","error":"source unreachable"}`)},
+			want: Status{State: "failed", Error: "source unreachable", InitialSync: nil},
+		},
 		"failed with non-zero exit still returns parsed status": {
 			stub: stubExec{
 				stdout: []byte(`{"state":"failed","error":"connection refused"}`),
