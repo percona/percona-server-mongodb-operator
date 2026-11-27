@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	fakePodexec "github.com/percona/percona-server-mongodb-operator/pkg/k8s/podexec/fake"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
@@ -965,8 +966,8 @@ func TestReconcileStorageAutoscalingComponents(t *testing.T) {
 
 			var execContainer string
 			var execCommand []string
-			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+			r.clientcmd = &fakePodexec.Client{
+				ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execContainer = containerName
 					execCommand = command
 					_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
@@ -1081,8 +1082,8 @@ func TestResizeMongosPVCsWithoutLogPVC(t *testing.T) {
 			r := buildFakeClient(tt.cr)
 
 			execCalls := 0
-			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+			r.clientcmd = &fakePodexec.Client{
+				ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execCalls++
 					return nil
 				},
@@ -1155,8 +1156,8 @@ func TestReconcileStorageAutoscalingNoPVCs(t *testing.T) {
 			r := buildFakeClient(cr.DeepCopy(), sts)
 
 			execCalls := 0
-			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+			r.clientcmd = &fakePodexec.Client{
+				ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execCalls++
 					return nil
 				},
@@ -1242,9 +1243,9 @@ func fullPVCAndPod(
 	return pvc, pod
 }
 
-func fullDiskExec() *mockClientCmd {
-	return &mockClientCmd{
-		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+func fullDiskExec() *fakePodexec.Client {
+	return &fakePodexec.Client{
+		ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
 /dev/sdb       10737418240 9663676416  1073741824  90% /data/db`))
 			return nil
@@ -1419,8 +1420,8 @@ func TestSearchAutoscalingResizesOnlyTargetShard(t *testing.T) {
 				objects = append(objects, sts, pod, pvc)
 			}
 			r := buildFakeClient(append(objects, cr)...)
-			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+			r.clientcmd = &fakePodexec.Client{
+				ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					used := "1073741824"
 					if pod.Labels[naming.LabelKubernetesReplset] == target.Name && !tt.belowThreshold {
 						used = "9663676416"
@@ -1588,8 +1589,8 @@ func TestResizeMongosPVCsAutoscalesLogVolume(t *testing.T) {
 
 	var execContainer string
 	var execCommand []string
-	r.clientcmd = &mockClientCmd{
-		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	r.clientcmd = &fakePodexec.Client{
+		ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			execContainer = containerName
 			execCommand = command
 			_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
@@ -1658,8 +1659,8 @@ func TestReconcileStorageAutoscalingVolumeNotMounted(t *testing.T) {
 			r := buildFakeClient(cr.DeepCopy(), sts, pvc.DeepCopy(), pod.DeepCopy())
 
 			execCalls := 0
-			r.clientcmd = &mockClientCmd{
-				execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+			r.clientcmd = &fakePodexec.Client{
+				ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 					execCalls++
 					return nil
 				},
@@ -1731,8 +1732,8 @@ func TestReconcileStorageAutoscalingPicksOwningContainer(t *testing.T) {
 
 	var execContainer string
 	var execCommand []string
-	r.clientcmd = &mockClientCmd{
-		execFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
+	r.clientcmd = &fakePodexec.Client{
+		ExecFunc: func(ctx context.Context, pod *corev1.Pod, containerName string, command []string, stdin io.Reader, stdout, stderr io.Writer) error {
 			execContainer = containerName
 			execCommand = command
 			_, _ = stdout.Write([]byte(`Filesystem       1B-blocks       Used   Available Use% Mounted on
@@ -1753,8 +1754,8 @@ func TestCheckAndResizePVCSkipsTerminatingPod(t *testing.T) {
 	t.Parallel()
 
 	r := buildFakeClient()
-	r.clientcmd = &mockClientCmd{
-		execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+	r.clientcmd = &fakePodexec.Client{
+		ExecFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer) error {
 			t.Fatal("df must not run in a terminating pod")
 			return nil
 		},
@@ -1783,8 +1784,8 @@ func TestCheckAndResizePVCSkipsUnmountedPVC(t *testing.T) {
 	t.Parallel()
 
 	r := buildFakeClient()
-	r.clientcmd = &mockClientCmd{
-		execFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer, bool) error {
+	r.clientcmd = &fakePodexec.Client{
+		ExecFunc: func(context.Context, *corev1.Pod, string, []string, io.Reader, io.Writer, io.Writer) error {
 			t.Fatal("df would measure the data volume of a pod that does not mount the log PVC")
 			return nil
 		},
