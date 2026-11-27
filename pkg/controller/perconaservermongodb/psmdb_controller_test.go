@@ -627,7 +627,8 @@ func TestHandleShardingToggleConditionNotInCache(t *testing.T) {
 
 	t.Run("condition appears in cache", func(t *testing.T) {
 		r := staleCache(2)
-		c := cr.DeepCopy()
+		c := new(psmdbv1.PerconaServerMongoDB)
+		require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(cr), c))
 		require.NoError(t, r.handleShardingToggle(ctx, c))
 		assert.False(t, c.Spec.Pause)
 		assert.True(t, c.Spec.Sharding.Enabled)
@@ -638,7 +639,10 @@ func TestHandleShardingToggleConditionNotInCache(t *testing.T) {
 	})
 
 	t.Run("condition never appears in cache", func(t *testing.T) {
-		err := staleCache(100).handleShardingToggle(ctx, cr.DeepCopy())
+		r := staleCache(100)
+		c := new(psmdbv1.PerconaServerMongoDB)
+		require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(cr), c))
+		err := r.handleShardingToggle(ctx, c)
 		require.ErrorIs(t, err, errShardingConditionNotInCache)
 	})
 }

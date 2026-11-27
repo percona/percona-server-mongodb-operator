@@ -210,6 +210,24 @@ func TestCollectStorageCABundles(t *testing.T) {
 	}
 }
 
+func TestPersistentVolumeClaimDoesNotSetMutableMetadata(t *testing.T) {
+	spec := &api.VolumeSpec{
+		PersistentVolumeClaim: api.PVCSpec{
+			Labels: map[string]string{
+				"example.com/storage": "fast",
+			},
+			Annotations: map[string]string{
+				"example.com/retention": "retain",
+			},
+		},
+	}
+
+	pvc := PersistentVolumeClaim("mongod-data-cluster-rs0-0", "mongodb", spec)
+
+	assert.Empty(t, pvc.Labels)
+	assert.Empty(t, pvc.Annotations)
+}
+
 func TestGetCAVolumeMounts(t *testing.T) {
 	t.Parallel()
 
@@ -1643,10 +1661,12 @@ func TestStatefulSpecBackupAgent(t *testing.T) {
 	}
 
 	tests := map[string]struct {
-		setup         func(cr *api.PerconaServerMongoDB)
-		wantAgent     bool
-		wantVolumes   []string
-		wantNoVolumes []string
+		platform         version.Platform
+		setup            func(cr *api.PerconaServerMongoDB)
+		wantAgent        bool
+		wantVolumes      []string
+		wantNoVolumes    []string
+		wantAgentContext *corev1.SecurityContext
 	}{
 		"backup disabled": {
 			setup:         func(cr *api.PerconaServerMongoDB) { cr.Spec.Backup.Enabled = false },
@@ -1687,6 +1707,15 @@ func TestStatefulSpecBackupAgent(t *testing.T) {
 			wantAgent:   true,
 			wantVolumes: []string{nfs.Name},
 		},
+		"kubernetes security context defaults": {
+			wantAgent:        true,
+			wantAgentContext: &corev1.SecurityContext{RunAsNonRoot: new(true), RunAsUser: new(int64(1001))},
+		},
+		"openshift security context defaults": {
+			platform:         version.PlatformOpenshift,
+			wantAgent:        true,
+			wantAgentContext: &corev1.SecurityContext{RunAsNonRoot: new(true)},
+		},
 	}
 
 	for name, tt := range tests {
@@ -1700,7 +1729,7 @@ func TestStatefulSpecBackupAgent(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(cr)
 			}
-			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), cmp.Or(tt.platform, version.PlatformKubernetes)))
 
 			spec, err := StatefulSpec(t.Context(), cr, rs, naming.MongodLabels(cr, rs), cr.Spec.InitImage,
 				StatefulConfigParams{}, StatefulSpecSecretParams{SSLSecret: &corev1.Secret{}})
@@ -1712,6 +1741,9 @@ func TestStatefulSpecBackupAgent(t *testing.T) {
 			require.Equal(t, tt.wantAgent, idx != -1)
 			if tt.wantAgent {
 				assert.Contains(t, spec.Template.Spec.Containers[idx].Env, corev1.EnvVar{Name: "PBM_MONGODB_PORT", Value: "27018"})
+			}
+			if tt.wantAgentContext != nil {
+				assert.Equal(t, tt.wantAgentContext, spec.Template.Spec.Containers[idx].SecurityContext)
 			}
 
 			volumes := spec.Template.Spec.Volumes

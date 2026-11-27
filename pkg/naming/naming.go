@@ -106,6 +106,15 @@ func HiddenPodName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec, id
 	return fmt.Sprintf("%s-%d", HiddenStatefulSetName(cr, rs), idx)
 }
 
+// ReplsetMemberStatefulSetNames returns the names of the statefulsets that run data-bearing members of rs.
+func ReplsetMemberStatefulSetNames(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) []string {
+	return []string{
+		MongodStatefulSetName(cr, rs),
+		NonVotingStatefulSetName(cr, rs),
+		HiddenStatefulSetName(cr, rs),
+	}
+}
+
 func ArbiterStatefulSetName(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) string {
 	return fmt.Sprintf("%s-%s-%s", cr.Name, rs.Name, ComponentArbiter)
 }

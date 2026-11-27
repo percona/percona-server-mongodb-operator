@@ -40,7 +40,7 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	if rs == nil {
 		return errors.Errorf("replset %s not found in cr", ls[naming.LabelKubernetesReplset])
 	}
-	claimName := config.MongodDataVolClaimName
+	claimName := dataClaimName(ls[naming.LabelKubernetesComponent])
 	volumeSpec := rs.VolumeSpec
 	switch ls[naming.LabelKubernetesComponent] {
 	case naming.ComponentNonVoting:
@@ -48,7 +48,6 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	case naming.ComponentHidden:
 		volumeSpec = rs.Hidden.VolumeSpec
 	case naming.ComponentSearch:
-		claimName = vectorsearch.DataVolumeName
 		volumeSpec = rs.SearchStorage(cr)
 	}
 	if volumeSpec == nil || volumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec == nil {
@@ -79,6 +78,13 @@ func (r *ReconcilePerconaServerMongoDB) reconcilePVCs(ctx context.Context, cr *p
 	}
 
 	return nil
+}
+
+func dataClaimName(component string) string {
+	if component == naming.ComponentSearch {
+		return vectorsearch.DataVolumeName
+	}
+	return config.MongodDataVolClaimName
 }
 
 var (
@@ -180,14 +186,23 @@ func resizingClaim(sts *appsv1.StatefulSet) string {
 	if claim := sts.Annotations[psmdbv1.AnnotationPVCResizeClaim]; claim != "" {
 		return claim
 	}
-	if sts.Labels[naming.LabelKubernetesComponent] == naming.ComponentSearch {
-		return vectorsearch.DataVolumeName
-	}
-	return config.MongodDataVolClaimName
+	return dataClaimName(sts.Labels[naming.LabelKubernetesComponent])
 }
 
 func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
-	return strings.HasPrefix(pvc.Name, claimName+"-"+sts.Name)
+	prefix := claimName + "-" + sts.Name + "-"
+	ordinal, ok := strings.CutPrefix(pvc.Name, prefix)
+	if !ok || ordinal == "" {
+		return false
+	}
+
+	for _, digit := range ordinal {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func maxPVCCapacity(pvcs []corev1.PersistentVolumeClaim, claimName string, sts *appsv1.StatefulSet) resource.Quantity {
@@ -562,16 +577,26 @@ func (r *ReconcilePerconaServerMongoDB) deleteStatefulSetForResize(
 	ctx context.Context,
 	cr *psmdbv1.PerconaServerMongoDB,
 	sts *appsv1.StatefulSet,
+	opts ...client.DeleteOption,
 ) error {
-	log := logf.FromContext(ctx).WithName("PVCResize").WithValues("sts", sts.Name)
-
 	if restartedAtValue, exists := sts.Spec.Template.Annotations[naming.AnnotationKubectlRestartedAt]; exists {
-		if err := k8s.AnnotateObject(ctx, r.client, cr, map[string]string{psmdbv1.AnnotationPreservedRestartedAt(sts.Name): restartedAtValue}); err != nil {
-			log.V(1).Info("Failed to preserve restartedAt annotation, continuing", "error", err)
+		orig := cr.DeepCopy()
+		if cr.Annotations == nil {
+			cr.Annotations = make(map[string]string)
+		}
+		cr.Annotations[psmdbv1.AnnotationPreservedRestartedAt(sts.Name)] = restartedAtValue
+		if err := r.patchCR(ctx, cr, orig); err != nil {
+			cr.Annotations = orig.Annotations
+			return errors.Wrap(err, "preserve restartedAt annotation")
 		}
 	}
 
-	return client.IgnoreNotFound(k8s.OrphanDeleteStatefulSet(ctx, r.client, sts))
+	// a conflict means a precondition in opts failed: sts was already replaced
+	err := k8s.OrphanDeleteStatefulSet(ctx, r.client, sts, opts...)
+	if k8serrors.IsNotFound(err) || k8serrors.IsConflict(err) {
+		return nil
+	}
+	return err
 }
 
 func (r *ReconcilePerconaServerMongoDB) handlePVCResizeFailure(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, sts *appsv1.StatefulSet, claimName string, originalSize resource.Quantity) error {
@@ -613,7 +638,7 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 		log.Info("Reverting volume template", "claim", claimName, "component", component, "originalSize", originalSize)
 		pvcSpec.Resources.Requests[corev1.ResourceStorage] = originalSize
 
-		if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+		if err := r.patchCR(ctx, cr, orig); err != nil {
 			return errors.Wrapf(err, "patch psmdb/%s", cr.Name)
 		}
 
@@ -684,7 +709,7 @@ func (r *ReconcilePerconaServerMongoDB) revertVolumeTemplate(ctx context.Context
 		return errors.Errorf("unsupported component %s", component)
 	}
 
-	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+	if err := r.patchCR(ctx, cr, orig); err != nil {
 		return errors.Wrapf(err, "patch psmdb/%s", cr.Name)
 	}
 
@@ -911,16 +936,8 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		return nil
 	}
 
-	// Delete STS with cascade=orphan (reuse existing function)
-	if err := r.deleteStatefulSetForResize(ctx, sc.cr, sc.sts); err != nil {
-		return errors.Wrap(err, "delete statefulset for shrink")
-	}
-
-	log.Info("PVC shrink preflight passed, starting shrink operation",
-		"targetSize", requested.String(), "primaryPod", primaryPod)
-	r.recorder.Eventf(sc.cr, nil, corev1.EventTypeNormal, "PVCShrinkStarted", "Preflight", "Shrinking volumes of %s from %s to %s", sc.sts.Name, actual.String(), requested.String())
-
-	// Store shrink state in CR status
+	// Save the shrink state before deleting the statefulset. A reconcile that
+	// loses it after the delete no longer knows that a shrink is running.
 	sc.cr.SetPVCShrinkState(sc.sts.Name, psmdbv1.PVCShrinkState{
 		TargetSize:    requested.String(),
 		StartedAt:     time.Now().Format(time.RFC3339),
@@ -928,6 +945,21 @@ func (r *ReconcilePerconaServerMongoDB) shrinkPreflight(
 		ProcessedPods: []string{},
 		PrimaryPod:    primaryPod,
 	})
+	if err := r.writeStatus(ctx, sc.cr); err != nil {
+		sc.cr.ClearPVCShrinkState(sc.sts.Name)
+		revertVCT()
+		return errors.Wrap(err, "save PVC shrink state")
+	}
+
+	// Delete STS with cascade=orphan. If it fails, the next reconcile finds
+	// the old claim template and deletes the statefulset again.
+	if err := r.deleteStatefulSetForResize(ctx, sc.cr, sc.sts); err != nil {
+		return errors.Wrap(err, "delete statefulset for shrink")
+	}
+
+	log.Info("PVC shrink preflight passed, starting shrink operation",
+		"targetSize", requested.String(), "primaryPod", primaryPod)
+	r.recorder.Eventf(sc.cr, nil, corev1.EventTypeNormal, "PVCShrinkStarted", "Preflight", "Shrinking volumes of %s from %s to %s", sc.sts.Name, actual.String(), requested.String())
 
 	return nil
 }
@@ -959,7 +991,10 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		return nil
 	}
 
-	targetSize := resource.MustParse(state.TargetSize)
+	targetSize, err := resource.ParseQuantity(state.TargetSize)
+	if err != nil {
+		return errors.Wrap(err, "parse shrink target size")
+	}
 
 	// List pods
 	podList := corev1.PodList{}
@@ -1071,6 +1106,9 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 		// Use Spec.Requests, not Status.Capacity, because storage classes may round capacity up.
 		pvcRequested := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
 		if pvcRequested.Cmp(targetSize) > 0 {
+			if ok, err := r.shrinkClaimTemplateReady(ctx, sc.cr, sc.sts, sc.claimName, targetSize); err != nil || !ok {
+				return err
+			}
 			if !r.shrinkRSHealthy(ctx, sc, &state, nil) {
 				return nil
 			}
@@ -1146,6 +1184,59 @@ func (r *ReconcilePerconaServerMongoDB) shrinkProcessPods(
 	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
 
 	return nil
+}
+
+// shrinkClaimTemplateReady reports whether the live statefulset recreates PVCs with the target size.
+// If it still has the old claim template, it is orphan-deleted to be recreated with the new one.
+func (r *ReconcilePerconaServerMongoDB) shrinkClaimTemplateReady(
+	ctx context.Context,
+	cr *psmdbv1.PerconaServerMongoDB,
+	sts *appsv1.StatefulSet,
+	claimName string,
+	target resource.Quantity,
+) (bool, error) {
+	live := new(appsv1.StatefulSet)
+	if err := r.client.Get(ctx, client.ObjectKeyFromObject(sts), live); err != nil {
+		// a missing statefulset is recreated from the new template
+		if k8serrors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, errors.Wrapf(err, "get statefulset %s", sts.Name)
+	}
+	if live.DeletionTimestamp != nil {
+		return false, nil
+	}
+
+	for _, vct := range live.Spec.VolumeClaimTemplates {
+		if vct.Name != claimName {
+			continue
+		}
+		size := vct.Spec.Resources.Requests[corev1.ResourceStorage]
+		if size.Cmp(target) == 0 {
+			return true, nil
+		}
+		logf.FromContext(ctx).WithName("PVCShrink").Info("Statefulset still has the old claim template, recreating it",
+			"sts", live.Name, "size", size.String(), "targetSize", target.String())
+		// live may come from a stale cache and be already replaced by a statefulset with the target size
+		if err := r.deleteStatefulSetForResize(ctx, cr, live, client.Preconditions{UID: &live.UID}); err != nil {
+			return false, errors.Wrap(err, "delete statefulset for shrink")
+		}
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// pinShrinkTarget sets the claim template's storage request to the shrink target.
+// A size changed during the shrink is applied after it.
+func pinShrinkTarget(sts *appsv1.StatefulSet, claimName string, target resource.Quantity) {
+	for i := range sts.Spec.VolumeClaimTemplates {
+		if sts.Spec.VolumeClaimTemplates[i].Name == claimName {
+			requests := sts.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests.DeepCopy()
+			requests[corev1.ResourceStorage] = target
+			sts.Spec.VolumeClaimTemplates[i].Spec.Resources.Requests = requests
+		}
+	}
 }
 
 // shrinkCheckPrimary reports whether pod is the replset primary. In the secondaries phase a newly elected
@@ -1271,12 +1362,43 @@ func unhealthyRSMember(status mongo.Status, replacingHost string) *mongo.Member 
 	return replacing
 }
 
+// clearStalePVCShrinkStates drops the shrink state of statefulsets the spec no longer has,
+// e.g. hidden members or mongos log storage disabled during the shrink. Nothing else clears
+// it, and a shrink in progress blocks smart updates, backups and other shrinks.
+func clearStalePVCShrinkStates(ctx context.Context, cr *psmdbv1.PerconaServerMongoDB, repls []*psmdbv1.ReplsetSpec) {
+	// pause disables hidden and nonVoting members in memory, not in the spec
+	if !cr.IsPVCShrinkInProgress() || cr.Spec.Pause {
+		return
+	}
+
+	wanted := make(map[string]bool)
+	for _, rs := range repls {
+		wanted[naming.MongodStatefulSetName(cr, rs)] = true
+		if rs.NonVoting.Enabled {
+			wanted[naming.NonVotingStatefulSetName(cr, rs)] = true
+		}
+		if rs.Hidden.Enabled {
+			wanted[naming.HiddenStatefulSetName(cr, rs)] = true
+		}
+	}
+	if mongosLogStorageResizable(cr) {
+		wanted[naming.MongosStatefulSetName(cr)] = true
+	}
+
+	for name := range cr.Status.PVCShrink {
+		if !wanted[name] {
+			logf.FromContext(ctx).WithName("PVCShrink").Info("Clearing shrink state of a removed statefulset", "sts", name)
+			cr.ClearPVCShrinkState(name)
+		}
+	}
+}
+
 // shrinkingReplsetStatefulSet returns another statefulset of the same replset with a shrink in progress.
 func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 	if !sc.isRSComponent || sc.replset == nil {
 		return ""
 	}
-	for _, name := range replsetMemberStatefulSetNames(sc.cr, sc.replset) {
+	for _, name := range naming.ReplsetMemberStatefulSetNames(sc.cr, sc.replset) {
 		if name == sc.sts.Name {
 			continue
 		}
@@ -1290,20 +1412,12 @@ func shrinkingReplsetStatefulSet(sc shrinkContext) string {
 // replsetPVCShrinkInProgress reports whether any statefulset of the replset
 // that holds data-bearing members is being shrunk.
 func replsetPVCShrinkInProgress(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) bool {
-	for _, name := range replsetMemberStatefulSetNames(cr, rs) {
+	for _, name := range naming.ReplsetMemberStatefulSetNames(cr, rs) {
 		if _, ok := cr.GetPVCShrinkState(name); ok {
 			return true
 		}
 	}
 	return false
-}
-
-func replsetMemberStatefulSetNames(cr *psmdbv1.PerconaServerMongoDB, rs *psmdbv1.ReplsetSpec) []string {
-	return []string{
-		naming.MongodStatefulSetName(cr, rs),
-		naming.NonVotingStatefulSetName(cr, rs),
-		naming.HiddenStatefulSetName(cr, rs),
-	}
 }
 
 func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
@@ -1357,11 +1471,12 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	return nil
 }
 
+// fixVolumeLabels updates matching PVC metadata. PVCs inherit labels from volumeClaimTemplates,
+// not from the StatefulSet selector, so identify claims by name before applying mutable metadata.
 func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec psmdbv1.PVCSpec) error {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
-		Namespace:     sts.Namespace,
-		LabelSelector: labels.SelectorFromSet(ls),
+		Namespace: sts.Namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "list PVCs")
@@ -1391,7 +1506,7 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 		patch := client.MergeFrom(orig)
 
 		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
+			return errors.Wrapf(err, "patch PVC %s", pvc.Name)
 		}
 	}
 

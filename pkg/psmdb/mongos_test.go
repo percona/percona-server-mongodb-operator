@@ -1,6 +1,7 @@
 package psmdb
 
 import (
+	"cmp"
 	"maps"
 	"os"
 	"path/filepath"
@@ -639,6 +640,7 @@ func TestMongosTemplateSpec(t *testing.T) {
 	sidecar := corev1.Container{Name: "mongos-sidecar-1", Image: "busybox"}
 
 	tests := map[string]struct {
+		platform      version.Platform
 		setup         func(cr *api.PerconaServerMongoDB)
 		configType    config.VolumeSourceType
 		wantVolumes   map[string]corev1.VolumeSource
@@ -692,6 +694,19 @@ func TestMongosTemplateSpec(t *testing.T) {
 				assert.Equal(t, "container-rc", *spec.RuntimeClassName)
 			},
 		},
+		"kubernetes security context defaults": {
+			check: func(t *testing.T, spec corev1.PodSpec) {
+				assert.Equal(t, &corev1.SecurityContext{RunAsNonRoot: new(true), RunAsUser: new(int64(1001))}, spec.Containers[0].SecurityContext)
+				assert.Equal(t, &corev1.PodSecurityContext{FSGroup: new(int64(1001))}, spec.SecurityContext)
+			},
+		},
+		"openshift security context defaults": {
+			platform: version.PlatformOpenshift,
+			check: func(t *testing.T, spec corev1.PodSpec) {
+				assert.Equal(t, &corev1.SecurityContext{RunAsNonRoot: new(true)}, spec.Containers[0].SecurityContext)
+				assert.Equal(t, &corev1.PodSecurityContext{}, spec.SecurityContext)
+			},
+		},
 	}
 
 	for name, tt := range tests {
@@ -703,7 +718,7 @@ func TestMongosTemplateSpec(t *testing.T) {
 			if tt.setup != nil {
 				tt.setup(cr)
 			}
-			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), cmp.Or(tt.platform, version.PlatformKubernetes)))
 
 			configs := StatefulConfigParams{MongoDConf: config.CustomConfig{Type: tt.configType}}
 			templateSpec, err := MongosTemplateSpec(cr, cr.Spec.InitImage, logr.Discard(), configs,

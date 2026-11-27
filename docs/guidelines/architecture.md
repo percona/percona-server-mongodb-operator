@@ -48,7 +48,14 @@ Rules:
 - A new step is a function called from `Reconcile` at the position its
   dependencies require. It returns a wrapped error and does not write status
   itself. Status goes through `updateStatus` and `updateCondition`
-  (`status.go`, `conditions.go`), which retry on conflict.
+  (`status.go`, `conditions.go`), which end in `writeStatus`. It writes with
+  `cr.ResourceVersion` and returns the conflict if the CR changed, so a
+  reconcile working from a stale cache cannot overwrite newer status.
+- Write the CR's spec or metadata inside a reconcile through `patchCR`,
+  which keeps `cr.ResourceVersion` current. Don't use `client.Update`,
+  `client.Patch` or `k8s.AnnotateObject` on a copy of the CR: the next
+  status write conflicts. `setCRVersion` and `checkFinalizers` patch and
+  update `cr` itself, which also keeps it current.
 - On error return `reconcile.Result{}, err`; controller-runtime requeues with
   backoff. Use `RequeueAfter` only to wait for an external condition, as
   `reconcileSSL` does with `errTLSNotReady`.
