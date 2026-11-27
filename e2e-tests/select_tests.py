@@ -52,6 +52,23 @@ def _rule(name: str, pattern: str, needs: str, why: str) -> PlacementRule:
     return PlacementRule(name, re.compile(pattern, re.MULTILINE), needs, why)
 
 
+# Separates two words of a command in shell (`kubectl delete crd`) and in a Python argument list
+# (`kubectl_bin("delete", "crd")`).
+_SEP = r"""[\s"',]+"""
+
+
+def _kind(kinds: str) -> str:
+    """Matches an object of one of `kinds` (a regex alternation): in YAML a `kind` next to
+    `apiVersion`, also indented or as a list item, so a reference such as `roleRef.kind` does not
+    match; in JSON or a Python dict a quoted `kind` key."""
+    kind = rf"kind:[ \t]*(?:{kinds})\b"
+    return (
+        rf"^(?P<kind_a>[ \t]*)(?:- )?apiVersion:.*\n(?P=kind_a)(?:  )?{kind}"
+        rf"|^(?P<kind_b>[ \t]*)(?:- )?{kind}.*\n(?P=kind_b)(?:  )?apiVersion:"
+        rf"""|["']kind["'][ \t]*:[ \t]*["'](?:{kinds})["']"""
+    )
+
+
 # Checked against every file of a test directory except compare/. A match without the tag in
 # tests.yaml fails `check-placement`. ownCluster satisfies every rule.
 PLACEMENT_RULES = [
@@ -63,7 +80,7 @@ PLACEMENT_RULES = [
     ),
     _rule(
         "crd",
-        r"delete_crd|delete crd|/crd\.yaml|^kind: CustomResourceDefinition",
+        rf"delete_crd|delete{_SEP}crds?\b|/crd\.yaml|{_kind('CustomResourceDefinition')}",
         OWN_CLUSTER,
         "replaces or deletes a CRD, which every test on the cluster uses",
     ),
@@ -75,13 +92,13 @@ PLACEMENT_RULES = [
     ),
     _rule(
         "default-storageclass",
-        r"is-default-class=true|annotate storageclass",
+        rf"is-default-class=true|annotate{_SEP}storageclass",
         OWN_CLUSTER,
         "changes the default StorageClass for every new PVC",
     ),
     _rule(
         "admission-webhook",
-        r"^kind: (Mutating|Validating)WebhookConfiguration",
+        rf"{_kind('MutatingWebhookConfiguration|ValidatingWebhookConfiguration')}",
         OWN_CLUSTER,
         "an admission webhook acts on objects in every namespace",
     ),
@@ -94,7 +111,7 @@ PLACEMENT_RULES = [
     ),
     _rule(
         "cert-manager",
-        r"deploy_cert_manager|cert_manager|^kind: ClusterIssuer",
+        rf"deploy_cert_manager|cert_manager|{_kind('ClusterIssuer')}",
         OWN_CLUSTER,
         "with cert-manager installed the operator issues every test's certificates through it; "
         "other tests run without it, as in serial runs",
@@ -107,22 +124,28 @@ PLACEMENT_RULES = [
     ),
     _rule(
         "cluster-rbac",
-        r"(create|delete|patch|edit|replace) (clusterrole|clusterrolebinding)\b"
-        r"|clusterrole/|^kind: (ClusterRole|ClusterRoleBinding)$",
+        rf"(create|delete|patch|edit|replace){_SEP}(clusterrole|clusterrolebinding)\b"
+        rf"|clusterrole/|{_kind('ClusterRole|ClusterRoleBinding')}",
         "cluster-rbac",
         "creates, changes or deletes ClusterRoles or ClusterRoleBindings",
     ),
     _rule(
         "nodes",
-        r"(label|taint|cordon|uncordon|drain|annotate) nodes?\b",
+        rf"(label|taint|cordon|uncordon|drain|annotate){_SEP}nodes?\b",
         "nodes",
         "changes labels, taints or scheduling of shared nodes",
     ),
     _rule(
         "storageclass",
-        r"^kind: StorageClass",
+        rf"{_kind('StorageClass')}",
         "storageclass",
         "creates a cluster-scoped StorageClass",
+    ),
+    _rule(
+        "priorityclass",
+        rf"{_kind('PriorityClass')}",
+        "priorityclass",
+        "creates a cluster-scoped PriorityClass, which tests create and delete by the same name",
     ),
 ]
 

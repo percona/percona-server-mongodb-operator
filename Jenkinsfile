@@ -753,6 +753,8 @@ void runTestSlots(String cluster) {
 // - CLEAN_NAMESPACE=0: with 1, a starting test deletes every namespace on the cluster.
 // - SKIP_DELETE=1: the teardown would also remove cert-manager and the RBAC. cleanupSlotTest
 //   deletes only this test's namespaces instead.
+// - E2E_NAMESPACE_OWNER: the test helpers label every namespace they create with it, so
+//   cleanupSlotTest finds them whatever their names.
 // - Cluster-wide: a test that shares the cluster gets its own operator namespace
 //   <test>-<hex>-op, and SHARED_CLUSTER=1 makes that operator use its own ClusterRole and
 //   ClusterRoleBinding and watch only the test namespace.
@@ -763,11 +765,9 @@ void runSlotTest(Integer testId, String slot) {
     def testName = test.name
     def clusterKubeconfig = "/tmp/${CLUSTER_NAME}-${test.cluster}"
     def slotDir = "/tmp/${CLUSTER_NAME}-${slot}"
-    def operatorNs = 'psmdb-operator'
-    if (!test.ownCluster) {
-        def suffix = sh(script: "head -c 3 /dev/urandom | od -An -tx1 | tr -d ' \\n'", returnStdout: true).trim()
-        operatorNs = "${testName}-${suffix}-op"
-    }
+    def suffix = sh(script: "head -c 3 /dev/urandom | od -An -tx1 | tr -d ' \\n'", returnStdout: true).trim()
+    def namespaceOwner = "${testName}-${suffix}"
+    def operatorNs = test.ownCluster ? 'psmdb-operator' : "${testName}-${suffix}-op"
     // One folder per attempt: finishSlotAllureResults labels its results with the cluster and slot.
     def allureDir = "e2e-tests/allure-results-slots/${testName}-${new Date().getTime()}"
 
@@ -776,6 +776,13 @@ void runSlotTest(Integer testId, String slot) {
         mkdir -p '${slotDir}'
         cp '${clusterKubeconfig}' '${slotDir}/kubeconfig'
     """
+    if (test.ownCluster) {
+        // Nothing else runs on the cluster, so every namespace that is new after the test is its own.
+        sh """
+            KUBECONFIG='${clusterKubeconfig}' kubectl get namespaces --request-timeout=10s --no-headers \
+                -o custom-columns=NAME:.metadata.name > '${slotDir}/namespaces-before' || true
+        """
+    }
     def slotExports = """
         export KUBECONFIG='${slotDir}/kubeconfig'
         export HELM_CONFIG_HOME='${slotDir}/helm'
@@ -785,6 +792,7 @@ void runSlotTest(Integer testId, String slot) {
         export SKIP_DELETE=1
         export OPERATOR_NS='${operatorNs}'
         export ALLURE_RESULTS_DIR='${allureDir}'
+        export E2E_NAMESPACE_OWNER='${namespaceOwner}'
         ${test.ownCluster ? '' : 'export SHARED_CLUSTER=1'}
     """
 
@@ -816,7 +824,7 @@ void runSlotTest(Integer testId, String slot) {
     }
 
     try {
-        cleanupSlotTest(clusterKubeconfig, testName, test.ownCluster)
+        cleanupSlotTest(clusterKubeconfig, testName, test.ownCluster, namespaceOwner, slotDir, (test.locks ?: []).contains('vault'))
     } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
         throw exc
     } catch (cleanupErr) {
@@ -824,13 +832,22 @@ void runSlotTest(Integer testId, String slot) {
     }
 }
 
-// Frees the cluster for the next tests: deletes the test's own namespaces and, in cluster-wide
-// runs, its ClusterRole and ClusterRoleBinding. After a test that ran alone also removes
-// cert-manager (other tests expect the operator to issue its own certificates, which it does only
-// without cert-manager) and its operator, which watches every namespace. Only the operator's own
-// resources get their finalizers removed: they keep a namespace Terminating.
-void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster) {
-    withEnv(["KUBECONFIG=${kubeconfig}", "TEST_NAME=${testName}", "OWN_CLUSTER=${ownCluster ? 1 : 0}"]) {
+// Frees the cluster for the next tests. Runs after every test, also a failed one, whose own
+// teardown may not have run.
+// - The test's namespaces: those labeled with its E2E_NAMESPACE_OWNER, those named
+//   <test>-<hex>..., and after a test that ran alone every namespace that is new since it started.
+//   Only the operator's own resources get their finalizers removed: they keep a namespace
+//   Terminating.
+// - In cluster-wide runs, its ClusterRole and ClusterRoleBinding.
+// - After a test with the vault lock, the cluster-scoped parts of the Vault chart.
+// - After a test that ran alone, what it may have installed for the whole cluster: its operator,
+//   which watches every namespace; cert-manager (other tests expect the operator to issue its own
+//   certificates, which it does only without cert-manager); the VPA CRDs and recommender (the
+//   operator watches VerticalPodAutoscalers in every namespace once the CRD exists); chaos-mesh;
+//   the PMM server RBAC.
+void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster, String namespaceOwner, String slotDir, Boolean vaultLock) {
+    withEnv(["KUBECONFIG=${kubeconfig}", "TEST_NAME=${testName}", "OWN_CLUSTER=${ownCluster ? 1 : 0}",
+             "NAMESPACE_OWNER=${namespaceOwner}", "SLOT_DIR=${slotDir}", "VAULT_LOCK=${vaultLock ? 1 : 0}"]) {
         sh '''
             set +e
             if ! kubectl get --raw='/healthz' --request-timeout=5s >/dev/null 2>&1; then
@@ -838,10 +855,19 @@ void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster) {
                 exit 0
             fi
 
+            list_namespaces() {
+                kubectl get namespaces --request-timeout=10s --no-headers -o custom-columns=NAME:.metadata.name "$@"
+            }
             resources=$(kubectl api-resources --api-group=psmdb.percona.com --namespaced -o name --request-timeout=10s | paste -sd, -)
-            kubectl get namespaces --request-timeout=10s --no-headers -o custom-columns=NAME:.metadata.name \
-                | grep -E "^${TEST_NAME}-[0-9a-f]+(-.*)?\\$" \
-                | while read -r namespace; do
+            {
+                list_namespaces -l "e2e.percona.com/owner=$NAMESPACE_OWNER"
+                list_namespaces | grep -E "^${TEST_NAME}-[0-9a-f]+(-.*)?\\$"
+                if [ "$OWN_CLUSTER" = 1 ] && [ -s "$SLOT_DIR/namespaces-before" ]; then
+                    # psmdb-operator and cert-manager are removed below, in order.
+                    list_namespaces | grep -vxF -f "$SLOT_DIR/namespaces-before" \
+                        | grep -vE '^(kube-.*|gke-.*|gmp-.*|default|psmdb-operator|cert-manager)$'
+                fi
+            } | sort -u | while read -r namespace; do
                     echo "Deleting namespace: $namespace"
                     if [ -n "$resources" ]; then
                         kubectl get "$resources" -n "$namespace" -o name --request-timeout=10s 2>/dev/null \
@@ -854,6 +880,12 @@ void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster) {
             kubectl get clusterrole,clusterrolebinding --request-timeout=10s -o name \
                 | grep -E -- "-${TEST_NAME}-[0-9a-f]+-op\\$" \
                 | xargs -r kubectl delete --ignore-not-found --wait=false --request-timeout=10s
+
+            if [ "$VAULT_LOCK" = 1 ]; then
+                kubectl delete clusterrole,clusterrolebinding,mutatingwebhookconfiguration \
+                    -l 'app.kubernetes.io/instance in (vault-service,users-vault-service)' \
+                    --ignore-not-found --request-timeout=30s
+            fi
 
             if [ "$OWN_CLUSTER" != 1 ]; then
                 exit 0
@@ -873,6 +905,25 @@ void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster) {
                 kubectl delete crd -l "$selector" --ignore-not-found --timeout=180s
                 kubectl delete namespace cert-manager --ignore-not-found --timeout=180s
             fi
+
+            kubectl delete crd verticalpodautoscalers.autoscaling.k8s.io verticalpodautoscalercheckpoints.autoscaling.k8s.io \
+                --ignore-not-found --timeout=120s
+            kubectl delete deployment vpa-recommender -n kube-system --ignore-not-found --request-timeout=30s
+
+            kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration,clusterrole,clusterrolebinding \
+                -o name --request-timeout=10s | grep -E 'chaos-mesh|/validate-auth$' \
+                | xargs -r kubectl delete --ignore-not-found --request-timeout=30s
+            for crd in $(kubectl get crd -o name --request-timeout=10s | grep -E '\\.chaos-mesh\\.org$'); do
+                kubectl get "${crd#*/}" --all-namespaces --no-headers --request-timeout=10s \
+                    -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name 2>/dev/null \
+                    | while read -r namespace name; do
+                        kubectl patch "${crd#*/}" "$name" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                    done
+                kubectl delete "$crd" --ignore-not-found --timeout=60s
+            done
+
+            kubectl delete clusterrole,clusterrolebinding monitoring --ignore-not-found --request-timeout=30s
+            kubectl delete clusterrolebinding pmm-psmdb-operator-cluster-wide --ignore-not-found --request-timeout=30s
             exit 0
         '''
     }

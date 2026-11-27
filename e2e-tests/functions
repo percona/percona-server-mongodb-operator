@@ -348,6 +348,15 @@ create_namespace() {
 		kubectl_bin create namespace "$namespace"
 		set_kube_ctx ${namespace}
 	fi
+	label_test_namespace "$namespace"
+}
+
+# E2E_NAMESPACE_OWNER is set by the CI runner when tests share a cluster. The label lets the
+# runner delete every namespace the test created, whatever its name.
+label_test_namespace() {
+	if [[ -n ${E2E_NAMESPACE_OWNER} ]]; then
+		kubectl_bin label namespace "$1" "e2e.percona.com/owner=${E2E_NAMESPACE_OWNER}" --overwrite >/dev/null
+	fi
 }
 
 get_operator_pod() {

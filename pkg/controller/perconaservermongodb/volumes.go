@@ -187,7 +187,19 @@ func resizingClaim(sts *appsv1.StatefulSet) string {
 }
 
 func validatePVCName(claimName string, pvc corev1.PersistentVolumeClaim, sts *appsv1.StatefulSet) bool {
-	return strings.HasPrefix(pvc.Name, claimName+"-"+sts.Name)
+	prefix := claimName + "-" + sts.Name + "-"
+	ordinal, ok := strings.CutPrefix(pvc.Name, prefix)
+	if !ok || ordinal == "" {
+		return false
+	}
+
+	for _, digit := range ordinal {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 func maxPVCCapacity(pvcs []corev1.PersistentVolumeClaim, claimName string, sts *appsv1.StatefulSet) resource.Quantity {
@@ -1357,11 +1369,12 @@ func (r *ReconcilePerconaServerMongoDB) shrinkStepdown(
 	return nil
 }
 
+// fixVolumeLabels updates matching PVC metadata. PVCs inherit labels from volumeClaimTemplates,
+// not from the StatefulSet selector, so identify claims by name before applying mutable metadata.
 func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts *appsv1.StatefulSet, ls map[string]string, claimName string, pvcSpec psmdbv1.PVCSpec) error {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 	err := r.client.List(ctx, pvcList, &client.ListOptions{
-		Namespace:     sts.Namespace,
-		LabelSelector: labels.SelectorFromSet(ls),
+		Namespace: sts.Namespace,
 	})
 	if err != nil {
 		return errors.Wrap(err, "list PVCs")
@@ -1391,7 +1404,7 @@ func (r *ReconcilePerconaServerMongoDB) fixVolumeLabels(ctx context.Context, sts
 		patch := client.MergeFrom(orig)
 
 		if err := r.client.Patch(ctx, &pvc, patch); err != nil {
-			logf.FromContext(ctx).Error(err, "patch PVC", "PVC", pvc.Name)
+			return errors.Wrapf(err, "patch PVC %s", pvc.Name)
 		}
 	}
 

@@ -281,6 +281,15 @@ images. It defaults to `docker.io`.
 * `OPERATOR_NS` - deploys the operator in a separate namespace
 * `CERT_MANAGER_VER`, `SEAWEEDFS_VER`, `CHAOS_MESH_VER`, and `PMM_SERVER_VER` - override dependency versions
 
+### Running several tests on one cluster
+
+The PR check in the `Jenkinsfile` runs several tests at the same time on each cluster. It sets these variables for each test; a serial run, local or in CI, does not set them and behaves as before.
+
+* `SHARED_CLUSTER=1` - other tests run on the same cluster. With `OPERATOR_NS` set, the test's operator gets its own namespace (`<test>-<hex>-op`), a ClusterRole and ClusterRoleBinding named after it, and `WATCH_NAMESPACE` set to the test namespace, so each test has its own operator and tests do not reconcile each other's clusters. Tests tagged `ownCluster` in `tests.yaml` run without it and keep the operator that watches all namespaces.
+* `E2E_NAMESPACE_OWNER` - `create_namespace` (bash) and the `create_namespace` / `create_infra` fixtures (pytest) label each namespace they create with `e2e.percona.com/owner=<value>`. After the test the runner deletes the namespaces with its label, so create test namespaces with these helpers.
+
+Which tests may share a cluster is set by `ownCluster` and `locks` in `tests.yaml`; `uv run e2e-tests/select_tests.py check-placement` finds tests that need them.
+
 ### Using automatic clean-up after testing
 
 By default, each test creates its own namespace and does not clean up objects in case of failure.
