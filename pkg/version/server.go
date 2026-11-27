@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,12 +20,14 @@ import (
 
 var log = logf.Log.WithName("version")
 
-const cloudDetectionTimeout = 10 * time.Second
+const (
+	cloudDetectionTimeout = 10 * time.Second
+	sysVendorPath         = "/sys/class/dmi/id/sys_vendor"
+)
 
 type Platform string
 
 const (
-	PlatformUndef      Platform = ""
 	PlatformKubernetes Platform = "kubernetes"
 	PlatformOpenshift  Platform = "openshift"
 )
@@ -157,7 +160,7 @@ var cloudProbes = []cloudProbe{
 	{provider: CloudProviderDOKS, apiGroups: []string{"dataplane-operator.doks.digitalocean.com"}},
 	{provider: CloudProviderOKE, apiGroups: []string{"oci.oraclecloud.com"}, hosts: []string{".oraclecloud.com"}},
 	{provider: CloudProviderACK, apiGroups: []string{"alibabacloud.com"}, hosts: []string{".aliyuncs.com"}},
-	{provider: CloudProviderNKP, apiGroups: []string{"nkp.nutanix.com", "kommander.mesosphere.io"}},
+	{provider: CloudProviderNKP, apiGroups: []string{"nkp.nutanix.com", "kommander.mesosphere.io"}, custom: detectNutanix},
 	{provider: CloudProviderPlatform9, hosts: []string{".platform9.io", ".platform9.net"}},
 	{provider: CloudProviderTanzu, apiGroups: []string{"run.tanzu.vmware.com"}},
 	{provider: CloudProviderRancher, apiGroups: []string{"management.cattle.io"}},
@@ -290,6 +293,22 @@ func detectAKS(ctx context.Context, cfg *rest.Config) bool {
 	}
 
 	return false
+}
+
+// detectNutanix matches NKP workload clusters, which expose no NKP API groups,
+// by the hypervisor vendor of the node the operator runs on.
+func detectNutanix(context.Context, *rest.Config) bool {
+	return sysVendorIs(sysVendorPath, "Nutanix")
+}
+
+func sysVendorIs(path, vendor string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		log.V(1).Info("failed to read DMI vendor", "error", err.Error())
+		return false
+	}
+
+	return strings.TrimSpace(string(b)) == vendor
 }
 
 func probeAPI(ctx context.Context, path string, client rest.Interface) (k8sversion.Info, error) {
