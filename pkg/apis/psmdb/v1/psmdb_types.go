@@ -1133,8 +1133,8 @@ type StorageScalingSpec struct {
 	// When enabled, the operator skips internal autoscaling and resize operations
 	EnableExternalAutoscaling bool `json:"enableExternalAutoscaling,omitempty"`
 
-	// EnableVolumeScaling allows volume expansion/resizing operations
-	// When disabled, PVC sizes will not be modified even if storage changes in the spec
+	// EnableVolumeScaling allows volume expansion operations
+	// When disabled, PVC sizes will not be scaled up even if storage changes in the spec
 	EnableVolumeScaling bool `json:"enableVolumeScaling,omitempty"`
 
 	// EnableVolumeShrink allows PVC shrink operations by deleting and recreating PVCs
