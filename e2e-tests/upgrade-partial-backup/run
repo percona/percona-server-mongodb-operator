@@ -212,18 +212,13 @@ test_backup_deletion() {
 	kubectl_bin patch psmdb "${cluster}" --type='merge' \
 		--patch '{"spec": {"backup": {"pitr": {"enabled": false}}}}'
 
-	delete_backup ${BACKUP_NAME_LOCAL_S3}-incremental-base
+	kubectl_bin delete psmdb-backup "${BACKUP_NAME_LOCAL_S3}-incremental-base" --wait=false
+	wait_for_delete "psmdb-backup/${BACKUP_NAME_LOCAL_S3}-incremental-base" 180
 	check_backup_deletion_gcs "$incremental_base_dest"
 
-	delete_backup ${BACKUP_NAME_LOCAL_S3}-logical
+	kubectl_bin delete psmdb-backup "${BACKUP_NAME_LOCAL_S3}-logical" --wait=false
+	wait_for_delete "psmdb-backup/${BACKUP_NAME_LOCAL_S3}-logical" 180
 	check_backup_deletion_gcs "$logical_dest"
-}
-
-delete_backup() {
-	local backup_name=$1
-
-	kubectl_bin delete psmdb-backup "${backup_name}" --wait=false
-	kubectl_bin wait --for=delete psmdb-backup "${backup_name}" --timeout=300s
 }
 
 

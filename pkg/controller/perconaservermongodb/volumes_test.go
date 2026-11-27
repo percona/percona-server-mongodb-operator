@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,16 +16,19 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/percona/percona-server-mongodb-operator/pkg/apis"
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
@@ -33,9 +37,53 @@ import (
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo"
 	mongoFake "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/mongo/fake"
+	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/tls"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb/vectorsearch"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
+
+func TestValidatePVCName(t *testing.T) {
+	sts := &appsv1.StatefulSet{
+		Name: "some-name-rs0",
+	}
+
+	tests := []struct {
+		name    string
+		pvcName string
+		want    bool
+	}{
+		{
+			name:    "matching StatefulSet ordinal",
+			pvcName: "mongod-data-some-name-rs0-0",
+			want:    true,
+		},
+		{
+			name:    "hidden StatefulSet with overlapping prefix",
+			pvcName: "mongod-data-some-name-rs0-hidden-0",
+			want:    false,
+		},
+		{
+			name:    "non-voting StatefulSet with overlapping prefix",
+			pvcName: "mongod-data-some-name-rs0-nv-0",
+			want:    false,
+		},
+		{
+			name:    "non-numeric suffix",
+			pvcName: "mongod-data-some-name-rs0-other",
+			want:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pvc := corev1.PersistentVolumeClaim{
+				Name: tt.pvcName,
+			}
+
+			assert.Equal(t, tt.want, validatePVCName(config.MongodDataVolClaimName, pvc, sts))
+		})
+	}
+}
 
 func TestReconcilePersistentVolumes(t *testing.T) {
 	t.Parallel()
@@ -397,7 +445,22 @@ func newStatefulSet(namespace, name string, labels map[string]string, storage re
 		Namespace: namespace,
 		Labels:    labels,
 		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: labels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: labels,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "mongod",
+							Image: "percona/percona-server-mongodb",
+						},
+					},
+				},
+			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					Name: config.MongodDataVolClaimName,
@@ -2229,4 +2292,614 @@ func eventReasons(rec *events.FakeRecorder) []string {
 			return reasons
 		}
 	}
+}
+
+// mongosShrinkFixture builds a ready sharded cluster whose mongos log volumes are 3Gi and requested at 2Gi.
+func mongosShrinkFixture(t *testing.T, vctSize resource.Quantity, objs ...client.Object) (*ReconcilePerconaServerMongoDB, shrinkContext) {
+	t.Helper()
+
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	cr.Spec.Sharding.Enabled = true
+	cr.Spec.StorageScaling = &api.StorageScalingSpec{EnableVolumeShrink: true}
+	cr.Status.State = api.AppStateReady
+
+	labels := naming.MongosLabels(cr)
+	sts := &appsv1.StatefulSet{
+		Name:      naming.MongosStatefulSetName(cr),
+		Namespace: cr.Namespace,
+		Labels:    labels,
+		Spec: appsv1.StatefulSetSpec{
+			Replicas: new(int32(1)),
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{{
+				Name: config.MongosLogVolClaimName,
+				Spec: corev1.PersistentVolumeClaimSpec{
+					Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: vctSize}},
+				},
+			}},
+		},
+	}
+
+	r := buildFakeClient(append([]client.Object{cr, sts}, objs...)...)
+	r.recorder = events.NewFakeRecorder(10)
+
+	stored := &api.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), stored))
+	stored.Spec = cr.Spec
+
+	return r, shrinkContext{
+		cr:        stored,
+		sts:       sts.DeepCopy(),
+		ls:        labels,
+		claimName: config.MongosLogVolClaimName,
+		component: naming.ComponentMongos,
+	}
+}
+
+func TestReconcileMongosStatefulsetKeepsShrinkTarget(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		shrinkTarget string
+		want         string
+		wantErr      string
+	}{
+		"shrink in progress uses the shrink target": {shrinkTarget: "2Gi", want: "2Gi"},
+		"no shrink uses the CR size":                {want: "1Gi"},
+		"shrink target does not parse":              {shrinkTarget: "not-a-size", wantErr: "parse shrink target size"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", "ns")
+			require.NoError(t, err)
+			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("1Gi").PersistentVolumeClaim}
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+			// the fake cluster has no config server pods to wait for
+			cr.Spec.Sharding.ConfigsvrReplSet.Size = 0
+			if tt.shrinkTarget != "" {
+				cr.SetPVCShrinkState(naming.MongosStatefulSetName(cr), api.PVCShrinkState{Phase: "secondaries", TargetSize: tt.shrinkTarget})
+			}
+			r := buildFakeClient(cr,
+				&corev1.Secret{Name: api.SSLSecretName(cr), Namespace: cr.Namespace},
+				&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: cr.Namespace},
+			)
+
+			err = r.reconcileMongosStatefulset(t.Context(), cr)
+			sts := &appsv1.StatefulSet{}
+			getErr := r.client.Get(t.Context(), types.NamespacedName{Name: naming.MongosStatefulSetName(cr), Namespace: cr.Namespace}, sts)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				assert.True(t, k8serrors.IsNotFound(getErr), "statefulset must not be created, got %v", getErr)
+				return
+			}
+			require.NoError(t, err)
+			require.NoError(t, getErr)
+			require.Len(t, sts.Spec.VolumeClaimTemplates, 1)
+			vct := sts.Spec.VolumeClaimTemplates[0]
+			assert.Equal(t, config.MongosLogVolClaimName, vct.Name)
+			assert.Equal(t, tt.want, new(vct.Spec.Resources.Requests[corev1.ResourceStorage]).String())
+		})
+	}
+}
+
+func TestClearStalePVCShrinkStates(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rs0          = "some-cluster-rs0"
+		rs0Hidden    = "some-cluster-rs0-hidden"
+		rs0NonVoting = "some-cluster-rs0-nv"
+		removedRS    = "some-cluster-rs9"
+		cfg          = "some-cluster-cfg"
+		mongos       = "some-cluster-mongos"
+	)
+
+	enableHidden := func(cr *api.PerconaServerMongoDB) { cr.Spec.Replsets[0].Hidden.Enabled = true }
+	enableNonVoting := func(cr *api.PerconaServerMongoDB) { cr.Spec.Replsets[0].NonVoting.Enabled = true }
+
+	tests := map[string]struct {
+		modify func(cr *api.PerconaServerMongoDB)
+		want   []string
+	}{
+		"all statefulsets still in the spec": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				enableHidden(cr)
+				enableNonVoting(cr)
+			},
+			want: []string{rs0, rs0Hidden, rs0NonVoting, cfg, mongos},
+		},
+		"hidden disabled": {
+			modify: enableNonVoting,
+			want:   []string{rs0, rs0NonVoting, cfg, mongos},
+		},
+		"nonVoting disabled": {
+			modify: enableHidden,
+			want:   []string{rs0, rs0Hidden, cfg, mongos},
+		},
+		"mongos log storage removed": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Sharding.Mongos.Logs = nil
+			},
+			want: []string{rs0, cfg},
+		},
+		"crVersion without mongos log shrink": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.CRVersion = "1.23.0"
+			},
+			want: []string{rs0, cfg},
+		},
+		"sharding disabled": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Sharding.Enabled = false
+			},
+			want: []string{rs0},
+		},
+		"paused keeps every entry": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Pause = true
+			},
+			want: []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", "ns")
+			require.NoError(t, err)
+			require.Equal(t, "rs0", cr.Spec.Replsets[0].Name)
+			require.Len(t, cr.Spec.Replsets, 1)
+			require.True(t, cr.Spec.Sharding.Enabled)
+			require.False(t, cr.Spec.Replsets[0].Hidden.Enabled)
+			require.False(t, cr.Spec.Replsets[0].NonVoting.Enabled)
+			require.GreaterOrEqual(t, cr.CompareVersion("1.24.0"), 0)
+			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("1Gi").PersistentVolumeClaim}
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+			if tt.modify != nil {
+				tt.modify(cr)
+			}
+			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
+				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
+			}
+
+			repls := cr.Spec.Replsets
+			if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
+				repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
+			}
+			clearStalePVCShrinkStates(t.Context(), cr, repls)
+
+			assert.ElementsMatch(t, tt.want, slices.Collect(maps.Keys(cr.Status.PVCShrink)))
+		})
+	}
+}
+
+func TestReconcileClearsStalePVCShrinkStates(t *testing.T) {
+	t.Parallel()
+
+	const (
+		rs0          = "some-cluster-rs0"
+		rs0Hidden    = "some-cluster-rs0-hidden"
+		rs0NonVoting = "some-cluster-rs0-nv"
+		removedRS    = "some-cluster-rs9"
+		cfg          = "some-cluster-cfg"
+		mongos       = "some-cluster-mongos"
+	)
+
+	tests := map[string]struct {
+		setup func(cr *api.PerconaServerMongoDB) []client.Object
+		want  []string
+	}{
+		"entries of removed statefulsets are dropped": {
+			want: []string{rs0, rs0Hidden, cfg, mongos},
+		},
+		// pause disables hidden and nonVoting members in memory, their shrink must survive it
+		"paused cluster keeps every entry": {
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				cr.Spec.Pause = true
+				return nil
+			},
+			want: []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos},
+		},
+		// a running backup postpones the pause, the spec is reconciled as it is
+		"paused cluster with a running backup drops entries of removed statefulsets": {
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				cr.Spec.Pause = true
+				return []client.Object{&api.PerconaServerMongoDBBackup{
+					Name:      "backup",
+					Namespace: cr.Namespace,
+					Spec:      api.PerconaServerMongoDBBackupSpec{ClusterName: cr.Name},
+					Status:    api.PerconaServerMongoDBBackupStatus{State: api.BackupStateRunning},
+				}}
+			},
+			want: []string{rs0, rs0Hidden, cfg, mongos},
+		},
+		// with no pods left the sharding toggle unpauses and the spec without sharding is reconciled
+		"sharding disabled drops config server and mongos entries": {
+			setup: func(cr *api.PerconaServerMongoDB) []client.Object {
+				cr.Spec.Sharding.Enabled = false
+				cr.Status.AddCondition(api.ClusterCondition{Type: api.AppStateSharding, Status: api.ConditionTrue})
+				return nil
+			},
+			want: []string{rs0, rs0Hidden},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("some-cluster", "ns")
+			require.NoError(t, err)
+			require.True(t, cr.Spec.Sharding.Enabled)
+			require.False(t, cr.Spec.Replsets[0].NonVoting.Enabled)
+			// the sharding toggle only runs with backups enabled
+			require.True(t, cr.Spec.Backup.Enabled)
+			cr.Spec.Replsets[0].Hidden.Enabled = true
+			cr.Spec.Sharding.Mongos.Logs = &api.MongosLogsSpec{PersistentVolumeClaim: logStorageSpec("1Gi").PersistentVolumeClaim}
+			var objs []client.Object
+			if tt.setup != nil {
+				objs = tt.setup(cr)
+			}
+			for _, sts := range []string{rs0, rs0Hidden, rs0NonVoting, removedRS, cfg, mongos} {
+				cr.SetPVCShrinkState(sts, api.PVCShrinkState{Phase: "secondaries", TargetSize: "1Gi"})
+			}
+
+			r := buildFakeClient(append([]client.Object{cr}, objs...)...)
+			r.serverVersion = &version.ServerVersion{Platform: version.PlatformKubernetes}
+			r.crons = NewCronRegistry()
+
+			_, err = r.Reconcile(t.Context(), reconcile.Request{Name: cr.Name, Namespace: cr.Namespace})
+			require.NoError(t, err)
+
+			got := &api.PerconaServerMongoDB{}
+			require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(cr), got))
+			assert.ElementsMatch(t, tt.want, slices.Collect(maps.Keys(got.Status.PVCShrink)))
+			if !cr.Spec.Sharding.Enabled {
+				cond := got.Status.FindCondition(api.AppStateSharding)
+				require.NotNil(t, cond)
+				assert.Equal(t, api.ConditionFalse, cond.Status, "sharding toggle must have run")
+			}
+		})
+	}
+}
+
+func TestShrinkPreflightSavesStateBeforeDeletingStatefulSet(t *testing.T) {
+	t.Parallel()
+
+	requested, actual := resource.MustParse("2Gi"), resource.MustParse("3Gi")
+
+	t.Run("state saved, then statefulset deleted", func(t *testing.T) {
+		t.Parallel()
+		r, sc := mongosShrinkFixture(t, requested)
+
+		require.NoError(t, r.shrinkPreflight(t.Context(), sc, requested, actual))
+
+		stored := &api.PerconaServerMongoDB{}
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.cr), stored))
+		state, ok := stored.GetPVCShrinkState(sc.sts.Name)
+		require.True(t, ok, "shrink state must be saved")
+		assert.Equal(t, "2Gi", state.TargetSize)
+
+		err := r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{})
+		assert.True(t, k8serrors.IsNotFound(err), "statefulset must be deleted, got %v", err)
+	})
+
+	t.Run("stale CR deletes nothing", func(t *testing.T) {
+		t.Parallel()
+		r, sc := mongosShrinkFixture(t, requested)
+
+		edited := sc.cr.DeepCopy()
+		edited.Annotations = map[string]string{"foo": "bar"}
+		require.NoError(t, r.client.Update(t.Context(), edited))
+
+		err := r.shrinkPreflight(t.Context(), sc, requested, actual)
+		require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+
+		_, ok := sc.cr.GetPVCShrinkState(sc.sts.Name)
+		assert.False(t, ok, "state must not stay in memory")
+		vct := sc.sts.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+		assert.Equal(t, actual.String(), vct.String(), "claim template must be reverted")
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{}), "statefulset must not be deleted")
+	})
+
+	t.Run("failed statefulset delete keeps the saved state", func(t *testing.T) {
+		t.Parallel()
+		r, sc := mongosShrinkFixture(t, requested)
+		r.client = interceptorClient(t, r.client, failStatefulSetDelete)
+
+		require.Error(t, r.shrinkPreflight(t.Context(), sc, requested, actual))
+
+		stored := &api.PerconaServerMongoDB{}
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.cr), stored))
+		_, ok := stored.GetPVCShrinkState(sc.sts.Name)
+		assert.True(t, ok, "saved state must be kept, the next reconcile deletes the statefulset again")
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{}))
+	})
+}
+
+func TestShrinkRecreatesStatefulSetWithOldClaimTemplate(t *testing.T) {
+	t.Parallel()
+
+	target, old := resource.MustParse("2Gi"), resource.MustParse("3Gi")
+	cr, err := readDefaultCR("some-cluster", "ns")
+	require.NoError(t, err)
+	labels := naming.MongosLabels(cr)
+	podName := naming.MongosStatefulSetName(cr) + "-0"
+	pvc := newPVC(cr.Namespace, config.MongosLogVolClaimName+"-"+podName, labels, old, old)
+
+	r, sc := mongosShrinkFixture(t, old, newPod(cr.Namespace, podName, labels), pvc)
+	state := api.PVCShrinkState{TargetSize: target.String(), Phase: "secondaries", ProcessedPods: []string{}}
+	sc.cr.SetPVCShrinkState(sc.sts.Name, state)
+
+	require.NoError(t, r.shrinkProcessPods(t.Context(), sc, state, false))
+
+	require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(pvc), &corev1.PersistentVolumeClaim{}), "PVC must not be deleted while the old template would recreate it")
+	err = r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{})
+	assert.True(t, k8serrors.IsNotFound(err), "statefulset with the old template must be deleted, got %v", err)
+}
+
+func TestShrinkClaimTemplateReady(t *testing.T) {
+	t.Parallel()
+
+	target, old := resource.MustParse("2Gi"), resource.MustParse("3Gi")
+
+	deleting := func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+		live := &appsv1.StatefulSet{}
+		require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), live))
+		live.Finalizers = []string{"test/hold"}
+		require.NoError(t, r.client.Update(t.Context(), live))
+		require.NoError(t, r.client.Delete(t.Context(), live))
+	}
+
+	tests := map[string]struct {
+		vctSize   resource.Quantity
+		prepare   func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext)
+		wantReady bool
+		wantErr   string
+		wantSTS   bool
+	}{
+		"template has the target size": {vctSize: target, wantReady: true, wantSTS: true},
+		"template has the old size":    {vctSize: old, wantReady: false, wantSTS: false},
+		"statefulset is gone": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				require.NoError(t, r.client.Delete(t.Context(), sc.sts.DeepCopy()))
+			},
+			wantReady: true,
+		},
+		"statefulset with the old size is being deleted":    {vctSize: old, prepare: deleting, wantSTS: true},
+		"statefulset with the target size is being deleted": {vctSize: target, prepare: deleting, wantSTS: true},
+		"no template for the claim": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				sc.claimName = "other"
+			},
+			wantReady: true,
+			wantSTS:   true,
+		},
+		"delete fails": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				r.client = interceptorClient(t, r.client, failStatefulSetDelete)
+			},
+			wantErr: "delete statefulset for shrink",
+			wantSTS: true,
+		},
+		"stale cache read is not deleted": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				// the fake client ignores UID preconditions, so emulate the API server
+				r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+					Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if err := c.Get(ctx, key, obj, opts...); err != nil {
+							return err
+						}
+						if sts, ok := obj.(*appsv1.StatefulSet); ok {
+							sts.UID = "replaced-uid"
+						}
+						return nil
+					},
+					Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+						options := &client.DeleteOptions{}
+						options.ApplyOptions(opts)
+						if _, ok := obj.(*appsv1.StatefulSet); ok && options.Preconditions != nil && options.Preconditions.UID != nil {
+							live := &appsv1.StatefulSet{}
+							if err := c.Get(ctx, client.ObjectKeyFromObject(obj), live); err != nil {
+								return err
+							}
+							if live.UID != *options.Preconditions.UID {
+								return k8serrors.NewConflict(appsv1.Resource("statefulsets"), obj.GetName(), errors.New("uid mismatch"))
+							}
+						}
+						return c.Delete(ctx, obj, opts...)
+					},
+				})
+			},
+			wantSTS: true,
+		},
+		"stale CR when preserving restartedAt": {
+			vctSize: old,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				live := &appsv1.StatefulSet{}
+				require.NoError(t, r.client.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), live))
+				live.Spec.Template.Annotations = map[string]string{naming.AnnotationKubectlRestartedAt: "2026-11-26T00:00:00Z"}
+				require.NoError(t, r.client.Update(t.Context(), live))
+				r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+					Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+						if _, ok := obj.(*api.PerconaServerMongoDB); ok {
+							return k8serrors.NewConflict(api.SchemeGroupVersion.WithResource("perconaservermongodbs").GroupResource(), obj.GetName(), errors.New("stale"))
+						}
+						return c.Patch(ctx, obj, patch, opts...)
+					},
+				})
+			},
+			wantErr: "preserve restartedAt annotation",
+			wantSTS: true,
+		},
+		"get fails": {
+			vctSize: target,
+			prepare: func(t *testing.T, r *ReconcilePerconaServerMongoDB, sc *shrinkContext) {
+				r.client = interceptor.NewClient(r.client.(client.WithWatch), interceptor.Funcs{
+					Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*appsv1.StatefulSet); ok {
+							return errors.New("boom")
+						}
+						return c.Get(ctx, key, obj, opts...)
+					},
+				})
+			},
+			wantErr: "get statefulset",
+			wantSTS: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			r, sc := mongosShrinkFixture(t, tt.vctSize)
+			base := r.client
+			if tt.prepare != nil {
+				tt.prepare(t, r, &sc)
+			}
+
+			ready, err := r.shrinkClaimTemplateReady(t.Context(), sc.cr, sc.sts, sc.claimName, target)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantReady, ready)
+
+			err = base.Get(t.Context(), client.ObjectKeyFromObject(sc.sts), &appsv1.StatefulSet{})
+			assert.Equal(t, tt.wantSTS, err == nil, "statefulset exists: got err %v", err)
+		})
+	}
+}
+
+// rejectClaimTemplateUpdates makes the fake client reject claim template changes as the API server does.
+func rejectClaimTemplateUpdates(c client.Client) client.Client {
+	return interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{
+		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+			if sts, ok := obj.(*appsv1.StatefulSet); ok {
+				cur := new(appsv1.StatefulSet)
+				if err := c.Get(ctx, client.ObjectKeyFromObject(sts), cur); err == nil &&
+					!equality.Semantic.DeepEqual(cur.Spec.VolumeClaimTemplates, sts.Spec.VolumeClaimTemplates) {
+					return k8serrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, sts.Name,
+						errors.New("spec: Forbidden: updates to statefulset spec for fields other than 'replicas', 'ordinals', 'template', 'updateStrategy', 'persistentVolumeClaimRetentionPolicy' and 'minReadySeconds' are forbidden"))
+				}
+			}
+			return c.Update(ctx, obj, opts...)
+		},
+	})
+}
+
+// The shrink state was saved but the operator stopped before deleting the statefulset.
+func TestShrinkReplsetRecreatesStatefulSetWithOldClaimTemplate(t *testing.T) {
+	t.Parallel()
+
+	target := resource.MustParse("2Gi")
+
+	for name, specSize := range map[string]resource.Quantity{
+		"old claim template":             target,
+		"size changed during the shrink": resource.MustParse("1Gi"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			f := newReplsetShrinkFixture(t, specSize, target.String())
+
+			_, err := f.r.reconcileStatefulSet(ctx, f.cr, f.rs, f.ls)
+			require.NoError(t, err)
+			err = f.r.client.Get(ctx, client.ObjectKeyFromObject(f.sts), new(appsv1.StatefulSet))
+			require.True(t, k8serrors.IsNotFound(err), "statefulset with the old claim template must be deleted, got %v", err)
+			require.NoError(t, f.r.client.Get(ctx, client.ObjectKeyFromObject(f.pvc), new(corev1.PersistentVolumeClaim)), "PVC must not be deleted yet")
+
+			// the shrink keeps its target until it is done, so the statefulset is recreated once
+			for range 3 {
+				_, err = f.r.reconcileStatefulSet(ctx, f.cr, f.rs, f.ls)
+				require.NoError(t, err)
+				recreated := new(appsv1.StatefulSet)
+				require.NoError(t, f.r.client.Get(ctx, client.ObjectKeyFromObject(f.sts), recreated))
+				size := recreated.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage]
+				assert.Equal(t, target.String(), size.String())
+			}
+			assert.Equal(t, specSize.String(), f.rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests.Storage().String(), "CR spec must not change")
+		})
+	}
+
+	t.Run("delete fails", func(t *testing.T) {
+		t.Parallel()
+		f := newReplsetShrinkFixture(t, target, target.String())
+		f.r.client = interceptorClient(t, f.r.client, failStatefulSetDelete)
+
+		_, err := f.r.reconcileStatefulSet(t.Context(), f.cr, f.rs, f.ls)
+		require.ErrorContains(t, err, "delete statefulset for shrink")
+	})
+
+	t.Run("target size does not parse", func(t *testing.T) {
+		t.Parallel()
+		f := newReplsetShrinkFixture(t, target, "not-a-size")
+
+		_, err := f.r.reconcileStatefulSet(t.Context(), f.cr, f.rs, f.ls)
+		require.ErrorContains(t, err, "parse shrink target size")
+	})
+}
+
+func failStatefulSetDelete(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+	if _, ok := obj.(*appsv1.StatefulSet); ok {
+		return errors.New("delete failed")
+	}
+	return c.Delete(ctx, obj, opts...)
+}
+
+type replsetShrinkFixture struct {
+	r   *ReconcilePerconaServerMongoDB
+	cr  *api.PerconaServerMongoDB
+	rs  *api.ReplsetSpec
+	ls  map[string]string
+	sts *appsv1.StatefulSet
+	pvc *corev1.PersistentVolumeClaim
+}
+
+// newReplsetShrinkFixture builds rs0 with a 3Gi statefulset and PVC, a saved shrink state and the spec at specSize:
+// the shrink state was saved but the operator stopped before deleting the statefulset.
+func newReplsetShrinkFixture(t *testing.T, specSize resource.Quantity, targetSize string) replsetShrinkFixture {
+	t.Helper()
+	ctx := t.Context()
+	const ns = "shrink-crash"
+	crName := ns + "-cr"
+
+	cr, err := readDefaultCR(crName, ns)
+	require.NoError(t, err)
+	require.NoError(t, cr.CheckNSetDefaults(ctx, version.PlatformKubernetes))
+	rs := cr.Spec.Replset("rs0")
+	ls := naming.MongodLabels(cr, rs)
+	objs := []client.Object{
+		cr,
+		&corev1.Secret{Name: crName + "-ssl", Namespace: ns},
+		&corev1.Secret{Name: crName + "-ssl-internal", Namespace: ns},
+		&corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: ns},
+	}
+
+	old := resource.MustParse("3Gi")
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = old
+	sts, err := buildFakeClient(objs...).getStatefulsetFromReplset(ctx, cr, rs, ls)
+	require.NoError(t, err)
+	sts = sts.DeepCopy()
+
+	pod := newPod(ns, sts.Name+"-0", ls)
+	pvc := newPVC(ns, config.MongodDataVolClaimName+"-"+pod.Name, ls, old, old)
+
+	rs.VolumeSpec.PersistentVolumeClaim.Resources.Requests[corev1.ResourceStorage] = specSize
+	cr.Status.State = api.AppStateInit
+	cr.SetPVCShrinkState(sts.Name, api.PVCShrinkState{TargetSize: targetSize, Phase: "secondaries", ProcessedPods: []string{}})
+
+	r := buildFakeClient(append(objs, sts, pod, pvc)...)
+	r.client = rejectClaimTemplateUpdates(r.client)
+
+	return replsetShrinkFixture{r: r, cr: cr, rs: rs, ls: ls, sts: sts, pvc: pvc}
 }

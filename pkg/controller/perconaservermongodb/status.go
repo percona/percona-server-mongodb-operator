@@ -16,8 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -362,39 +360,49 @@ func (r *ReconcilePerconaServerMongoDB) upgradeInProgress(ctx context.Context, c
 	return sfsObj.Status.Replicas > sfsObj.Status.UpdatedReplicas, nil
 }
 
-// writeStatusBackoff gives the informer cache time to catch up with our own
-// previous writes, otherwise consecutive status writes keep conflicting.
-var writeStatusBackoff = wait.Backoff{
-	Steps:    6,
-	Duration: 50 * time.Millisecond,
-	Factor:   2.0,
-	Jitter:   0.1,
-}
-
+// writeStatus writes cr.Status with the resourceVersion cr was read at. If the
+// CR changed since then, the write fails with a conflict: cr may come from a
+// stale cache and miss status written by the previous reconcile. A recreated
+// CR has a new resourceVersion and conflicts too.
+// It writes a copy so that the response does not replace the defaults set on cr.Spec.
 func (r *ReconcilePerconaServerMongoDB) writeStatus(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	err := retry.RetryOnConflict(writeStatusBackoff, func() error {
-		c := &api.PerconaServerMongoDB{}
+	c := cr.DeepCopy()
 
-		err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c)
-		if err != nil {
-			return err
-		}
-
-		// The CR might be deleted and recreated with the same name while we were reconciling the old one.
-		if c.UID != cr.UID {
-			return nil
-		}
-
-		c.Status = cr.Status
-
-		return r.client.Status().Update(ctx, c)
-	})
-
+	err := r.client.Status().Update(ctx, c)
 	if k8serrors.IsNotFound(err) {
 		return nil
 	}
+	if err != nil {
+		return errors.Wrap(err, "write status")
+	}
 
-	return errors.Wrap(err, "write status")
+	cr.ResourceVersion = c.ResourceVersion
+
+	return nil
+}
+
+// patchCR patches the CR from orig, failing on a conflict like writeStatus,
+// and keeps cr.ResourceVersion current so later writes in this reconcile
+// don't conflict with this one. cr itself is not overwritten with the
+// response, which would drop the defaults set in memory.
+func (r *ReconcilePerconaServerMongoDB) patchCR(ctx context.Context, cr, orig *api.PerconaServerMongoDB) error {
+	// Without changes the patch would only carry the resourceVersion and fail on a stale cr for nothing.
+	data, err := client.MergeFrom(orig).Data(cr)
+	if err != nil {
+		return errors.Wrap(err, "build patch")
+	}
+	if string(data) == "{}" {
+		return nil
+	}
+
+	patched := cr.DeepCopy()
+	if err := r.client.Patch(ctx, patched, client.MergeFromWithOptions(orig, client.MergeFromWithOptimisticLock{})); err != nil {
+		return err
+	}
+
+	cr.ResourceVersion = patched.ResourceVersion
+
+	return nil
 }
 
 func (r *ReconcilePerconaServerMongoDB) rsStatus(ctx context.Context, cr *api.PerconaServerMongoDB, rsSpec *api.ReplsetSpec) (api.ReplsetStatus, error) {
