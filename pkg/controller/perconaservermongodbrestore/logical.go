@@ -30,7 +30,7 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcileLogicalRestore(
 
 	backupName := bcp.Status.PBMname
 
-	pbmc, err := backup.NewPBM(ctx, r.client, cluster)
+	pbmc, err := r.newPBMFunc(ctx, r.client, cluster)
 	if err != nil {
 		log.Info("Waiting for pbm-agent.")
 		status.State = psmdbv1.RestoreStateWaiting
