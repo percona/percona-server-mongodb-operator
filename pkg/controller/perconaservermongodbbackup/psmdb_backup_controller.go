@@ -739,6 +739,10 @@ func (r *ReconcilePerconaServerMongoDBBackup) checkFinalizers(ctx context.Contex
 				log.Error(err, "failed to release backup lock")
 				finalizers = append(finalizers, f)
 			}
+		default:
+			// Keep finalizers the operator does not own, so their owner still
+			// gets to run its cleanup before the object is garbage collected.
+			finalizers = append(finalizers, f)
 		}
 	}
 

@@ -360,3 +360,66 @@ func TestReconcileDeleteRetriesOnTransientClusterFetchError(t *testing.T) {
 	assert.ElementsMatch(t, []string{naming.FinalizerDeleteBackup, naming.FinalizerReleaseLock}, got.GetFinalizers(),
 		"finalizers must not be touched when the cluster could not be inspected")
 }
+
+func TestReconcileDeleteKeepsForeignFinalizers(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns          = "ns"
+		clusterName = "restored-mongodb"
+		backupName  = "backup-foreign"
+		foreign     = "example.com/backup-protection"
+	)
+
+	now := metav1.NewTime(time.Now())
+	cr := &psmdbv1.PerconaServerMongoDBBackup{
+		Name:              backupName,
+		Namespace:         ns,
+		UID:               types.UID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+		DeletionTimestamp: &now,
+		Finalizers: []string{
+			naming.FinalizerDeleteBackup,
+			foreign,
+		},
+		Spec: psmdbv1.PerconaServerMongoDBBackupSpec{
+			ClusterName: clusterName,
+			StorageName: "s3-storage",
+		},
+		Status: psmdbv1.PerconaServerMongoDBBackupStatus{
+			State: psmdbv1.BackupStateReady,
+		},
+	}
+
+	cluster := &psmdbv1.PerconaServerMongoDB{
+		Name:      clusterName,
+		Namespace: ns,
+		Spec: psmdbv1.PerconaServerMongoDBSpec{
+			CRVersion: "1.21.0",
+		},
+	}
+
+	cl := fake.NewClientBuilder().
+		WithScheme(backupScheme(t)).
+		WithRuntimeObjects(cr.DeepCopy(), cluster.DeepCopy()).
+		WithStatusSubresource(cr).
+		Build()
+
+	r := &ReconcilePerconaServerMongoDBBackup{
+		client:    cl,
+		apiReader: cl,
+		newPBMFunc: func(ctx context.Context, c client.Client, cluster *psmdbv1.PerconaServerMongoDB) (backup.PBM, error) {
+			return nil, errors.New("create PBM connection: mongo: no documents in result")
+		},
+	}
+
+	_, err := r.Reconcile(context.Background(), reconcile.Request{
+		Name: backupName, Namespace: ns,
+	})
+	require.NoError(t, err)
+
+	got := &psmdbv1.PerconaServerMongoDBBackup{}
+	require.NoError(t, cl.Get(context.Background(), types.NamespacedName{Name: backupName, Namespace: ns}, got),
+		"the backup must outlive its own finalizers while %s is still set", foreign)
+	assert.Equal(t, []string{foreign}, got.GetFinalizers(),
+		"the operator must remove only the finalizers it owns")
+}
