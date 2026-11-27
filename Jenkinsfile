@@ -180,14 +180,16 @@ boolean publishAllureReport() {
 
 // The Allure timeline groups tests by their host and thread labels. All slots run on one Jenkins
 // agent, so pytest gives every test the same host. This sets host to the cluster and thread to the
-// slot, adds the cluster load while each test case ran, and moves the results into
+// slot, adds a "Cluster" parameter and the cluster load while each test case ran, attaches the
+// cleanup log to the test case that finished last, and moves the results into
 // e2e-tests/allure-results. A problem here does not fail the build.
-void finishSlotAllureResults(String resultsDir, String cluster, String slot) {
+void finishSlotAllureResults(String resultsDir, String cluster, String slot, String cleanupLog) {
     try {
         withEnv([
             "RESULTS=${resultsDir}",
             "LABEL_HOST=${CLUSTER_NAME}-${cluster}",
             "LABEL_THREAD=${slot}",
+            "CLEANUP_LOG=${cleanupLog}",
             "LOAD_SAMPLES=${clusterLoadSamples(cluster)}",
             "CPU_LIMIT=${loadCpuPercent}",
             "MEM_LIMIT=${loadMemoryPercent}",
@@ -197,9 +199,13 @@ void finishSlotAllureResults(String resultsDir, String cluster, String slot) {
                 [ -d "$RESULTS" ] || exit 0
                 for result in "$RESULTS"/*-result.json; do
                     [ -f "$result" ] || continue
+                    # excluded parameters: the values differ between attempts, and Allure groups a retry
+                    # with its earlier attempts only when their parameters match.
                     jq --arg host "$LABEL_HOST" --arg thread "$LABEL_THREAD" '
                         .labels = ([(.labels // [])[] | select(.name != "host" and .name != "thread")]
                             + [{"name": "host", "value": $host}, {"name": "thread", "value": $thread}])
+                        | .parameters = ((.parameters // [])
+                            + [{"name": "Cluster", "value": ($host + " (" + $thread + ")"), "excluded": true}])
                     ' "$result" > "$result.tmp" && mv "$result.tmp" "$result"
 
                     [ -s "$LOAD_SAMPLES" ] || continue
@@ -226,13 +232,23 @@ void finishSlotAllureResults(String resultsDir, String cluster, String slot) {
                             '$1 >= from && $1 <= to { $1 = $1 - start; print }' "$LOAD_SAMPLES"
                     } > "$RESULTS/$attachment"
 
-                    # excluded: the value differs between attempts, and Allure groups a retry with its
-                    # earlier attempts only when their parameters match.
                     jq --arg value "$value" --arg source "$attachment" '
                         .parameters = ((.parameters // []) + [{"name": "Cluster load", "value": $value, "excluded": true}])
                         | .attachments = ((.attachments // []) + [{"name": "Cluster load", "source": $source, "type": "text/plain"}])
                     ' "$result" > "$result.tmp" && mv "$result.tmp" "$result"
                 done
+
+                # The cleanup runs once after the whole test, so its log goes to the last test case.
+                last=$(for result in "$RESULTS"/*-result.json; do
+                    [ -f "$result" ] && printf '%s %s\\n' "$(jq -r '.stop // 0' "$result")" "$result"
+                done | sort -n | tail -1 | cut -d' ' -f2-)
+                if [ -n "$last" ] && [ -s "$CLEANUP_LOG" ]; then
+                    attachment="$(basename "$last" -result.json)-cleanup-attachment.txt"
+                    cp "$CLEANUP_LOG" "$RESULTS/$attachment"
+                    jq --arg source "$attachment" '
+                        .attachments = ((.attachments // []) + [{"name": "Cleanup after the test", "source": $source, "type": "text/plain"}])
+                    ' "$last" > "$last.tmp" && mv "$last.tmp" "$last"
+                fi
                 mkdir -p e2e-tests/allure-results
                 find "$RESULTS" -mindepth 1 -maxdepth 1 -exec mv -f {} e2e-tests/allure-results/ \\;
                 rm -rf "$RESULTS"
@@ -797,7 +813,6 @@ void runSlotTest(Integer testId, String slot) {
     """
 
     runTest(testId, slotExports, operatorNs, false)
-    finishSlotAllureResults(allureDir, test.cluster, slot)
 
     def failed = test.result != 'passed'
     if (failed && !test.ownCluster && currentBuild.nextBuild == null) {
@@ -830,6 +845,7 @@ void runSlotTest(Integer testId, String slot) {
     } catch (cleanupErr) {
         echo "Warning: failed to clean up after ${testName}: ${cleanupErr}"
     }
+    finishSlotAllureResults(allureDir, test.cluster, slot, "${slotDir}/cleanup.log")
 }
 
 // Frees the cluster for the next tests. Runs after every test, also a failed one, whose own
@@ -850,80 +866,85 @@ void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster, Str
              "NAMESPACE_OWNER=${namespaceOwner}", "SLOT_DIR=${slotDir}", "VAULT_LOCK=${vaultLock ? 1 : 0}"]) {
         sh '''
             set +e
-            if ! kubectl get --raw='/healthz' --request-timeout=5s >/dev/null 2>&1; then
-                echo "Skipping the cleanup after $TEST_NAME: the cluster is not reachable"
-                exit 0
-            fi
-
-            list_namespaces() {
-                kubectl get namespaces --request-timeout=10s --no-headers -o custom-columns=NAME:.metadata.name "$@"
-            }
-            resources=$(kubectl api-resources --api-group=psmdb.percona.com --namespaced -o name --request-timeout=10s | paste -sd, -)
-            {
-                list_namespaces -l "e2e.percona.com/owner=$NAMESPACE_OWNER"
-                list_namespaces | grep -E "^${TEST_NAME}-[0-9a-f]+(-.*)?\\$"
-                if [ "$OWN_CLUSTER" = 1 ] && [ -s "$SLOT_DIR/namespaces-before" ]; then
-                    # psmdb-operator and cert-manager are removed below, in order.
-                    list_namespaces | grep -vxF -f "$SLOT_DIR/namespaces-before" \
-                        | grep -vE '^(kube-.*|gke-.*|gmp-.*|default|psmdb-operator|cert-manager)$'
+            # The log, with the commands, is also attached to the test in the Allure report.
+            cleanup() {
+                if ! kubectl get --raw='/healthz' --request-timeout=5s >/dev/null 2>&1; then
+                    echo "Skipping the cleanup after $TEST_NAME: the cluster is not reachable"
+                    return 0
                 fi
-            } | sort -u | while read -r namespace; do
-                    echo "Deleting namespace: $namespace"
-                    if [ -n "$resources" ]; then
-                        kubectl get "$resources" -n "$namespace" -o name --request-timeout=10s 2>/dev/null \
-                            | while read -r object; do
-                                kubectl patch "$object" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
-                            done
+
+                list_namespaces() {
+                    kubectl get namespaces --request-timeout=10s --no-headers -o custom-columns=NAME:.metadata.name "$@"
+                }
+                resources=$(kubectl api-resources --api-group=psmdb.percona.com --namespaced -o name --request-timeout=10s | paste -sd, -)
+                {
+                    list_namespaces -l "e2e.percona.com/owner=$NAMESPACE_OWNER"
+                    list_namespaces | grep -E "^${TEST_NAME}-[0-9a-f]+(-.*)?\\$"
+                    if [ "$OWN_CLUSTER" = 1 ] && [ -s "$SLOT_DIR/namespaces-before" ]; then
+                        # psmdb-operator and cert-manager are removed below, in order.
+                        list_namespaces | grep -vxF -f "$SLOT_DIR/namespaces-before" \
+                            | grep -vE '^(kube-.*|gke-.*|gmp-.*|default|psmdb-operator|cert-manager)$'
                     fi
-                    kubectl delete namespace "$namespace" --wait=false --request-timeout=10s
-                done
-            kubectl get clusterrole,clusterrolebinding --request-timeout=10s -o name \
-                | grep -E -- "-${TEST_NAME}-[0-9a-f]+-op\\$" \
-                | xargs -r kubectl delete --ignore-not-found --wait=false --request-timeout=10s
-
-            if [ "$VAULT_LOCK" = 1 ]; then
-                kubectl delete clusterrole,clusterrolebinding,mutatingwebhookconfiguration \
-                    -l 'app.kubernetes.io/instance in (vault-service,users-vault-service)' \
-                    --ignore-not-found --request-timeout=30s
-            fi
-
-            if [ "$OWN_CLUSTER" != 1 ]; then
-                exit 0
-            fi
-            kubectl delete namespace psmdb-operator --ignore-not-found --timeout=120s
-            kubectl delete clusterrolebinding service-account-percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
-            kubectl delete clusterrole percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
-
-            selector=app.kubernetes.io/instance=cert-manager
-            if kubectl get namespace cert-manager --request-timeout=10s >/dev/null 2>&1 \
-                || [ -n "$(kubectl get crd -l "$selector" -o name --request-timeout=10s 2>/dev/null)" ]; then
-                echo "Removing cert-manager left by $TEST_NAME"
-                kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration -l "$selector" --ignore-not-found --request-timeout=30s
-                kubectl delete clusterrole,clusterrolebinding -l "$selector" --ignore-not-found --request-timeout=30s
-                kubectl delete role,rolebinding -n kube-system -l "$selector" --ignore-not-found --request-timeout=30s
-                # Wait: the operator decides how to issue certificates by whether these CRDs exist.
-                kubectl delete crd -l "$selector" --ignore-not-found --timeout=180s
-                kubectl delete namespace cert-manager --ignore-not-found --timeout=180s
-            fi
-
-            kubectl delete crd verticalpodautoscalers.autoscaling.k8s.io verticalpodautoscalercheckpoints.autoscaling.k8s.io \
-                --ignore-not-found --timeout=120s
-            kubectl delete deployment vpa-recommender -n kube-system --ignore-not-found --request-timeout=30s
-
-            kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration,clusterrole,clusterrolebinding \
-                -o name --request-timeout=10s | grep -E 'chaos-mesh|/validate-auth$' \
-                | xargs -r kubectl delete --ignore-not-found --request-timeout=30s
-            for crd in $(kubectl get crd -o name --request-timeout=10s | grep -E '\\.chaos-mesh\\.org$'); do
-                kubectl get "${crd#*/}" --all-namespaces --no-headers --request-timeout=10s \
-                    -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name 2>/dev/null \
-                    | while read -r namespace name; do
-                        kubectl patch "${crd#*/}" "$name" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                } | sort -u | while read -r namespace; do
+                        echo "Deleting namespace: $namespace"
+                        if [ -n "$resources" ]; then
+                            kubectl get "$resources" -n "$namespace" -o name --request-timeout=10s 2>/dev/null \
+                                | while read -r object; do
+                                    kubectl patch "$object" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                                done
+                        fi
+                        kubectl delete namespace "$namespace" --wait=false --request-timeout=10s
                     done
-                kubectl delete "$crd" --ignore-not-found --timeout=60s
-            done
+                kubectl get clusterrole,clusterrolebinding --request-timeout=10s -o name \
+                    | grep -E -- "-${TEST_NAME}-[0-9a-f]+-op\\$" \
+                    | xargs -r kubectl delete --ignore-not-found --wait=false --request-timeout=10s
 
-            kubectl delete clusterrole,clusterrolebinding monitoring --ignore-not-found --request-timeout=30s
-            kubectl delete clusterrolebinding pmm-psmdb-operator-cluster-wide --ignore-not-found --request-timeout=30s
+                if [ "$VAULT_LOCK" = 1 ]; then
+                    kubectl delete clusterrole,clusterrolebinding,mutatingwebhookconfiguration \
+                        -l 'app.kubernetes.io/instance in (vault-service,users-vault-service)' \
+                        --ignore-not-found --request-timeout=30s
+                fi
+
+                if [ "$OWN_CLUSTER" != 1 ]; then
+                    return 0
+                fi
+                kubectl delete namespace psmdb-operator --ignore-not-found --timeout=120s
+                kubectl delete clusterrolebinding service-account-percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
+                kubectl delete clusterrole percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
+
+                selector=app.kubernetes.io/instance=cert-manager
+                if kubectl get namespace cert-manager --request-timeout=10s >/dev/null 2>&1 \
+                    || [ -n "$(kubectl get crd -l "$selector" -o name --request-timeout=10s 2>/dev/null)" ]; then
+                    echo "Removing cert-manager left by $TEST_NAME"
+                    kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration -l "$selector" --ignore-not-found --request-timeout=30s
+                    kubectl delete clusterrole,clusterrolebinding -l "$selector" --ignore-not-found --request-timeout=30s
+                    kubectl delete role,rolebinding -n kube-system -l "$selector" --ignore-not-found --request-timeout=30s
+                    # Wait: the operator decides how to issue certificates by whether these CRDs exist.
+                    kubectl delete crd -l "$selector" --ignore-not-found --timeout=180s
+                    kubectl delete namespace cert-manager --ignore-not-found --timeout=180s
+                fi
+
+                kubectl delete crd verticalpodautoscalers.autoscaling.k8s.io verticalpodautoscalercheckpoints.autoscaling.k8s.io \
+                    --ignore-not-found --timeout=120s
+                kubectl delete deployment vpa-recommender -n kube-system --ignore-not-found --request-timeout=30s
+
+                kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration,clusterrole,clusterrolebinding \
+                    -o name --request-timeout=10s | grep -E 'chaos-mesh|/validate-auth$' \
+                    | xargs -r kubectl delete --ignore-not-found --request-timeout=30s
+                for crd in $(kubectl get crd -o name --request-timeout=10s | grep -E '\\.chaos-mesh\\.org$'); do
+                    kubectl get "${crd#*/}" --all-namespaces --no-headers --request-timeout=10s \
+                        -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name 2>/dev/null \
+                        | while read -r namespace name; do
+                            kubectl patch "${crd#*/}" "$name" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                        done
+                    kubectl delete "$crd" --ignore-not-found --timeout=60s
+                done
+
+                kubectl delete clusterrole,clusterrolebinding monitoring --ignore-not-found --request-timeout=30s
+                kubectl delete clusterrolebinding pmm-psmdb-operator-cluster-wide --ignore-not-found --request-timeout=30s
+            }
+            cleanup > "$SLOT_DIR/cleanup.log" 2>&1
+            cat "$SLOT_DIR/cleanup.log"
             exit 0
         '''
     }
