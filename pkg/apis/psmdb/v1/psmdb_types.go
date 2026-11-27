@@ -71,6 +71,7 @@ const (
 
 // PerconaServerMongoDBSpec defines the desired state of PerconaServerMongoDB
 // +kubebuilder:validation:XValidation:rule="!self.?pmm.?enabled.orValue(false) || self.?pmm.?querySource.orValue('profiler') != 'mongolog' || self.?logcollector.?enabled.orValue(false)",message="pmm.querySource 'mongolog' requires logcollector to be enabled"
+// +kubebuilder:validation:XValidation:rule="self.?sharding.?enabled.orValue(false) || size(self.?replsets.orValue([])) <= 1",message="multiple replsets require sharding to be enabled"
 type PerconaServerMongoDBSpec struct {
 	Pause                        bool                                 `json:"pause,omitempty"`
 	Unmanaged                    bool                                 `json:"unmanaged,omitempty"`

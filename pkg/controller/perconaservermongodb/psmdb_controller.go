@@ -817,16 +817,9 @@ func (r *ReconcilePerconaServerMongoDB) checkConfiguration(ctx context.Context, 
 		return errors.Wrap(rsErr, "failed to get all replsets")
 	}
 
-	if !cr.Spec.Sharding.Enabled {
-		// means we have already had sharded cluster and try to disable sharding
-		if cfgErr == nil && len(rs.Items) > 1 {
-			return errors.Errorf("failed to disable sharding with %d active replsets", len(rs.Items))
-		}
-
-		// means we want to run multiple replsets without sharding
-		if len(cr.Spec.Replsets) > 1 {
-			return errors.New("running multiple replsets without sharding is prohibited")
-		}
+	// means we have already had sharded cluster and try to disable sharding
+	if !cr.Spec.Sharding.Enabled && cfgErr == nil && len(rs.Items) > 1 {
+		return errors.Errorf("failed to disable sharding with %d active replsets", len(rs.Items))
 	}
 
 	return nil
