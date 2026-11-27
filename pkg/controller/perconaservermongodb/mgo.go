@@ -287,6 +287,17 @@ func (r *ReconcilePerconaServerMongoDB) reconcileCluster(ctx context.Context, cr
 			cr.Status.Mongos != nil &&
 			cr.Status.Mongos.Status == api.AppStateReady:
 
+			// mongos can't be reached through hostnames missing from the certificate it runs,
+			// e.g. per-pod services right after servicePerPod is enabled
+			certCurrent, err := r.mongosServesCurrentCert(ctx, cr, mongosPods)
+			if err != nil {
+				return api.AppStateError, nil, errors.Wrap(err, "check mongos certificate")
+			}
+			if !certCurrent {
+				log.V(1).Info("Waiting for mongos to load the current TLS certificate", "replset", replset.Name)
+				break
+			}
+
 			mongosSession, err := r.mongosClientWithRole(ctx, cr, api.RoleClusterAdmin)
 			if err != nil {
 				return api.AppStateError, nil, errors.Wrap(err, "failed to get mongos connection")

@@ -1184,6 +1184,96 @@ func TestUpdateMongosFirstIfTLSOutdated(t *testing.T) {
 	}
 }
 
+func TestMongosServesCurrentCert(t *testing.T) {
+	newCR := func(tlsMode api.TLSMode, allowInvalidCerts bool) *api.PerconaServerMongoDB {
+		cr := newTestCR()
+		cr.Spec.TLS = &api.TLSSpec{
+			Mode:                     tlsMode,
+			AllowInvalidCertificates: new(allowInvalidCerts),
+		}
+		return cr
+	}
+
+	sslSecret := &corev1.Secret{
+		Name:      "test-cluster-ssl",
+		Namespace: "test-ns",
+		Data:      map[string][]byte{"tls.crt": []byte("current")},
+	}
+	current := secretHash(sslSecret)
+
+	tests := []struct {
+		name              string
+		tlsMode           api.TLSMode
+		allowInvalidCerts bool
+		noSecret          bool
+		podHashes         []string
+		want              bool
+		wantErr           bool
+	}{
+		{
+			name:      "every mongos runs the current certificate",
+			tlsMode:   api.TLSModeRequire,
+			podHashes: []string{current, current},
+			want:      true,
+		},
+		{
+			name:      "a mongos runs an outdated certificate",
+			tlsMode:   api.TLSModeRequire,
+			podHashes: []string{current, "outdated-hash"},
+			want:      false,
+		},
+		{
+			name:              "hostname verification is disabled",
+			tlsMode:           api.TLSModeRequire,
+			allowInvalidCerts: true,
+			podHashes:         []string{"outdated-hash"},
+			want:              true,
+		},
+		{
+			name:      "TLS is disabled",
+			tlsMode:   api.TLSModeDisabled,
+			noSecret:  true,
+			podHashes: []string{""},
+			want:      true,
+		},
+		{
+			name:      "TLS secret is missing",
+			tlsMode:   api.TLSModeRequire,
+			noSecret:  true,
+			podHashes: []string{current},
+			wantErr:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := newCR(tt.tlsMode, tt.allowInvalidCerts)
+			objs := []client.Object{cr}
+			if !tt.noSecret {
+				objs = append(objs, sslSecret.DeepCopy())
+			}
+			r := buildFakeClient(objs...)
+
+			pods := make([]corev1.Pod, 0, len(tt.podHashes))
+			for i, hash := range tt.podHashes {
+				pods = append(pods, corev1.Pod{
+					Name:        fmt.Sprintf("test-cluster-mongos-%d", i),
+					Namespace:   "test-ns",
+					Annotations: map[string]string{naming.AnnotationSSLHash: hash},
+				})
+			}
+
+			got, err := r.mongosServesCurrentCert(t.Context(), cr, pods)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // mergeNewCA deletes the "-old" secret once the merged CA is already in the
 // live one. The client cache can be behind the API server there, so a secret
 // that is already gone is the state the cleanup wants, not a failure.

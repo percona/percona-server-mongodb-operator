@@ -250,6 +250,29 @@ func (r *ReconcilePerconaServerMongoDB) updateMongosFirstIfTLSOutdated(ctx conte
 	return nil
 }
 
+// mongosServesCurrentCert reports whether every mongos pod runs the certificate in the TLS secret.
+// The secret is read uncached, because right after a re-sign the cache still holds the old one.
+func (r *ReconcilePerconaServerMongoDB) mongosServesCurrentCert(ctx context.Context, cr *api.PerconaServerMongoDB, pods []corev1.Pod) (bool, error) {
+	if !cr.TLSEnabled() || cr.InvalidCertificatesAllowed() {
+		return true, nil
+	}
+
+	secret := new(corev1.Secret)
+	nn := types.NamespacedName{Name: api.SSLSecretName(cr), Namespace: cr.Namespace}
+	if err := r.apiReader.Get(ctx, nn, secret); err != nil {
+		return false, errors.Wrapf(err, "get secret/%s", nn.Name)
+	}
+
+	hash := secretHash(secret)
+	for _, pod := range pods {
+		if pod.Annotations[naming.AnnotationSSLHash] != hash {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 func mongosNeedsLatestTLS(cr *api.PerconaServerMongoDB) bool {
 	return cr.Spec.Sharding.Enabled &&
 		cr.Spec.Sharding.Mongos.Size > 0 &&

@@ -2,6 +2,7 @@
 
 import base64
 import logging
+import os
 import subprocess
 import time
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from dataclasses import dataclass
 import pytest
 from lib.config import apply_cluster
 from lib.kubectl import kubectl_bin, wait_cluster_consistency, wait_for_running, wait_pod
+from lib.operator import get_operator_pod
 from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,16 @@ def _pod_creation_times(cluster: str, selector: str) -> list[str]:
         "jsonpath={.items[*].metadata.creationTimestamp}",
     )
     return out.split()
+
+
+def _operator_log_lines() -> list[str]:
+    args = ["logs", get_operator_pod()]
+    operator_ns = os.environ.get("OPERATOR_NS")
+    if operator_ns:
+        args.extend(["-n", operator_ns])
+    lines: list[str] = kubectl_bin(*args).splitlines()
+    assert lines, "operator log is empty"
+    return lines
 
 
 def _cert_sans(cluster: str) -> set[str]:
@@ -202,6 +214,7 @@ class TestTLSServicePerPod:
     ) -> None:
         """Enabling servicePerPod adds the per-pod hostnames to the certificate SANs"""
         cluster, namespace = config.cluster, config.namespace
+        log_offset = len(_operator_log_lines())
 
         kubectl_bin(
             "patch",
@@ -239,6 +252,17 @@ class TestTLSServicePerPod:
         cfg_created = _pod_creation_times(cluster, "app.kubernetes.io/replset=cfg")
         assert max(mongos_created) <= min(cfg_created), (
             f"cfg was updated before mongos: mongos={mongos_created} cfg={cfg_created}"
+        )
+
+        # mongos serves the old certificate until it restarts, so the operator must not dial
+        # the per-pod hostnames before that
+        tls_errors = [
+            line
+            for line in _operator_log_lines()[log_offset:]
+            if "failed to verify certificate" in line
+        ]
+        assert not tls_errors, "operator failed TLS verification during the switch:\n" + "\n".join(
+            tls_errors[:5]
         )
 
     @pytest.mark.dependency(depends=["TestTLSServicePerPod::test_enable_service_per_pod"])
