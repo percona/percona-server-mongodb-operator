@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from .allure_support import step
 from .kubectl import kubectl_bin, wait_cluster_consistency
 from .secrets import get_secret_data
 from .utils import aws_cli_s3, retry
@@ -109,6 +110,7 @@ def wait_backup_agent(pod: str, timeout: int = 1800) -> None:
     raise TimeoutError(f"pbm-agent in {pod} was not ready within {timeout}s")
 
 
+@step("Check {file} of backup {backup_name} ({replset}) in S3 storage")
 def check_backup_in_s3_storage(
     backup_name: str,
     replset: str,
@@ -144,6 +146,7 @@ def check_backup_in_s3_storage(
     logger.info(f"{key} found in storage: {listing.strip()}")
 
 
+@step("Run {backup_type} backup to {storage}")
 def run_backup(
     test_dir: str,
     storage: str,
@@ -167,6 +170,7 @@ def run_backup(
     return name
 
 
+@step("Wait for backup {backup_name} to be {target_state}")
 def wait_backup(backup_name: str, target_state: str = "ready", timeout: int = 600) -> None:
     """Wait for a psmdb-backup to reach `target_state`, failing fast on error."""
     logger.info(f"Waiting for psmdb-backup/{backup_name} to reach {target_state} state")
@@ -192,6 +196,7 @@ def wait_backup(backup_name: str, target_state: str = "ready", timeout: int = 60
     )
 
 
+@step("Run restore of backup {backup_name}")
 def run_restore(
     test_dir: str,
     backup_name: str,
@@ -213,6 +218,7 @@ def run_restore(
     return name
 
 
+@step("Wait for restore {restore_name} to be {target_state}")
 def wait_restore(
     restore_name: str,
     cluster_name: str,
@@ -250,6 +256,7 @@ def wait_restore(
         wait_cluster_consistency(cluster_name)
 
 
+@step("Wait for PBM operations on {cluster_name} to finish")
 def wait_for_pbm_operations(cluster_name: str, timeout: int = 2700) -> None:
     """Wait until no PBM operation is running on the cluster."""
     logger.info(f"Waiting for PBM operations on {cluster_name} to finish")
@@ -295,6 +302,7 @@ def _psmdb(cluster_name: str) -> tuple[str, set[str], str]:
     return str(cr.get("status", {}).get("state", "")), RESYNC_ANNOTATIONS & set(annotations), ""
 
 
+@step("Wait for physical restore {restore_name} on {cluster_name}")
 def wait_physical_restore(
     restore_name: str,
     cluster_name: str,
