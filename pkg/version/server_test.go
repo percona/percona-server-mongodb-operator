@@ -14,6 +14,8 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -442,6 +444,33 @@ func TestDetectAKS(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			assert.Equal(t, tc.want, detectAKS(t.Context(), tc.setup(t)))
+		})
+	}
+}
+
+func TestSysVendorIs(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		content *string
+		want    bool
+	}{
+		"nutanix with newline": {content: new("Nutanix\n"), want: true},
+		"nutanix":              {content: new("Nutanix"), want: true},
+		"other vendor":         {content: new("Google\n")},
+		"lowercase":            {content: new("nutanix\n")},
+		"empty":                {content: new("")},
+		"missing file":         {},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "sys_vendor")
+			if tc.content != nil {
+				require.NoError(t, os.WriteFile(path, []byte(*tc.content), 0o644))
+			}
+
+			assert.Equal(t, tc.want, sysVendorIs(path, "Nutanix"))
 		})
 	}
 }
