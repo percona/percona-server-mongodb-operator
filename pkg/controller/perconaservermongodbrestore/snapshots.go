@@ -901,6 +901,13 @@ func (r *ReconcilePerconaServerMongoDBRestore) deleteStatefulSetsForSnapshotRest
 			stsName := naming.ArbiterStatefulSetName(cluster, rs)
 			toDelete = append(toDelete, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
 		}
+
+		// prepareStatefulSetsForPhysicalRestore scales the search statefulset down and marks it
+		// as being restored. Without the deletion the cluster controller never brings it back.
+		if cluster.IsSearchEnabled() && rs.ClusterRole != psmdbv1.ClusterRoleConfigSvr {
+			stsName := naming.SearchStatefulSetName(cluster, rs)
+			toDelete = append(toDelete, types.NamespacedName{Namespace: cluster.Namespace, Name: stsName})
+		}
 	}
 
 	// Foreground deletion keeps each statefulset, with its restore-in-progress annotation,
