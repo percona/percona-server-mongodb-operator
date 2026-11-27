@@ -11,8 +11,17 @@ spec:
   backup:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
+    configuration:
+      backupOptions:
+        oplogSpanMin: 10
+        numParallelCollections: 2
+        timeouts:
+          startingStatus: 60
+        # This is now ignored during incremental backups
+        priority:
+          "some-name-rs0-2.some-name-rs0.NAMESPACE.svc.cluster.local:27017": 2.0
     storages:
-      local-s3:
+      s3-compatible:
         type: s3
         main: true
         s3:

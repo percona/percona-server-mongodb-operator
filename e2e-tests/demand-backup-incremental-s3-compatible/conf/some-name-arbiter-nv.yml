@@ -3,7 +3,7 @@ kind: PerconaServerMongoDB
 metadata:
   finalizers:
   - percona.com/delete-psmdb-pvc
-  name: some-name
+  name: some-name-arbiter-nv
 spec:
   #platform: openshift
   image:
@@ -12,7 +12,7 @@ spec:
     enabled: true
     image: perconalab/percona-server-mongodb-operator:1.1.0-backup
     storages:
-      local-s3:
+      s3-compatible:
         type: s3
         main: true
         s3:

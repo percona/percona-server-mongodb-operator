@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from lib.backup import MAX_EMPTY_READS
 from lib.kubectl import kubectl_bin
 from lib.mongo import MongoManager
 from lib.operator import check_crd_for_deletion, delete_crd_rbac
@@ -20,6 +19,9 @@ from lib.secrets import get_user_data
 from lib.utils import Paths, retry
 
 logger = logging.getLogger(__name__)
+
+# Failed reads in a row before a wait gives up: the object is gone or the API is down.
+MAX_EMPTY_READS = 6
 
 # Fully qualified: "subscription" alone can resolve to Knative's Subscription on OpenShift.
 CATALOGSOURCE = "catalogsources.operators.coreos.com"
