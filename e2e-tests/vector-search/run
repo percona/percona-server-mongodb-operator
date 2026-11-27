@@ -8,7 +8,9 @@
 #   4. run a $vectorSearch query and assert the nearest neighbours
 #   5. autoscale search storage, then re-verify search
 #   6. take a physical backup
-#   7. restore the physical backup and re-verify data and search
+#   7. change the vector data and let mongot index the changes
+#   8. restore the physical backup and re-verify data and search
+#      (the search indexes must be rebuilt from the restored data)
 #
 # NOTE: Vector search (mongot) requires a MongoDB 8.3+ server, so this
 # test must be run with an 8.3+ IMAGE_MONGOD. The mongot container image
@@ -88,6 +90,40 @@ run_vector_search() {
 		'use myApp\n db.vectors.aggregate([{ $vectorSearch: { index: "'${search_index}'", path: "embedding", queryVector: [1.0, 0.0, 0.0], numCandidates: 5, limit: 3 } }]).forEach(function(d){ print("RESULT:" + d.name) })' \
 		"$uri" 2>/dev/null \
 		| grep 'RESULT:' | cut -d: -f2 | tr -d '\r'
+}
+
+change_vector_data() {
+	local uri=$1
+
+	# avocado becomes the second nearest neighbor of the query vector and
+	# banana disappears, so the search result changes to apple, avocado, carrot.
+	run_mongo \
+		'use myApp\n db.vectors.insertOne({ name: "avocado", embedding: [0.99, 0.01, 0.0] })\n db.vectors.deleteOne({ name: "banana" })' \
+		"$uri"
+}
+
+wait_vector_search() {
+	local uri=$1
+	local expected=$2
+
+	local retry=0
+	local result
+	echo -n "waiting for vector search to return the expected result"
+	until result=$(run_vector_search "$uri") && [[ ${result} == "${expected}" ]]; do
+		echo -n .
+		sleep 5
+		retry=$((retry + 1))
+		if [[ ${retry} -ge 36 ]]; then
+			echo "vector search did not return the expected result in time"
+			echo "got:"
+			echo "${result}"
+			echo "expected:"
+			echo "${expected}"
+			kubectl_bin logs "${cluster}-rs0-search-0" || :
+			exit 1
+		fi
+	done
+	echo ".OK"
 }
 
 check_vector_search() {
@@ -250,9 +286,20 @@ main() {
 	wait_backup "${backup_name}"
 	check_backup_in_storage "${backup_name}" local-s3 rs0
 
-	desc 'drop collections'
+	desc 'drop test collection and change vector data'
 	run_mongo 'use myApp\n db.test.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
-	run_mongo 'use myApp\n db.vectors.drop()' "myApp:myPass@${cluster}-rs0.${namespace}"
+	# The vectors collection is changed instead of dropped: a dropped collection
+	# removes its search indexes from mongot, which hides stale index data.
+	change_vector_data "myApp:myPass@${cluster}-rs0.${namespace}"
+	wait_vector_search "myApp:myPass@${cluster}-rs0.${namespace}" $'apple\navocado\ncarrot'
+
+	# mongot commits its change stream resume token to disk once a minute.
+	# Wait for the commit, so the token on disk is newer than the backup.
+	sleep 90
+
+	local search_pvc="mongot-data-${cluster}-rs0-search-0"
+	local search_pvc_uid
+	search_pvc_uid=$(kubectl_bin get pvc "${search_pvc}" -o jsonpath='{.metadata.uid}')
 
 	desc 'restore physical backup'
 	run_restore "${backup_name}"
@@ -278,7 +325,18 @@ main() {
 
 	wait_pod "${cluster}-rs0-search-0"
 	wait_search_index "myApp:myPass@${cluster}-rs0.${namespace}"
+	# mongot rebuilds the index from the restored data, wait for the initial sync.
+	wait_vector_search "myApp:myPass@${cluster}-rs0.${namespace}" $'apple\nbanana\ncarrot'
 	check_vector_search "myApp:myPass@${cluster}-rs0.${namespace}"
+
+	local restored_search_pvc_uid
+	restored_search_pvc_uid=$(kubectl_bin get pvc "${search_pvc}" -o jsonpath='{.metadata.uid}')
+	if [[ -z ${restored_search_pvc_uid} || ${restored_search_pvc_uid} == "${search_pvc_uid}" ]]; then
+		echo "PVC ${search_pvc} should be recreated after a physical restore"
+		echo "uid before the restore: ${search_pvc_uid}"
+		echo "uid after the restore: ${restored_search_pvc_uid}"
+		exit 1
+	fi
 	log "Vector search works after restore: OK"
 
 	destroy "${namespace}"

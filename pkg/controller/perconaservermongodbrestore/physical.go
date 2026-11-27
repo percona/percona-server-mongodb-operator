@@ -294,6 +294,12 @@ func (r *ReconcilePerconaServerMongoDBRestore) reconcilePhysicalRestore(
 			replsets = append(replsets, cluster.Spec.Sharding.ConfigsvrReplSet)
 		}
 
+		// The search PVCs must be gone before the cluster controller recreates
+		// the search statefulsets, otherwise mongot starts on its old data.
+		if err := r.deleteSearchPVCs(ctx, cluster); err != nil {
+			return status, errors.Wrap(err, "delete search PVCs")
+		}
+
 		for _, rs := range replsets {
 			toDelete := []string{naming.MongodStatefulSetName(cluster, rs)}
 
@@ -1144,6 +1150,52 @@ func isContainerUnavailableError(err error) bool {
 	}
 
 	return false
+}
+
+// deleteSearchPVCs deletes the mongot data PVCs of the cluster.
+//
+// mongot stores its change stream resume token together with the index data and
+// resumes from that token on startup. Once a restore has rewound mongod, the token
+// points past the restored oplog. mongod accepts it without an error, so mongot
+// never resyncs and its indexes silently diverge from the restored data. Without
+// the PVC, mongot starts with an empty data directory and rebuilds the indexes
+// from the definitions stored in mongod.
+//
+// PVCs are selected by labels, so a PVC that was kept when search was disabled
+// is deleted too and cannot be reused when search is enabled again.
+func (r *ReconcilePerconaServerMongoDBRestore) deleteSearchPVCs(
+	ctx context.Context,
+	cluster *psmdbv1.PerconaServerMongoDB,
+) error {
+	log := logf.FromContext(ctx)
+
+	// An error here fails a restore that PBM has already finished, so every error is retried.
+	retriable := func(err error) bool { return true }
+	return retry.OnError(retry.DefaultBackoff, retriable, func() error {
+		pvcList := &corev1.PersistentVolumeClaimList{}
+		if err := r.client.List(ctx, pvcList,
+			client.InNamespace(cluster.Namespace),
+			client.MatchingLabels(naming.SearchLabels(cluster, nil)),
+		); err != nil {
+			return errors.Wrap(err, "list search PVCs")
+		}
+
+		for i := range pvcList.Items {
+			pvc := &pvcList.Items[i]
+
+			if !pvc.DeletionTimestamp.IsZero() {
+				continue
+			}
+
+			log.Info("Deleting search PVC", "pvc", pvc.Name)
+
+			if err := r.client.Delete(ctx, pvc); client.IgnoreNotFound(err) != nil {
+				return errors.Wrapf(err, "delete PVC %s", pvc.Name)
+			}
+		}
+
+		return nil
+	})
 }
 
 // shutdownStatefulSetForRestore scales down the StatefulSet to zero replicas and marks it as being restored.
