@@ -239,6 +239,37 @@ void initTests() {
     markPassedTests()
 }
 
+// The number of clusters to create: enough for the tests left to run, at most clusterCount, so a
+// rebuild or a run of a few tests does not create clusters that get no test.
+// - One test per cluster at a time: one cluster per test.
+// - Several tests per cluster: one cluster per ownCluster test, plus one per testsPerCluster other
+//   tests, and at least as many as the tests that hold the same lock (they cannot share a cluster).
+@NonCPS
+int neededClusterCount() {
+    def own = 0
+    def shared = 0
+    def lockCounts = [:]
+    for (test in tests) {
+        if (test.result != 'skipped') {
+            continue
+        }
+        if (testsPerCluster > 1 && test.ownCluster) {
+            own++
+            continue
+        }
+        shared++
+        for (lock in (test.locks ?: [])) {
+            lockCounts[lock] = (lockCounts[lock] ?: 0) + 1
+        }
+    }
+    def perCluster = testsPerCluster > 1 ? testsPerCluster : 1
+    def sharedClusters = (shared + perCluster - 1).intdiv(perCluster)
+    for (count in lockCounts.values()) {
+        sharedClusters = Math.max(sharedClusters, count)
+    }
+    return Math.min(clusterCount, own + sharedClusters)
+}
+
 // Reads the placement tags from e2e-tests/tests.yaml: an ownCluster test runs alone on a cluster,
 // and tests with the same lock never run at the same time on one cluster.
 void loadTestPlacement() {
@@ -1262,7 +1293,9 @@ pipeline {
             steps {
                 script {
                     def branches = [:]
-                    for (int i = 1; i <= clusterCount; i++) {
+                    def clusters = neededClusterCount()
+                    echo "Creating ${clusters} of up to ${clusterCount} clusters for ${countSkippedTests()} tests"
+                    for (int i = 1; i <= clusters; i++) {
                         def cluster = "cluster${i}".toString()
                         branches[cluster] = {
                             stage(cluster) {
@@ -1270,7 +1303,9 @@ pipeline {
                             }
                         }
                     }
-                    parallel branches
+                    if (branches) {
+                        parallel branches
+                    }
                 }
             }
         }
