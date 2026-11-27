@@ -3,6 +3,8 @@ ARG BASE_IMAGE=ubi10
 FROM --platform=${BUILDPLATFORM} golang:1.27 AS go_builder
 WORKDIR /go/src/github.com/percona/percona-server-mongodb-operator
 
+RUN false
+
 COPY go.mod go.sum ./
 COPY cmd/mongodb-healthcheck/logger/lumberjack ./cmd/mongodb-healthcheck/logger/lumberjack
 RUN go mod download

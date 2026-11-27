@@ -6,6 +6,7 @@ import groovy.transform.Field
 @Field def reportHtml = 'e2e-test-report.html'
 @Field def reportXml = 'e2e-test-report.xml'
 @Field int clusterCount = 15
+@Field boolean imageBuildFailed = false
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
@@ -824,18 +825,28 @@ pipeline {
                         docker_tag_file='./results/docker/TAG'
                         mkdir -p $(dirname ${docker_tag_file})
                         echo ${DOCKER_TAG} > "${docker_tag_file}"
+                        build_status=0
                             sg docker -c "
+                                set -e
+                                trap 'docker logout' EXIT
                                 echo '\$PASS' | docker login -u '\$USER' --password-stdin
                                 export RELEASE=0
                                 export IMAGE=\$DOCKER_TAG
                                 DOCKER_DEFAULT_PLATFORM=linux/amd64,linux/arm64 ./e2e-tests/build
-                                docker logout
-                            "
+                            " || build_status=$?
                         sudo rm -rf ./build
+                        exit $build_status
                     '''
                 }
                 stash includes: 'results/docker/TAG', name: 'IMAGE'
                 archiveArtifacts 'results/docker/TAG'
+            }
+            post {
+                failure {
+                    script {
+                        imageBuildFailed = true
+                    }
+                }
             }
         }
         stage('GoLicenseDetector test') {
@@ -946,44 +957,61 @@ pipeline {
                                 comment.delete()
                             }
                         }
-                        makeReport()
-                        normalizeReports()
-
-                        // pytest_html_merger needs at least one real pytest-html report. When every test
-                        // was already passed in a previous build, only placeholders exist and it fails.
-                        def hasHtmlReports = sh(returnStatus: true, script: "grep -qs 'Report generated on ' e2e-tests/reports/*.html") == 0
-
-                        sh """
-                            export PATH="\$HOME/.local/bin:\$PATH"
-                            uv run junitparser merge --glob 'e2e-tests/reports/*.xml' ${reportXml}
-                        """
-                        junit testResults: reportXml, healthScaleFactor: 1.0
-                        archiveArtifacts "${reportXml}"
-                        def allurePublished = publishAllureReport()
-
-                        unstash 'IMAGE'
-                        def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
-                        TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\n"
-
-                        if (hasHtmlReports) {
-                            sh """
-                                export PATH="\$HOME/.local/bin:\$PATH"
-                                uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
-                            """
-                            formatReportDuration(reportHtml)
-                            archiveArtifacts "${reportHtml}"
-                            pushReportFile()
-
-                            def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
-                            currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
-                            TestsReport = TestsReport + "Test report: [report](${reportUrl})\r\n"
+                        if (imageBuildFailed) {
+                            pullRequest.comment("❌ Docker image build failed, e2e tests were not run. See the build log: ${env.BUILD_URL}console\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}")
                         } else {
-                            echo "No pytest-html reports in e2e-tests/reports, skipping the HTML report merge"
+                            makeReport()
+                            normalizeReports()
+
+                            // pytest_html_merger needs at least one real pytest-html report. When every test
+                            // was already passed in a previous build, only placeholders exist and it fails.
+                            def hasHtmlReports = sh(returnStatus: true, script: "grep -qs 'Report generated on ' e2e-tests/reports/*.html") == 0
+
+                            // No XML reports when no test ran, e.g. an earlier stage failed.
+                            if (sh(returnStatus: true, script: "ls e2e-tests/reports/*.xml >/dev/null 2>&1") == 0) {
+                                sh """
+                                    export PATH="\$HOME/.local/bin:\$PATH"
+                                    uv run junitparser merge --glob 'e2e-tests/reports/*.xml' ${reportXml}
+                                """
+                                junit testResults: reportXml, healthScaleFactor: 1.0
+                                archiveArtifacts "${reportXml}"
+                            } else {
+                                echo "No JUnit reports in e2e-tests/reports, skipping the JUnit report merge"
+                            }
+                            def allurePublished = publishAllureReport()
+
+                            def imageLine
+                            try {
+                                unstash 'IMAGE'
+                                imageLine = "Image: `" + sh(returnStdout: true, script: "cat results/docker/TAG").trim() + "`"
+                            } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+                                throw exc
+                            } catch (exc) {
+                                echo "Failed to unstash the image tag: ${exc.message}"
+                                imageLine = "Image: not available"
+                            }
+                            TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\n${imageLine}\r\n"
+
+                            if (hasHtmlReports) {
+                                sh """
+                                    export PATH="\$HOME/.local/bin:\$PATH"
+                                    uv run pytest_html_merger -i e2e-tests/reports -o ${reportHtml} -t "PSMDB e2e tests - ${env.GIT_BRANCH} (${env.GIT_SHORT_COMMIT})"
+                                """
+                                formatReportDuration(reportHtml)
+                                archiveArtifacts "${reportHtml}"
+                                pushReportFile()
+
+                                def reportUrl = "${testUrlPrefix}/${env.GIT_BRANCH}/${env.GIT_SHORT_COMMIT}/${reportHtml}"
+                                currentBuild.description = "<a href=\"${reportUrl}\">Test report</a>"
+                                TestsReport = TestsReport + "Test report: [report](${reportUrl})\r\n"
+                            } else {
+                                echo "No pytest-html reports in e2e-tests/reports, skipping the HTML report merge"
+                            }
+                            if (allurePublished) {
+                                TestsReport = TestsReport + "Allure report: [allure](${env.BUILD_URL}allure/) (tests that ran and finished in this build only; see the table above for timeouts)\r\n"
+                            }
+                            pullRequest.comment(TestsReport)
                         }
-                        if (allurePublished) {
-                            TestsReport = TestsReport + "Allure report: [allure](${env.BUILD_URL}allure/) (tests that ran and finished in this build only; see the table above for timeouts)\r\n"
-                        }
-                        pullRequest.comment(TestsReport)
                     }
                     deleteOldClusters("$CLUSTER_NAME")
                     sh """
