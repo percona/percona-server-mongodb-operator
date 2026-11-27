@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from functools import partial
 
 import pytest
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import (
     kubectl_bin,
     wait_cluster_consistency,
@@ -140,9 +140,9 @@ def _assert_writable_primary(config: SplitHorizonConfig) -> None:
     logger.info("Connected through horizon hostnames and landed on a writable primary")
 
 
-def _cert_sans(secret: str) -> list[str]:
+def _cert_sans(secret_name: str) -> list[str]:
     cert = base64.b64decode(
-        kubectl_bin("get", "secret", secret, "-o", "jsonpath={.data.tls\\.crt}")
+        kubectl_bin("get", "secret", secret_name, "-o", "jsonpath={.data.tls\\.crt}")
     )
     text = subprocess.run(
         ["openssl", "x509", "-noout", "-text"], input=cert, capture_output=True, check=True
@@ -150,10 +150,10 @@ def _cert_sans(secret: str) -> list[str]:
     return re.findall(r"DNS:([^,\s]+)", text)
 
 
-def _assert_cert_san(secret: str, san: str) -> None:
-    sans = _cert_sans(secret)
-    assert san in sans, f"SAN {san} not found in secret {secret}: {sans}"
-    logger.info(f"Secret {secret} has SAN {san}")
+def _assert_cert_san(secret_name: str, san: str) -> None:
+    sans = _cert_sans(secret_name)
+    assert san in sans, f"SAN {san} not found in secret {secret_name}: {sans}"
+    logger.info(f"Secret {secret_name} has SAN {san}")
 
 
 def _assert_no_horizons_in_rs_conf(config: SplitHorizonConfig) -> None:
@@ -186,20 +186,9 @@ class TestSplitHorizon:
 
     @pytest.mark.dependency()
     def test_create_cluster(self, config: SplitHorizonConfig, test_paths: Paths) -> None:
-        """Create cluster with 3 horizons and compare certificates and issuers"""
-        cluster = config.cluster
-        apply_cluster(f"{test_paths['test_dir']}/conf/{cluster}-3horizons.yml")
+        """Create cluster with 3 horizons"""
+        apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster}-3horizons.yml")
         _wait_cluster(config, 3)
-
-        for resource in (
-            f"certificate/{cluster}-ssl",
-            f"certificate/{cluster}-ssl-internal",
-            f"certificate/{cluster}-ca-cert",
-            f"issuer/{cluster}-psmdb-ca-issuer",
-            f"issuer/{cluster}-psmdb-issuer",
-        ):
-            compare_kubectl(test_paths["test_dir"], resource, config.namespace)
-            logger.info(f"{resource} matches expected spec")
 
     @pytest.mark.dependency(depends=["TestSplitHorizon::test_create_cluster"])
     def test_connect_via_horizons(self, config: SplitHorizonConfig, test_paths: Paths) -> None:
@@ -229,14 +218,6 @@ class TestSplitHorizon:
 
         for secret in (f"{cluster}-ssl", f"{cluster}-ssl-internal"):
             kubectl_bin("wait", "--for=condition=Ready", f"certificate/{secret}", "--timeout=300s")
-            compare_kubectl(
-                test_paths["test_dir"],
-                f"certificate/{secret}",
-                config.namespace,
-                postfix="-5horizons",
-                skip_generation_check=True,
-            )
-            logger.info(f"certificate/{secret} matches expected spec with 5 horizons")
             for i in (3, 4):
                 san = f"{config.replset}-{i}.{HORIZON_DOMAIN}"
                 retry(partial(_assert_cert_san, secret, san), max_attempts=30, delay=10)

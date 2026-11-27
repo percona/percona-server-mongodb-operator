@@ -195,7 +195,7 @@ run_mongo_tls \
   "myApp:myPass@${cluster}-rs0.${namespace}"
 
 run_restore ${backup_name_single}
-run_recovery_check ${backup_name_single} "" "" "true"
+run_recovery_check ${backup_name_single} "" "true"
 
 rm -f /tmp/s3-cert.pem /tmp/secondary-s3-cert.pem
 

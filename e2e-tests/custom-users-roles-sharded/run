@@ -171,11 +171,6 @@ retry 60 2 check_connection_strings "$cluster-databaseadmin-conn-str" \
 	"databaseAdmin_rs0" \
 	"databaseAdmin_cfg"
 
-desc 'check if service and statefulset created with expected config'
-compare_kubectl statefulset/$cluster-rs0
-compare_kubectl statefulset/$cluster-cfg
-compare_kubectl statefulset/$cluster-mongos ""
-
 desc 'check user created on cluster creation'
 
 userOne="user-one"

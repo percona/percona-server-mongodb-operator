@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
+	psmdbconfig "github.com/percona/percona-server-mongodb-operator/pkg/psmdb/config"
 	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 )
 
@@ -644,4 +645,39 @@ func TestHandleShardingToggleConditionNotInCache(t *testing.T) {
 		err := r.handleShardingToggle(ctx, c)
 		require.ErrorIs(t, err, errShardingConditionNotInCache)
 	})
+}
+
+func TestGetCustomConfig(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns   = "custom-config"
+		name = "some-cluster-mongos"
+	)
+
+	secret := &corev1.Secret{Name: name, Namespace: ns, Data: map[string][]byte{"mongos.conf": []byte("a: b")}}
+	configMap := &corev1.ConfigMap{Name: name, Namespace: ns, Data: map[string]string{"mongos.conf": "a: b"}}
+
+	tests := map[string]struct {
+		objs []client.Object
+		want psmdbconfig.VolumeSourceType
+	}{
+		"none":                       {want: psmdbconfig.VolumeSourceNone},
+		"configmap":                  {objs: []client.Object{configMap}, want: psmdbconfig.VolumeSourceConfigMap},
+		"secret":                     {objs: []client.Object{secret}, want: psmdbconfig.VolumeSourceSecret},
+		"secret wins over configmap": {objs: []client.Object{configMap, secret}, want: psmdbconfig.VolumeSourceSecret},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := buildFakeClient(tt.objs...)
+
+			got, err := r.getCustomConfig(t.Context(), ns, "some-cluster-mongos")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.Type)
+			assert.Equal(t, tt.want.IsUsable(), got.HashHex != "")
+		})
+	}
 }

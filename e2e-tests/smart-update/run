@@ -49,9 +49,6 @@ qualify_image_var IMAGE_MONGOD
 desc "create first PSMDB cluster $cluster"
 spinup_psmdb ${cluster}-rs0 ${test_dir}/conf/${cluster}-rs0.yml
 
-desc 'check if statefulsets created with expected config'
-compare_kubectl "statefulset/${cluster}-rs0"
-compare_kubectl "statefulset/${cluster}-rs0-arbiter"
 sleep 10
 
 desc 'create user clusterAdmin'

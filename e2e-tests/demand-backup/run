@@ -249,9 +249,6 @@ wait_for_running $cluster 3
 desc 'verify PBM client certificate Secret exists'
 kubectl_bin wait --for=create "secret/${cluster%-rs0}-pbm" --timeout=300s
 
-desc 'check if service and statefulset created with expected config'
-compare_kubectl statefulset/$cluster
-
 check_custom_backup_probes $cluster
 
 desc 'create user'

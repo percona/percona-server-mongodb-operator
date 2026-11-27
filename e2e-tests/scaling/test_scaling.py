@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 import yaml
-from lib.config import apply_cluster, compare_kubectl, render_cluster_config
+from lib.config import apply_cluster, render_cluster_config
 from lib.kubectl import kubectl_bin, wait_for_delete, wait_for_running
 from lib.mongo import MongoManager
 from lib.utils import Paths, retry
@@ -92,12 +92,12 @@ class TestScaling:
         _scale(config.psmdb, 5)
         wait_for_running(config.cluster, 5)
 
-        compare_kubectl(
-            test_paths["test_dir"], f"pvc/mongod-data-{config.cluster}-3", config.namespace
-        )
-        compare_kubectl(
-            test_paths["test_dir"], f"pvc/mongod-data-{config.cluster}-4", config.namespace
-        )
+        for i in (3, 4):
+            pvc = f"mongod-data-{config.cluster}-{i}"
+            size = kubectl_bin(
+                "get", "pvc", pvc, "-o", "jsonpath={.spec.resources.requests.storage}"
+            ).strip()
+            assert size == "1Gi", f"pvc/{pvc} requests {size!r}, expected '1Gi'"
 
         for i in (3, 4):
             psmdb_client.compare_mongo_cmd(

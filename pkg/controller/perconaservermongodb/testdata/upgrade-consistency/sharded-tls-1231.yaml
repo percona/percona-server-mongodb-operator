@@ -1,0 +1,1196 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: cfg
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: cfg
+  name: some-name-cfg
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: cfg
+      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: cfg
+  serviceName: some-name-cfg
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: cfg
+        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: cfg
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: cfg
+                app.kubernetes.io/instance: some-name
+                app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                app.kubernetes.io/name: percona-server-mongodb
+                app.kubernetes.io/part-of: percona-server-mongodb
+                app.kubernetes.io/replset: cfg
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - --bind_ip_all
+        - --auth
+        - --dbpath=/data/db
+        - --port=27017
+        - --replSet=cfg
+        - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslAllowInvalidCertificates
+        - --clusterAuthMode=x509
+        - --tlsMode=preferTLS
+        - --configsvr
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+        - --wiredTigerCacheSizeGB=0.25
+        - --wiredTigerIndexPrefixCompression=true
+        - --quiet
+        command:
+        - /opt/percona/ps-entry.sh
+        env:
+        - name: SERVICE_NAME
+          value: some-name
+        - name: NAMESPACE
+          value: upgrade
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_REPLSET
+          value: cfg
+        envFrom:
+        - secretRef:
+            name: internal-some-name-users
+            optional: false
+        image: percona/percona-server-mongodb:sometag
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - /opt/percona/mongodb-healthcheck
+            - k8s
+            - liveness
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
+            - --startupDelaySeconds
+            - "7200"
+          failureThreshold: 4
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        name: mongod
+        ports:
+        - containerPort: 27017
+          name: mongodb
+        readinessProbe:
+          exec:
+            command:
+            - /opt/percona/mongodb-healthcheck
+            - k8s
+            - readiness
+            - --component
+            - mongod
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 300m
+            memory: 500M
+          requests:
+            cpu: 300m
+            memory: 500M
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: some-name-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
+          readOnly: true
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /.mongodb
+          name: mongosh
+        - mountPath: /etc/mongodb-encryption
+          name: some-name-mongodb-encryption-key
+          readOnly: true
+        - mountPath: /etc/users-secret
+          name: users-secret-file
+        workingDir: /data/db
+      initContainers:
+      - command:
+        - /init-entrypoint.sh
+        image: percona/percona-server-mongodb-operator:sometag
+        imagePullPolicy: Always
+        name: mongo-init
+        resources:
+          limits:
+            cpu: 300m
+            memory: 500M
+          requests:
+            cpu: 300m
+            memory: 500M
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: some-name-mongodb-keyfile
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-mongodb-keyfile
+      - emptyDir: {}
+        name: bin
+      - emptyDir: {}
+        name: mongosh
+      - name: some-name-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-mongodb-encryption-key
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: some-name-ssl-internal
+      - name: users-secret-file
+        secret:
+          secretName: internal-some-name-users
+  updateStrategy:
+    type: OnDelete
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: mongod-data
+      namespace: upgrade
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 3Gi
+    status: {}
+status:
+  availableReplicas: 0
+  replicas: 0
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-mongos
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongos
+      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+  serviceName: ""
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: mongos
+        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: mongos
+                app.kubernetes.io/instance: some-name
+                app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                app.kubernetes.io/name: percona-server-mongodb
+                app.kubernetes.io/part-of: percona-server-mongodb
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - mongos
+        - --bind_ip_all
+        - --port=27017
+        - --sslAllowInvalidCertificates
+        - --configdb
+        - cfg/some-name-cfg-0.some-name-cfg.upgrade.svc.cluster.local:27017,some-name-cfg-1.some-name-cfg.upgrade.svc.cluster.local:27017,some-name-cfg-2.some-name-cfg.upgrade.svc.cluster.local:27017
+        - --relaxPermChecks
+        - --clusterAuthMode=x509
+        - --tlsMode=preferTLS
+        command:
+        - /opt/percona/ps-entry.sh
+        env:
+        - name: MONGODB_PORT
+          value: "27017"
+        envFrom:
+        - secretRef:
+            name: some-users
+            optional: false
+        - secretRef:
+            name: internal-some-name-users
+            optional: false
+        image: percona/percona-server-mongodb:sometag
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - /opt/percona/mongodb-healthcheck
+            - k8s
+            - liveness
+            - --component
+            - mongos
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
+            - --startupDelaySeconds
+            - "10"
+          failureThreshold: 4
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        name: mongos
+        ports:
+        - containerPort: 27017
+          name: mongos
+        readinessProbe:
+          exec:
+            command:
+            - /opt/percona/mongodb-healthcheck
+            - k8s
+            - readiness
+            - --component
+            - mongos
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 1
+          successThreshold: 1
+          timeoutSeconds: 1
+        resources:
+          limits:
+            cpu: 300m
+            memory: 500M
+          requests:
+            cpu: 300m
+            memory: 500M
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: some-name-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
+          readOnly: true
+        - mountPath: /etc/users-secret
+          name: users-secret-file
+          readOnly: true
+        - mountPath: /opt/percona
+          name: bin
+        workingDir: /data/db
+      initContainers:
+      - command:
+        - /init-entrypoint.sh
+        image: percona/percona-server-mongodb-operator:sometag
+        imagePullPolicy: Always
+        name: mongo-init
+        resources:
+          limits:
+            cpu: 300m
+            memory: 500M
+          requests:
+            cpu: 300m
+            memory: 500M
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: some-name-mongodb-keyfile
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-mongodb-keyfile
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: some-name-ssl-internal
+      - emptyDir: {}
+        name: mongod-data
+      - name: users-secret-file
+        secret:
+          secretName: internal-some-name-users
+      - emptyDir: {}
+        name: bin
+  updateStrategy:
+    type: OnDelete
+status:
+  availableReplicas: 0
+  replicas: 0
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app.kubernetes.io/component: mongod
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongod
+      app.kubernetes.io/instance: some-name
+      app.kubernetes.io/managed-by: percona-server-mongodb-operator
+      app.kubernetes.io/name: percona-server-mongodb
+      app.kubernetes.io/part-of: percona-server-mongodb
+      app.kubernetes.io/replset: rs0
+  serviceName: some-name-rs0
+  template:
+    metadata:
+      annotations:
+        percona.com/configuration-hash: ad7cbf2eb1032ae7e0237dc53930d09e
+      labels:
+        app.kubernetes.io/component: mongod
+        app.kubernetes.io/instance: some-name
+        app.kubernetes.io/managed-by: percona-server-mongodb-operator
+        app.kubernetes.io/name: percona-server-mongodb
+        app.kubernetes.io/part-of: percona-server-mongodb
+        app.kubernetes.io/replset: rs0
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: mongod
+                app.kubernetes.io/instance: some-name
+                app.kubernetes.io/managed-by: percona-server-mongodb-operator
+                app.kubernetes.io/name: percona-server-mongodb
+                app.kubernetes.io/part-of: percona-server-mongodb
+                app.kubernetes.io/replset: rs0
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - args:
+        - --bind_ip_all
+        - --auth
+        - --dbpath=/data/db
+        - --port=27017
+        - --replSet=rs0
+        - --storageEngine=wiredTiger
+        - --relaxPermChecks
+        - --sslAllowInvalidCertificates
+        - --clusterAuthMode=x509
+        - --tlsMode=preferTLS
+        - --shardsvr
+        - --enableEncryption
+        - --encryptionKeyFile=/etc/mongodb-encryption/encryption-key
+        - --wiredTigerCacheSizeGB=0.25
+        - --wiredTigerIndexPrefixCompression=true
+        - --config=/etc/mongodb-config/mongod.conf
+        - --quiet
+        command:
+        - /opt/percona/ps-entry.sh
+        env:
+        - name: SERVICE_NAME
+          value: some-name
+        - name: NAMESPACE
+          value: upgrade
+        - name: MONGODB_PORT
+          value: "27017"
+        - name: MONGODB_REPLSET
+          value: rs0
+        envFrom:
+        - secretRef:
+            name: internal-some-name-users
+            optional: false
+        image: percona/percona-server-mongodb:sometag
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - /opt/percona/mongodb-healthcheck
+            - k8s
+            - liveness
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
+            - --startupDelaySeconds
+            - "7200"
+          failureThreshold: 4
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+        name: mongod
+        ports:
+        - containerPort: 27017
+          name: mongodb
+        readinessProbe:
+          exec:
+            command:
+            - /opt/percona/mongodb-healthcheck
+            - k8s
+            - readiness
+            - --component
+            - mongod
+            - --ssl
+            - --sslInsecure
+            - --sslCAFile
+            - /etc/mongodb-ssl/ca.crt
+            - --sslPEMKeyFile
+            - /tmp/tls.pem
+          failureThreshold: 8
+          initialDelaySeconds: 10
+          periodSeconds: 3
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: 500m
+            memory: 500M
+          requests:
+            cpu: 100m
+            memory: 100M
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+        volumeMounts:
+        - mountPath: /data/db
+          name: mongod-data
+        - mountPath: /etc/mongodb-secrets
+          name: some-name-mongodb-keyfile
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl
+          name: ssl
+          readOnly: true
+        - mountPath: /etc/mongodb-ssl-internal
+          name: ssl-internal
+          readOnly: true
+        - mountPath: /etc/mongodb-config
+          name: config
+        - mountPath: /opt/percona
+          name: bin
+        - mountPath: /.mongodb
+          name: mongosh
+        - mountPath: /etc/mongodb-encryption
+          name: some-name-mongodb-encryption-key
+          readOnly: true
+        - mountPath: /etc/users-secret
+          name: users-secret-file
+        workingDir: /data/db
+      initContainers:
+      - command:
+        - /init-entrypoint.sh
+        image: percona/percona-server-mongodb-operator:sometag
+        imagePullPolicy: Always
+        name: mongo-init
+        resources:
+          limits:
+            cpu: 500m
+            memory: 500M
+          requests:
+            cpu: 100m
+            memory: 100M
+        volumeMounts:
+        - mountPath: /opt/percona
+          name: bin
+      restartPolicy: Always
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: default
+      terminationGracePeriodSeconds: 60
+      volumes:
+      - name: some-name-mongodb-keyfile
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-mongodb-keyfile
+      - emptyDir: {}
+        name: bin
+      - emptyDir: {}
+        name: mongosh
+      - configMap:
+          name: some-name-rs0-mongod
+          optional: true
+        name: config
+      - name: some-name-mongodb-encryption-key
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-mongodb-encryption-key
+      - name: ssl
+        secret:
+          defaultMode: 288
+          optional: false
+          secretName: some-name-ssl
+      - name: ssl-internal
+        secret:
+          defaultMode: 288
+          optional: true
+          secretName: some-name-ssl-internal
+      - name: users-secret-file
+        secret:
+          secretName: internal-some-name-users
+  updateStrategy:
+    type: OnDelete
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: mongod-data
+      namespace: upgrade
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi
+    status: {}
+status:
+  availableReplicas: 0
+  replicas: 0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: cfg
+  name: some-name-cfg
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  clusterIP: None
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  selector:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: cfg
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: external-service
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: cfg
+  name: some-name-cfg-0
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  publishNotReadyAddresses: true
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-cfg-0
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: external-service
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: cfg
+  name: some-name-cfg-1
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  publishNotReadyAddresses: true
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-cfg-1
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: external-service
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: cfg
+  name: some-name-cfg-2
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  publishNotReadyAddresses: true
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-cfg-2
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-mongos-0
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongos
+    port: 27017
+    targetPort: 27017
+  selector:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    statefulset.kubernetes.io/pod-name: some-name-mongos-0
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-mongos-1
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongos
+    port: 27017
+    targetPort: 27017
+  selector:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    statefulset.kubernetes.io/pod-name: some-name-mongos-1
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-mongos-2
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongos
+    port: 27017
+    targetPort: 27017
+  selector:
+    app.kubernetes.io/component: mongos
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    statefulset.kubernetes.io/pod-name: some-name-mongos-2
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  clusterIP: None
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  selector:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: external-service
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0-0
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  publishNotReadyAddresses: true
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-rs0-0
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: external-service
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0-1
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  publishNotReadyAddresses: true
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-rs0-1
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/component: external-service
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+    app.kubernetes.io/replset: rs0
+  name: some-name-rs0-2
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ports:
+  - appProtocol: mongo
+    name: mongodb
+    port: 27017
+    targetPort: 27017
+  publishNotReadyAddresses: true
+  selector:
+    statefulset.kubernetes.io/pod-name: some-name-rs0-2
+  type: ClusterIP
+status:
+  loadBalancer: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-psmdb-ca-issuer
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  selfSigned: {}
+status: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-psmdb-issuer
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  ca:
+    secretName: some-name-ca-cert
+status: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-ca-cert
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  commonName: some-name-ca
+  duration: 8760h0m0s
+  isCA: true
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: some-name-psmdb-ca-issuer
+  renewBefore: 730h0m0s
+  secretName: some-name-ca-cert
+status: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-ssl
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  commonName: some-name
+  dnsNames:
+  - localhost
+  - some-name-rs0
+  - some-name-rs0.upgrade
+  - some-name-rs0.upgrade.svc.cluster.local
+  - '*.some-name-rs0'
+  - '*.some-name-rs0.upgrade'
+  - '*.some-name-rs0.upgrade.svc.cluster.local'
+  - some-name-rs0.upgrade.svc.clusterset.local
+  - '*.some-name-rs0.upgrade.svc.clusterset.local'
+  - '*.upgrade.svc.clusterset.local'
+  - some-name-mongos
+  - some-name-mongos.upgrade
+  - some-name-mongos.upgrade.svc.cluster.local
+  - '*.some-name-mongos'
+  - '*.some-name-mongos.upgrade'
+  - '*.some-name-mongos.upgrade.svc.cluster.local'
+  - some-name-cfg
+  - some-name-cfg.upgrade
+  - some-name-cfg.upgrade.svc.cluster.local
+  - '*.some-name-cfg'
+  - '*.some-name-cfg.upgrade'
+  - '*.some-name-cfg.upgrade.svc.cluster.local'
+  - some-name-mongos.upgrade.svc.clusterset.local
+  - '*.some-name-mongos.upgrade.svc.clusterset.local'
+  - some-name-cfg.upgrade.svc.clusterset.local
+  - '*.some-name-cfg.upgrade.svc.clusterset.local'
+  duration: 2160h0m0s
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: some-name-psmdb-issuer
+  secretName: some-name-ssl
+  subject:
+    organizations:
+    - PSMDB
+status: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/instance: some-name
+    app.kubernetes.io/managed-by: percona-server-mongodb-operator
+    app.kubernetes.io/name: percona-server-mongodb
+    app.kubernetes.io/part-of: percona-server-mongodb
+  name: some-name-ssl-internal
+  namespace: upgrade
+  ownerReferences:
+  - apiVersion: psmdb.percona.com/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PerconaServerMongoDB
+    name: some-name
+    uid: ""
+spec:
+  commonName: some-name
+  dnsNames:
+  - localhost
+  - some-name-rs0
+  - some-name-rs0.upgrade
+  - some-name-rs0.upgrade.svc.cluster.local
+  - '*.some-name-rs0'
+  - '*.some-name-rs0.upgrade'
+  - '*.some-name-rs0.upgrade.svc.cluster.local'
+  - some-name-rs0.upgrade.svc.clusterset.local
+  - '*.some-name-rs0.upgrade.svc.clusterset.local'
+  - '*.upgrade.svc.clusterset.local'
+  - some-name-mongos
+  - some-name-mongos.upgrade
+  - some-name-mongos.upgrade.svc.cluster.local
+  - '*.some-name-mongos'
+  - '*.some-name-mongos.upgrade'
+  - '*.some-name-mongos.upgrade.svc.cluster.local'
+  - some-name-cfg
+  - some-name-cfg.upgrade
+  - some-name-cfg.upgrade.svc.cluster.local
+  - '*.some-name-cfg'
+  - '*.some-name-cfg.upgrade'
+  - '*.some-name-cfg.upgrade.svc.cluster.local'
+  - some-name-mongos.upgrade.svc.clusterset.local
+  - '*.some-name-mongos.upgrade.svc.clusterset.local'
+  - some-name-cfg.upgrade.svc.clusterset.local
+  - '*.some-name-cfg.upgrade.svc.clusterset.local'
+  duration: 2160h0m0s
+  issuerRef:
+    group: cert-manager.io
+    kind: Issuer
+    name: some-name-psmdb-issuer
+  secretName: some-name-ssl-internal
+  subject:
+    organizations:
+    - PSMDB
+status: {}

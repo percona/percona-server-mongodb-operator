@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import pytest
-from lib.config import apply_cluster, apply_runtime_class, compare_kubectl
+from lib.config import apply_cluster, apply_runtime_class
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.mongo import MongoManager
 from lib.secrets import apply_s3_storage_secrets, cloud_secret_exists, get_user_data, secret_exists
@@ -66,9 +66,6 @@ class TestInitDeploy:
         """Create first PSMDB cluster"""
         apply_cluster(f"{test_paths['test_dir']}/../conf/{config.cluster}.yml")
         wait_for_running(config.cluster, 3)
-
-        compare_kubectl(test_paths["test_dir"], f"statefulset/{config.cluster}", config.namespace)
-        compare_kubectl(test_paths["test_dir"], f"service/{config.cluster}", config.namespace)
 
     @pytest.mark.dependency(depends=["TestInitDeploy::test_create_first_cluster"])
     def test_verify_users_created(
@@ -222,9 +219,6 @@ class TestInitDeploy:
 
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster2}.yml")
         wait_for_running(config.cluster2, 3)
-
-        compare_kubectl(test_paths["test_dir"], f"statefulset/{config.cluster2}", config.namespace)
-        compare_kubectl(test_paths["test_dir"], f"service/{config.cluster2}", config.namespace)
 
     @pytest.mark.dependency(depends=["TestInitDeploy::test_create_second_cluster"])
     def test_default_rw_concern(

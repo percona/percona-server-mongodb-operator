@@ -49,6 +49,41 @@ delete_clusterissuer_rbac() {
 	kubectl_bin delete clusterrole "${cluster_issuer_name}-reader" --ignore-not-found
 }
 
+check_certificate_field() {
+	local certificate=$1
+	local jsonpath=$2
+	local expected=$3
+	local actual
+
+	actual=$(kubectl_bin get certificate "$certificate" -o "jsonpath={${jsonpath}}")
+	if [ "$actual" != "$expected" ]; then
+		echo "certificate/${certificate} ${jsonpath} is '${actual}', expected '${expected}'"
+		exit 1
+	fi
+}
+
+check_certificates_use_user_clusterissuer() {
+	local certificate
+
+	for certificate in "$@"; do
+		check_certificate_field "$certificate" '.metadata.ownerReferences[0].kind' 'PerconaServerMongoDB'
+		check_certificate_field "$certificate" '.spec.issuerRef.kind' 'ClusterIssuer'
+		check_certificate_field "$certificate" '.spec.issuerRef.name' "$cluster-psmdb-issuer"
+	done
+}
+
+check_tls_disabled() {
+	local sts=$1
+	local container=$2
+	local args
+
+	args=$(kubectl_bin get statefulset "$sts" -o "jsonpath={.spec.template.spec.containers[?(@.name==\"${container}\")].args}")
+	if [[ $args != *--tlsMode=disabled* ]]; then
+		echo "statefulset/${sts} ${container} args lack --tlsMode=disabled: ${args}"
+		exit 1
+	fi
+}
+
 check_issuer_not_created() {
 	local issuer_name=$1
 	local found
@@ -143,11 +178,9 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	desc 'compare user certificates are preserved and clusterissuers are not overwritten'
-	compare_kubectl "certificate/${cluster}-ssl" "-user"
-	compare_kubectl "certificate/${cluster}-ssl-internal" "-user"
-	compare_kubectl "clusterissuer/$cluster-psmdb-ca-issuer" "-custom"
-	compare_kubectl "clusterissuer/$cluster-psmdb-issuer" "-custom"
+	desc 'check user certificates are preserved'
+	check_certificate_field "${cluster}-ssl" '.spec.subject.organizations[0]' 'CUSTOM'
+	check_certificate_field "${cluster}-ssl-internal" '.spec.subject.organizations[0]' 'CUSTOM'
 
 	desc 'step 2: operator creates certificates using the existing user ClusterIssuer when it has no RBAC to read ClusterIssuers'
 	delete_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
@@ -173,9 +206,8 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	desc 'compare custom certificates without clusterissuer RBAC'
-	compare_kubectl "certificate/${cluster}-ssl" "-custom"
-	compare_kubectl "certificate/${cluster}-ssl-internal" "-custom"
+	desc 'check certificates use the user clusterissuer without clusterissuer RBAC'
+	check_certificates_use_user_clusterissuer "${cluster}-ssl" "${cluster}-ssl-internal"
 
 	desc 'delete cluster'
 	kubectl delete psmdb --all
@@ -197,13 +229,8 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	desc 'compare certificates issued by the user clusterissuer'
-	compare_kubectl "certificate/${cluster}-ssl" "-custom"
-	compare_kubectl "certificate/${cluster}-ssl-internal" "-custom"
-
-	desc 'compare clusterissuers are not overwritten'
-	compare_kubectl "clusterissuer/$cluster-psmdb-ca-issuer" "-custom"
-	compare_kubectl "clusterissuer/$cluster-psmdb-issuer" "-custom"
+	desc 'check certificates are issued by the user clusterissuer'
+	check_certificates_use_user_clusterissuer "${cluster}-ssl" "${cluster}-ssl-internal"
 
 	desc 'check operator does not create namespaced issuers'
 	check_issuer_not_created "$cluster-psmdb-issuer"
@@ -240,18 +267,8 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	compare_kubectl statefulset/${cluster}-rs0
-	compare_kubectl statefulset/${cluster}-cfg
-	compare_kubectl statefulset/${cluster}-mongos
-
 	desc 'check if certificates issued with certmanager'
 	check_tls_secret "$cluster-ssl"
-
-	desc 'check if certificate issued'
-	compare_kubectl certificate/$cluster-ssl
-
-	desc 'check if internal certificate issued'
-	compare_kubectl certificate/$cluster-ssl-internal
 
 	renew_certificate "some-name-ssl"
 	sleep 10
@@ -265,12 +282,6 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_for_running $cluster-mongos 3
 
-	desc 'check if certificate issued'
-	compare_kubectl certificate/$cluster-ssl
-
-	desc 'check if internal certificate issued'
-	compare_kubectl certificate/$cluster-ssl-internal
-
 	desc 'disable TLS'
 	pause_cluster "$cluster"
 	wait_for_cluster_state "${cluster}" "paused"
@@ -280,9 +291,9 @@ main() {
 	unpause_cluster "$cluster"
 	wait_for_cluster_state "${cluster}" "ready"
 
-	compare_kubectl statefulset/${cluster}-rs0 "-tls-disabled" "skip_generation_check"
-	compare_kubectl statefulset/${cluster}-cfg "-tls-disabled" "skip_generation_check"
-	compare_kubectl statefulset/${cluster}-mongos "-tls-disabled" "skip_generation_check"
+	check_tls_disabled "${cluster}-rs0" mongod
+	check_tls_disabled "${cluster}-cfg" mongod
+	check_tls_disabled "${cluster}-mongos" mongos
 
 	delete_clusterissuer_rbac "$cluster-psmdb-ca-issuer"
 	delete_clusterissuer_rbac "$cluster-psmdb-issuer"

@@ -7,9 +7,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import pytest
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import kubectl_bin, wait_for_running
-from lib.utils import Paths, retry
+from lib.utils import Paths
 
 logger = logging.getLogger(__name__)
 
@@ -72,33 +72,51 @@ def _assert_headless_svc_has_no_expose_annotations(
         )
 
 
-def _wait_compare_kubectl(
-    test_dir: str, resource: str, namespace: str, postfix: str, retries: int = 12
-) -> None:
-    """Operator restores service metadata on its next reconcile, which may be
+# Label and annotation keys the test sets: "<prefix>Label" and "<prefix>Annotation".
+META_PREFIXES = ("ignored", "notIgnored", "cr", "otherCr", "secondCr")
+
+
+def _service_test_meta(svc_name: str) -> tuple[dict[str, str], dict[str, str]]:
+    meta = json.loads(kubectl_bin("get", f"service/{svc_name}", "-o", "json"))["metadata"]
+    labels = meta.get("labels") or {}
+    annotations = meta.get("annotations") or {}
+    return (
+        {f"{p}Label": labels[f"{p}Label"] for p in META_PREFIXES if f"{p}Label" in labels},
+        {
+            f"{p}Annotation": annotations[f"{p}Annotation"]
+            for p in META_PREFIXES
+            if f"{p}Annotation" in annotations
+        },
+    )
+
+
+def _wait_service_meta(svc_name: str, prefixes: tuple[str, ...], retries: int = 12) -> None:
+    """Wait until the service has exactly the test labels and annotations for `prefixes`.
+
+    Operator restores service metadata on its next reconcile, which may be
     delayed (e.g. by an update conflict), so retry instead of relying on sleep."""
-
-    def _try_compare() -> bool:
-        try:
-            compare_kubectl(test_dir, resource, namespace, postfix)
-            return True
-        except AssertionError:
-            return False
-
-    retry(_try_compare, max_attempts=retries, delay=5, condition=lambda ok: ok)
-    compare_kubectl(test_dir, resource, namespace, postfix)
+    expected = (
+        {f"{p}Label": "true" for p in prefixes},
+        {f"{p}Annotation": "true" for p in prefixes},
+    )
+    actual = _service_test_meta(svc_name)
+    for _ in range(retries):
+        if actual == expected:
+            return
+        time.sleep(5)
+        actual = _service_test_meta(svc_name)
+    assert actual == expected, (
+        f"service/{svc_name} labels, annotations: expected {expected}, got {actual}"
+    )
 
 
 def _check_service(
     config: IgnoreLabelsAnnotationsConfig,
-    test_paths: Paths,
     replset_name: str,
     expose_path: str,
     svc_name: str,
     headless_svc_name: str | None,
 ) -> None:
-    test_dir = test_paths["test_dir"]
-    namespace = config.namespace
     cluster = config.cluster
 
     logger.info(f"add labels and annotation manually to service {svc_name}")
@@ -115,7 +133,7 @@ def _check_service(
 
     time.sleep(7)  # waiting for reconcile
     logger.info(f"check if annotations/labels are not deleted from service {svc_name}")
-    _wait_compare_kubectl(test_dir, f"service/{svc_name}", namespace, "-manual")
+    _wait_service_meta(svc_name, ("ignored", "notIgnored"))
 
     logger.info("adding ignoreAnnotations and ignoreLabels")
     _patch_psmdb(
@@ -127,7 +145,7 @@ def _check_service(
     )
     time.sleep(7)
     logger.info(f"check if annotations/labels are not deleted from service {svc_name}")
-    _wait_compare_kubectl(test_dir, f"service/{svc_name}", namespace, "-manual")
+    _wait_service_meta(svc_name, ("ignored", "notIgnored"))
 
     logger.info(f"adding labels and annotations to {expose_path}")
     _patch_psmdb(
@@ -143,7 +161,7 @@ def _check_service(
     )
     time.sleep(5)
     logger.info(f"check if not ignored labels and annotations are deleted from service {svc_name}")
-    _wait_compare_kubectl(test_dir, f"service/{svc_name}", namespace, "-crmeta")
+    _wait_service_meta(svc_name, ("ignored", "cr"))
 
     logger.info(
         f"check that expose.annotations are never applied to the headless service {headless_svc_name}"
@@ -160,7 +178,7 @@ def _check_service(
     )
     time.sleep(5)
     logger.info(f"check if labels and annotations are not deleted from service {svc_name}")
-    _wait_compare_kubectl(test_dir, f"service/{svc_name}", namespace, "-crmeta")
+    _wait_service_meta(svc_name, ("ignored", "cr"))
 
     logger.info(f"adding other labels and annotations to {expose_path}")
     _patch_psmdb(
@@ -180,9 +198,7 @@ def _check_service(
     )
     time.sleep(5)
     logger.info(f"check if not previous service labels and annotations is deleted from {svc_name}")
-    _wait_compare_kubectl(
-        test_dir, f"service/{svc_name}", namespace, "-two-service-labels-annotations"
-    )
+    _wait_service_meta(svc_name, ("ignored", "otherCr", "secondCr"))
 
     logger.info(
         f"check that expose.annotations are still never applied to the headless service {headless_svc_name}"
@@ -205,9 +221,7 @@ def _check_service(
     )
     time.sleep(5)
     logger.info(f"check if removed service label is deleted from {svc_name}")
-    _wait_compare_kubectl(
-        test_dir, f"service/{svc_name}", namespace, "-one-service-label-annotation"
-    )
+    _wait_service_meta(svc_name, ("ignored", "otherCr"))
 
     logger.info("removing ignoreLabels and ignoreAnnotations")
     # When `labels` and `annotations` are not set, old metadata should stay
@@ -220,7 +234,7 @@ def _check_service(
     )
     time.sleep(5)  # waiting for reconcile
     logger.info(f"check if ignored labels and annotations are deleted from {svc_name}")
-    _wait_compare_kubectl(test_dir, f"service/{svc_name}", namespace, "-no-ignored-meta")
+    _wait_service_meta(svc_name, ("otherCr",))
 
 
 class TestIgnoreLabelsAnnotations:
@@ -240,11 +254,10 @@ class TestIgnoreLabelsAnnotations:
     def test_service_labels_annotations(
         self,
         config: IgnoreLabelsAnnotationsConfig,
-        test_paths: Paths,
         replset_name: str,
         expose_path: str,
         svc_name: str,
         headless_svc_name: str | None,
     ) -> None:
         """Check ignoreLabels/ignoreAnnotations and expose.labels/annotations behavior"""
-        _check_service(config, test_paths, replset_name, expose_path, svc_name, headless_svc_name)
+        _check_service(config, replset_name, expose_path, svc_name, headless_svc_name)

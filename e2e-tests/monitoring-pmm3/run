@@ -354,8 +354,12 @@ wait_for_running $cluster-rs0 3
 # Create client after the cluster cause the TLS secret is created during the cluster creation
 apply_client_with_tls "$cluster"
 
-desc 'check if pmm-client container is not enabled'
-compare_kubectl statefulset/$cluster-rs0 "-no-pmm"
+desc 'check if pmm-client container is not enabled without a PMM token'
+containers=$(kubectl_bin get "statefulset/$cluster-rs0" -o jsonpath='{.spec.template.spec.containers[*].name}')
+if [[ " $containers " == *" pmm-client "* ]]; then
+	echo "statefulset/$cluster-rs0 has a pmm-client container before the PMM token was added"
+	exit 1
+fi
 sleep 10
 
 custom_port='27019'
@@ -383,11 +387,13 @@ wait_for_running $cluster-rs0 3
 sleep 90
 
 desc 'check if pmm-client container enabled'
-compare_kubectl statefulset/$cluster-rs0
-compare_kubectl service/$cluster-rs0
-compare_kubectl service/$cluster-mongos
-compare_kubectl statefulset/$cluster-cfg
-compare_kubectl statefulset/$cluster-mongos
+for component in rs0 cfg mongos; do
+	containers=$(kubectl_bin get "statefulset/$cluster-$component" -o jsonpath='{.spec.template.spec.containers[*].name}')
+	if [[ " $containers " != *" pmm-client "* ]]; then
+		echo "statefulset/$cluster-$component has no pmm-client container after the PMM token was added, got: $containers"
+		exit 1
+	fi
+done
 
 check_custom_pmm_probes
 

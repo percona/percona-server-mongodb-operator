@@ -9,6 +9,7 @@ import (
 	"maps"
 	"slices"
 	"testing"
+	"time"
 
 	cm "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -60,9 +61,12 @@ func TestReconcileSSLCertManagerCheck(t *testing.T) {
 	for _, tt := range []struct {
 		name                            string
 		external, internal, certManager bool
-		checks, applies                 int
+		// user secrets are not owned by the cluster
+		user            bool
+		checks, applies int
 	}{
 		{name: "existing manual secrets", external: true, internal: true},
+		{name: "user cert-manager secrets", external: true, internal: true, certManager: true, user: true},
 		{name: "existing cert-manager secrets", external: true, internal: true, certManager: true, applies: 1},
 		{name: "missing external secret", internal: true, checks: 1},
 		{name: "missing internal secret", external: true, checks: 1},
@@ -88,10 +92,16 @@ func TestReconcileSSLCertManagerCheck(t *testing.T) {
 					Name: name, Namespace: cr.Namespace,
 					OwnerReferences: []metav1.OwnerReference{{UID: cr.UID, Controller: &controller}},
 				}
+				if tt.user {
+					secret.OwnerReferences = nil
+				}
 				if tt.certManager {
 					secret.Labels = map[string]string{cm.PartOfCertManagerControllerLabelKey: "true"}
 				}
 				objects = append(objects, secret)
+			}
+			if tt.user {
+				objects = append(objects, &corev1.Secret{Name: tls.CertificatePBMClient(cr).SecretName(), Namespace: cr.Namespace})
 			}
 			r := buildFakeClient(objects...)
 			stop := errors.New("stop cert-manager operation")
@@ -637,6 +647,179 @@ func TestApplyCertManagerCertificatesClusterIssuer(t *testing.T) {
 		assert.Zero(t, cmCtrl.ApplyIssuerCalls)
 		assert.Equal(t, []string{cm.ClusterIssuerKind, cm.ClusterIssuerKind}, cmCtrl.IssuerRefKinds)
 	})
+}
+
+type noWaitCertManager struct {
+	tls.CertManagerController
+}
+
+func (noWaitCertManager) WaitForCerts(context.Context, *api.PerconaServerMongoDB, ...tls.Certificate) error {
+	return nil
+}
+
+func TestApplyCertManagerCertificatesObjects(t *testing.T) {
+	t.Parallel()
+
+	const ns = "cm-objects"
+	userAnnotations := map[string]string{"some-random-annotation": "true"}
+	caIssuerSpec := cm.IssuerSpec{SelfSigned: new(cm.SelfSignedIssuer)}
+	issuerSpec := cm.IssuerSpec{CA: &cm.CAIssuer{SecretName: "some-name-ca-cert"}}
+	caCertSpec := func(kind string) cm.CertificateSpec {
+		return cm.CertificateSpec{
+			IsCA:       true,
+			CommonName: "some-name-ca",
+			SecretName: "some-name-ca-cert",
+			IssuerRef:  cmmeta.IssuerReference{Name: "some-name-psmdb-ca-issuer", Kind: kind},
+		}
+	}
+
+	tests := map[string]struct {
+		issuerConf cmmeta.IssuerReference
+		backup     bool
+		// user objects the operator must leave as they are
+		user []client.Object
+
+		caIssuer, issuer client.Object
+		caCert           types.NamespacedName
+		caCommonName     string
+		caIssuerRef      cmmeta.IssuerReference
+		caSecret         string
+		issuerRef        cmmeta.IssuerReference
+	}{
+		"operator issuer": {
+			caIssuer:     &cm.Issuer{Name: "some-name-psmdb-ca-issuer", Namespace: ns},
+			issuer:       &cm.Issuer{Name: "some-name-psmdb-issuer", Namespace: ns},
+			caCert:       types.NamespacedName{Name: "some-name-ca-cert", Namespace: ns},
+			caCommonName: "some-name-ca",
+			caIssuerRef:  cmmeta.IssuerReference{Name: "some-name-psmdb-ca-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+			caSecret:     "some-name-ca-cert",
+			issuerRef:    cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+		},
+		"operator issuer with backup": {
+			backup:       true,
+			caIssuer:     &cm.Issuer{Name: "some-name-psmdb-ca-issuer", Namespace: ns},
+			issuer:       &cm.Issuer{Name: "some-name-psmdb-issuer", Namespace: ns},
+			caCert:       types.NamespacedName{Name: "some-name-ca-cert", Namespace: ns},
+			caCommonName: "some-name-ca",
+			caIssuerRef:  cmmeta.IssuerReference{Name: "some-name-psmdb-ca-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+			caSecret:     "some-name-ca-cert",
+			issuerRef:    cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+		},
+		"operator cluster issuer": {
+			issuerConf:   cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.ClusterIssuerKind},
+			caIssuer:     &cm.ClusterIssuer{Name: "some-name-psmdb-issuer-psmdb-ca-issuer"},
+			issuer:       &cm.ClusterIssuer{Name: "some-name-psmdb-issuer"},
+			caCert:       types.NamespacedName{Name: "some-name-psmdb-issuer-ca-cert", Namespace: "cert-manager"},
+			caCommonName: "some-name-psmdb-issuer-ca",
+			caIssuerRef:  cmmeta.IssuerReference{Name: "some-name-psmdb-issuer-psmdb-ca-issuer", Kind: cm.ClusterIssuerKind, Group: "cert-manager.io"},
+			caSecret:     "some-name-psmdb-issuer-ca-cert",
+			issuerRef:    cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.ClusterIssuerKind, Group: "cert-manager.io"},
+		},
+		"user issuer": {
+			issuerConf: cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.IssuerKind},
+			user: []client.Object{
+				&cm.Issuer{Name: "some-name-psmdb-ca-issuer", Namespace: ns, Annotations: userAnnotations, Spec: caIssuerSpec},
+				&cm.Issuer{Name: "some-name-psmdb-issuer", Namespace: ns, Annotations: userAnnotations, Spec: issuerSpec},
+				&cm.Certificate{Name: "some-name-ca-cert", Namespace: ns, Annotations: userAnnotations, Spec: caCertSpec(cm.IssuerKind)},
+			},
+			issuerRef: cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.IssuerKind, Group: "cert-manager.io"},
+		},
+		"user cluster issuer": {
+			issuerConf: cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.ClusterIssuerKind},
+			user: []client.Object{
+				&cm.ClusterIssuer{Name: "some-name-psmdb-ca-issuer", Annotations: userAnnotations, Spec: caIssuerSpec},
+				&cm.ClusterIssuer{Name: "some-name-psmdb-issuer", Annotations: userAnnotations, Spec: issuerSpec},
+				&cm.Certificate{Name: "some-name-ca-cert", Namespace: "cert-manager", Annotations: userAnnotations, Spec: caCertSpec(cm.ClusterIssuerKind)},
+			},
+			issuerRef: cmmeta.IssuerReference{Name: "some-name-psmdb-issuer", Kind: cm.ClusterIssuerKind, Group: "cert-manager.io"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			cr, err := readDefaultCR("some-name", ns)
+			require.NoError(t, err)
+			cr.UID = "some-name-uid"
+			cr.Spec.Backup.Enabled = tt.backup
+			cr.Spec.TLS = &api.TLSSpec{IssuerConf: tt.issuerConf}
+			require.NoError(t, cr.CheckNSetDefaults(ctx, ""))
+
+			objs := []client.Object{cr}
+			for _, obj := range tt.user {
+				objs = append(objs, obj.DeepCopyObject().(client.Object))
+			}
+			r := buildFakeClient(objs...)
+			cmCtrl := noWaitCertManager{tls.NewCertManagerController(r.client, r.scheme, false)}
+			_, err = r.applyCertManagerCertificates(ctx, cr, cmCtrl)
+			require.NoError(t, err)
+
+			for _, want := range tt.user {
+				got := want.DeepCopyObject().(client.Object)
+				require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(want), got))
+				assert.Equal(t, userAnnotations, got.GetAnnotations(), got.GetName())
+				assert.Empty(t, got.GetLabels(), got.GetName())
+				assert.Empty(t, got.GetOwnerReferences(), got.GetName())
+			}
+
+			assertOwner := func(t *testing.T, obj client.Object) {
+				t.Helper()
+				assert.True(t, naming.IsManagedByOperator(obj.GetLabels()), obj.GetName())
+				if obj.GetNamespace() == cr.Namespace {
+					assert.True(t, metav1.IsControlledBy(obj, cr), obj.GetName())
+				} else {
+					assert.Empty(t, obj.GetOwnerReferences(), obj.GetName())
+				}
+			}
+
+			if tt.caIssuer != nil {
+				caIssuer := tt.caIssuer.(cm.GenericIssuer)
+				require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(caIssuer), caIssuer))
+				assert.NotNil(t, caIssuer.GetSpec().SelfSigned)
+				assertOwner(t, caIssuer)
+
+				issuer := tt.issuer.(cm.GenericIssuer)
+				require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(issuer), issuer))
+				require.NotNil(t, issuer.GetSpec().CA)
+				assert.Equal(t, tt.caSecret, issuer.GetSpec().CA.SecretName)
+				assertOwner(t, issuer)
+
+				ca := new(cm.Certificate)
+				require.NoError(t, r.client.Get(ctx, tt.caCert, ca))
+				assert.True(t, ca.Spec.IsCA)
+				assert.Equal(t, tt.caCommonName, ca.Spec.CommonName)
+				assert.Equal(t, tt.caSecret, ca.Spec.SecretName)
+				assert.Equal(t, tt.caIssuerRef, ca.Spec.IssuerRef)
+				assert.Equal(t, 365*24*time.Hour, ca.Spec.Duration.Duration)
+				assert.Equal(t, 730*time.Hour, ca.Spec.RenewBefore.Duration)
+				assertOwner(t, ca)
+			}
+
+			for _, name := range []string{"some-name-ssl", "some-name-ssl-internal"} {
+				cert := new(cm.Certificate)
+				require.NoError(t, r.client.Get(ctx, types.NamespacedName{Name: name, Namespace: ns}, cert))
+				assert.Equal(t, name, cert.Spec.SecretName)
+				assert.Equal(t, "some-name", cert.Spec.CommonName)
+				assert.Equal(t, []string{naming.CertificateOrganizationPSMDB}, cert.Spec.Subject.Organizations)
+				assert.Equal(t, 90*24*time.Hour, cert.Spec.Duration.Duration)
+				assert.Equal(t, tt.issuerRef, cert.Spec.IssuerRef)
+				assert.Subset(t, cert.Spec.DNSNames, []string{"some-name-rs0", "*.some-name-cfg", "*.some-name-mongos"})
+				assertOwner(t, cert)
+			}
+
+			pbm := new(cm.Certificate)
+			err = r.client.Get(ctx, types.NamespacedName{Name: "some-name-pbm", Namespace: ns}, pbm)
+			if !tt.backup {
+				assert.True(t, k8serrors.IsNotFound(err), "PBM client certificate without backups")
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.issuerRef, pbm.Spec.IssuerRef)
+			assertOwner(t, pbm)
+		})
+	}
 }
 
 func TestIsExternalIssuer(t *testing.T) {

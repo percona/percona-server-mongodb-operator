@@ -2,12 +2,13 @@
 
 import logging
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import kubectl_bin, wait_for_running
 from lib.utils import Paths
 
@@ -41,16 +42,25 @@ def setup_tests(test_paths: Paths, deploy_s3_storage: Any) -> None:
     )
 
 
+def _wait_mongod_probe(sts: str, probe: str, field: str, expected: str) -> None:
+    jsonpath = f'{{.spec.template.spec.containers[?(@.name=="mongod")].{probe}.{field}}}'
+    actual = ""
+    for _ in range(30):
+        actual = kubectl_bin("get", "statefulset", sts, "-o", f"jsonpath={jsonpath}").strip()
+        if actual == expected:
+            return
+        time.sleep(2)
+    raise AssertionError(
+        f"statefulset/{sts} mongod {probe}.{field}: expected {expected}, got {actual}"
+    )
+
+
 class TestLiveness:
     @pytest.mark.dependency()
     def test_create_first_cluster(self, config: LivenessConfig, test_paths: Paths) -> None:
         """Create first PSMDB cluster"""
         apply_cluster(f"{test_paths['test_dir']}/conf/{config.cluster}-rs0.yml")
         wait_for_running(f"{config.cluster}-rs0", 3)
-
-        compare_kubectl(
-            test_paths["test_dir"], f"statefulset/{config.cluster}-rs0", config.namespace
-        )
 
     @pytest.mark.dependency(depends=["TestLiveness::test_create_first_cluster"])
     def test_liveness_check_fails_with_invalid_ssl_option(self, config: LivenessConfig) -> None:
@@ -92,9 +102,5 @@ class TestLiveness:
 
         wait_for_running(f"{config.cluster}-rs0", 3)
 
-        compare_kubectl(
-            test_paths["test_dir"],
-            f"statefulset/{config.cluster}-rs0",
-            config.namespace,
-            "-changed",
-        )
+        _wait_mongod_probe(f"{config.cluster}-rs0", "livenessProbe", "periodSeconds", "32")
+        _wait_mongod_probe(f"{config.cluster}-rs0", "readinessProbe", "periodSeconds", "5")

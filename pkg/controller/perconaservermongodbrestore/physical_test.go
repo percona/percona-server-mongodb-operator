@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,15 +33,24 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		AllowPrivilegeEscalation: &allowPrivEsc,
 	}
 
+	const (
+		uriBase = "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
+		uriTLS  = uriBase + "/?tls=true&tlsCertificateKeyFile=/tmp/pbm-tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt"
+	)
+
 	tests := []struct {
 		name                string
 		crVersion           string
 		backupVersion       string
 		storages            map[string]psmdbv1.BackupStorageSpec
+		tlsMode             psmdbv1.TLSMode
+		tlsInsecure         bool
 		clusterInitSC       *corev1.SecurityContext
 		wantPbmInitSC       *corev1.SecurityContext
 		wantAWSChecksumEnvs bool
-		wantTLSInsecure     bool
+		wantPBMTLS          bool
+		wantCABundle        bool
+		wantURI             string
 	}{
 		{
 			name:                "latest_version_with_InitContainerSecurityContext",
@@ -50,6 +60,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			clusterInitSC:       initSC,
 			wantPbmInitSC:       initSC,
 			wantAWSChecksumEnvs: true,
+			wantPBMTLS:          true,
+			wantURI:             uriTLS,
 		},
 		{
 			name:                "latest_version_without_InitContainerSecurityContext",
@@ -59,6 +71,8 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			clusterInitSC:       nil,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
+			wantPBMTLS:          true,
+			wantURI:             uriTLS,
 		},
 		{
 			name:                "latest_version_with_regular_s3",
@@ -68,26 +82,48 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			clusterInitSC:       nil,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
+			wantPBMTLS:          true,
+			wantURI:             uriTLS,
+		},
+		{
+			name:          "latest_version_with_minio_ca_bundle",
+			crVersion:     version.Version(),
+			backupVersion: "2.12.0",
+			storages:      minioCABundleStorage(),
+			tlsInsecure:   true,
+			wantPBMTLS:    true,
+			wantCABundle:  true,
+			wantURI:       uriTLS + "&tlsInsecure=true",
+		},
+		{
+			name:          "latest_version_tls_disabled",
+			crVersion:     version.Version(),
+			backupVersion: "2.12.0",
+			storages:      regularS3Storage(),
+			tlsMode:       psmdbv1.TLSModeDisabled,
+			wantURI:       uriBase,
 		},
 		{
 			name:                "1_22_with_InitContainerSecurityContext_ignored",
 			crVersion:           "1.22.0",
 			backupVersion:       "2.11.0",
 			storages:            s3CompatibleOSSStorage(),
+			tlsInsecure:         true,
 			clusterInitSC:       initSC,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
-			wantTLSInsecure:     true,
+			wantURI:             uriBase + "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true",
 		},
 		{
 			name:                "1_22_without_InitContainerSecurityContext",
 			crVersion:           "1.22.0",
 			backupVersion:       "2.11.0",
 			storages:            s3CompatibleOSSStorage(),
+			tlsInsecure:         true,
 			clusterInitSC:       nil,
 			wantPbmInitSC:       nil,
 			wantAWSChecksumEnvs: false,
-			wantTLSInsecure:     true,
+			wantURI:             uriBase + "/?tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true",
 		},
 	}
 
@@ -95,24 +131,24 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 
+			tlsMode := tt.tlsMode
+			if tlsMode == "" {
+				tlsMode = psmdbv1.TLSModePrefer
+			}
+			extraMount := corev1.VolumeMount{Name: "extra-volume", MountPath: "/extra"}
 			cluster := &psmdbv1.PerconaServerMongoDB{
 				Name:      "my-cluster",
 				Namespace: "default",
 				Spec: psmdbv1.PerconaServerMongoDBSpec{
 					CRVersion: tt.crVersion,
 					Backup: psmdbv1.BackupSpec{
-						Image:    "percona/percona-backup-mongodb:latest",
-						Storages: tt.storages,
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "extra-volume",
-								MountPath: "/extra",
-							},
-						},
+						Image:        "percona/percona-backup-mongodb:latest",
+						Storages:     tt.storages,
+						VolumeMounts: []corev1.VolumeMount{extraMount},
 					},
 					TLS: &psmdbv1.TLSSpec{
-						Mode:                     psmdbv1.TLSModePrefer,
-						AllowInvalidCertificates: new(tt.wantTLSInsecure),
+						Mode:                     tlsMode,
+						AllowInvalidCertificates: new(tt.tlsInsecure),
 					},
 					ImagePullPolicy: corev1.PullIfNotPresent,
 					Secrets: &psmdbv1.SecretsSpec{
@@ -177,7 +213,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 				Namespace: sts.Namespace,
 			}
 
-			err = r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27017)
+			err = r.updateStatefulSetForPhysicalRestore(ctx, cluster, namespacedName, 27018)
 			assert.NoError(t, err)
 
 			updatedSTS := &appsv1.StatefulSet{}
@@ -185,6 +221,7 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			assert.NoError(t, err)
 
 			assert.Equal(t, "true", updatedSTS.Annotations[psmdbv1.AnnotationRestoreInProgress])
+			assert.Equal(t, "true", updatedSTS.Spec.Template.Annotations[psmdbv1.AnnotationRestoreInProgress])
 
 			for _, c := range updatedSTS.Spec.Template.Spec.Containers {
 				assert.NotEqual(t, naming.ContainerBackupAgent, c.Name)
@@ -200,42 +237,180 @@ func TestUpdateStatefulSetForPhysicalRestore(t *testing.T) {
 			assert.NotNil(t, pbmInit)
 			assert.Equal(t, tt.wantPbmInitSC, pbmInit.SecurityContext)
 
-			assert.Equal(t, "/opt/percona/physical-restore-ps-entry.sh", updatedSTS.Spec.Template.Spec.Containers[0].Command[0])
+			mongod := updatedSTS.Spec.Template.Spec.Containers[0]
+			assert.Equal(t, "/opt/percona/physical-restore-ps-entry.sh", mongod.Command[0])
 
+			assert.Contains(t, updatedSTS.Spec.Template.Spec.Volumes, corev1.Volume{
+				Name:   "pbm-config",
+				Secret: &corev1.SecretVolumeSource{SecretName: "my-cluster-pbm-config"},
+			})
+			assert.Contains(t, mongod.VolumeMounts, corev1.VolumeMount{Name: "pbm-config", MountPath: "/etc/pbm/", ReadOnly: true})
+			assert.Contains(t, mongod.VolumeMounts, extraMount)
 			assert.True(t,
-				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
-					return c.MountPath == "/etc/pbm/"
-				}))
-			assert.True(t,
-				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
+				slices.ContainsFunc(mongod.VolumeMounts, func(c corev1.VolumeMount) bool {
 					return c.Name == config.MongodDataVolClaimName
 				}))
 			assert.False(t,
-				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].VolumeMounts, func(c corev1.VolumeMount) bool {
+				slices.ContainsFunc(mongod.VolumeMounts, func(c corev1.VolumeMount) bool {
 					return c.Name == config.MongodJournalVolClaimName || c.Name == config.MongodLogVolClaimName
 				}))
 
+			pbmTLSMount := corev1.VolumeMount{Name: naming.PBMClientTLSVolumeName, MountPath: naming.PBMClientTLSDirectory, ReadOnly: true}
+			pbmTLSDirEnv := corev1.EnvVar{Name: "PBM_AGENT_TLS_DIR", Value: naming.PBMClientTLSDirectory}
+			hasPBMTLSVolume := slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Volumes, func(v corev1.Volume) bool {
+				return v.Name == naming.PBMClientTLSVolumeName && v.Secret != nil && v.Secret.SecretName == "my-cluster-pbm"
+			})
+			assert.Equal(t, tt.wantPBMTLS, hasPBMTLSVolume)
+			assertContains(t, tt.wantPBMTLS, mongod.VolumeMounts, pbmTLSMount)
+			assert.Equal(t, tt.wantPBMTLS, slices.Contains(mongod.Env, pbmTLSDirEnv))
+
 			assert.Equal(t, tt.wantAWSChecksumEnvs,
-				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
+				slices.ContainsFunc(mongod.Env, func(e corev1.EnvVar) bool {
 					return e.Name == "AWS_REQUEST_CHECKSUM_CALCULATION" && e.Value == "when_required"
 				}))
 			assert.Equal(t, tt.wantAWSChecksumEnvs,
-				slices.ContainsFunc(updatedSTS.Spec.Template.Spec.Containers[0].Env, func(e corev1.EnvVar) bool {
+				slices.ContainsFunc(mongod.Env, func(e corev1.EnvVar) bool {
 					return e.Name == "AWS_RESPONSE_CHECKSUM_VALIDATION" && e.Value == "when_required"
 				}))
 
-			lastEnvVar := updatedSTS.Spec.Template.Spec.Containers[0].Env[len(updatedSTS.Spec.Template.Spec.Containers[0].Env)-1]
-			pemFile := "/tmp/pbm-tls.pem"
-			if tt.crVersion == "1.22.0" {
-				pemFile = "/tmp/tls.pem"
+			assert.Contains(t, mongod.Env, corev1.EnvVar{Name: "PBM_AGENT_TLS_ENABLED", Value: strconv.FormatBool(tlsMode != psmdbv1.TLSModeDisabled)})
+			assert.Contains(t, mongod.Env, corev1.EnvVar{Name: "PBM_MONGODB_PORT", Value: "27018"})
+
+			caMounts := []corev1.VolumeMount{
+				{Name: naming.BackupStorageCAInputVolumeName, MountPath: "/etc/s3/certs-in", ReadOnly: true},
+				{Name: naming.BackupStorageCAFileVolumeName, MountPath: "/etc/s3/certs"},
 			}
-			expectedURI := "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)/?tls=true&tlsCertificateKeyFile=" + pemFile + "&tlsCAFile=/etc/mongodb-ssl/ca.crt"
-			if tt.wantTLSInsecure {
-				expectedURI += "&tlsInsecure=true"
+			for _, m := range caMounts {
+				assertContains(t, tt.wantCABundle, mongod.VolumeMounts, m)
 			}
 
-			assert.Equal(t, "PBM_MONGODB_URI", lastEnvVar.Name)
-			assert.Equal(t, expectedURI, lastEnvVar.Value)
+			// PBM_MONGODB_URI references other variables, so only SSL_CERT_FILE may follow it
+			env := mongod.Env
+			if tt.wantCABundle {
+				assert.Equal(t, corev1.EnvVar{Name: "SSL_CERT_FILE", Value: "/etc/s3/certs/ca-bundle.crt"}, env[len(env)-1])
+				env = env[:len(env)-1]
+			}
+			assert.False(t, slices.ContainsFunc(env, func(e corev1.EnvVar) bool { return e.Name == "SSL_CERT_FILE" }))
+			assert.Equal(t, corev1.EnvVar{Name: "PBM_MONGODB_URI", Value: tt.wantURI}, env[len(env)-1])
+		})
+	}
+}
+
+func assertContains(t *testing.T, want bool, list, elem any) {
+	t.Helper()
+
+	if want {
+		assert.Contains(t, list, elem)
+	} else {
+		assert.NotContains(t, list, elem)
+	}
+}
+
+func TestPrepareStatefulSetsForPhysicalRestore(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+
+	tests := map[string]struct {
+		sharded      bool
+		wantPrepared []string
+		wantShutdown []string
+		wantSkipped  []string
+	}{
+		"replset with non-voting and arbiter": {
+			wantPrepared: []string{"my-cluster-rs0", "my-cluster-rs0-nv"},
+			wantShutdown: []string{"my-cluster-rs0-arbiter"},
+		},
+		"sharded": {
+			sharded:      true,
+			wantPrepared: []string{"my-cluster-cfg", "my-cluster-rs0", "my-cluster-rs0-nv"},
+			wantShutdown: []string{"my-cluster-rs0-arbiter"},
+			wantSkipped:  []string{"my-cluster-mongos"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cluster := &psmdbv1.PerconaServerMongoDB{
+				Name:      "my-cluster",
+				Namespace: ns,
+				Spec: psmdbv1.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Backup:    psmdbv1.BackupSpec{Image: "percona/percona-backup-mongodb:latest"},
+					TLS:       &psmdbv1.TLSSpec{Mode: psmdbv1.TLSModeDisabled},
+					Secrets:   &psmdbv1.SecretsSpec{Users: "users-secret"},
+					Replsets: []*psmdbv1.ReplsetSpec{{
+						Name:      "rs0",
+						Size:      3,
+						NonVoting: psmdbv1.NonVotingSpec{Enabled: true, Size: 1},
+						Arbiter:   psmdbv1.Arbiter{Enabled: true, Size: 1},
+					}},
+				},
+			}
+			if tt.sharded {
+				cluster.Spec.Sharding = psmdbv1.Sharding{
+					Enabled:          true,
+					ConfigsvrReplSet: &psmdbv1.ReplsetSpec{Name: psmdbv1.ConfigReplSetName, Size: 3},
+				}
+			}
+
+			objs := []client.Object{cluster}
+			for _, name := range slices.Concat(tt.wantPrepared, tt.wantShutdown, tt.wantSkipped) {
+				objs = append(objs, &appsv1.StatefulSet{
+					Name:      name,
+					Namespace: ns,
+					Spec: appsv1.StatefulSetSpec{
+						Replicas: new(int32(3)),
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"sts": name}},
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{Name: naming.ContainerMongod},
+									{Name: naming.ContainerBackupAgent},
+								},
+							},
+						},
+					},
+				})
+			}
+			r := fakeReconciler(objs...)
+
+			done, err := r.prepareStatefulSetsForPhysicalRestore(t.Context(), cluster)
+			require.NoError(t, err)
+			assert.True(t, done)
+
+			get := func(name string) *appsv1.StatefulSet {
+				sts := new(appsv1.StatefulSet)
+				require.NoError(t, r.client.Get(t.Context(), types.NamespacedName{Name: name, Namespace: ns}, sts))
+				return sts
+			}
+			containerNames := func(sts *appsv1.StatefulSet) []string {
+				var names []string
+				for _, c := range sts.Spec.Template.Spec.Containers {
+					names = append(names, c.Name)
+				}
+				return names
+			}
+
+			for _, name := range tt.wantPrepared {
+				sts := get(name)
+				assert.Equal(t, "true", sts.Annotations[psmdbv1.AnnotationRestoreInProgress], name)
+				assert.Equal(t, []string{naming.ContainerMongod}, containerNames(sts), name)
+				assert.Equal(t, int32(3), *sts.Spec.Replicas, name)
+			}
+			for _, name := range tt.wantShutdown {
+				sts := get(name)
+				assert.Equal(t, "true", sts.Annotations[psmdbv1.AnnotationRestoreInProgress], name)
+				assert.Equal(t, int32(0), *sts.Spec.Replicas, name)
+			}
+			for _, name := range tt.wantSkipped {
+				sts := get(name)
+				assert.NotContains(t, sts.Annotations, psmdbv1.AnnotationRestoreInProgress, name)
+				assert.Equal(t, int32(3), *sts.Spec.Replicas, name)
+				assert.Contains(t, containerNames(sts), naming.ContainerBackupAgent, name)
+			}
 		})
 	}
 }
@@ -246,6 +421,17 @@ func s3CompatibleOSSStorage() map[string]psmdbv1.BackupStorageSpec {
 			Type: psmdbv1.BackupStorageS3,
 			S3: psmdbv1.BackupStorageS3Spec{
 				EndpointURL: "https://s3.oss-eu-central-1.aliyuncs.com",
+			},
+		},
+	}
+}
+
+func minioCABundleStorage() map[string]psmdbv1.BackupStorageSpec {
+	return map[string]psmdbv1.BackupStorageSpec{
+		"minio": {
+			Type: psmdbv1.BackupStorageMinio,
+			Minio: psmdbv1.BackupStorageMinioSpec{
+				CABundle: &corev1.SecretKeySelector{Name: "minio-ca"},
 			},
 		},
 	}

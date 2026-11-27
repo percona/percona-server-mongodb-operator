@@ -15,10 +15,6 @@ check_cr_config() {
 	desc 'check if all 3 Pods started'
 	wait_for_running $cluster 3
 
-	desc 'check if service and statefulset created with expected config'
-	compare_kubectl statefulset/$cluster "" "skip_generation_check"
-	compare_kubectl service/$cluster-0
-
 	local URI="$(get_service_ip $cluster-0),$(get_service_ip $cluster-1),$(get_service_ip $cluster-2)"
 	# Wait a bit longer for ELB availability on Openshift
 	sleep 30
@@ -58,10 +54,10 @@ check_cr_config() {
 				"test": "service-per-pod",
 			}
 		}]'
-		sleep 5 # waiting for reconcile
 
-		desc 'check if service created with expected config'
-		compare_kubectl service/node-port-rs0-0 "-updated"
+		desc 'check if service got the label and annotation'
+		retry 12 5 check_jsonpath service/node-port-rs0-0 '{.metadata.labels.test}' service-per-pod
+		retry 12 5 check_jsonpath service/node-port-rs0-0 '{.metadata.annotations.test}' service-per-pod
 		current_node_port=$(kubectl_bin get svc node-port-rs0-0 -o 'jsonpath={.spec.ports[0].nodePort}')
 		if [[ $current_node_port != "$old_node_port" ]]; then
 			echo "Node port changed from ${old_node_port} to ${current_node_port}"

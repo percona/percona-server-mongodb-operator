@@ -1,13 +1,16 @@
 package psmdb
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -1139,6 +1142,630 @@ func TestStatefulSpecLogStoragePerComponent(t *testing.T) {
 				require.NotEqual(t, -1, idx, "%s must get a log claim", component)
 				got := spec.VolumeClaimTemplates[idx].Spec.Resources.Requests[corev1.ResourceStorage]
 				assert.Equal(t, want, got.String(), component)
+			}
+		})
+	}
+}
+
+func TestStatefulSpecMongod(t *testing.T) {
+	t.Parallel()
+
+	tlsFlags := []string{"--ssl", "--sslInsecure", "--sslCAFile", "/etc/mongodb-ssl/ca.crt", "--sslPEMKeyFile", "/tmp/tls.pem"}
+	livenessCmd := func(delay string) []string {
+		return slices.Concat([]string{"/opt/percona/mongodb-healthcheck", "k8s", "liveness"}, tlsFlags, []string{"--startupDelaySeconds", delay})
+	}
+	readinessCmd := slices.Concat([]string{"/opt/percona/mongodb-healthcheck", "k8s", "readiness", "--component", "mongod"}, tlsFlags)
+
+	quantities := func(cpu, mem string) corev1.ResourceList {
+		return corev1.ResourceList{corev1.ResourceCPU: resource.MustParse(cpu), corev1.ResourceMemory: resource.MustParse(mem)}
+	}
+	vault := func(cr *api.PerconaServerMongoDB) {
+		cr.Spec.Secrets.Vault = "vault-secret"
+		for _, rs := range []*api.ReplsetSpec{cr.Spec.Replsets[0], cr.Spec.Sharding.ConfigsvrReplSet} {
+			rs.Configuration = "security:\n  enableEncryption: true\n  vault:\n    serverName: vault-service\n"
+		}
+	}
+	userSecurityContext := func(cr *api.PerconaServerMongoDB) {
+		cr.Spec.InitContainerSecurityContext = &corev1.SecurityContext{Privileged: new(false), RunAsUser: new(int64(1001))}
+		rs := cr.Spec.Replsets[0]
+		rs.ContainerSecurityContext = &corev1.SecurityContext{Privileged: new(true)}
+		rs.PodSecurityContext = &corev1.PodSecurityContext{FSGroup: new(int64(1001)), SupplementalGroups: []int64{1001, 1002, 1003}}
+		rs.ServiceAccountName = "percona-server-mongodb-operator-workload"
+	}
+	checkUserSecurityContext := func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+		pod := spec.Template.Spec
+		assert.Equal(t, &corev1.SecurityContext{Privileged: new(true)}, pod.Containers[0].SecurityContext)
+		assert.Equal(t, &corev1.PodSecurityContext{FSGroup: new(int64(1001)), SupplementalGroups: []int64{1001, 1002, 1003}}, pod.SecurityContext)
+		assert.Equal(t, &corev1.SecurityContext{Privileged: new(false), RunAsUser: new(int64(1001))}, pod.InitContainers[0].SecurityContext)
+		assert.Equal(t, "percona-server-mongodb-operator-workload", pod.ServiceAccountName)
+	}
+
+	tests := map[string]struct {
+		platform version.Platform
+		rs       string
+		labels   func(*api.PerconaServerMongoDB, *api.ReplsetSpec) map[string]string
+		modify   func(cr *api.PerconaServerMongoDB)
+		check    func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec)
+	}{
+		"requests and limits": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Resources = corev1.ResourceRequirements{Limits: quantities("500m", "500M"), Requests: quantities("100m", "100M")}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				want := corev1.ResourceRequirements{Limits: quantities("500m", "500M"), Requests: quantities("100m", "100M")}
+				assert.Equal(t, want, spec.Template.Spec.Containers[0].Resources)
+				assert.Equal(t, want, spec.Template.Spec.InitContainers[0].Resources)
+				assert.Equal(t, []string{"--wiredTigerCacheSizeGB=0.25"}, cacheSizeArgs(spec))
+			},
+		},
+		"limits only": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Resources = corev1.ResourceRequirements{Limits: quantities("600m", "4Gi")}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				want := corev1.ResourceRequirements{Limits: quantities("600m", "4Gi")}
+				assert.Equal(t, want, spec.Template.Spec.Containers[0].Resources)
+				assert.Equal(t, want, spec.Template.Spec.InitContainers[0].Resources)
+				assert.Equal(t, []string{"--wiredTigerCacheSizeGB=1.50"}, cacheSizeArgs(spec))
+			},
+		},
+		"requests only": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Resources = corev1.ResourceRequirements{Requests: quantities("600m", "1G")}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				want := corev1.ResourceRequirements{Requests: quantities("600m", "1G")}
+				assert.Equal(t, want, spec.Template.Spec.Containers[0].Resources)
+				assert.Equal(t, want, spec.Template.Spec.InitContainers[0].Resources)
+				assert.Empty(t, cacheSizeArgs(spec))
+			},
+		},
+		"no requests and no limits": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Resources = corev1.ResourceRequirements{}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.Equal(t, corev1.ResourceRequirements{}, spec.Template.Spec.Containers[0].Resources)
+				assert.Equal(t, corev1.ResourceRequirements{}, spec.Template.Spec.InitContainers[0].Resources)
+				assert.Empty(t, cacheSizeArgs(spec))
+			},
+		},
+		"nonvoting uses its own resources": {
+			labels: naming.NonVotingLabels,
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].NonVoting.Enabled = true
+				cr.Spec.Replsets[0].NonVoting.Resources = corev1.ResourceRequirements{Limits: quantities("300m", "4Gi")}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.Equal(t, corev1.ResourceRequirements{Limits: quantities("300m", "4Gi")}, spec.Template.Spec.Containers[0].Resources)
+				assert.Equal(t, []string{"--wiredTigerCacheSizeGB=1.50"}, cacheSizeArgs(spec))
+			},
+		},
+		"hidden uses its own resources": {
+			labels: naming.HiddenLabels,
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Hidden.Enabled = true
+				cr.Spec.Replsets[0].Hidden.Resources = corev1.ResourceRequirements{Limits: quantities("300m", "4Gi")}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.Equal(t, corev1.ResourceRequirements{Limits: quantities("300m", "4Gi")}, spec.Template.Spec.Containers[0].Resources)
+			},
+		},
+		"arbiter uses its own resources": {
+			labels: naming.ArbiterLabels,
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Arbiter.Enabled = true
+				cr.Spec.Replsets[0].Arbiter.Size = 1
+				cr.Spec.Replsets[0].Size = 4
+				cr.Spec.Replsets[0].Arbiter.Resources = corev1.ResourceRequirements{Limits: quantities("300m", "300M")}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.Equal(t, corev1.ResourceRequirements{Limits: quantities("300m", "300M")}, spec.Template.Spec.Containers[0].Resources)
+			},
+		},
+		"default probes": {
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				c := spec.Template.Spec.Containers[0]
+				assert.Equal(t, &corev1.Probe{
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7200")},
+					InitialDelaySeconds: 60, TimeoutSeconds: 10, PeriodSeconds: 30, FailureThreshold: 4,
+				}, c.LivenessProbe)
+				assert.Equal(t, &corev1.Probe{
+					Exec:                &corev1.ExecAction{Command: readinessCmd},
+					InitialDelaySeconds: 10, TimeoutSeconds: 2, PeriodSeconds: 3, SuccessThreshold: 1, FailureThreshold: 8,
+				}, c.ReadinessProbe)
+			},
+		},
+		"user probes": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].LivenessProbe = &api.LivenessProbeExtended{
+					InitialDelaySeconds: 61, TimeoutSeconds: 6, PeriodSeconds: 31, SuccessThreshold: 1, FailureThreshold: 5,
+					StartupDelaySeconds: 7201, //nolint:staticcheck // still rendered as --startupDelaySeconds
+				}
+				cr.Spec.Replsets[0].ReadinessProbe = &corev1.Probe{
+					TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt32(27017)},
+					InitialDelaySeconds: 11, TimeoutSeconds: 3, PeriodSeconds: 4, SuccessThreshold: 2, FailureThreshold: 9,
+				}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				c := spec.Template.Spec.Containers[0]
+				assert.Equal(t, &corev1.Probe{
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7201")},
+					InitialDelaySeconds: 61, TimeoutSeconds: 6, PeriodSeconds: 31, SuccessThreshold: 1, FailureThreshold: 5,
+				}, c.LivenessProbe)
+				assert.Equal(t, &corev1.Probe{
+					TCPSocket:           &corev1.TCPSocketAction{Port: intstr.FromInt32(27017)},
+					InitialDelaySeconds: 11, TimeoutSeconds: 3, PeriodSeconds: 4, SuccessThreshold: 2, FailureThreshold: 9,
+				}, c.ReadinessProbe)
+			},
+		},
+		"user probes keep unset defaults": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].LivenessProbe = &api.LivenessProbeExtended{FailureThreshold: 3}
+				cr.Spec.Replsets[0].ReadinessProbe = &corev1.Probe{FailureThreshold: 5}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				c := spec.Template.Spec.Containers[0]
+				assert.Equal(t, &corev1.Probe{
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7200")},
+					InitialDelaySeconds: 60, TimeoutSeconds: 10, PeriodSeconds: 30, FailureThreshold: 3,
+				}, c.LivenessProbe)
+				assert.Equal(t, &corev1.Probe{
+					Exec:                &corev1.ExecAction{Command: readinessCmd},
+					InitialDelaySeconds: 10, TimeoutSeconds: 2, PeriodSeconds: 3, SuccessThreshold: 1, FailureThreshold: 5,
+				}, c.ReadinessProbe)
+			},
+		},
+		"nonvoting user liveness probe": {
+			labels: naming.NonVotingLabels,
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].NonVoting.Enabled = true
+				cr.Spec.Replsets[0].NonVoting.LivenessProbe = &api.LivenessProbeExtended{
+					InitialDelaySeconds: 70, PeriodSeconds: 31, FailureThreshold: 3,
+					StartupDelaySeconds: 7201, //nolint:staticcheck // still rendered as --startupDelaySeconds
+				}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.Equal(t, &corev1.Probe{
+					Exec:                &corev1.ExecAction{Command: livenessCmd("7201")},
+					InitialDelaySeconds: 70, TimeoutSeconds: 10, PeriodSeconds: 31, FailureThreshold: 3,
+				}, spec.Template.Spec.Containers[0].LivenessProbe)
+			},
+		},
+		"emptyDir data volume": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].VolumeSpec = &api.VolumeSpec{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				v := findVolume(t, spec, config.MongodDataVolClaimName)
+				assert.Equal(t, corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}, v.VolumeSource)
+				assert.False(t, hasClaimTemplate(spec, config.MongodDataVolClaimName))
+			},
+		},
+		"hostPath data volume": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].VolumeSpec = &api.VolumeSpec{HostPath: &corev1.HostPathVolumeSource{Path: "/run/data-dir", Type: new(corev1.HostPathDirectory)}}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				v := findVolume(t, spec, config.MongodDataVolClaimName)
+				assert.Equal(t, corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/data-dir", Type: new(corev1.HostPathDirectory)}}, v.VolumeSource)
+				assert.False(t, hasClaimTemplate(spec, config.MongodDataVolClaimName))
+			},
+		},
+		"vault encryption": {
+			modify: vault,
+			check:  checkVaultEncryption,
+		},
+		"vault encryption on cfg": {
+			rs:     api.ConfigReplSetName,
+			modify: vault,
+			check:  checkVaultEncryption,
+		},
+		"encryption disabled and quiet off": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Replsets[0].Configuration = "systemLog:\n  quiet: false\nsecurity:\n  enableEncryption: false\n"
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				c := spec.Template.Spec.Containers[0]
+				assert.NotContains(t, c.Args, "--enableEncryption")
+				assert.NotContains(t, c.Args, "--quiet")
+				assert.False(t, slices.ContainsFunc(c.VolumeMounts, func(m corev1.VolumeMount) bool { return m.MountPath == api.MongodRESTencryptDir }))
+				assert.False(t, slices.ContainsFunc(spec.Template.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == cr.Spec.Secrets.EncryptionKey }))
+			},
+		},
+		"preferTLS": {
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				c := spec.Template.Spec.Containers[0]
+				assert.Subset(t, c.Args, []string{"--clusterAuthMode=x509", "--tlsMode=preferTLS"})
+				assert.NotContains(t, c.Args, "--clusterAuthMode=keyFile")
+				assert.False(t, slices.ContainsFunc(spec.Template.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == cr.Spec.Secrets.GetInternalKey(cr) }))
+				assert.False(t, *findVolume(t, spec, "ssl").Secret.Optional)
+			},
+		},
+		"allowTLS": {
+			modify: func(cr *api.PerconaServerMongoDB) { cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeAllow} },
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				c := spec.Template.Spec.Containers[0]
+				assert.Subset(t, c.Args, []string{"--clusterAuthMode=keyFile", "--keyFile=/etc/mongodb-secrets/mongodb-key", "--tlsMode=allowTLS"})
+				assert.NotContains(t, c.Args, "--clusterAuthMode=x509")
+			},
+		},
+		"TLS disabled": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Unsafe.TLS = true
+				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				c := spec.Template.Spec.Containers[0]
+				assert.Subset(t, c.Args, []string{"--clusterAuthMode=keyFile", "--keyFile=/etc/mongodb-secrets/mongodb-key", "--tlsMode=disabled"})
+				assert.NotContains(t, c.Args, "--clusterAuthMode=x509")
+				for _, p := range []*corev1.Probe{c.LivenessProbe, c.ReadinessProbe, c.StartupProbe} {
+					assert.NotContains(t, p.Exec.Command, "--ssl")
+				}
+				keyfile := findVolume(t, spec, cr.Spec.Secrets.GetInternalKey(cr))
+				assert.Equal(t, cr.Spec.Secrets.GetInternalKey(cr), keyfile.Secret.SecretName)
+				assert.Contains(t, c.VolumeMounts, corev1.VolumeMount{Name: keyfile.Name, MountPath: config.MongodSecretsDir, ReadOnly: true})
+				assert.True(t, *findVolume(t, spec, "ssl").Secret.Optional)
+			},
+		},
+		"custom secret names": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Secrets.SSL = "custom-ssl"
+				cr.Spec.Secrets.SSLInternal = "custom-ssl-internal"
+				cr.Spec.Secrets.EncryptionKey = "custom-encryption-key"
+				cr.Spec.Secrets.InternalKey = "custom-keyfile"
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				for volume, secret := range map[string]string{
+					"ssl":                   "custom-ssl",
+					"ssl-internal":          "custom-ssl-internal",
+					"custom-encryption-key": "custom-encryption-key",
+					"custom-keyfile":        "custom-keyfile",
+				} {
+					assert.Equal(t, secret, findVolume(t, spec, volume).Secret.SecretName, volume)
+				}
+			},
+		},
+		"sharding disabled": {
+			modify: func(cr *api.PerconaServerMongoDB) { cr.Spec.Sharding.Enabled = false },
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.NotContains(t, spec.Template.Spec.Containers[0].Args, "--shardsvr")
+				assert.NotContains(t, spec.Template.Spec.Containers[0].Args, "--configsvr")
+			},
+		},
+		"kubernetes security context defaults": {
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.Equal(t, &corev1.SecurityContext{RunAsNonRoot: new(true), RunAsUser: new(int64(1001))}, spec.Template.Spec.Containers[0].SecurityContext)
+				assert.Equal(t, &corev1.PodSecurityContext{FSGroup: new(int64(1001))}, spec.Template.Spec.SecurityContext)
+			},
+		},
+		"openshift security context defaults": {
+			platform: version.PlatformOpenshift,
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				assert.Equal(t, &corev1.SecurityContext{RunAsNonRoot: new(true)}, spec.Template.Spec.Containers[0].SecurityContext)
+				assert.Equal(t, &corev1.PodSecurityContext{}, spec.Template.Spec.SecurityContext)
+			},
+		},
+		"security context from the CR": {
+			modify: userSecurityContext,
+			check:  checkUserSecurityContext,
+		},
+		"security context from the CR on openshift": {
+			platform: version.PlatformOpenshift,
+			modify:   userSecurityContext,
+			check:    checkUserSecurityContext,
+		},
+		"sidecars and pod settings": {
+			modify: func(cr *api.PerconaServerMongoDB) {
+				rs := cr.Spec.Replsets[0]
+				rs.Sidecars = []corev1.Container{{Name: "my-sidecar-1", Image: "busybox"}, {Name: naming.ContainerMongod, Image: "busybox"}}
+				rs.RuntimeClassName = new("container-rc")
+				rs.TerminationGracePeriodSeconds = new(int64(30))
+				rs.Annotations = map[string]string{"openshift.io/scc": "privileged"}
+			},
+			check: func(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+				pod := spec.Template.Spec
+				assert.Equal(t, naming.ContainerMongod, pod.Containers[0].Name)
+				assert.Equal(t, corev1.Container{Name: "my-sidecar-1", Image: "busybox"}, pod.Containers[1])
+				mongods := slices.DeleteFunc(slices.Clone(pod.Containers), func(c corev1.Container) bool { return c.Name != naming.ContainerMongod })
+				assert.Len(t, mongods, 1, "the sidecar named like mongod must be skipped")
+				assert.Equal(t, new("container-rc"), pod.RuntimeClassName)
+				assert.Equal(t, new(int64(30)), pod.TerminationGracePeriodSeconds)
+				assert.Equal(t, "privileged", spec.Template.Annotations["openshift.io/scc"])
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("test-cr", "test-ns")
+			require.NoError(t, err)
+			cr.Spec.Backup.Enabled = false
+			if tt.modify != nil {
+				tt.modify(cr)
+			}
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), cmp.Or(tt.platform, version.PlatformKubernetes)))
+
+			rs := cr.Spec.Replset(cmp.Or(tt.rs, "rs0"))
+			labels := naming.MongodLabels
+			if tt.labels != nil {
+				labels = tt.labels
+			}
+			secrets := StatefulSpecSecretParams{SSLSecret: new(corev1.Secret), UsersSecret: new(corev1.Secret)}
+			spec, err := StatefulSpec(t.Context(), cr, rs, labels(cr, rs), cr.Spec.InitImage, StatefulConfigParams{}, secrets)
+			require.NoError(t, err)
+
+			tt.check(t, cr, spec)
+		})
+	}
+}
+
+func checkVaultEncryption(t *testing.T, cr *api.PerconaServerMongoDB, spec appsv1.StatefulSetSpec) {
+	c := spec.Template.Spec.Containers[0]
+	assert.NotContains(t, c.Args, "--enableEncryption")
+	assert.False(t, slices.ContainsFunc(c.Args, func(a string) bool { return strings.HasPrefix(a, "--encryptionKeyFile") }))
+	assert.Contains(t, c.VolumeMounts, corev1.VolumeMount{Name: "vault-secret", MountPath: config.VaultDir, ReadOnly: true})
+	assert.Equal(t, "vault-secret", findVolume(t, spec, "vault-secret").Secret.SecretName)
+	assert.False(t, slices.ContainsFunc(spec.Template.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == cr.Spec.Secrets.EncryptionKey }))
+}
+
+func cacheSizeArgs(spec appsv1.StatefulSetSpec) []string {
+	var args []string
+	for _, a := range spec.Template.Spec.Containers[0].Args {
+		if strings.HasPrefix(a, "--wiredTigerCacheSizeGB") {
+			args = append(args, a)
+		}
+	}
+	return args
+}
+
+func findVolume(t *testing.T, spec appsv1.StatefulSetSpec, name string) corev1.Volume {
+	t.Helper()
+	i := slices.IndexFunc(spec.Template.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == name })
+	require.NotEqual(t, -1, i, "volume %s not found", name)
+	return spec.Template.Spec.Volumes[i]
+}
+
+func hasClaimTemplate(spec appsv1.StatefulSetSpec, name string) bool {
+	return slices.ContainsFunc(spec.VolumeClaimTemplates, func(pvc corev1.PersistentVolumeClaim) bool { return pvc.Name == name })
+}
+
+func TestBackupAgentContainer(t *testing.T) {
+	t.Parallel()
+
+	const uri = "mongodb://$(PBM_AGENT_MONGODB_USERNAME):$(PBM_AGENT_MONGODB_PASSWORD)@localhost:$(PBM_MONGODB_PORT)"
+
+	pbmTLSMount := corev1.VolumeMount{Name: naming.PBMClientTLSVolumeName, MountPath: naming.PBMClientTLSDirectory, ReadOnly: true}
+	nfsMount := corev1.VolumeMount{Name: "backup-nfs", MountPath: "/mnt/nfs/"}
+	resources := corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("300m")},
+	}
+
+	tests := map[string]struct {
+		setup         func(cr *api.PerconaServerMongoDB)
+		tlsDisabled   bool
+		wantEnv       []corev1.EnvVar
+		wantNoEnv     []string
+		wantMounts    []corev1.VolumeMount
+		wantNoMounts  []string
+		wantResources corev1.ResourceRequirements
+	}{
+		"tls enabled": {
+			wantEnv: []corev1.EnvVar{
+				{Name: "PBM_AGENT_TLS_DIR", Value: naming.PBMClientTLSDirectory},
+				{Name: "PBM_AGENT_TLS_ENABLED", Value: "true"},
+			},
+			wantNoEnv:    []string{"SHARDED", "SSL_CERT_FILE"},
+			wantMounts:   []corev1.VolumeMount{pbmTLSMount},
+			wantNoMounts: []string{naming.BackupStorageCAInputVolumeName, naming.BackupStorageCAFileVolumeName},
+		},
+		"tls disabled": {
+			tlsDisabled: true,
+			wantEnv: []corev1.EnvVar{
+				{Name: "PBM_MONGODB_URI", Value: uri},
+				{Name: "PBM_AGENT_TLS_ENABLED", Value: "false"},
+			},
+			wantNoEnv:    []string{"PBM_AGENT_TLS_DIR"},
+			wantNoMounts: []string{naming.PBMClientTLSVolumeName},
+		},
+		"sharded": {
+			setup:   func(cr *api.PerconaServerMongoDB) { cr.Spec.Sharding.Enabled = true },
+			wantEnv: []corev1.EnvVar{{Name: "SHARDED", Value: "TRUE"}},
+		},
+		"minio storage with caBundle": {
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Backup.Storages = map[string]api.BackupStorageSpec{
+					"minio": {
+						Type:  api.BackupStorageMinio,
+						Minio: api.BackupStorageMinioSpec{CABundle: &corev1.SecretKeySelector{Name: "minio-ca"}},
+					},
+				}
+			},
+			wantEnv:    []corev1.EnvVar{{Name: "SSL_CERT_FILE", Value: "/etc/s3/certs/ca-bundle.crt"}},
+			wantMounts: GetCAVolumeMounts(),
+		},
+		"backup volumeMounts": {
+			setup:      func(cr *api.PerconaServerMongoDB) { cr.Spec.Backup.VolumeMounts = []corev1.VolumeMount{nfsMount} },
+			wantMounts: []corev1.VolumeMount{nfsMount},
+		},
+		"backup resources": {
+			setup:         func(cr *api.PerconaServerMongoDB) { cr.Spec.Backup.Resources = resources },
+			wantResources: resources,
+		},
+		"backup hookScript": {
+			setup: func(cr *api.PerconaServerMongoDB) { cr.Spec.Backup.HookScript.Script = "echo hook" },
+			wantMounts: []corev1.VolumeMount{
+				{Name: config.BinVolumeName, MountPath: config.BinMountPath},
+				{Name: config.PBMHookscriptVolClaimName, MountPath: config.PBMHookscriptMountPath},
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr := &api.PerconaServerMongoDB{
+				Name:      "some-name",
+				Namespace: "some-ns",
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: version.Version(),
+					Secrets:   &api.SecretsSpec{Users: "some-users"},
+					Replsets:  []*api.ReplsetSpec{{Name: "rs0"}},
+					TLS:       &api.TLSSpec{Mode: api.TLSModePrefer, AllowInvalidCertificates: new(false)},
+					Backup:    api.BackupSpec{Enabled: true, Image: "backup-image"},
+				},
+			}
+			if tt.setup != nil {
+				tt.setup(cr)
+			}
+
+			caCert, tlsCert, tlsKey, err := tls.Issue(tls.GetCertificateSans(cr))
+			require.NoError(t, err)
+			sslSecret := &corev1.Secret{Data: map[string][]byte{"ca.crt": caCert, "tls.crt": tlsCert, "tls.key": tlsKey}}
+
+			c := backupAgentContainer(t.Context(), cr, "rs0", 27018, !tt.tlsDisabled, sslSecret)
+
+			assert.Contains(t, c.Env, corev1.EnvVar{Name: "PBM_MONGODB_REPLSET", Value: "rs0"})
+			assert.Contains(t, c.Env, corev1.EnvVar{Name: "PBM_MONGODB_PORT", Value: "27018"})
+			for _, env := range tt.wantEnv {
+				assert.Contains(t, c.Env, env)
+			}
+			for _, name := range tt.wantNoEnv {
+				assert.False(t, slices.ContainsFunc(c.Env, func(e corev1.EnvVar) bool { return e.Name == name }), name)
+			}
+			assert.Equal(t, "PBM_MONGODB_URI", c.Env[slices.IndexFunc(c.Env, func(e corev1.EnvVar) bool { return e.Name == "POD_NAME" })+1].Name,
+				"PBM_MONGODB_URI references POD_NAME and must follow it")
+
+			for _, m := range tt.wantMounts {
+				assert.Contains(t, c.VolumeMounts, m)
+			}
+			for _, name := range tt.wantNoMounts {
+				assert.False(t, slices.ContainsFunc(c.VolumeMounts, func(m corev1.VolumeMount) bool { return m.Name == name }), name)
+			}
+			assert.Equal(t, tt.wantResources, c.Resources)
+		})
+	}
+}
+
+func TestStatefulSpecBackupAgent(t *testing.T) {
+	t.Parallel()
+
+	nfs := corev1.Volume{
+		Name: "backup-nfs",
+		NFS:  &corev1.NFSVolumeSource{Server: "nfs-service", Path: "/psmdb"},
+	}
+
+	tests := map[string]struct {
+		platform         version.Platform
+		setup            func(cr *api.PerconaServerMongoDB)
+		wantAgent        bool
+		wantVolumes      []string
+		wantNoVolumes    []string
+		wantAgentContext *corev1.SecurityContext
+	}{
+		"backup disabled": {
+			setup:         func(cr *api.PerconaServerMongoDB) { cr.Spec.Backup.Enabled = false },
+			wantNoVolumes: []string{naming.PBMClientTLSVolumeName},
+		},
+		"backup enabled": {
+			wantAgent:     true,
+			wantVolumes:   []string{naming.PBMClientTLSVolumeName},
+			wantNoVolumes: []string{naming.BackupStorageCAInputVolumeName, config.PBMHookscriptVolClaimName},
+		},
+		"tls disabled": {
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Unsafe.TLS = true
+				cr.Spec.TLS = &api.TLSSpec{Mode: api.TLSModeDisabled}
+			},
+			wantAgent:     true,
+			wantNoVolumes: []string{naming.PBMClientTLSVolumeName},
+		},
+		"minio storage with caBundle": {
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Backup.Storages = map[string]api.BackupStorageSpec{
+					"minio": {
+						Type:  api.BackupStorageMinio,
+						Minio: api.BackupStorageMinioSpec{CABundle: &corev1.SecretKeySelector{Name: "minio-ca"}},
+					},
+				}
+			},
+			wantAgent:   true,
+			wantVolumes: []string{naming.BackupStorageCAInputVolumeName, naming.BackupStorageCAFileVolumeName},
+		},
+		"backup hookScript": {
+			setup:       func(cr *api.PerconaServerMongoDB) { cr.Spec.Backup.HookScript.Script = "echo hook" },
+			wantAgent:   true,
+			wantVolumes: []string{config.PBMHookscriptVolClaimName},
+		},
+		"replset sidecarVolumes": {
+			setup:       func(cr *api.PerconaServerMongoDB) { cr.Spec.Replsets[0].SidecarVolumes = []corev1.Volume{nfs} },
+			wantAgent:   true,
+			wantVolumes: []string{nfs.Name},
+		},
+		"kubernetes security context defaults": {
+			wantAgent:        true,
+			wantAgentContext: &corev1.SecurityContext{RunAsNonRoot: new(true), RunAsUser: new(int64(1001))},
+		},
+		"openshift security context defaults": {
+			platform:         version.PlatformOpenshift,
+			wantAgent:        true,
+			wantAgentContext: &corev1.SecurityContext{RunAsNonRoot: new(true)},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("test-cr", "test-ns")
+			require.NoError(t, err)
+			rs := cr.Spec.Replsets[0]
+			rs.Configuration = "net:\n  port: 27018\n"
+			if tt.setup != nil {
+				tt.setup(cr)
+			}
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), cmp.Or(tt.platform, version.PlatformKubernetes)))
+
+			spec, err := StatefulSpec(t.Context(), cr, rs, naming.MongodLabels(cr, rs), cr.Spec.InitImage,
+				StatefulConfigParams{}, StatefulSpecSecretParams{SSLSecret: &corev1.Secret{}})
+			require.NoError(t, err)
+
+			idx := slices.IndexFunc(spec.Template.Spec.Containers, func(c corev1.Container) bool {
+				return c.Name == naming.ContainerBackupAgent
+			})
+			require.Equal(t, tt.wantAgent, idx != -1)
+			if tt.wantAgent {
+				assert.Contains(t, spec.Template.Spec.Containers[idx].Env, corev1.EnvVar{Name: "PBM_MONGODB_PORT", Value: "27018"})
+			}
+			if tt.wantAgentContext != nil {
+				assert.Equal(t, tt.wantAgentContext, spec.Template.Spec.Containers[idx].SecurityContext)
+			}
+
+			volumes := spec.Template.Spec.Volumes
+			for _, name := range tt.wantVolumes {
+				assert.True(t, slices.ContainsFunc(volumes, func(v corev1.Volume) bool { return v.Name == name }), name)
+			}
+			for _, name := range tt.wantNoVolumes {
+				assert.False(t, slices.ContainsFunc(volumes, func(v corev1.Volume) bool { return v.Name == name }), name)
+			}
+			if slices.Contains(tt.wantVolumes, naming.PBMClientTLSVolumeName) {
+				assert.Contains(t, volumes, PBMClientTLSVolume(cr))
+				assert.Equal(t, "test-cr-pbm", PBMClientTLSVolume(cr).Secret.SecretName)
+			}
+			if slices.Contains(tt.wantVolumes, config.PBMHookscriptVolClaimName) {
+				assert.Contains(t, volumes, corev1.Volume{
+					Name: config.PBMHookscriptVolClaimName,
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						Name:     "test-cr-pbm-hookscript",
+						Optional: new(true),
+					},
+				})
+			}
+			if slices.Contains(tt.wantVolumes, nfs.Name) {
+				assert.Contains(t, volumes, nfs)
 			}
 		})
 	}

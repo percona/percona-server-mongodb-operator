@@ -92,11 +92,6 @@ fi
 log 'wait for all 3 pods to start'
 wait_for_running ${cluster}-rs0 3
 
-if [[ $GKE == 1 ]]; then
-	log 'checking if statefulset created with expected config'
-	compare_kubectl statefulset/${cluster}-rs0
-fi
-
 log 'creating user'
 run_mongo \
 	'db.createUser({user:"myApp",pwd:"myPass",roles:[{db:"myApp",role:"readWrite"}]})' \

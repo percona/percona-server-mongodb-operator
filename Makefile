@@ -241,68 +241,43 @@ update-upgrade-consistency-test:
 	@test -n "$(NEXT_VER)" || \
 		(echo "Usage: make $@ NEXT_VER=1.24.0"; exit 1)
 	@set -eu; \
-	for test in \
-		e2e-tests/upgrade-consistency \
-		e2e-tests/upgrade-consistency-sharded-tls; do \
-		echo "Updating $$test..."; \
-		cd "$$test"; \
-		versions=($$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' run | awk '!seen[$$0]++')); \
-		v1="$${versions[0]}"; \
-		v2="$${versions[1]}"; \
-		v3="$${versions[2]}"; \
-		next="$(NEXT_VER)"; \
-		s1="$${v1//./}"; \
-		s2="$${v2//./}"; \
-		s3="$${v3//./}"; \
-		next_suffix="$${next//./}"; \
-		copy_compare_files() { \
-			source_suffix="$$1"; \
-			target_suffix="$$2"; \
-			source_version="$$3"; \
-			target_version="$$4"; \
-			for file in compare/*-"$$source_suffix"*.yml; do \
-				[[ -e "$$file" ]] || continue; \
-				new_file="$${file/-$$source_suffix/-$$target_suffix}"; \
-				cp "$$file" "$$new_file"; \
-				sed -i.bak \
-					-e "s/$$source_version/$$target_version/g" \
-					-e "s/-$$source_suffix/-$$target_suffix/g" \
-					"$$new_file"; \
-			done; \
-		}; \
-		if [[ "$${v3%.*}" == "$${next%.*}" ]]; then \
-			echo "  Patch release: $$v3 -> $$next"; \
-			echo "  Removing compare files for $$v3"; \
-			echo "  Copying compare files: $$s3 -> $$next_suffix"; \
-			copy_compare_files "$$s3" "$$next_suffix" "$$v3" "$$next"; \
-			rm -f compare/*-"$$s3"*.yml; \
-			find . -type f \( -name run -o -path './conf/*.yml' \) \
-				-exec sed -i.bak \
-					-e "s/$$v3/$$next/g" \
-					-e "s/-$$s3/-$$next_suffix/g" {} +; \
-		else \
-			echo "  Minor release:"; \
-			echo "    $$v1 -> $$v2"; \
-			echo "    $$v2 -> $$v3"; \
-			echo "    $$v3 -> $$next"; \
-			echo "  Removing compare files for $$v1"; \
-			echo "  Copying compare files: $$s3 -> $$next_suffix"; \
-			copy_compare_files "$$s3" "$$next_suffix" "$$v3" "$$next"; \
-			rm -f compare/*-"$$s1"*.yml; \
-			find . -type f \( -name run -o -path './conf/*.yml' \) \
-				-exec sed -i.bak \
-					-e "s/$$v3/__UPGRADE_V3__/g" \
-					-e "s/$$v2/$$v3/g" \
-					-e "s/$$v1/$$v2/g" \
-					-e "s/__UPGRADE_V3__/$$next/g" \
-					-e "s/-$$s3/-__UPGRADE_S3__/g" \
-					-e "s/-$$s2/-$$s3/g" \
-					-e "s/-$$s1/-$$s2/g" \
-					-e "s/-__UPGRADE_S3__/-$$next_suffix/g" {} +; \
-		fi; \
-		find . -name '*.bak' -delete; \
-		cd - >/dev/null; \
-	done
+	versions=($$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' e2e-tests/upgrade-consistency/run | awk '!seen[$$0]++')); \
+	v1="$${versions[0]}"; \
+	v2="$${versions[1]}"; \
+	v3="$${versions[2]}"; \
+	next="$(NEXT_VER)"; \
+	s1="$${v1//./}"; \
+	s2="$${v2//./}"; \
+	s3="$${v3//./}"; \
+	next_suffix="$${next//./}"; \
+	files=$$(find e2e-tests/upgrade-consistency e2e-tests/upgrade-consistency-sharded-tls \
+		-type f \( -name run -o -path '*/conf/*.yml' \)); \
+	files="$$files pkg/controller/perconaservermongodb/upgrade_consistency_test.go"; \
+	if [[ "$${v3%.*}" == "$${next%.*}" ]]; then \
+		echo "Patch release: $$v3 -> $$next"; \
+		sed -i.bak \
+			-e "s/$$v3/$$next/g" \
+			-e "s/-$$s3/-$$next_suffix/g" \
+			-e "s/\"$$s3\"/\"$$next_suffix\"/g" $$files; \
+	else \
+		echo "Minor release: $$v1 -> $$v2, $$v2 -> $$v3, $$v3 -> $$next"; \
+		sed -i.bak \
+			-e "s/$$v3/__UPGRADE_V3__/g" \
+			-e "s/$$v2/$$v3/g" \
+			-e "s/$$v1/$$v2/g" \
+			-e "s/__UPGRADE_V3__/$$next/g" \
+			-e "s/-$$s3/-__UPGRADE_S3__/g" \
+			-e "s/-$$s2/-$$s3/g" \
+			-e "s/-$$s1/-$$s2/g" \
+			-e "s/-__UPGRADE_S3__/-$$next_suffix/g" \
+			-e "s/\"$$s3\"/\"__UPGRADE_S3__\"/g" \
+			-e "s/\"$$s2\"/\"$$s3\"/g" \
+			-e "s/\"$$s1\"/\"$$s2\"/g" \
+			-e "s/\"__UPGRADE_S3__\"/\"$$next_suffix\"/g" $$files; \
+	fi; \
+	for f in $$files; do rm -f "$$f.bak"; done; \
+	rm -f pkg/controller/perconaservermongodb/testdata/upgrade-consistency/*.yaml; \
+	UPDATE_COMPARE_FILES=1 go test -count=1 -run TestUpgradeConsistency ./pkg/controller/perconaservermongodb/
 
 VS_BRANCH ?= main
 VS_CLIENT_DIR = ./pkg/versionservice/client

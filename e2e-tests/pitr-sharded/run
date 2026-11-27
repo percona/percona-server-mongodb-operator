@@ -44,13 +44,6 @@ main() {
 	wait_for_running $cluster-cfg 3 "false"
 	wait_cluster_consistency $cluster
 
-	desc 'check if statefulset created with expected config'
-	compare_kubectl statefulset/$cluster-rs0
-	compare_kubectl statefulset/$cluster-rs1
-	compare_kubectl statefulset/$cluster-rs2
-	compare_kubectl statefulset/$cluster-cfg
-	compare_kubectl statefulset/$cluster-mongos ""
-
 	write_initial_data
 	write_document
 

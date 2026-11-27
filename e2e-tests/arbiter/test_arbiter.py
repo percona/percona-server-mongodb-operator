@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import pytest
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import kubectl_bin, wait_for_running, wait_pod
 from lib.mongo import MongoManager
 from lib.utils import Paths
@@ -46,12 +46,6 @@ class TestArbiter:
 
         wait_pod(f"{config.cluster}-arbiter-0")
         wait_for_running(config.cluster, 2, False)
-
-        compare_kubectl(
-            test_paths["test_dir"],
-            f"statefulset/{config.cluster}-arbiter",
-            config.namespace,
-        )
 
     @pytest.mark.dependency(depends=["TestArbiter::test_create_cluster"])
     def test_arbiter_healthy_in_replset(

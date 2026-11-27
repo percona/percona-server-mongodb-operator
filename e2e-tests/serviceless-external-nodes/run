@@ -20,7 +20,6 @@ kubectl_bin apply \
 
 apply_cluster "$test_dir/conf/main.yml"
 wait_for_running "$cluster-rs0" 1
-compare_kubectl statefulset/mydb-rs0
 
 secrets_count=$(kubectl_bin get secret -o json | jq --arg pattern "$cluster" '[.items[] | select(.metadata.name | test($pattern))] | length')
 if [[ $secrets_count != 7 ]]; then

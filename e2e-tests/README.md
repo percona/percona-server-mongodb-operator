@@ -277,7 +277,7 @@ images. It defaults to `docker.io`.
 * `DELETE_CRD_ON_START` - deletes existing CRDs before a test, `1` by default
 * `SKIP_DELETE` - keeps test resources after completion, `1` by default for pytest tests
 * `SKIP_BACKUPS_TO_AWS_GCP_AZURE` - skips cloud backup tests, `1` by default when cloud credentials are unavailable
-* `UPDATE_COMPARE_FILES=1` - replaces expected resource files with the current Kubernetes output
+* `UPDATE_COMPARE_FILES=1` - replaces expected query results in `compare/*.json` with the current output
 * `OPERATOR_NS` - deploys the operator in a separate namespace
 * `CERT_MANAGER_VER`, `SEAWEEDFS_VER`, `CHAOS_MESH_VER`, and `PMM_SERVER_VER` - override dependency versions
 

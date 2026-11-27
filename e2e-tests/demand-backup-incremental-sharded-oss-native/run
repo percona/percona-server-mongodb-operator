@@ -61,7 +61,7 @@ check_backup_in_storage ${backup_name_oss_native_sharded} oss cfg
 
 log 'running restore'
 run_restore "${backup_name_oss_native_sharded}"
-run_recovery_check "${backup_name_oss_native_sharded}" "_restore_sharded" "sharded"
+run_recovery_check "${backup_name_oss_native_sharded}" "sharded"
 check_exported_mongos_service_endpoint "$lbEndpoint"
 
 desc 'test passed'

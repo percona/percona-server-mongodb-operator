@@ -1,8 +1,11 @@
 package psmdb
 
 import (
+	"cmp"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -144,6 +147,10 @@ func TestMongosService(t *testing.T) {
 			}
 			spec := MongosServiceSpec(cr, tt.podName)
 			assert.Equal(t, tt.expectedSpec, spec)
+
+			wantLabels := map[string]string{"percona.com/test": "label"}
+			maps.Copy(wantLabels, tt.expectedSpec.Selector)
+			assert.Equal(t, wantLabels, MongosService(cr, tt.podName).Labels)
 		})
 	}
 }
@@ -555,6 +562,193 @@ func TestMongosLogPVC(t *testing.T) {
 			assert.Equal(t, tt.expectedLabels, pvc.Labels)
 			assert.Equal(t, tt.expectedAnnotations, pvc.Annotations)
 			assert.Equal(t, tt.expectedSpec, pvc.Spec)
+		})
+	}
+}
+
+func TestMongosTemplateSpecTLS(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		tls          *api.TLSSpec
+		unsafeTLS    bool
+		wantArgs     []string
+		notWantArgs  []string
+		wantProbeTLS bool
+		wantKeyFile  bool
+	}{
+		"preferTLS": {
+			wantArgs:     []string{"--clusterAuthMode=x509", "--tlsMode=preferTLS"},
+			notWantArgs:  []string{"--clusterAuthMode=keyFile"},
+			wantProbeTLS: true,
+		},
+		"allowTLS": {
+			tls:          &api.TLSSpec{Mode: api.TLSModeAllow},
+			wantArgs:     []string{"--clusterAuthMode=keyFile", "--keyFile=/etc/mongodb-secrets/mongodb-key", "--tlsMode=allowTLS"},
+			notWantArgs:  []string{"--clusterAuthMode=x509"},
+			wantProbeTLS: true,
+			wantKeyFile:  true,
+		},
+		"TLS disabled": {
+			tls:         &api.TLSSpec{Mode: api.TLSModeDisabled},
+			unsafeTLS:   true,
+			wantArgs:    []string{"--clusterAuthMode=keyFile", "--keyFile=/etc/mongodb-secrets/mongodb-key", "--tlsMode=disabled"},
+			notWantArgs: []string{"--clusterAuthMode=x509"},
+			wantKeyFile: true,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("test-cr", "test-ns")
+			require.NoError(t, err)
+			if tt.tls != nil {
+				cr.Spec.TLS = tt.tls
+			}
+			cr.Spec.Unsafe.TLS = tt.unsafeTLS
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+
+			tmpl, err := MongosTemplateSpec(cr, cr.Spec.InitImage, logr.Discard(), StatefulConfigParams{}, []string{"cfg-0:27017"}, false)
+			require.NoError(t, err)
+
+			c := tmpl.Spec.Containers[0]
+			assert.Subset(t, c.Args, tt.wantArgs)
+			for _, arg := range tt.notWantArgs {
+				assert.NotContains(t, c.Args, arg)
+			}
+			for _, p := range []*corev1.Probe{c.LivenessProbe, c.ReadinessProbe} {
+				assert.Equal(t, tt.wantProbeTLS, slices.Contains(p.Exec.Command, "--ssl"))
+			}
+
+			keyFile := cr.Spec.Secrets.GetInternalKey(cr)
+			assert.Equal(t, tt.wantKeyFile, slices.ContainsFunc(tmpl.Spec.Volumes, func(v corev1.Volume) bool { return v.Name == keyFile }))
+			mount := corev1.VolumeMount{Name: keyFile, MountPath: config.MongodSecretsDir, ReadOnly: true}
+			if tt.wantKeyFile {
+				assert.Contains(t, c.VolumeMounts, mount)
+			} else {
+				assert.NotContains(t, c.VolumeMounts, mount)
+			}
+		})
+	}
+}
+
+func TestMongosTemplateSpec(t *testing.T) {
+	t.Parallel()
+
+	sidecar := corev1.Container{Name: "mongos-sidecar-1", Image: "busybox"}
+
+	tests := map[string]struct {
+		platform      version.Platform
+		setup         func(cr *api.PerconaServerMongoDB)
+		configType    config.VolumeSourceType
+		wantVolumes   map[string]corev1.VolumeSource
+		wantNoVolumes []string
+		wantMounts    []corev1.VolumeMount
+		wantArgs      []string
+		wantNoArgs    []string
+		check         func(t *testing.T, spec corev1.PodSpec)
+	}{
+		"no custom config": {
+			wantNoVolumes: []string{"config", config.HookscriptVolClaimName},
+			wantNoArgs:    []string{"--config=/etc/mongos-config/mongos.conf"},
+		},
+		"custom config from ConfigMap": {
+			configType: config.VolumeSourceConfigMap,
+			wantVolumes: map[string]corev1.VolumeSource{
+				"config": {ConfigMap: &corev1.ConfigMapVolumeSource{
+					Name:     "test-cr-mongos",
+					Optional: new(true),
+				}},
+			},
+			wantMounts: []corev1.VolumeMount{{Name: "config", MountPath: config.MongosConfigDir}},
+			wantArgs:   []string{"--config=/etc/mongos-config/mongos.conf"},
+		},
+		"custom config from Secret": {
+			configType: config.VolumeSourceSecret,
+			wantVolumes: map[string]corev1.VolumeSource{
+				"config": {Secret: &corev1.SecretVolumeSource{SecretName: "test-cr-mongos", Optional: new(true)}},
+			},
+			wantMounts: []corev1.VolumeMount{{Name: "config", MountPath: config.MongosConfigDir}},
+			wantArgs:   []string{"--config=/etc/mongos-config/mongos.conf"},
+		},
+		"hookScript": {
+			setup: func(cr *api.PerconaServerMongoDB) { cr.Spec.Sharding.Mongos.HookScript.Script = "echo hook" },
+			wantVolumes: map[string]corev1.VolumeSource{
+				config.HookscriptVolClaimName: {ConfigMap: &corev1.ConfigMapVolumeSource{
+					Name:     "test-cr-mongos-hookscript",
+					Optional: new(true),
+				}},
+			},
+			wantMounts: []corev1.VolumeMount{{Name: config.HookscriptVolClaimName, MountPath: config.HookscriptMountPath}},
+		},
+		"sidecars and runtimeClassName": {
+			setup: func(cr *api.PerconaServerMongoDB) {
+				cr.Spec.Sharding.Mongos.Sidecars = []corev1.Container{sidecar}
+				cr.Spec.Sharding.Mongos.RuntimeClassName = new("container-rc")
+			},
+			check: func(t *testing.T, spec corev1.PodSpec) {
+				assert.Contains(t, spec.Containers, sidecar)
+				require.NotNil(t, spec.RuntimeClassName)
+				assert.Equal(t, "container-rc", *spec.RuntimeClassName)
+			},
+		},
+		"kubernetes security context defaults": {
+			check: func(t *testing.T, spec corev1.PodSpec) {
+				assert.Equal(t, &corev1.SecurityContext{RunAsNonRoot: new(true), RunAsUser: new(int64(1001))}, spec.Containers[0].SecurityContext)
+				assert.Equal(t, &corev1.PodSecurityContext{FSGroup: new(int64(1001))}, spec.SecurityContext)
+			},
+		},
+		"openshift security context defaults": {
+			platform: version.PlatformOpenshift,
+			check: func(t *testing.T, spec corev1.PodSpec) {
+				assert.Equal(t, &corev1.SecurityContext{RunAsNonRoot: new(true)}, spec.Containers[0].SecurityContext)
+				assert.Equal(t, &corev1.PodSecurityContext{}, spec.SecurityContext)
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			cr, err := readDefaultCR("test-cr", "test-ns")
+			require.NoError(t, err)
+			if tt.setup != nil {
+				tt.setup(cr)
+			}
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), cmp.Or(tt.platform, version.PlatformKubernetes)))
+
+			configs := StatefulConfigParams{MongoDConf: config.CustomConfig{Type: tt.configType}}
+			templateSpec, err := MongosTemplateSpec(cr, cr.Spec.InitImage, logr.Discard(), configs,
+				[]string{"cfg-0.test-cr-cfg.test-ns.svc.cluster.local:27017"}, true)
+			require.NoError(t, err)
+
+			spec := templateSpec.Spec
+			require.Equal(t, "mongos", spec.Containers[0].Name)
+			mongos := spec.Containers[0]
+
+			for name, src := range tt.wantVolumes {
+				assert.Contains(t, spec.Volumes, corev1.Volume{Name: name, VolumeSource: src})
+			}
+			for _, name := range tt.wantNoVolumes {
+				for _, v := range spec.Volumes {
+					assert.NotEqual(t, name, v.Name)
+				}
+			}
+			for _, m := range tt.wantMounts {
+				assert.Contains(t, mongos.VolumeMounts, m)
+			}
+			for _, arg := range tt.wantArgs {
+				assert.Contains(t, mongos.Args, arg)
+			}
+			for _, arg := range tt.wantNoArgs {
+				assert.NotContains(t, mongos.Args, arg)
+			}
+			if tt.check != nil {
+				tt.check(t, spec)
+			}
 		})
 	}
 }

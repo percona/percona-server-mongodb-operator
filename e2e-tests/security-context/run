@@ -96,21 +96,17 @@ cluster='sec-context'
 desc "create first PSMDB cluster $cluster"
 spinup_psmdb ${cluster}-rs0 $test_dir/conf/${cluster}-rs0.yml
 
-desc 'check if statefulset created with expected config'
-compare_kubectl "statefulset/${cluster}-rs0"
-
 deploy_s3_storage
 
 desc 'change security context'
-postfix="-changed"
-apply_cluster $test_dir/conf/${cluster}-rs0$postfix.yml
+apply_cluster "$test_dir/conf/${cluster}-rs0-changed.yml"
 
 trap collect_diagnostics_on_failure EXIT
 wait_for_running "${cluster}-rs0" "3" false
 wait_for_cluster_ready "${cluster}"
 
-desc 'check if statefulset created with expected config'
-compare_kubectl "statefulset/${cluster}-rs0" $postfix
+desc 'check if statefulset got the new security context'
+retry 30 5 check_jsonpath "statefulset/${cluster}-rs0" '{.spec.template.spec.securityContext.supplementalGroups}' '[1001,1003]'
 trap - EXIT
 
 if [[ -n "$OPENSHIFT" ]]; then

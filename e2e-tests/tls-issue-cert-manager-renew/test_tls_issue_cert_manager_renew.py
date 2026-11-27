@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from lib.config import apply_cluster, compare_kubectl
+from lib.config import apply_cluster
 from lib.kubectl import (
     kubectl_bin,
     wait_certificate,
@@ -79,13 +79,29 @@ def _renew_certificate(cert_name: str) -> None:
     kubectl_bin("exec", pod_name, "--", "/tmp/cmctl", "renew", cert_name)
 
     expected_revision = str(int(revision) + 1)
-    for _ in range(10):
+    new_revision = ""
+    for _ in range(60):
         new_revision = kubectl_bin(
             "get", "certificate", cert_name, "-o", "jsonpath={.status.revision}"
         ).strip()
         if new_revision == expected_revision:
             return
         time.sleep(1)
+    raise AssertionError(
+        f"Certificate {cert_name} revision is {new_revision!r}, expected {expected_revision}"
+    )
+
+
+def _assert_tls_disabled(sts: str, container: str) -> None:
+    args = kubectl_bin(
+        "get",
+        f"statefulset/{sts}",
+        "-o",
+        f'jsonpath={{.spec.template.spec.containers[?(@.name=="{container}")].args}}',
+    )
+    assert "--tlsMode=disabled" in args, (
+        f"statefulset/{sts} {container} args lack --tlsMode=disabled: {args}"
+    )
 
 
 def _pause_cluster(cluster_name: str) -> None:
@@ -160,29 +176,18 @@ class TestOperatorManagedCertManager:
         """Operator creates its own certs when no custom ones exist."""
         cluster = config.cluster
         test_dir = test_paths["test_dir"]
-        ns = config.namespace
 
         apply_cluster(f"{test_dir}/conf/{cluster}.yml")
         _wait_all_started(cluster)
 
-        for component in ("rs0", "cfg", "mongos"):
-            compare_kubectl(test_dir, f"statefulset/{cluster}-{component}", ns)
-
         _check_tls_secret(f"{cluster}-ssl")
-
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-ca-issuer", ns)
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-issuer", ns)
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl", ns)
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl-internal", ns)
 
     @pytest.mark.dependency(
         depends=["TestOperatorManagedCertManager::test_operator_creates_certificates"]
     )
-    def test_certificate_renewal(self, config: TLSCertManagerConfig, test_paths: Paths) -> None:
+    def test_certificate_renewal(self, config: TLSCertManagerConfig) -> None:
         """Renew both certificates and validate the cluster recovers."""
         cluster = config.cluster
-        test_dir = test_paths["test_dir"]
-        ns = config.namespace
 
         _renew_certificate(f"{cluster}-ssl")
         time.sleep(10)
@@ -192,17 +197,10 @@ class TestOperatorManagedCertManager:
         time.sleep(10)
         _wait_all_started(cluster)
 
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-ca-issuer", ns)
-        compare_kubectl(test_dir, f"issuer/{cluster}-psmdb-issuer", ns)
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl", ns)
-        compare_kubectl(test_dir, f"certificate/{cluster}-ssl-internal", ns)
-
     @pytest.mark.dependency(depends=["TestOperatorManagedCertManager::test_certificate_renewal"])
-    def test_disable_tls(self, config: TLSCertManagerConfig, test_paths: Paths) -> None:
-        """Pause cluster, disable TLS, unpause, validate statefulsets."""
+    def test_disable_tls(self, config: TLSCertManagerConfig) -> None:
+        """Pause cluster, disable TLS, unpause, check the operator turned TLS off."""
         cluster = config.cluster
-        test_dir = test_paths["test_dir"]
-        ns = config.namespace
 
         _pause_cluster(cluster)
         wait_for_cluster_state(cluster, "paused")
@@ -212,11 +210,6 @@ class TestOperatorManagedCertManager:
         _unpause_cluster(cluster)
         wait_for_cluster_state(cluster, "ready")
 
-        for component in ("rs0", "cfg", "mongos"):
-            compare_kubectl(
-                test_dir,
-                f"statefulset/{cluster}-{component}",
-                ns,
-                postfix="-tls-disabled",
-                skip_generation_check=True,
-            )
+        _assert_tls_disabled(f"{cluster}-rs0", "mongod")
+        _assert_tls_disabled(f"{cluster}-cfg", "mongod")
+        _assert_tls_disabled(f"{cluster}-mongos", "mongos")

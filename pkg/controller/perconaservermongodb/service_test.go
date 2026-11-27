@@ -2,9 +2,11 @@ package perconaservermongodb
 
 import (
 	"bytes"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -14,6 +16,7 @@ import (
 	api "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	"github.com/percona/percona-server-mongodb-operator/pkg/naming"
 	"github.com/percona/percona-server-mongodb-operator/pkg/psmdb"
+	"github.com/percona/percona-server-mongodb-operator/pkg/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -357,6 +360,216 @@ func TestRemoveStaleExternalDNSAnnotations(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			removeStaleExternalDNSAnnotations(tt.old, tt.desired)
 			assert.Equal(t, tt.expected, tt.old)
+		})
+	}
+}
+
+func TestServiceIgnoreLabelsAnnotations(t *testing.T) {
+	t.Parallel()
+
+	type meta = map[string]string
+	type step struct {
+		name string
+		// manual is added to the service by hand before the reconcile
+		manual            meta
+		ignore            bool
+		crLabels, crAnnot meta
+		wantLabels        meta
+		wantAnnot         meta
+	}
+	steps := []step{
+		{
+			name:       "manual metadata kept without CR metadata",
+			manual:     meta{"ignoredLabel": "true", "notIgnoredLabel": "true"},
+			wantLabels: meta{"ignoredLabel": "true", "notIgnoredLabel": "true"},
+			wantAnnot:  meta{"ignoredAnnotation": "true", "notIgnoredAnnotation": "true"},
+		},
+		{
+			name:       "ignore lists keep manual metadata",
+			ignore:     true,
+			wantLabels: meta{"ignoredLabel": "true", "notIgnoredLabel": "true"},
+			wantAnnot:  meta{"ignoredAnnotation": "true", "notIgnoredAnnotation": "true"},
+		},
+		{
+			name:       "CR metadata drops not ignored keys",
+			ignore:     true,
+			crLabels:   meta{"crLabel": "true"},
+			crAnnot:    meta{"crAnnotation": "true"},
+			wantLabels: meta{"crLabel": "true", "ignoredLabel": "true"},
+			wantAnnot:  meta{"crAnnotation": "true", "ignoredAnnotation": "true"},
+		},
+		{
+			name:       "removed CR metadata stays",
+			ignore:     true,
+			wantLabels: meta{"crLabel": "true", "ignoredLabel": "true"},
+			wantAnnot:  meta{"crAnnotation": "true", "ignoredAnnotation": "true"},
+		},
+		{
+			name:       "new CR metadata replaces old",
+			ignore:     true,
+			crLabels:   meta{"otherCrLabel": "true", "secondCrLabel": "true"},
+			crAnnot:    meta{"otherCrAnnotation": "true", "secondCrAnnotation": "true"},
+			wantLabels: meta{"ignoredLabel": "true", "otherCrLabel": "true", "secondCrLabel": "true"},
+			wantAnnot:  meta{"ignoredAnnotation": "true", "otherCrAnnotation": "true", "secondCrAnnotation": "true"},
+		},
+		{
+			name:       "key removed from CR metadata is dropped",
+			ignore:     true,
+			crLabels:   meta{"otherCrLabel": "true"},
+			crAnnot:    meta{"otherCrAnnotation": "true"},
+			wantLabels: meta{"ignoredLabel": "true", "otherCrLabel": "true"},
+			wantAnnot:  meta{"ignoredAnnotation": "true", "otherCrAnnotation": "true"},
+		},
+		{
+			name:       "ignored keys dropped without ignore lists",
+			crLabels:   meta{"otherCrLabel": "true"},
+			crAnnot:    meta{"otherCrAnnotation": "true"},
+			wantLabels: meta{"otherCrLabel": "true"},
+			wantAnnot:  meta{"otherCrAnnotation": "true"},
+		},
+	}
+	// the first step adds the same keys as annotations
+	manualAnnot := meta{"ignoredAnnotation": "true", "notIgnoredAnnotation": "true"}
+
+	userMeta := func(m meta) meta {
+		out := meta{}
+		for k, v := range m {
+			if !strings.HasPrefix(k, "app.kubernetes.io/") && !strings.HasPrefix(k, "percona.com/") {
+				out[k] = v
+			}
+		}
+		return out
+	}
+
+	tests := map[string]struct {
+		svc      string
+		headless string
+		expose   func(cr *api.PerconaServerMongoDB) *api.Expose
+	}{
+		"rs0": {
+			svc:      "some-name-rs0-0",
+			headless: "some-name-rs0",
+			expose:   func(cr *api.PerconaServerMongoDB) *api.Expose { return &cr.Spec.Replsets[0].Expose.Expose },
+		},
+		"cfg": {
+			svc:      "some-name-cfg-0",
+			headless: "some-name-cfg",
+			expose: func(cr *api.PerconaServerMongoDB) *api.Expose {
+				return &cr.Spec.Sharding.ConfigsvrReplSet.Expose.Expose
+			},
+		},
+		"mongos": {
+			svc:    "some-name-mongos-0",
+			expose: func(cr *api.PerconaServerMongoDB) *api.Expose { return &cr.Spec.Sharding.Mongos.Expose.Expose },
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			cr, err := readDefaultCR("some-name", "ignore-meta")
+			require.NoError(t, err)
+			cr.Spec.Replsets[0].Expose.Enabled = true
+			cr.Spec.Sharding.ConfigsvrReplSet.Expose.Enabled = true
+			cr.Spec.Sharding.Mongos.Expose.ServicePerPod = true
+			require.NoError(t, cr.CheckNSetDefaults(ctx, ""))
+			repls := []*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet, cr.Spec.Replsets[0]}
+
+			objs := []client.Object{cr}
+			for _, rs := range repls {
+				component := naming.ComponentMongod
+				if rs.ClusterRole == api.ClusterRoleConfigSvr {
+					component = api.ConfigReplSetName
+				}
+				objs = append(objs, fakeStatefulset(cr, rs, rs.Size, "", component))
+				objs = append(objs, fakePodsForRS(cr, rs)...)
+			}
+			r := buildFakeClient(objs...)
+			require.NoError(t, r.reconcileServices(ctx, cr, repls))
+
+			for _, s := range steps {
+				if s.manual != nil {
+					svc := new(corev1.Service)
+					require.NoError(t, r.client.Get(ctx, client.ObjectKey{Name: tt.svc, Namespace: cr.Namespace}, svc))
+					maps.Copy(svc.Labels, s.manual)
+					if svc.Annotations == nil {
+						svc.Annotations = meta{}
+					}
+					maps.Copy(svc.Annotations, manualAnnot)
+					require.NoError(t, r.client.Update(ctx, svc))
+				}
+
+				cr.Spec.IgnoreLabels, cr.Spec.IgnoreAnnotations = nil, nil
+				if s.ignore {
+					cr.Spec.IgnoreLabels = []string{"ignoredLabel"}
+					cr.Spec.IgnoreAnnotations = []string{"ignoredAnnotation"}
+				}
+				expose := tt.expose(cr)
+				expose.ServiceLabels, expose.ServiceAnnotations = s.crLabels, s.crAnnot
+				require.NoError(t, r.reconcileServices(ctx, cr, repls))
+
+				svc := new(corev1.Service)
+				require.NoError(t, r.client.Get(ctx, client.ObjectKey{Name: tt.svc, Namespace: cr.Namespace}, svc))
+				assert.Equal(t, s.wantLabels, userMeta(svc.Labels), s.name)
+				assert.Equal(t, s.wantAnnot, userMeta(svc.Annotations), s.name)
+
+				if tt.headless == "" {
+					continue
+				}
+				headless := new(corev1.Service)
+				require.NoError(t, r.client.Get(ctx, client.ObjectKey{Name: tt.headless, Namespace: cr.Namespace}, headless))
+				for k := range s.crAnnot {
+					assert.NotContains(t, headless.Annotations, k, s.name)
+				}
+				for k, v := range s.crLabels {
+					assert.Equal(t, v, headless.Labels[k], s.name)
+				}
+			}
+		})
+	}
+}
+
+func TestReconcileMongosSvc(t *testing.T) {
+	tests := map[string]struct {
+		sharding      bool
+		servicePerPod bool
+		want          []string
+	}{
+		"sharding disabled": {
+			sharding: false,
+		},
+		"single service": {
+			sharding: true,
+			want:     []string{"mongos-svc-mongos"},
+		},
+		"service per pod": {
+			sharding:      true,
+			servicePerPod: true,
+			want:          []string{"mongos-svc-mongos-0", "mongos-svc-mongos-1", "mongos-svc-mongos-2"},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cr, err := readDefaultCR("mongos-svc", "mongos-svc")
+			require.NoError(t, err)
+			cr.Spec.Sharding.Enabled = tt.sharding
+			cr.Spec.Sharding.Mongos.Size = 3
+			cr.Spec.Sharding.Mongos.Expose.ServicePerPod = tt.servicePerPod
+			require.NoError(t, cr.CheckNSetDefaults(t.Context(), version.PlatformKubernetes))
+
+			r := buildFakeClient(cr)
+			require.NoError(t, r.reconcileMongosSvc(t.Context(), cr))
+
+			svcs := new(corev1.ServiceList)
+			require.NoError(t, r.client.List(t.Context(), svcs, client.InNamespace(cr.Namespace)))
+			var got []string
+			for _, svc := range svcs.Items {
+				got = append(got, svc.Name)
+			}
+			sort.Strings(got)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
