@@ -26,12 +26,12 @@ run demand-backup-physical-parallel
 run demand-backup-physical-aws
 run demand-backup-physical-azure
 run demand-backup-physical-gcp
-run demand-backup-physical-minio
+run demand-backup-physical-s3-compatible
 run demand-backup-physical-sharded-parallel
 run demand-backup-physical-sharded-aws
 run demand-backup-physical-sharded-azure
 run demand-backup-physical-sharded-gcp
-run demand-backup-physical-sharded-minio
+run demand-backup-physical-sharded-s3-compatible
 run expose-sharded
 run ignore-labels-annotations
 run init-deploy

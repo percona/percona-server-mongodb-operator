@@ -173,7 +173,7 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
 
-  demand-backup-incremental-minio:
+  demand-backup-incremental-s3-compatible:
     suites: [pr, release, minikube, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
@@ -203,7 +203,7 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, sharding]
 
-  demand-backup-incremental-sharded-minio:
+  demand-backup-incremental-sharded-s3-compatible:
     suites: [pr, release, minikube, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, sharding]
@@ -238,7 +238,7 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
 
-  demand-backup-physical-minio:
+  demand-backup-physical-s3-compatible:
     suites: [pr, release, minikube, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
@@ -288,7 +288,7 @@ tests:
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, sharding]
 
-  demand-backup-physical-sharded-minio:
+  demand-backup-physical-sharded-s3-compatible:
     suites: [pr, release, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, sharding]
