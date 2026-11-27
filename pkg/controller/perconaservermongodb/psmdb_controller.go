@@ -23,6 +23,7 @@ import (
 	eventsv1 "k8s.io/api/events/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -390,6 +391,8 @@ func (r *ReconcilePerconaServerMongoDB) Reconcile(ctx context.Context, request r
 	if cr.Spec.Sharding.Enabled && cr.Spec.Sharding.ConfigsvrReplSet != nil {
 		repls = append([]*api.ReplsetSpec{cr.Spec.Sharding.ConfigsvrReplSet}, repls...)
 	}
+
+	clearStalePVCShrinkStates(ctx, cr, repls)
 
 	err = r.reconcileMongodConfigMaps(ctx, cr, repls)
 	if err != nil {
@@ -1474,15 +1477,16 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongos(ctx context.Context, cr 
 	return nil
 }
 
-func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
-	if !cr.Spec.Sharding.Enabled || cr.CompareVersion("1.24.0") < 0 {
-		return nil
-	}
+// mongosLogStorageResizable reports whether mongos log volumes are resized and shrunk.
+func mongosLogStorageResizable(cr *api.PerconaServerMongoDB) bool {
+	return cr.Spec.Sharding.Enabled && cr.CompareVersion("1.24.0") >= 0 && cr.Spec.Sharding.Mongos.LogStorage() != nil
+}
 
-	pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
-	if pvcSpec == nil {
+func (r *ReconcilePerconaServerMongoDB) resizeMongosPVCs(ctx context.Context, cr *api.PerconaServerMongoDB) error {
+	if !mongosLogStorageResizable(cr) {
 		return nil
 	}
+	pvcSpec := cr.Spec.Sharding.Mongos.LogStorage()
 
 	if rstRunning, err := r.isRestoreRunning(ctx, cr); err != nil {
 		return errors.Wrap(err, "failed to check running restores")
@@ -1685,6 +1689,14 @@ func (r *ReconcilePerconaServerMongoDB) reconcileMongosStatefulset(ctx context.C
 	if len(currentVCT) > 0 {
 		// Pin the volumeClaimTemplates, they should never change here.
 		sts.Spec.VolumeClaimTemplates = currentVCT
+	}
+	// The statefulset was deleted for the shrink, recreate it with the shrink target.
+	if state, ok := cr.GetPVCShrinkState(sts.Name); ok {
+		target, err := resource.ParseQuantity(state.TargetSize)
+		if err != nil {
+			return errors.Wrapf(err, "parse shrink target size of %s", sts.Name)
+		}
+		pinShrinkTarget(sts, psmdbconfig.MongosLogVolClaimName, target)
 	}
 
 	err = r.createOrUpdate(ctx, sts)
