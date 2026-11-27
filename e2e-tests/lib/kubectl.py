@@ -296,6 +296,16 @@ def event_reasons(name: str) -> list[str]:
     return out.split()
 
 
+def label_test_namespace(namespace: str) -> None:
+    """Label a namespace with E2E_NAMESPACE_OWNER, which the CI runner sets when tests share a
+    cluster, so the runner can delete every namespace the test created, whatever its name."""
+    owner = os.environ.get("E2E_NAMESPACE_OWNER")
+    if owner:
+        kubectl_bin(
+            "label", "namespace", namespace, f"e2e.percona.com/owner={owner}", "--overwrite"
+        )
+
+
 def resource_exists(kind: str, name: str) -> bool:
     return bool(
         kubectl_bin("get", kind, name, "-o", "name", "--ignore-not-found", check=False).strip()
