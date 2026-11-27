@@ -15,7 +15,6 @@ import (
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -383,29 +382,16 @@ func (r *ReconcilePerconaServerMongoDB) setUpdateMongosFirst(ctx context.Context
 		return nil
 	}
 
-	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		c := new(api.PerconaServerMongoDB)
-		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
-			return err
-		}
-		if _, ok := c.Annotations[api.AnnotationUpdateMongosFirst]; ok {
-			return nil
-		}
-		if c.Annotations == nil {
-			c.Annotations = make(map[string]string)
-		}
-		c.Annotations[api.AnnotationUpdateMongosFirst] = "true"
-
-		return r.client.Update(ctx, c)
-	})
-	if err != nil {
-		return err
-	}
-
+	orig := cr.DeepCopy()
 	if cr.Annotations == nil {
 		cr.Annotations = make(map[string]string)
 	}
 	cr.Annotations[api.AnnotationUpdateMongosFirst] = "true"
+
+	if err := r.patchCR(ctx, cr, orig); err != nil {
+		cr.Annotations = orig.Annotations
+		return err
+	}
 
 	return nil
 }
@@ -414,24 +400,17 @@ func (r *ReconcilePerconaServerMongoDB) unsetUpdateMongosFirst(ctx context.Conte
 	if !cr.Spec.Sharding.Enabled {
 		return nil
 	}
-	err := retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-		c := new(api.PerconaServerMongoDB)
-		if err := r.client.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, c); err != nil {
-			return err
-		}
-		if _, ok := c.Annotations[api.AnnotationUpdateMongosFirst]; !ok {
-			return nil
-		}
-
-		delete(c.Annotations, api.AnnotationUpdateMongosFirst)
-
-		return r.client.Update(ctx, c)
-	})
-	if err != nil {
-		return err
+	if _, ok := cr.Annotations[api.AnnotationUpdateMongosFirst]; !ok {
+		return nil
 	}
 
+	orig := cr.DeepCopy()
 	delete(cr.Annotations, api.AnnotationUpdateMongosFirst)
+
+	if err := r.patchCR(ctx, cr, orig); err != nil {
+		cr.Annotations = orig.Annotations
+		return err
+	}
 
 	return nil
 }
@@ -727,6 +706,7 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 		poll = defaultPodRestartPoll
 	}
 
+	statusConflict := false
 	for range waitLimit {
 		select {
 		case <-ctx.Done():
@@ -739,9 +719,18 @@ func (r *ReconcilePerconaServerMongoDB) waitPodRestart(ctx context.Context, cr *
 			return errors.Wrap(err, "get pod")
 		}
 
-		// We update status in every loop to not wait until the end of smart update
-		if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
-			return errors.Wrap(err, "update status")
+		// We update status in every loop to not wait until the end of smart update.
+		// A conflict means the CR changed since this reconcile read it, so every
+		// later CR write in this reconcile conflicts too. The restart goes on
+		// without status updates and the next reconcile starts from the new CR.
+		if !statusConflict {
+			if err := r.updateStatus(ctx, cr, nil, api.AppStateInit); err != nil {
+				if !k8sErrors.IsConflict(err) {
+					return errors.Wrap(err, "update status")
+				}
+				statusConflict = true
+				logf.FromContext(ctx).V(1).Info("CR changed during pod restart, skipping status updates", "pod", pod.Name)
+			}
 		}
 
 		ready := false
