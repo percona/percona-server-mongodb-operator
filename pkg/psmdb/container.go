@@ -212,10 +212,13 @@ func container(ctx context.Context, cr *api.PerconaServerMongoDB, params contain
 		WorkingDir:      config.MongodContainerDataDir,
 		LivenessProbe:   &livenessProbe.Probe,
 		ReadinessProbe:  readinessProbe,
-		StartupProbe:    startupProbe,
 		Resources:       resources,
 		SecurityContext: containerSecurityContext,
 		VolumeMounts:    volumes,
+	}
+
+	if cr.CompareVersion("1.24.0") >= 0 {
+		container.StartupProbe = startupProbe
 	}
 
 	container.EnvFrom = []corev1.EnvFromSource{

@@ -718,6 +718,56 @@ func TestContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 	}
 }
 
+func TestContainerStartupProbe(t *testing.T) {
+	t.Parallel()
+
+	partialProbe := &corev1.Probe{
+		FailureThreshold: 8640,
+		PeriodSeconds:    10,
+		TimeoutSeconds:   10,
+	}
+
+	allowInvalidCerts := true
+
+	tests := []struct {
+		name      string
+		crVersion string
+		want      *corev1.Probe
+	}{
+		{name: "set on current version", crVersion: version.Version(), want: partialProbe},
+		{name: "ignored on <1.24.0", crVersion: "1.23.0", want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cr := &api.PerconaServerMongoDB{
+				Spec: api.PerconaServerMongoDBSpec{
+					CRVersion: tt.crVersion,
+					Secrets:   &api.SecretsSpec{Users: "some-users"},
+					TLS: &api.TLSSpec{
+						Mode:                     api.TLSModePrefer,
+						AllowInvalidCertificates: &allowInvalidCerts,
+					},
+				},
+			}
+			params := containerFnParams{
+				replset: &api.ReplsetSpec{
+					Name:    "rs0",
+					Storage: &api.MongodSpecStorage{},
+				},
+				name:          naming.ContainerMongod,
+				livenessProbe: &api.LivenessProbeExtended{},
+				startupProbe:  partialProbe,
+			}
+
+			c, err := container(t.Context(), cr, params)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, c.StartupProbe)
+		})
+	}
+}
+
 func TestBackupAgentContainerReadOnlyRootFilesystemTmpMount(t *testing.T) {
 	t.Parallel()
 
