@@ -289,7 +289,7 @@ func (r *ReconcilePerconaServerMongoDB) triggerResize(
 	previous, hadPrevious := requests[corev1.ResourceStorage]
 	requests[corev1.ResourceStorage] = newSize
 
-	if err := r.client.Patch(ctx, cr.DeepCopy(), client.MergeFrom(orig)); err != nil {
+	if err := r.patchCR(ctx, cr, orig); err != nil {
 		// callers keep reconciling with this spec, so a size the API server never
 		// accepted would grow the PVC past what the CR requests, and the next
 		// reconcile would read that as a shrink

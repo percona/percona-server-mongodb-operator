@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -843,4 +844,34 @@ func TestReconcileBackupVersionNoReadyPods(t *testing.T) {
 			assert.Empty(t, cr.Status.BackupVersion)
 		})
 	}
+}
+
+func TestResyncPBMIfNeededStaleCR(t *testing.T) {
+	t.Parallel()
+
+	existing := &psmdbv1.PerconaServerMongoDB{Name: "sh", Namespace: "ns"}
+	existing.Annotations = map[string]string{psmdbv1.AnnotationResyncPBM: "true"}
+	existing.Spec.Backup.Enabled = true
+	existing.Spec.Replsets = []*psmdbv1.ReplsetSpec{{Name: "rs0", Size: 3}}
+	r := fakeReconciler(t, existing)
+	ctx := t.Context()
+
+	stale := &psmdbv1.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stale))
+	stale.Status.State = psmdbv1.AppStateReady
+	current := stale.DeepCopy()
+	current.Spec.Image = "new-image"
+	require.NoError(t, r.client.Update(ctx, current))
+
+	err := r.resyncPBMIfNeeded(ctx, stale)
+	require.True(t, k8serrors.IsConflict(err), "want conflict, got %v", err)
+	assert.Equal(t, map[string]string{psmdbv1.AnnotationResyncPBM: "true"}, stale.Annotations)
+
+	stored := &psmdbv1.PerconaServerMongoDB{}
+	require.NoError(t, r.client.Get(ctx, client.ObjectKeyFromObject(existing), stored))
+	assert.Equal(t, map[string]string{psmdbv1.AnnotationResyncPBM: "true"}, stored.Annotations)
+
+	l := r.lockers.LoadOrCreate(stale.NamespacedName().String())
+	require.True(t, l.resyncMutex.TryLock(), "resync lock must be released after a failed patch")
+	l.resyncMutex.Unlock()
 }
