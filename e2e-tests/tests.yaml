@@ -62,11 +62,26 @@ mongoVersionSkips:
 
 # suites: pr, release, minikube, distro, backups
 # groups: backup, chaos, core, monitoring, networking, pitr, security, sharding, storage, tls, upgrade, users
+#
+# Placement, for CI runs with several tests on one cluster. A test without these fields shares
+# the cluster with any other test, so it must touch only its own namespaces. Create namespaces
+# with the create_namespace / create_infra helpers: the CI runner deletes them after the test by
+# the label these helpers set.
+#   ownCluster: true   the test changes something every test on the cluster uses (CRDs, a
+#                      released operator, chaos-mesh, the default StorageClass, cert-manager:
+#                      with it installed the operator issues all certificates through it).
+#                      It runs alone.
+#   locks: [name]      the test changes a cluster-wide resource that other tests with the same
+#                      lock also change (vault, cluster-rbac, nodes, storageclass,
+#                      priorityclass).
+#                      Tests with the same lock run one at a time per cluster, next to the rest.
+# `uv run e2e-tests/select_tests.py check-placement` finds tests that need a tag and prints it.
 tests:
   arbiter:
     suites: [pr, release, minikube, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   balancer:
     suites: [pr, release, distro]
@@ -77,6 +92,7 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core, tls]
+    ownCluster: true
 
   clustersync:
     suites: [pr, release]
@@ -102,6 +118,7 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [tls]
+    ownCluster: true
 
   custom-users-roles:
     suites: [pr, release, distro]
@@ -117,16 +134,19 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [security, backup, sharding]
+    locks: [vault]
 
   data-sharded:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [sharding, tls]
+    ownCluster: true
 
   default-cr:
     suites: [release, minikube, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   demand-backup:
     suites: [pr, release, minikube, backups, distro]
@@ -147,6 +167,7 @@ tests:
     suites: [pr, release, backups]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, storage]
+    ownCluster: true
 
   demand-backup-gcs-workload-identity:
     suites: [pr, release]
@@ -222,6 +243,7 @@ tests:
     suites: [pr, release, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, tls]
+    ownCluster: true
 
   demand-backup-physical-aws:
     suites: [pr, release, minikube, backups, distro]
@@ -252,6 +274,7 @@ tests:
     suites: [pr, release, backups]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, tls]
+    ownCluster: true
 
   demand-backup-physical-oci:
     suites: [pr, release, backups, distro]
@@ -327,6 +350,7 @@ tests:
     suites: [pr, release, backups, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup, security]
+    locks: [vault]
 
   disabled-auth:
     suites: [pr, release]
@@ -372,6 +396,7 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [users, security, tls]
+    ownCluster: true
 
   limits:
     suites: [pr, release, minikube]
@@ -407,6 +432,7 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [monitoring]
+    ownCluster: true
 
   multi-cluster-service:
     suites: [pr, release]
@@ -422,6 +448,7 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   one-pod:
     suites: [pr, release, minikube, distro]
@@ -432,6 +459,7 @@ tests:
     suites: [pr, release, minikube]
     operatorModes: [cluster-wide, namespaced]
     groups: [chaos]
+    ownCluster: true
 
   pitr:
     suites: [pr, release, minikube, distro]
@@ -467,31 +495,37 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
+    locks: [storageclass]
 
   pvc-auto-resize-mongos:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
+    locks: [storageclass]
 
   pvc-resize:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [storage]
+    locks: [storageclass]
 
   pvc-shrink:
     suites: [pr, release]
     operatorModes: [namespaced]
     groups: [storage]
+    locks: [storageclass]
 
   pvc-shrink-sharded:
     suites: [pr, release]
     operatorModes: [namespaced]
     groups: [storage, sharding]
+    locks: [storageclass]
 
   pvc-shrink-mongos-log:
     suites: [pr, release]
     operatorModes: [namespaced]
     groups: [storage, sharding]
+    locks: [storageclass]
 
   recover-no-primary:
     suites: [pr, release, distro]
@@ -527,21 +561,25 @@ tests:
     suites: [pr, release, minikube, backups]
     operatorModes: [cluster-wide, namespaced]
     groups: [backup]
+    locks: [nodes, priorityclass]
 
   security-context:
     suites: [pr, release, minikube]
     operatorModes: [cluster-wide, namespaced]
     groups: [security]
+    locks: [cluster-rbac]
 
   self-healing-chaos:
     suites: [pr, release, minikube]
     operatorModes: [cluster-wide, namespaced]
     groups: [chaos]
+    ownCluster: true
 
   service-per-pod:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [networking]
+    ownCluster: true
 
   serviceless-external-nodes:
     suites: [pr, release]
@@ -557,11 +595,13 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [networking, tls]
+    ownCluster: true
 
   split-horizon-manual-tls:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [networking, tls]
+    ownCluster: true
 
   stable-resource-version:
     suites: [pr, release]
@@ -572,26 +612,31 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [storage, tls]
+    ownCluster: true
 
   tls-clusterissuer-cert-manager:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide]
     groups: [tls]
+    ownCluster: true
 
   tls-issue-cert-manager:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [tls]
+    ownCluster: true
 
   tls-issue-cert-manager-renew:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [tls]
+    ownCluster: true
 
   tls-service-per-pod:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [networking, tls]
+    ownCluster: true
 
   unsafe-psa:
     suites: [pr, release]
@@ -602,6 +647,7 @@ tests:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [upgrade]
+    ownCluster: true
 
   upgrade-consistency:
     suites: [pr, release, minikube]
@@ -612,16 +658,19 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [upgrade, sharding, tls]
+    ownCluster: true
 
   upgrade-partial-backup:
     suites: [pr, release, backups]
     operatorModes: [cluster-wide, namespaced]
     groups: [upgrade, backup]
+    ownCluster: true
 
   upgrade-sharded:
     suites: [pr, release, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [upgrade, sharding]
+    ownCluster: true
 
   users:
     suites: [pr, release, minikube, distro]
@@ -632,6 +681,7 @@ tests:
     suites: [pr, release, minikube, distro]
     operatorModes: [cluster-wide, namespaced]
     groups: [users, security]
+    locks: [vault]
 
   vector-search:
     suites: [pr, release]
@@ -647,6 +697,7 @@ tests:
     suites: [pr, release, minikube]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   vpa:
     # Cluster-wide only: test_two_namespaces_do_not_interfere needs the operator
@@ -654,6 +705,7 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide]
     groups: [core]
+    ownCluster: true
 
   vpa-inplace:
     # The one VPA suite kept in both operator modes. No VPA logic branches on
@@ -664,16 +716,19 @@ tests:
     suites: [pr, release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   vpa-inplace-sharded:
     suites: [pr, release]
     operatorModes: [cluster-wide]
     groups: [core, sharding]
+    ownCluster: true
 
   vpa-goldilocks:
     suites: [release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core]
+    ownCluster: true
 
   vpa-sharded:
     # Release only: ~18m per run, and the component matrix it covers is also
@@ -682,4 +737,5 @@ tests:
     suites: [release]
     operatorModes: [cluster-wide, namespaced]
     groups: [core, sharding]
+    ownCluster: true
 

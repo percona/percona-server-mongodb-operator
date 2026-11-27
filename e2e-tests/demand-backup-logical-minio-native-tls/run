@@ -50,18 +50,20 @@ EOF
 kubectl_bin wait --for=condition=Ready certificate/s3-cert \
   -n ${namespace} --timeout=120s
 
+# Not a fixed /tmp path: other tests run at the same time on the same machine.
+cert_dir=$(mktemp -d)
 kubectl_bin get secret s3-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/s3-cert.pem
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > "${cert_dir}/s3-cert.pem"
 
 kubectl_bin get secret s3-tls-temp -n ${namespace} \
-  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/s3-key.pem
+  -o jsonpath='{.data.tls\.key}' | base64 -d > "${cert_dir}/s3-key.pem"
 
 kubectl_bin create secret tls s3-tls -n ${namespace} \
-  --cert=/tmp/s3-cert.pem \
-  --key=/tmp/s3-key.pem
+  --cert="${cert_dir}/s3-cert.pem" \
+  --key="${cert_dir}/s3-key.pem"
 
 kubectl_bin create secret generic s3-ca-bundle -n ${namespace} \
-  --from-file=ca.crt=/tmp/s3-cert.pem
+  --from-file=ca.crt="${cert_dir}/s3-cert.pem"
 
 desc 'Deploy SeaweedFS with TLS'
 deploy_s3_storage s3-tls
@@ -129,7 +131,7 @@ wait_restore "${backup_name_single}" "${cluster}"
 
 compare_mongo_cmd "find" "myApp:myPass@${cluster}-rs0.${namespace}" "" "" "myApp" "test" "" "true"
 
-rm -f /tmp/s3-cert.pem /tmp/s3-key.pem
+rm -rf "${cert_dir}"
 
 destroy "${namespace}"
 

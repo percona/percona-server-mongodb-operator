@@ -372,9 +372,8 @@ class TestClusterSync:
         ).replace("NAME_SPACE", config.namespace)
         kubectl_bin("apply", "-f", "-", input_data=manifest)
 
-        kubectl_bin(
-            "wait", "--for=condition=Available", "--timeout=5m", f"deployment/{PCSM_DEPLOYMENT}"
-        )
+        # Polls: `kubectl wait` fails at once when the operator has not created the deployment yet.
+        wait_deployment_ready(PCSM_DEPLOYMENT, 1)
         wait_pcsm_state("running", 600)
 
     @pytest.mark.dependency(depends=["TestClusterSync::test_start_clustersync"])

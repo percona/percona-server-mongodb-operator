@@ -6,6 +6,8 @@ import groovy.transform.Field
 @Field def reportHtml = 'e2e-test-report.html'
 @Field def reportXml = 'e2e-test-report.xml'
 @Field int clusterCount = 15
+// Tests that run at the same time on each cluster. 1 runs one test at a time per cluster.
+@Field int testsPerCluster = 3
 
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
@@ -231,7 +233,42 @@ void initTests() {
         tests.add(["name": records[i], "cluster": "NA", "result": "skipped", "time": "0"])
     }
 
+    if (testsPerCluster > 1) {
+        loadTestPlacement()
+    }
     markPassedTests()
+}
+
+// Reads the placement tags from e2e-tests/tests.yaml: an ownCluster test runs alone on a cluster,
+// and tests with the same lock never run at the same time on one cluster.
+void loadTestPlacement() {
+    // One line per tagged test: "<name> <own|shared> <lock,lock|->".
+    def output = sh(
+        script: '''
+            export PATH="$HOME/.local/bin:$PATH"
+            uv run e2e-tests/select_tests.py placement | tail -n 1 \
+                | jq -r 'to_entries[] | [.key, (if .value.ownCluster then "own" else "shared" end), ((.value.locks // []) | if length == 0 then "-" else join(",") end)] | join(" ")'
+        ''',
+        returnStdout: true
+    ).trim()
+
+    def placement = [:]
+    for (line in output.split('\n')) {
+        def fields = line.trim().split(' ')
+        if (fields.size() == 3) {
+            placement[fields[0]] = [own: fields[1] == 'own', locks: fields[2] == '-' ? [] : fields[2].split(',').toList()]
+        }
+    }
+    def own = 0
+    def locked = 0
+    for (test in tests) {
+        def entry = placement[test.name]
+        test.ownCluster = entry ? entry.own : false
+        test.locks = entry ? entry.locks : []
+        own += test.ownCluster ? 1 : 0
+        locked += test.locks ? 1 : 0
+    }
+    echo "Placement: ${own} tests run alone on a cluster, ${locked} tests have locks"
 }
 
 void markPassedTests() {
@@ -428,6 +465,15 @@ boolean isClusterReachable(String clusterSuffix) {
 
 void clusterRunner(String cluster) {
     withCredentials([aws(credentialsId: 'AMI/OVF', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+        if (testsPerCluster > 1) {
+            if (countSkippedTests() > 0 && currentBuild.nextBuild == null) {
+                createCluster(cluster)
+                runTestSlots(cluster)
+                shutdownCluster(cluster)
+            }
+            return
+        }
+
         def clusterCreated=0
 
         for (int i=0; i<tests.size(); i++) {
@@ -451,7 +497,295 @@ void clusterRunner(String cluster) {
     }
 }
 
-void collectDebugLogs(String testName, String clusterSuffix) {
+// Runs up to testsPerCluster tests at the same time on one cluster. Each slot takes the next test it
+// may start (claimNextTest), so a slot that finishes a short test starts the next one at once.
+void runTestSlots(String cluster) {
+    echo "Running up to ${testsPerCluster} tests at a time on cluster ${CLUSTER_NAME}-${cluster}"
+    def branches = [:]
+    for (int i = 1; i <= testsPerCluster; i++) {
+        def slot = "${cluster}-slot${i}".toString()
+        branches[slot] = {
+            while (currentBuild.nextBuild == null) {
+                def testId = claimNextTest(cluster)
+                if (testId == null) {
+                    break
+                }
+                if (testId < 0) {
+                    // Tests are left, but an ownCluster test or a lock keeps this slot waiting.
+                    sleep(time: 30, unit: 'SECONDS')
+                    continue
+                }
+                try {
+                    runSlotTest(testId, slot)
+                } finally {
+                    markTestFinished(testId)
+                }
+            }
+        }
+    }
+    parallel branches
+}
+
+// One test in a slot. It gets its own kubeconfig and helm home, and must not delete what the
+// tests next to it use:
+// - DELETE_CRD_ON_START=0: the CRD stays.
+// - CLEAN_NAMESPACE=0: with 1, a starting test deletes every namespace on the cluster.
+// - SKIP_DELETE=1: the teardown would also remove cert-manager and the RBAC. cleanupSlotTest
+//   deletes only this test's namespaces instead.
+// - E2E_NAMESPACE_OWNER: the test helpers label every namespace they create with it, so
+//   cleanupSlotTest finds them whatever their names.
+// - Cluster-wide: a test that shares the cluster gets its own operator namespace
+//   <test>-<hex>-op, and SHARED_CLUSTER=1 makes that operator use its own ClusterRole and
+//   ClusterRoleBinding and watch only the test namespace.
+// A test that fails next to other tests is retried once, alone on a cluster, so a failure caused
+// by sharing does not fail the build, and "passed alone" shows which tests need ownCluster.
+void runSlotTest(Integer testId, String slot) {
+    def test = tests[testId]
+    def testName = test.name
+    def clusterKubeconfig = "/tmp/${CLUSTER_NAME}-${test.cluster}"
+    def slotDir = "/tmp/${CLUSTER_NAME}-${slot}"
+    def suffix = sh(script: "head -c 3 /dev/urandom | od -An -tx1 | tr -d ' \\n'", returnStdout: true).trim()
+    def namespaceOwner = "${testName}-${suffix}"
+    def operatorNs = test.ownCluster ? 'psmdb-operator' : "${testName}-${suffix}-op"
+
+    sh """
+        rm -rf '${slotDir}'
+        mkdir -p '${slotDir}'
+        cp '${clusterKubeconfig}' '${slotDir}/kubeconfig'
+    """
+    if (test.ownCluster) {
+        // Nothing else runs on the cluster, so every namespace that is new after the test is its own.
+        sh """
+            KUBECONFIG='${clusterKubeconfig}' kubectl get namespaces --request-timeout=10s --no-headers \
+                -o custom-columns=NAME:.metadata.name > '${slotDir}/namespaces-before' || true
+        """
+    }
+    def slotExports = """
+        export KUBECONFIG='${slotDir}/kubeconfig'
+        export HELM_CONFIG_HOME='${slotDir}/helm'
+        export HELM_CACHE_HOME='${slotDir}/helm-cache'
+        export DELETE_CRD_ON_START=0
+        export CLEAN_NAMESPACE=0
+        export SKIP_DELETE=1
+        export OPERATOR_NS='${operatorNs}'
+        export E2E_NAMESPACE_OWNER='${namespaceOwner}'
+        ${test.ownCluster ? '' : 'export SHARED_CLUSTER=1'}
+    """
+
+    runTest(testId, slotExports, operatorNs, false)
+
+    def failed = test.result != 'passed'
+    if (failed && !test.ownCluster && currentBuild.nextBuild == null) {
+        echo "The $testName test failed next to other tests, it will be retried alone on a cluster"
+        // Keep the log of this attempt: the retry writes the test's log again.
+        sh """
+            cp e2e-tests/logs/${testName}.log e2e-tests/logs/${testName}-shared.log 2>/dev/null || true
+            cp e2e-tests/logs/${testName}-debug.log e2e-tests/logs/${testName}-shared-debug.log 2>/dev/null || true
+        """
+        pushLogFile("${testName}-shared")
+        pushLogFile("${testName}-shared-debug")
+        test.sharedTime = test.time
+        test.requeueAlone = true
+    } else {
+        if (test.retriedAlone) {
+            test.time = (test.time as Double) + (test.sharedTime as Double)
+            if (!failed) {
+                echo "The $testName test passed alone after it failed next to other tests. If this repeats, tag it ownCluster or with a lock in e2e-tests/tests.yaml"
+            }
+        }
+        if (failed) {
+            currentBuild.result = 'FAILURE'
+        }
+    }
+
+    try {
+        cleanupSlotTest(clusterKubeconfig, testName, test.ownCluster, namespaceOwner, slotDir, (test.locks ?: []).contains('vault'))
+    } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException exc) {
+        throw exc
+    } catch (cleanupErr) {
+        echo "Warning: failed to clean up after ${testName}: ${cleanupErr}"
+    }
+}
+
+// Frees the cluster for the next tests. Runs after every test, also a failed one, whose own
+// teardown may not have run.
+// - The test's namespaces: those labeled with its E2E_NAMESPACE_OWNER, those named
+//   <test>-<hex>..., and after a test that ran alone every namespace that is new since it started.
+//   Only the operator's own resources get their finalizers removed: they keep a namespace
+//   Terminating.
+// - In cluster-wide runs, its ClusterRole and ClusterRoleBinding.
+// - After a test with the vault lock, the cluster-scoped parts of the Vault chart.
+// - After a test that ran alone, what it may have installed for the whole cluster: its operator,
+//   which watches every namespace; cert-manager (other tests expect the operator to issue its own
+//   certificates, which it does only without cert-manager); the VPA CRDs and recommender (the
+//   operator watches VerticalPodAutoscalers in every namespace once the CRD exists); chaos-mesh;
+//   the PMM server RBAC.
+void cleanupSlotTest(String kubeconfig, String testName, Boolean ownCluster, String namespaceOwner, String slotDir, Boolean vaultLock) {
+    withEnv(["KUBECONFIG=${kubeconfig}", "TEST_NAME=${testName}", "OWN_CLUSTER=${ownCluster ? 1 : 0}",
+             "NAMESPACE_OWNER=${namespaceOwner}", "SLOT_DIR=${slotDir}", "VAULT_LOCK=${vaultLock ? 1 : 0}"]) {
+        sh '''
+            set +e
+            if ! kubectl get --raw='/healthz' --request-timeout=5s >/dev/null 2>&1; then
+                echo "Skipping the cleanup after $TEST_NAME: the cluster is not reachable"
+                exit 0
+            fi
+
+            list_namespaces() {
+                kubectl get namespaces --request-timeout=10s --no-headers -o custom-columns=NAME:.metadata.name "$@"
+            }
+            resources=$(kubectl api-resources --api-group=psmdb.percona.com --namespaced -o name --request-timeout=10s | paste -sd, -)
+            {
+                list_namespaces -l "e2e.percona.com/owner=$NAMESPACE_OWNER"
+                list_namespaces | grep -E "^${TEST_NAME}-[0-9a-f]+(-.*)?\\$"
+                if [ "$OWN_CLUSTER" = 1 ] && [ -s "$SLOT_DIR/namespaces-before" ]; then
+                    # psmdb-operator and cert-manager are removed below, in order.
+                    list_namespaces | grep -vxF -f "$SLOT_DIR/namespaces-before" \
+                        | grep -vE '^(kube-.*|gke-.*|gmp-.*|default|psmdb-operator|cert-manager)$'
+                fi
+            } | sort -u | while read -r namespace; do
+                    echo "Deleting namespace: $namespace"
+                    if [ -n "$resources" ]; then
+                        kubectl get "$resources" -n "$namespace" -o name --request-timeout=10s 2>/dev/null \
+                            | while read -r object; do
+                                kubectl patch "$object" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                            done
+                    fi
+                    kubectl delete namespace "$namespace" --wait=false --request-timeout=10s
+                done
+            kubectl get clusterrole,clusterrolebinding --request-timeout=10s -o name \
+                | grep -E -- "-${TEST_NAME}-[0-9a-f]+-op\\$" \
+                | xargs -r kubectl delete --ignore-not-found --wait=false --request-timeout=10s
+
+            if [ "$VAULT_LOCK" = 1 ]; then
+                kubectl delete clusterrole,clusterrolebinding,mutatingwebhookconfiguration \
+                    -l 'app.kubernetes.io/instance in (vault-service,users-vault-service)' \
+                    --ignore-not-found --request-timeout=30s
+            fi
+
+            if [ "$OWN_CLUSTER" != 1 ]; then
+                exit 0
+            fi
+            kubectl delete namespace psmdb-operator --ignore-not-found --timeout=120s
+            kubectl delete clusterrolebinding service-account-percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
+            kubectl delete clusterrole percona-server-mongodb-operator --ignore-not-found --request-timeout=30s
+
+            selector=app.kubernetes.io/instance=cert-manager
+            if kubectl get namespace cert-manager --request-timeout=10s >/dev/null 2>&1 \
+                || [ -n "$(kubectl get crd -l "$selector" -o name --request-timeout=10s 2>/dev/null)" ]; then
+                echo "Removing cert-manager left by $TEST_NAME"
+                kubectl delete mutatingwebhookconfiguration,validatingwebhookconfiguration -l "$selector" --ignore-not-found --request-timeout=30s
+                kubectl delete clusterrole,clusterrolebinding -l "$selector" --ignore-not-found --request-timeout=30s
+                kubectl delete role,rolebinding -n kube-system -l "$selector" --ignore-not-found --request-timeout=30s
+                # Wait: the operator decides how to issue certificates by whether these CRDs exist.
+                kubectl delete crd -l "$selector" --ignore-not-found --timeout=180s
+                kubectl delete namespace cert-manager --ignore-not-found --timeout=180s
+            fi
+
+            kubectl delete crd verticalpodautoscalers.autoscaling.k8s.io verticalpodautoscalercheckpoints.autoscaling.k8s.io \
+                --ignore-not-found --timeout=120s
+            kubectl delete deployment vpa-recommender -n kube-system --ignore-not-found --request-timeout=30s
+
+            kubectl get mutatingwebhookconfiguration,validatingwebhookconfiguration,clusterrole,clusterrolebinding \
+                -o name --request-timeout=10s | grep -E 'chaos-mesh|/validate-auth$' \
+                | xargs -r kubectl delete --ignore-not-found --request-timeout=30s
+            for crd in $(kubectl get crd -o name --request-timeout=10s | grep -E '\\.chaos-mesh\\.org$'); do
+                kubectl get "${crd#*/}" --all-namespaces --no-headers --request-timeout=10s \
+                    -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name 2>/dev/null \
+                    | while read -r namespace name; do
+                        kubectl patch "${crd#*/}" "$name" -n "$namespace" --type=merge -p '{"metadata":{"finalizers":[]}}' --request-timeout=10s
+                    done
+                kubectl delete "$crd" --ignore-not-found --timeout=60s
+            done
+
+            kubectl delete clusterrole,clusterrolebinding monitoring --ignore-not-found --request-timeout=30s
+            kubectl delete clusterrolebinding pmm-psmdb-operator-cluster-wide --ignore-not-found --request-timeout=30s
+            exit 0
+        '''
+    }
+}
+
+// Returns the next test a slot on this cluster may start, -1 when tests are left but none may
+// start here yet, or null when no test is left.
+// - ownCluster tests are taken first, then tests with locks, then the rest, so the tests that need
+//   a cluster alone start while the clusters are empty.
+// - An ownCluster test starts only on a cluster with nothing running, and nothing starts next to
+//   it. While one is waiting, busy clusters start nothing new, so it is not starved.
+// - A test with locks does not start while a test with one of those locks runs on the cluster.
+@NonCPS
+Integer claimNextTest(String cluster) {
+    synchronized (tests) {
+        def running = []
+        def held = []
+        def pending = false
+        for (test in tests) {
+            if (test.result == 'skipped') {
+                pending = true
+            } else if (test.running && test.cluster == cluster) {
+                running << test
+                for (lock in (test.locks ?: [])) {
+                    held << lock
+                }
+            }
+        }
+        if (!pending) {
+            return null
+        }
+        for (test in running) {
+            if (test.ownCluster) {
+                return -1
+            }
+        }
+
+        for (int group = 0; group < 3; group++) {
+            for (int i = 0; i < tests.size(); i++) {
+                def test = tests[i]
+                def testGroup = test.ownCluster ? 0 : (test.locks ? 1 : 2)
+                if (test.result != 'skipped' || testGroup != group) {
+                    continue
+                }
+                if (test.ownCluster) {
+                    if (running) {
+                        return -1
+                    }
+                } else if ((test.locks ?: []).any { held.contains(it) }) {
+                    continue
+                }
+                test.result = 'failure'
+                test.cluster = cluster
+                test.running = true
+                return i
+            }
+        }
+        return -1
+    }
+}
+
+// Clears running under the lock. A test marked for a retry alone goes back to the queue as an
+// ownCluster test here, after running is cleared, so no slot claims the retry while this slot
+// still counts the test as running.
+@NonCPS
+void markTestFinished(Integer testId) {
+    synchronized (tests) {
+        def test = tests[testId]
+        test.running = false
+        if (test.requeueAlone) {
+            test.requeueAlone = false
+            test.retriedAlone = true
+            test.ownCluster = true
+            test.result = 'skipped'
+        }
+    }
+}
+
+@NonCPS
+Integer countSkippedTests() {
+    synchronized (tests) {
+        return tests.count { it.result == 'skipped' } as Integer
+    }
+}
+
+// operatorNs: the namespace of the test's operator, or '' to find it.
+void collectDebugLogs(String testName, String clusterSuffix, String operatorNs) {
     try {
         sh """
             export KUBECONFIG=/tmp/${CLUSTER_NAME}-${clusterSuffix}
@@ -464,6 +798,9 @@ void collectDebugLogs(String testName, String clusterSuffix) {
                 NAMESPACE=""
                 if [ -f "\$PYTEST_NAMESPACE_FILE" ]; then
                     NAMESPACE=\$(cat "\$PYTEST_NAMESPACE_FILE" | tail -1)
+                fi
+                if [ -z "\$NAMESPACE" ]; then
+                    NAMESPACE=\$(kubectl get namespaces --no-headers 2>/dev/null | awk '{print \$1}' | grep -E '^${testName}-[0-9a-f]+\$' | head -1)
                 fi
                 if [ -z "\$NAMESPACE" ]; then
                     NAMESPACE=\$(kubectl get namespaces --no-headers 2>/dev/null | awk '{print \$1}' | grep -vE '^kube-|^default\$|^gke-|^gmp-' | head -1)
@@ -500,7 +837,10 @@ void collectDebugLogs(String testName, String clusterSuffix) {
 
                     echo ""
                     echo "=== Operator Logs (last 100 lines) ==="
-                    OPERATOR_NS=\$(kubectl get deployments --all-namespaces 2>/dev/null | grep percona-server-mongodb-operator | awk '{print \$1}' | head -1)
+                    OPERATOR_NS='${operatorNs}'
+                    if [ -z "\$OPERATOR_NS" ]; then
+                        OPERATOR_NS=\$(kubectl get deployments --all-namespaces 2>/dev/null | grep percona-server-mongodb-operator | awk '{print \$1}' | head -1)
+                    fi
                     if [ -n "\$OPERATOR_NS" ]; then
                         OPERATOR_POD=\$(kubectl get pods -n "\$OPERATOR_NS" -l name=percona-server-mongodb-operator -o name 2>/dev/null | head -1)
                         if [ -n "\$OPERATOR_POD" ]; then
@@ -522,6 +862,12 @@ void collectDebugLogs(String testName, String clusterSuffix) {
 }
 
 void runTest(Integer TEST_ID) {
+    runTest(TEST_ID, '', '', true)
+}
+
+// slotExports: shell exports for a test that shares the cluster (runSlotTest).
+// failBuild: false when the caller decides the build result, after a possible retry.
+void runTest(Integer TEST_ID, String slotExports, String operatorNs, Boolean failBuild) {
     def testName = tests[TEST_ID]["name"]
     def clusterSuffix = tests[TEST_ID]["cluster"]
     def timeStart = new Date().getTime()
@@ -540,6 +886,7 @@ void runTest(Integer TEST_ID) {
                 export GCP_PROJECT=\$GCP_PROJECT
                 export GCS_WI_SERVICE_ACCOUNT=percona-psmdb-operator-wi@\$GCP_PROJECT.iam.gserviceaccount.com
                 export PATH="\$HOME/.local/bin:\$PATH"
+                ${slotExports}
                 mkdir -p e2e-tests/logs
                 bash -o pipefail <<BASH
                 {
@@ -560,9 +907,11 @@ BASH
         if (timedOut) {
             long elapsedMin = ((long)(new Date().getTime() - timeStart)).intdiv(60000)
             echo "Test $testName timed out after ${elapsedMin} minutes!"
-            collectDebugLogs(testName, clusterSuffix)
+            collectDebugLogs(testName, clusterSuffix, operatorNs)
             tests[TEST_ID]["result"] = "error"
-            currentBuild.result = 'FAILURE'
+            if (failBuild) {
+                currentBuild.result = 'FAILURE'
+            }
         } else {
             echo "Test $testName was interrupted (build aborted/superseded)!"
             throw exc
@@ -576,14 +925,16 @@ BASH
         long elapsedMin = ((long)(new Date().getTime() - timeStart)).intdiv(60000)
         if (exc.message?.contains('exit code 143')) {
             echo "Test $testName was terminated (exit 143) after ${elapsedMin} minutes - treating as timeout/error!"
-            collectDebugLogs(testName, clusterSuffix)
+            collectDebugLogs(testName, clusterSuffix, operatorNs)
             tests[TEST_ID]["result"] = "error"
         } else {
             echo "Test $testName has failed after ${elapsedMin} minutes!"
-            collectDebugLogs(testName, clusterSuffix)
+            collectDebugLogs(testName, clusterSuffix, operatorNs)
             tests[TEST_ID]["result"] = "failure"
         }
-        currentBuild.result = 'FAILURE'
+        if (failBuild) {
+            currentBuild.result = 'FAILURE'
+        }
     }
     finally {
         def timeStop = new Date().getTime()

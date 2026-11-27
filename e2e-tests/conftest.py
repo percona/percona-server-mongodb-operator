@@ -19,6 +19,7 @@ from lib.kubectl import (
     detect_platform,
     get_k8s_versions,
     kubectl_bin,
+    label_test_namespace,
     wait_pod,
 )
 from lib.mongo import MongoManager
@@ -360,6 +361,7 @@ def create_namespace() -> Callable[[str], str]:
             logger.info(f"Create namespace {namespace}")
             kubectl_bin("create", "namespace", namespace)
             kubectl_bin("config", "set-context", "--current", f"--namespace={namespace}")
+        label_test_namespace(namespace)
         return namespace
 
     return _create_namespace
@@ -483,7 +485,7 @@ def create_infra(
         # Namespaced: operator lives in the test namespace, which must exist first.
         if operator_ns:
             create_namespace(operator_ns)
-            deploy_operator(test_paths["test_dir"], test_paths["src_dir"])
+            deploy_operator(test_paths["test_dir"], test_paths["src_dir"], namespace)
             create_namespace(namespace)
         else:
             create_namespace(namespace)

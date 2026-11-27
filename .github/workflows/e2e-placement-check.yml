@@ -1,0 +1,25 @@
+name: e2e-tests placement check
+
+# Tests that change something outside their own namespaces must say so in tests.yaml
+# (ownCluster or locks), so CI never runs them next to tests they would break.
+on:
+  pull_request:
+    paths:
+      - 'e2e-tests/**'
+
+permissions:
+  contents: read
+
+jobs:
+  check-placement:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Check test placement
+        run: uv run e2e-tests/select_tests.py check-placement

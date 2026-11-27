@@ -348,6 +348,15 @@ create_namespace() {
 		kubectl_bin create namespace "$namespace"
 		set_kube_ctx ${namespace}
 	fi
+	label_test_namespace "$namespace"
+}
+
+# E2E_NAMESPACE_OWNER is set by the CI runner when tests share a cluster. The label lets the
+# runner delete every namespace the test created, whatever its name.
+label_test_namespace() {
+	if [[ -n ${E2E_NAMESPACE_OWNER} ]]; then
+		kubectl_bin label namespace "$1" "e2e.percona.com/owner=${E2E_NAMESPACE_OWNER}" --overwrite >/dev/null
+	fi
 }
 
 get_operator_pod() {
@@ -697,12 +706,32 @@ wait_restore() {
 	fi
 }
 
+# SHARED_CLUSTER=1 means other tests run on the same cluster at the same time. A cluster-wide
+# operator then gets a ClusterRole and ClusterRoleBinding named after OPERATOR_NS and watches
+# only the test namespace, so each test has its own operator.
+shared_cluster_rbac() {
+	if [[ ${SHARED_CLUSTER} != 1 || -z ${OPERATOR_NS} ]]; then
+		cat
+		return
+	fi
+	yq eval '
+		(select(.kind == "ClusterRole" or .kind == "ClusterRoleBinding") | .metadata.name) |= . + "-'"${OPERATOR_NS}"'" |
+		(select(.kind == "ClusterRoleBinding") | .roleRef.name) |= . + "-'"${OPERATOR_NS}"'"' -
+}
+
+operator_watch_namespace() {
+	if [[ ${SHARED_CLUSTER} == 1 ]]; then
+		echo "${namespace}"
+	fi
+}
+
 apply_rbac() {
 	local operator_namespace=${OPERATOR_NS:-'psmdb-operator'}
 	local rbac=${1:-'rbac'}
 
 	cat ${src_dir}/deploy/${rbac}.yaml \
 		| sed -e "s^namespace: .*^namespace: $operator_namespace^" \
+		| shared_cluster_rbac \
 		| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 }
 
@@ -722,7 +751,8 @@ deploy_operator() {
 		yq eval '
 			(.spec.template.spec.containers[].image = "'${IMAGE}'") |
 			((.. | select(.[] == "DISABLE_TELEMETRY")) |= .value="true") |
-			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG")' ${src_dir}/deploy/cw-operator.yaml \
+			((.. | select(.[] == "LOG_LEVEL")) |= .value="DEBUG") |
+			((.. | select(.[] == "WATCH_NAMESPACE")) |= .value="'"$(operator_watch_namespace)"'")' ${src_dir}/deploy/cw-operator.yaml \
 			| add_arch_to_podspecs - \
 			| kubectl_bin apply ${OPERATOR_NS:+-n $OPERATOR_NS} -f -
 	else

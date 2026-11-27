@@ -19,6 +19,17 @@ Read the root [`AGENTS.md`](../AGENTS.md) first. These rules cover
   `uv run e2e-tests/select_tests.py list --suite pr`. A test directory that is
   not in `tests.yaml` never runs in CI. Leaving it out is right only for a test
   that needs special infrastructure; say so in the PR.
+- CI can run several tests on one cluster. A test that changes anything outside
+  its own namespaces (CRDs, cert-manager, Vault, ClusterRoles, nodes,
+  StorageClasses) needs `ownCluster: true` or `locks: [...]` in `tests.yaml`;
+  the notes above `tests:` explain both. `uv run e2e-tests/select_tests.py
+  check-placement` prints the tag a test needs, and a PR check runs it.
+- The check finds cluster-wide actions by pattern, including helper names such
+  as `deploy_cert_manager`. A new helper in `functions` or `lib/` that changes
+  anything outside the test namespace needs a matching rule in
+  `PLACEMENT_RULES` (`select_tests.py`) in the same PR.
+- Many tests run at the same time on one CI machine. Write local files into a
+  `mktemp -d` directory, never to a fixed path such as `/tmp/s3-cert.pem`.
 
 ## Running locally
 
