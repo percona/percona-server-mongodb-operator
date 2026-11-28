@@ -11,7 +11,8 @@ import groovy.transform.Field
 // - With the "only-targeted-e2e-tests" label, push builds do not run e2e tests.
 // - A PR comment "/run arbiter limits" (or "/run tests=arbiter,limits") from a repository
 //   collaborator starts a build (issueCommentTrigger) that runs only those tests, also when
-//   they already passed on this commit. Plain "/run" runs the PR suite.
+//   they already passed on this commit. Plain "/run" or "/retest" runs the PR suite without
+//   the tests that already passed on this commit, so it reruns only the failed ones (like Build Now).
 @Field String targetedTestsLabel = 'only-targeted-e2e-tests'
 @Field def requestedTests = []
 
@@ -19,12 +20,19 @@ boolean isCommentBuild() {
     return env.GITHUB_COMMENT != null
 }
 
-// Parses the first line of a "/run" comment. Returns the requested test names, or [] for the PR suite.
+// Parses the first line of a "/run" or "/retest" comment. Returns the requested test names,
+// or [] for the PR suite without the tests that already passed on this commit.
 List parseRunComment(String comment) {
     def line = comment.trim().split('\n')[0].trim()
     def words = line.split('[\\s,]+')
+    if (words[0] == '/retest') {
+        if (words.size() > 1) {
+            error "'/retest' takes no test names. Use '/run name1 name2' to run selected tests."
+        }
+        return []
+    }
     if (words[0] != '/run') {
-        error "The first line must start with '/run'."
+        error "The first line must start with '/run' or '/retest'."
     }
     def names = []
     for (int i = 1; i < words.size(); i++) {
@@ -60,12 +68,14 @@ void readRunComment() {
     }
     if (requestedTests) {
         echo "Running only the requested tests: ${requestedTests.join(', ')}"
+    } else {
+        echo "Running the tests that did not pass on this commit yet."
     }
 }
 
 void rejectRunComment(String reason) {
     needToRunTests = false
-    pullRequest.comment("@${env.GITHUB_COMMENT_AUTHOR} `/run` was not started: ${reason}")
+    pullRequest.comment("@${env.GITHUB_COMMENT_AUTHOR} Your comment did not start the tests: ${reason}")
     error reason
 }
 
@@ -749,7 +759,7 @@ def skipRequested() {
         return true
     }
     if (hasLabel(targetedTestsLabel)) {
-        echo "PR has the '${targetedTestsLabel}' label. Push builds skip e2e tests; comment '/run <test> ...' to run tests."
+        echo "PR has the '${targetedTestsLabel}' label. Push builds skip e2e tests; comment '/run <test> ...' to run tests or '/retest' to run the ones that did not pass."
         return true
     }
     return false
@@ -758,7 +768,7 @@ def skipRequested() {
 @Field def needToRunTests = true
 void checkE2EIgnoreFiles() {
     if (isManualBuild() || isCommentBuild()) {
-        echo "This is a manual rebuild or a /run comment. Forcing pipeline execution."
+        echo "This is a manual rebuild or a /run or /retest comment. Forcing pipeline execution."
         return
     }
 
@@ -854,7 +864,7 @@ pipeline {
         copyArtifactPermission("$JOB_NAME/PR-*")
     }
     triggers {
-        issueCommentTrigger('(?s)^\\s*/run(\\s.*)?$')
+        issueCommentTrigger('(?s)^\\s*/(run|retest)(\\s.*)?$')
     }
     stages {
         stage('Check Ignore Files') {
