@@ -7,6 +7,87 @@ import groovy.transform.Field
 @Field def reportXml = 'e2e-test-report.xml'
 @Field int clusterCount = 15
 
+// Targeted e2e tests for PRs:
+// - With the "only-targeted-e2e-tests" label, push builds do not run e2e tests.
+// - A PR comment "/run arbiter limits" (or "/run tests=arbiter,limits") from a repository
+//   collaborator starts a build (issueCommentTrigger) that runs only those tests, also when
+//   they already passed on this commit. Plain "/run" or "/retest" runs the PR suite without
+//   the tests that already passed on this commit, so it reruns only the failed ones (like Build Now).
+@Field String targetedTestsLabel = 'only-targeted-e2e-tests'
+@Field def requestedTests = []
+
+boolean isCommentBuild() {
+    return env.GITHUB_COMMENT != null
+}
+
+// Parses the first line of a "/run" or "/retest" comment. Returns the requested test names,
+// or [] for the PR suite without the tests that already passed on this commit.
+List parseRunComment(String comment) {
+    def line = comment.trim().split('\n')[0].trim()
+    def words = line.split('[\\s,]+')
+    if (words[0] == '/retest') {
+        if (words.size() > 1) {
+            error "'/retest' takes no test names. Use '/run name1 name2' to run selected tests."
+        }
+        return []
+    }
+    if (words[0] != '/run') {
+        error "The first line must start with '/run' or '/retest'."
+    }
+    def names = []
+    for (int i = 1; i < words.size(); i++) {
+        def name = words[i]
+        if (name.startsWith('tests=')) {
+            name = name.substring('tests='.length())
+            if (!name) {
+                continue
+            }
+        }
+        if (!(name ==~ /[a-z0-9][a-z0-9-]*/)) {
+            error "Invalid test name '${name}' in '${line}'. Use '/run name1 name2' or '/run tests=name1,name2'."
+        }
+        if (!names.contains(name)) {
+            names.add(name)
+        }
+    }
+    if (names.isEmpty() && words.size() > 1) {
+        error "No test names in '${line}'."
+    }
+    return names
+}
+
+void readRunComment() {
+    if (!isCommentBuild()) {
+        return
+    }
+    echo "Build started by a comment from ${env.GITHUB_COMMENT_AUTHOR}: ${env.GITHUB_COMMENT}"
+    try {
+        requestedTests = parseRunComment(env.GITHUB_COMMENT)
+    } catch (Exception e) {
+        rejectRunComment(e.message)
+    }
+    if (requestedTests) {
+        echo "Running only the requested tests: ${requestedTests.join(', ')}"
+    } else {
+        echo "Running the tests that did not pass on this commit yet."
+    }
+}
+
+void rejectRunComment(String reason) {
+    needToRunTests = false
+    pullRequest.comment("@${env.GITHUB_COMMENT_AUTHOR} Your comment did not start the tests: ${reason}")
+    error reason
+}
+
+boolean hasLabel(String label) {
+    try {
+        return pullRequest.labels.contains(label)
+    } catch (Exception e) {
+        echo "Could not read PR labels: ${e.message}"
+    }
+    return false
+}
+
 void createCluster(String CLUSTER_SUFFIX) {
     withCredentials([string(credentialsId: 'GCP_PROJECT_ID', variable: 'GCP_PROJECT'), file(credentialsId: 'gcloud-key-file', variable: 'CLIENT_SECRET_FILE')]) {
         sh """
@@ -227,11 +308,22 @@ void initTests() {
     ).trim()
     def records = output.split('\n').findAll { it }
 
+    if (requestedTests) {
+        def unknown = requestedTests.findAll { !records.contains(it) }
+        if (unknown) {
+            rejectRunComment("not in the PR suite for GKE, cluster-wide, MongoDB ${mongoVersion}: ${unknown.join(', ')}")
+        }
+        records = requestedTests
+    }
+
     for (int i=0; i<records.size(); i++) {
         tests.add(["name": records[i], "cluster": "NA", "result": "skipped", "time": "0"])
     }
 
-    markPassedTests()
+    // A /run comment reruns the requested tests even when they passed on this commit.
+    if (!requestedTests) {
+        markPassedTests()
+    }
 }
 
 void markPassedTests() {
@@ -662,21 +754,21 @@ boolean isManualBuild() {
 }
 
 def skipRequested() {
-    try {
-        if (pullRequest.labels.contains('skip-e2e-tests')) {
-            echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
-            return true
-        }
-    } catch (Exception e) {
-        echo "Could not read PR labels: ${e.message}"
+    if (hasLabel('skip-e2e-tests')) {
+        echo "PR has the 'skip-e2e-tests' label. Skipping e2e tests."
+        return true
+    }
+    if (hasLabel(targetedTestsLabel)) {
+        echo "PR has the '${targetedTestsLabel}' label. Push builds skip e2e tests; comment '/run <test> ...' to run tests or '/retest' to run the ones that did not pass."
+        return true
     }
     return false
 }
 
 @Field def needToRunTests = true
 void checkE2EIgnoreFiles() {
-    if (isManualBuild()) {
-        echo "This is a manual rebuild. Forcing pipeline execution."
+    if (isManualBuild() || isCommentBuild()) {
+        echo "This is a manual rebuild or a /run or /retest comment. Forcing pipeline execution."
         return
     }
 
@@ -771,6 +863,9 @@ pipeline {
         disableConcurrentBuilds(abortPrevious: true)
         copyArtifactPermission("$JOB_NAME/PR-*")
     }
+    triggers {
+        issueCommentTrigger('(?s)^\\s*/(run|retest)(\\s.*)?$')
+    }
     stages {
         stage('Check Ignore Files') {
             when {
@@ -779,6 +874,7 @@ pipeline {
                 }
             }
             steps {
+                readRunComment()
                 checkE2EIgnoreFiles()
             }
         }
@@ -963,6 +1059,9 @@ pipeline {
 
                         unstash 'IMAGE'
                         def IMAGE = sh(returnStdout: true, script: "cat results/docker/TAG").trim()
+                        if (requestedTests) {
+                            TestsReport = "Selected tests only, started by `/run` from @${env.GITHUB_COMMENT_AUTHOR}. Other tests did not run in this build.\r\n\r\n" + TestsReport
+                        }
                         TestsReport = TestsReport + "\r\n\r\nCommit: ${env.CHANGE_URL}/commits/${env.GIT_COMMIT}\r\nImage: `${IMAGE}`\r\n"
 
                         if (hasHtmlReports) {
